@@ -6112,20 +6112,17 @@ describe("POST /api/chat/unified", () => {
     const response = await POST(request);
     expect(response.status).toBe(200);
     expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    expect(injectBrainContextIntoUserMessage).toHaveBeenCalledWith(
-      "Hello from local",
-      "alpha-project",
-    );
+    expect(injectBrainContextIntoUserMessage).not.toHaveBeenCalled();
     expect(streamChat).toHaveBeenCalledTimes(1);
     const streamArg = streamChat.mock.calls[0]?.[0] as {
       messages: Array<{ role: string; content: string }>;
+      projectId?: string | null;
     };
+    expect(streamArg.projectId).toBe("alpha-project");
     const lastUser = [...streamArg.messages]
       .reverse()
       .find((m) => m.role === "user");
-    expect(lastUser?.content).toBe(
-      "gbrain context\n\n## User Request\nHello from local",
-    );
+    expect(lastUser?.content).toBe("Hello from local");
     expect(sendAgentMessage).not.toHaveBeenCalled();
     expect(sendOpenClawMessage).not.toHaveBeenCalled();
   });

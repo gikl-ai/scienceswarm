@@ -64,7 +64,7 @@ describe("local-llm", () => {
     );
   });
 
-  it("requests Gemma 4 thinking mode for streaming chats", async () => {
+  it("sends streaming chats to Ollama without forcing Gemma thinking mode", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         new ReadableStream({
@@ -96,27 +96,9 @@ describe("local-llm", () => {
     const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
       messages: Array<{ role: string; content: string }>;
     };
-    expect(request.messages[0]?.content.startsWith("<|think|>\n")).toBe(true);
-    expect(request.messages[0]?.content).toContain("You are ScienceSwarm.");
-  });
-
-  it("does not duplicate the Gemma thinking tag when it is already present", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      Response.json({
-        message: { content: "gemma4 e4b trace test." },
-        done: true,
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await completeLocal([
-      { role: "system", content: "<|think|>\nYou are ScienceSwarm." },
-      { role: "user", content: "Reply with exactly: gemma4 e4b trace test." },
-    ], "gemma4:e4b");
-
-    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    expect(request.messages[0]?.content.match(/<\|think\|>/g)).toHaveLength(1);
+    expect(request.messages).toEqual([
+      { role: "system", content: "You are ScienceSwarm." },
+      { role: "user", content: "Reply with exactly FINAL." },
+    ]);
   });
 });

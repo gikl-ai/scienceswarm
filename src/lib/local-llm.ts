@@ -30,38 +30,6 @@ export interface LocalStreamChunk {
   thinking?: string;
 }
 
-function shouldEnableGemmaThinking(modelName: string): boolean {
-  return modelName.trim().toLowerCase().startsWith("gemma4");
-}
-
-function withGemmaThinkingPrompt(
-  messages: Array<{ role: string; content: string }>,
-  modelName: string,
-): Array<{ role: string; content: string }> {
-  if (!shouldEnableGemmaThinking(modelName)) {
-    return messages;
-  }
-
-  const systemIndex = messages.findIndex((message) => message.role === "system");
-  if (systemIndex === -1) {
-    return [
-      { role: "system", content: "<|think|>" },
-      ...messages,
-    ];
-  }
-
-  const systemMessage = messages[systemIndex];
-  if (systemMessage?.content.trimStart().startsWith("<|think|>")) {
-    return messages;
-  }
-
-  return messages.map((message, index) =>
-    index === systemIndex
-      ? { ...message, content: `<|think|>\n${message.content}` }
-      : message,
-  );
-}
-
 function getOllamaUrl(): string {
   return getOllamaUrlFromConfig();
 }
@@ -112,14 +80,13 @@ export async function completeLocal(
 ): Promise<string> {
   const url = getOllamaUrl();
   const modelName = model || getLocalModel();
-  const normalizedMessages = withGemmaThinkingPrompt(messages, modelName);
 
   const res = await fetch(`${url}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: modelName,
-      messages: normalizedMessages,
+      messages,
       stream: false,
     }),
     signal: AbortSignal.timeout(60_000),
@@ -143,14 +110,13 @@ export async function* streamLocal(
 ): AsyncGenerator<LocalStreamChunk> {
   const url = getOllamaUrl();
   const modelName = model || getLocalModel();
-  const normalizedMessages = withGemmaThinkingPrompt(messages, modelName);
 
   const res = await fetch(`${url}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: modelName,
-      messages: normalizedMessages,
+      messages,
       stream: true,
     }),
     signal: AbortSignal.timeout(300_000),

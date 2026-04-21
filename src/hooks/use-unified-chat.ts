@@ -361,6 +361,8 @@ const MAX_KEEPALIVE_MESSAGES = 50;
 const WORKSPACE_TREE_REFRESH_MS = 15000;
 const WORKSPACE_WATCH_POLL_MS = 5000;
 const MAX_GENERATED_ARTIFACTS = 50;
+const LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES = 12;
+const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 12_000;
 const SLASH_COMMAND_START_TIMEOUT_MS = 15_000;
 const SLASH_COMMAND_TIMEOUT_MESSAGE =
   "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.";
@@ -792,6 +794,129 @@ function getUploadedFileReference(file: Pick<UploadedFile, "workspacePath" | "na
   return typeof file.name === "string" ? file.name.trim() : "";
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeReferenceAlias(value: string): string {
+  return value.trim().replace(/^\/+/, "");
+}
+
+function buildFileReferenceAliases(file: {
+  name?: string;
+  displayPath?: string;
+  workspacePath?: string;
+  brainSlug?: string;
+}): string[] {
+  const aliases = new Set<string>();
+  const rawValues = [
+    file.name,
+    file.displayPath,
+    file.workspacePath,
+    file.brainSlug,
+    typeof file.brainSlug === "string" && file.brainSlug.trim().length > 0
+      ? `gbrain:${file.brainSlug.trim()}`
+      : "",
+  ];
+
+  for (const rawValue of rawValues) {
+    if (typeof rawValue !== "string") {
+      continue;
+    }
+    const normalized = normalizeReferenceAlias(rawValue);
+    if (!normalized) {
+      continue;
+    }
+    aliases.add(normalized);
+    aliases.add(getBasename(normalized));
+  }
+
+  return Array.from(aliases);
+}
+
+function contentExplicitlyReferencesFile(content: string, aliases: string[]): boolean {
+  return aliases.some((alias) => {
+    const escaped = escapeRegExp(alias);
+    const pattern = new RegExp(`(^|[^A-Za-z0-9_])@?${escaped}(?=$|[^A-Za-z0-9_])`, "i");
+    return pattern.test(content);
+  });
+}
+
+function shouldIncludeAllExplicitFiles(content: string): boolean {
+  return /\b(attached|uploaded|selected|mentioned)\s+files?\b|\b(these|those)\s+files\b|\ball\s+(attached|uploaded|selected|mentioned)\s+files\b/i.test(content);
+}
+
+function selectExplicitRequestFiles(
+  content: string,
+  files: UploadedFile[],
+): UploadedFile[] {
+  if (files.length === 0) {
+    return [];
+  }
+
+  if (shouldIncludeAllExplicitFiles(content)) {
+    return files;
+  }
+
+  return files.filter((file) =>
+    contentExplicitlyReferencesFile(content, buildFileReferenceAliases(file)),
+  );
+}
+
+function shouldAttachActiveFileContext(
+  content: string,
+  activeFile?: ActiveFileContext,
+): activeFile is ActiveFileContext {
+  if (!activeFile) {
+    return false;
+  }
+
+  if (/\b(this|current|selected|open|shown|visible)\s+file\b/i.test(content)) {
+    return true;
+  }
+
+  return contentExplicitlyReferencesFile(
+    content,
+    buildFileReferenceAliases({
+      name: getBasename(activeFile.path),
+      displayPath: activeFile.path,
+      workspacePath: activeFile.path,
+    }),
+  );
+}
+
+function isLocalDirectContext(context: Pick<SendContext, "backend" | "chatMode">): boolean {
+  return context.backend === "direct" && context.chatMode !== "openclaw-tools";
+}
+
+function trimLocalChatHistory(
+  history: Array<{ role: Message["role"]; content: string }>,
+): Array<{ role: Message["role"]; content: string }> {
+  const selected: Array<{ role: Message["role"]; content: string }> = [];
+  let totalChars = 0;
+
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index];
+    const content = entry?.content ?? "";
+    if (!content) {
+      continue;
+    }
+
+    const nextChars = totalChars + content.length;
+    if (
+      selected.length >= LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES ||
+      nextChars > LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS
+    ) {
+      break;
+    }
+
+    selected.push(entry);
+    totalChars = nextChars;
+  }
+
+  return selected.reverse();
+}
+
 function buildFallbackArtifactProvenance(
   generatedFiles: string[],
   prompt: string,
@@ -1010,6 +1135,7 @@ export function useUnifiedChat(
   const workspaceWatchAvailableRef = useRef(false);
   const projectVersionRef = useRef(0);
   const initialBackendSetRef = useRef(false);
+  const localProviderActiveRef = useRef(false);
   const userBackendOverrideVersionRef = useRef(0);
   const sendQueueRef = useRef<QueuedSend[]>([]);
   const sendQueueProcessingRef = useRef(false);
@@ -1386,6 +1512,7 @@ export function useUnifiedChat(
     assistantId: string,
     context: SendContext,
     requestContent: string,
+    requestFiles: UploadedFile[],
   ) => {
     const reader = res.body?.getReader();
     if (!reader) throw new Error("No response stream");
@@ -1440,7 +1567,7 @@ export function useUnifiedChat(
             const promptSourceFiles = Array.from(
               new Set([
                 ...extractPromptSourceFiles(requestContent),
-                ...liveUploadedFilesRef.current
+                ...requestFiles
                   .map(getUploadedFileReference)
                   .filter((value) => value.length > 0),
               ]),
@@ -1460,28 +1587,28 @@ export function useUnifiedChat(
             setArtifactProvenance((prev) => mergeArtifactProvenanceEntries(prev, nextArtifacts));
           }
 
-          if (typeof parsed.text === "string" && parsed.text.length > 0 && isSendContextCurrent(context)) {
-            applyMessagesUpdate((prev) =>
-              prev.map((m) =>
-                m.id === assistantId
-                  ? { ...m, content: m.content + parsed.text }
-                  : m
-              )
-            );
-          }
-
-          if (typeof parsed.thinking === "string" && parsed.thinking.length > 0 && isSendContextCurrent(context)) {
-            const thinkingChunk = parsed.thinking;
-            const replaceThinking = parsed.replaceThinking === true;
+          if (
+            isSendContextCurrent(context)
+            && (
+              (typeof parsed.text === "string" && parsed.text.length > 0)
+              || (typeof parsed.thinking === "string" && parsed.thinking.length > 0)
+            )
+          ) {
             applyMessagesUpdate((prev) =>
               prev.map((m) =>
                 m.id === assistantId
                   ? {
                       ...m,
+                      content:
+                        typeof parsed.text === "string" && parsed.text.length > 0
+                          ? m.content + parsed.text
+                          : m.content,
                       thinking:
-                        replaceThinking
-                          ? thinkingChunk
-                          : (m.thinking || "") + thinkingChunk,
+                        typeof parsed.thinking === "string" && parsed.thinking.length > 0
+                          ? parsed.replaceThinking === true
+                            ? parsed.thinking
+                            : (m.thinking || "") + parsed.thinking
+                          : m.thinking,
                     }
                   : m
               )
@@ -1508,11 +1635,27 @@ export function useUnifiedChat(
       historyMessages: Message[],
       activeFile?: ActiveFileContext,
     ) => {
-      const chatHistory = historyMessages
+      const baseHistory = historyMessages
         .filter((m) => m.role !== "system")
         .filter((m) => m.content !== QUEUED_ASSISTANT_CONTENT)
         .filter((m) => !(m.role === "assistant" && m.content.trim().length === 0))
         .map((m) => ({ role: m.role, content: m.content }));
+      const useLocalDirectOptimizations =
+        localProviderActiveRef.current && isLocalDirectContext(context);
+      const chatHistory = useLocalDirectOptimizations
+        ? trimLocalChatHistory(baseHistory)
+        : baseHistory;
+      const requestFiles = useLocalDirectOptimizations
+        ? selectExplicitRequestFiles(
+          content,
+          liveUploadedFilesRef.current,
+        )
+        : liveUploadedFilesRef.current;
+      const requestActiveFile = useLocalDirectOptimizations
+        ? shouldAttachActiveFileContext(content, activeFile)
+          ? activeFile
+          : undefined
+        : activeFile;
 
       if (!chatHistory.some((message) => message.role === "user" && message.content === content)) {
         chatHistory.push({ role: "user", content });
@@ -1523,11 +1666,11 @@ export function useUnifiedChat(
         messages: chatHistory,
         backend: context.backend,
         mode: context.chatMode,
-        files: uploadedFiles,
+        files: requestFiles,
         ...(hasProjectScope(projectName) ? { projectId: projectName } : {}),
         conversationId: activeConversationId,
         streamPhases: true,
-        ...(activeFile ? { activeFile } : {}),
+        ...(requestActiveFile ? { activeFile: requestActiveFile } : {}),
       });
       const sendChatRequest = (url: string, timeoutMs?: number) => {
         const init: RequestInit = {
@@ -1553,7 +1696,7 @@ export function useUnifiedChat(
 
       if (contentType.includes("text/event-stream")) {
         const responseBackend = mapResponseBackend(backendHeader) ?? context.backend;
-        await consumeSSEStream(res, assistantId, context, content);
+        await consumeSSEStream(res, assistantId, context, content, requestFiles);
         if (isSendProjectCurrent(context)) {
           liveBackendRef.current = responseBackend;
           setBackend(responseBackend);
@@ -1622,7 +1765,7 @@ export function useUnifiedChat(
         const promptSourceFiles = Array.from(
           new Set([
             ...extractPromptSourceFiles(content),
-            ...uploadedFiles
+            ...requestFiles
               .map(getUploadedFileReference)
               .filter((value) => value.length > 0),
           ]),
@@ -1684,7 +1827,6 @@ export function useUnifiedChat(
       recordGeneratedArtifacts,
       setArtifactProvenance,
       syncWorkspaceTreeAfterChat,
-      uploadedFiles,
     ]
   );
 
@@ -1707,6 +1849,7 @@ export function useUnifiedChat(
         const openClawSelected = agentType === "openclaw";
         const openhandsOk = data.openhands === "connected";
         const localSelected = data.llmProvider === "local";
+        localProviderActiveRef.current = localSelected;
 
         // Also check legacy fields for backward compat with older servers
         const legacyOpenClawOk = data.openclaw === "connected";
@@ -1733,6 +1876,7 @@ export function useUnifiedChat(
 
         setOpenClawConnected(openClawReady);
       } catch {
+        localProviderActiveRef.current = false;
         setOpenClawConnected(false);
       }
     }
