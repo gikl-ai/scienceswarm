@@ -1,0 +1,98 @@
+name: Trusted Review Policy
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  trusted-review-policy:
+    name: Trusted review policy
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      TRUSTED_USERS_JSON: '["vajdap","seijiyamamoto","yamamotoseiji"]'
+    steps:
+      - name: Evaluate trusted review policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          reviews_json=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate)
+
+          trusted_author=$(
+            jq -rn \
+              --arg author "$PR_AUTHOR" \
+              --argjson trusted "$TRUSTED_USERS_JSON" \
+              '$trusted | index($author) != null'
+          )
+
+          latest_trusted_reviews=$(
+            jq -c \
+              --argjson trusted "$TRUSTED_USERS_JSON" '
+                map(select(.user.login != null))
+                | sort_by(.user.login, .submitted_at // "")
+                | group_by(.user.login)
+                | map(last)
+                | map(select($trusted | index(.user.login)))
+              ' <<<"$reviews_json"
+          )
+
+          trusted_approvers=$(
+            jq -r '
+              map(select(.state == "APPROVED") | .user.login)
+              | unique
+              | join(",")
+            ' <<<"$latest_trusted_reviews"
+          )
+
+          {
+            echo "### Trusted review policy"
+            echo
+            echo "- PR author: \`$PR_AUTHOR\`"
+            echo "- Trusted maintainers: \`vajdap\`, \`seijiyamamoto\`, \`yamamotoseiji\`"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          if [[ "$trusted_author" == "true" ]]; then
+            {
+              echo "- Result: pass"
+              echo
+              echo "Author is trusted, so this PR is exempt from the extra approval requirement."
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [[ -n "$trusted_approvers" ]]; then
+            {
+              echo "- Result: pass"
+              echo "- Trusted approver(s): \`$trusted_approvers\`"
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "- Result: fail"
+            echo
+            echo "This PR needs an approving review from one of the trusted maintainers."
+            echo
+            echo "Latest trusted review states:"
+            jq -r '
+              if length == 0 then
+                "- none yet"
+              else
+                .[] | "- \(.user.login): \(.state)"
+              end
+            ' <<<"$latest_trusted_reviews"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          echo "Missing approving review from vajdap, seijiyamamoto, or yamamotoseiji." >&2
+          exit 1
