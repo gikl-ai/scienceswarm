@@ -2739,7 +2739,7 @@ describe("POST /api/chat/unified", () => {
       text: expect.stringContaining("local AI model connection is unavailable"),
       generatedFiles: [],
       taskPhases: [
-        { id: "reading-file", label: "Reading files", status: "completed" },
+        { id: "reading-file", label: "Reading file", status: "completed" },
         { id: "importing-result", label: "Importing result", status: "failed" },
         { id: "done", label: "Done", status: "pending" },
       ],
