@@ -17,6 +17,7 @@ import { createGbrainFileStore } from "@/brain/gbrain-file-store";
 import type { BrainPage } from "@/brain/store";
 
 const {
+  isLocalRequest,
   resolveAgentConfig,
   agentHealthCheck,
   sendAgentMessage,
@@ -41,6 +42,7 @@ const {
   upsertBrainChunks,
   listOpenClawSkills,
 } = vi.hoisted(() => ({
+  isLocalRequest: vi.fn(),
   resolveAgentConfig: vi.fn(),
   agentHealthCheck: vi.fn(),
   sendAgentMessage: vi.fn(),
@@ -70,6 +72,10 @@ vi.mock("@/lib/agent-client", () => ({
   resolveAgentConfig,
   agentHealthCheck,
   sendAgentMessage,
+}));
+
+vi.mock("@/lib/local-guard", () => ({
+  isLocalRequest,
 }));
 
 vi.mock("@/lib/openclaw", () => ({
@@ -212,6 +218,7 @@ function mockDirectLLMStream(text: string): void {
 
 beforeEach(() => {
   vi.unstubAllGlobals();
+  isLocalRequest.mockReset();
   resolveAgentConfig.mockReset();
   agentHealthCheck.mockReset();
   sendAgentMessage.mockReset();
@@ -235,6 +242,7 @@ beforeEach(() => {
   putBrainPage.mockReset();
   upsertBrainChunks.mockReset();
   listOpenClawSkills.mockReset();
+  isLocalRequest.mockResolvedValue(true);
   injectBrainContextIntoUserMessage.mockImplementation(
     (message: string) => message,
   );
