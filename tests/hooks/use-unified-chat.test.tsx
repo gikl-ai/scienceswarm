@@ -764,7 +764,6 @@ describe("useUnifiedChat persistence", () => {
     expect(secondBody.messages).toEqual(
       expect.arrayContaining([
         { role: "user", content: "Hello from the browser" },
-        { role: "assistant", content: "First answer" },
         { role: "user", content: "Second queued message" },
       ]),
     );

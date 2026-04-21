@@ -289,6 +289,19 @@ function normalizeChatMode(value: unknown): ChatMode | null {
   return value === "reasoning" || value === "openclaw-tools" ? value : null;
 }
 
+// Derives the restored ChatMode from the most recent persisted message that
+// recorded one. Necessary because the Backend union collapsed to a single
+// member ("openclaw") and can no longer encode reasoning vs tools mode.
+function deriveChatModeFromMessages(messages: Message[]): ChatMode | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const candidate = normalizeChatMode(messages[i]?.chatMode);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 // The server's X-Chat-Backend header can include diagnostic values
 // ("brain-setup", "slash-commands", "none") alongside "openclaw". Since the
 // hook's Backend union is now "openclaw" only, every server-reported value
@@ -377,8 +390,8 @@ const MAX_KEEPALIVE_MESSAGES = 50;
 const WORKSPACE_TREE_REFRESH_MS = 15000;
 const WORKSPACE_WATCH_POLL_MS = 5000;
 const MAX_GENERATED_ARTIFACTS = 50;
-const LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES = 12;
-const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 12_000;
+const LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES = 8;
+const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 8_000;
 const SLASH_COMMAND_START_TIMEOUT_MS = 15_000;
 const SLASH_COMMAND_TIMEOUT_MESSAGE =
   "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.";
@@ -912,11 +925,23 @@ function trimLocalChatHistory(
 ): Array<{ role: Message["role"]; content: string }> {
   const selected: Array<{ role: Message["role"]; content: string }> = [];
   let totalChars = 0;
+  let retainedAssistantTurns = 0;
 
   for (let index = history.length - 1; index >= 0; index -= 1) {
     const entry = history[index];
     const content = entry?.content ?? "";
     if (!content) {
+      continue;
+    }
+
+    // Keep the most recent assistant turn for short follow-up questions like
+    // "why?" or "compare that to the last answer", while still trimming older
+    // assistant prose that tends to re-impose stale agendas in local mode.
+    if (entry.role === "assistant") {
+      if (retainedAssistantTurns >= 1) {
+        continue;
+      }
+    } else if (entry.role !== "user") {
       continue;
     }
 
@@ -930,6 +955,9 @@ function trimLocalChatHistory(
 
     selected.push(entry);
     totalChars = nextChars;
+    if (entry.role === "assistant") {
+      retainedAssistantTurns += 1;
+    }
   }
 
   return selected.reverse();
@@ -1214,7 +1242,8 @@ export function useUnifiedChat(
     pendingHydrationKeyRef.current = storageKey;
     const hydratedMessages = materializeMessages(projectName, restored);
     const restoredBackend: Backend = "openclaw";
-    const restoredChatMode = restored.conversationBackend === "openclaw" ? "openclaw-tools" : "reasoning";
+    const restoredChatMode: ChatMode =
+      deriveChatModeFromMessages(hydratedMessages) ?? "reasoning";
     lastPollRef.current = getPollCursorSeed(hydratedMessages);
     setIsStreaming(false);
     setError(null);
@@ -1254,7 +1283,9 @@ export function useUnifiedChat(
         // auto-probe effect seeded in parallel (e.g. connected OpenClaw).
         if (preferredState.conversationBackend !== null) {
           const preferredBackend: Backend = "openclaw";
-          const preferredChatMode = preferredState.conversationBackend === "openclaw" ? "openclaw-tools" : "reasoning";
+          const preferredChatMode: ChatMode =
+            deriveChatModeFromMessages(preferredMessages)
+            ?? liveChatModeRef.current;
           setBackend(preferredBackend);
           setChatMode(preferredChatMode);
           liveBackendRef.current = preferredBackend;
