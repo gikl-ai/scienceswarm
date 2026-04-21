@@ -6757,6 +6757,13 @@ export async function handleUnifiedChatPost(
       }
     }
 
+    const shouldPreMaterializeProjectWorkspace =
+      Boolean(validatedProjectId) &&
+      (chatMode === "openclaw-tools" || requestedBackend !== "direct");
+    if (shouldPreMaterializeProjectWorkspace) {
+      await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
+    }
+
     // Use rawMessage (the original user text) for reference extraction so
     // path-like tokens inside the injected active-file content don't trigger
     // spurious workspace file resolution.
@@ -6917,7 +6924,7 @@ export async function handleUnifiedChatPost(
         );
       }
 
-      if (validatedProjectId) {
+      if (validatedProjectId && !shouldPreMaterializeProjectWorkspace) {
         await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
       }
 
