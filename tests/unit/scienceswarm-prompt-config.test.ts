@@ -53,6 +53,7 @@ describe("scienceswarm-prompt-config", () => {
 
     expect(config).toEqual({
       path: path.join(projectRoot, "SCIENCESWARM.md"),
+      promptLabel: "project:SCIENCESWARM.md",
       instructions: "# Project Instructions\n\nRead `notes/context.md` when the task needs it.",
       configuredTools: ["workspace-read", "brain-read"],
       referencedFiles: ["docs/project-brief.md", "notes/context.md"],

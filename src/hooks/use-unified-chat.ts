@@ -894,6 +894,7 @@ function trimLocalChatHistory(
 ): Array<{ role: Message["role"]; content: string }> {
   const selected: Array<{ role: Message["role"]; content: string }> = [];
   let totalChars = 0;
+  let retainedAssistantTurns = 0;
 
   for (let index = history.length - 1; index >= 0; index -= 1) {
     const entry = history[index];
@@ -901,7 +902,15 @@ function trimLocalChatHistory(
     if (!content) {
       continue;
     }
-    if (entry.role !== "user") {
+
+    // Keep the most recent assistant turn for short follow-up questions like
+    // "why?" or "compare that to the last answer", while still trimming older
+    // assistant prose that tends to re-impose stale agendas in local mode.
+    if (entry.role === "assistant") {
+      if (retainedAssistantTurns >= 1) {
+        continue;
+      }
+    } else if (entry.role !== "user") {
       continue;
     }
 
@@ -915,6 +924,9 @@ function trimLocalChatHistory(
 
     selected.push(entry);
     totalChars = nextChars;
+    if (entry.role === "assistant") {
+      retainedAssistantTurns += 1;
+    }
   }
 
   return selected.reverse();

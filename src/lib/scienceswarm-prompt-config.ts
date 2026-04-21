@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { constants as fsConstants } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
 import {
@@ -26,6 +27,7 @@ interface PromptFrontmatter {
 
 export interface ScienceSwarmPromptConfig {
   path: string;
+  promptLabel: string;
   instructions: string;
   configuredTools: PromptToolCapability[];
   referencedFiles: string[];
@@ -120,7 +122,7 @@ function extractReferencedFiles(markdown: string): string[] {
       if (!reference || /^https?:\/\//i.test(reference)) {
         continue;
       }
-      references.add(reference.replace(/^\.\/+/, ""));
+      references.add(reference.replace(/[?#].*$/, "").replace(/^\.\/+/, ""));
     }
   }
 
@@ -135,6 +137,31 @@ function resolvePromptSearchPaths(projectId?: string | null): string[] {
   ].filter((candidate): candidate is string => typeof candidate === "string");
 
   return Array.from(new Set(candidates));
+}
+
+function buildPromptLabel(candidatePath: string, projectId?: string | null): string {
+  const projectRoot = projectId ? getScienceSwarmProjectRoot(projectId) : null;
+  const workspaceRoot = getScienceSwarmWorkspaceRoot();
+  const cwd = process.cwd();
+
+  if (projectRoot) {
+    const relativeProjectPath = path.relative(projectRoot, candidatePath);
+    if (relativeProjectPath && !relativeProjectPath.startsWith("..")) {
+      return `project:${relativeProjectPath}`;
+    }
+  }
+
+  const relativeWorkspacePath = path.relative(workspaceRoot, candidatePath);
+  if (relativeWorkspacePath && !relativeWorkspacePath.startsWith("..")) {
+    return `workspace:${relativeWorkspacePath}`;
+  }
+
+  const relativeCwdPath = path.relative(cwd, candidatePath);
+  if (relativeCwdPath && !relativeCwdPath.startsWith("..")) {
+    return relativeCwdPath;
+  }
+
+  return path.basename(candidatePath);
 }
 
 export function buildScienceSwarmSystemPrompt(): string {
@@ -162,11 +189,13 @@ export async function loadScienceSwarmPromptConfig(
   projectId?: string | null,
 ): Promise<ScienceSwarmPromptConfig | null> {
   for (const candidatePath of resolvePromptSearchPaths(projectId)) {
-    if (!existsSync(candidatePath)) {
+    try {
+      await access(candidatePath, fsConstants.F_OK);
+    } catch {
       continue;
     }
 
-    const raw = readFileSync(candidatePath, "utf8");
+    const raw = await readFile(candidatePath, "utf8");
     const parsed = matter(raw);
     const frontmatter = (parsed.data ?? {}) as PromptFrontmatter;
     const instructions = trimPromptText(parsed.content, MAX_SCIENCESWARM_PROMPT_CHARS);
@@ -186,6 +215,7 @@ export async function loadScienceSwarmPromptConfig(
 
     return {
       path: candidatePath,
+      promptLabel: buildPromptLabel(candidatePath, projectId),
       instructions,
       configuredTools,
       referencedFiles,
@@ -212,7 +242,7 @@ export async function buildScienceSwarmPromptContextText(options: {
     (tool) => !availableTools.includes(tool),
   );
   const sections = [
-    `Project guidance loaded from ${config.path}.`,
+    `Project guidance loaded from ${config.promptLabel}.`,
     "Treat this as workspace-owner guidance for the current project. It is lower priority than the hidden system prompt and the user's current request.",
   ];
 

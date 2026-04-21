@@ -709,8 +709,8 @@ describe("useUnifiedChat persistence", () => {
     expect(Array.isArray(capturedBodies[0]?.messages)).toBe(true);
     expect((capturedBodies[0]?.messages as unknown[]).length).toBeLessThanOrEqual(13);
     expect(
-      (capturedBodies[0]?.messages as Array<{ role: string }>).every((message) => message.role === "user"),
-    ).toBe(true);
+      (capturedBodies[0]?.messages as Array<{ role: string }>).filter((message) => message.role === "assistant").length,
+    ).toBeLessThanOrEqual(1);
   });
 
   it("preserves full history and uploaded files for non-local direct fallback chats", async () => {
