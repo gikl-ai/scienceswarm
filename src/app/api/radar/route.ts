@@ -8,6 +8,7 @@
 
 import { getActiveRadar, createRadar, updateRadar } from "@/lib/radar/store"
 import { defaultSourcesForTopics } from "@/lib/radar/default-sources"
+import { isLocalRequest } from "@/lib/local-guard"
 
 function getStateDir(): string {
   return process.env.RADAR_STATE_DIR || process.env.BRAIN_ROOT || "state"
@@ -25,6 +26,10 @@ export async function GET(_request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 })
+  }
+
   try {
     const body = await request.json()
     const { prompt, topics, sources, schedule, channels } = body
@@ -66,6 +71,10 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 export async function PATCH(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 })
+  }
+
   try {
     const body = await request.json()
     const { radarId, ...updates } = body

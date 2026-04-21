@@ -7,6 +7,7 @@
 // never `NextResponse`.
 
 import { diffMarkdown } from "@/lib/md-diff";
+import { isLocalRequest } from "@/lib/local-guard";
 
 // Upper bound on per-field input size. `diffMarkdown` uses a classic LCS
 // dynamic-program with O(n*m) time and memory (allocated as a single
@@ -23,6 +24,10 @@ interface DiffRequest {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  if (!(await isLocalRequest(req))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: DiffRequest;
   try {
     body = (await req.json()) as DiffRequest;

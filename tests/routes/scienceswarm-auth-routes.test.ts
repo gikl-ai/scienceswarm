@@ -207,7 +207,11 @@ describe("/api/scienceswarm-auth/*", () => {
   });
 
   it("clears the local auth cookies on sign out", async () => {
-    const response = await postSignOut();
+    const response = await postSignOut(
+      new Request("http://127.0.0.1:3022/api/scienceswarm-auth/sign-out", {
+        method: "POST",
+      }),
+    );
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain(
       `${SCIENCESWARM_LOCAL_AUTH_COOKIE}=;`,

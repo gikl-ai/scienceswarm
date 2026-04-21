@@ -1,6 +1,11 @@
 import { parseBibtex } from "@/lib/bibtex-parser";
+import { isLocalRequest } from "@/lib/local-guard";
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let payload: unknown;
   try {
     payload = await request.json();

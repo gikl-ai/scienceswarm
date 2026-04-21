@@ -1,6 +1,7 @@
 import {
   getAuthUrl,
   handleCallback,
+  GoogleDriveOAuthStateError,
   isConnected,
   disconnect,
   listFiles,
@@ -8,6 +9,7 @@ import {
   searchFiles,
   downloadFile,
 } from "@/lib/google-drive";
+import { isLocalRequest } from "@/lib/local-guard";
 
 // ── GET handler ───────────────────────────────────────────────
 
@@ -15,16 +17,24 @@ export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
 
+  if (action !== "callback" && !(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     switch (action) {
       case "auth-url": {
-        const url = getAuthUrl();
+        const { url } = getAuthUrl();
         return Response.json({ url });
       }
       case "callback": {
         const code = searchParams.get("code");
+        const state = searchParams.get("state");
         if (!code) return Response.json({ error: "Missing code parameter" }, { status: 400 });
-        const result = await handleCallback(code);
+        if (!state) {
+          return Response.json({ error: "Missing state parameter" }, { status: 400 });
+        }
+        const result = await handleCallback(code, state);
         // Redirect back to the dashboard after successful OAuth
         if (result.success) {
           return new Response(null, {
@@ -63,6 +73,9 @@ export async function GET(request: Request): Promise<Response> {
         return Response.json({ error: `Unknown action: ${action}` }, { status: 400 });
     }
   } catch (err) {
+    if (err instanceof GoogleDriveOAuthStateError) {
+      return Response.json({ error: err.message }, { status: 400 });
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
     return Response.json({ error: message }, { status: 500 });
   }
@@ -71,6 +84,10 @@ export async function GET(request: Request): Promise<Response> {
 // ── POST handler ──────────────────────────────────────────────
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const raw = await request.json().catch(() => null);
     if (!raw || typeof raw !== "object") {

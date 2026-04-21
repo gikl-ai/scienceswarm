@@ -6,6 +6,7 @@
  */
 
 import { buildImportPreview } from "@/lib/import/preview-core";
+import { isLocalRequest } from "@/lib/local-guard";
 
 interface AnalyzeFolderFileContent {
   path: string;
@@ -20,6 +21,10 @@ interface AnalyzeFolderPreviewFile extends AnalyzeFolderFileContent {
 }
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     if (!isAnalyzeFolderBody(body)) {

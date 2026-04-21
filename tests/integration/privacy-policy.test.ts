@@ -196,6 +196,27 @@ describe("privacy policy", () => {
     expect(startConversation).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects cross-site browser requests before execution starts", async () => {
+    const response = await agentPost(new Request("http://localhost/api/agent", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        origin: "https://evil.example",
+        "sec-fetch-site": "cross-site",
+      },
+      body: JSON.stringify({
+        action: "start",
+        projectId: "gamma",
+        message: "build the memo",
+      }),
+    }));
+
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.error).toBe("Forbidden");
+    expect(startConversation).not.toHaveBeenCalled();
+  });
+
   it("allows selected chat without project context", async () => {
     sendOpenClawMessage.mockResolvedValue("no-project response");
 

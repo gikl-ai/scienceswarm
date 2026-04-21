@@ -15,6 +15,7 @@ import { expandHomeDir } from "@/lib/scienceswarm-paths";
 import { hashContent } from "@/lib/workspace-manager";
 import { buildImportPreview, buildPreviewAnalysis } from "@/lib/import/preview-core";
 import { shouldSkipImportDirectory, shouldSkipImportFile } from "@/lib/import/ignore";
+import { isLocalRequest } from "@/lib/local-guard";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -295,6 +296,10 @@ function buildScanWarnings(
 // ── POST handler ─────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const body = await request.json() as unknown;
     if (typeof body !== "object" || body === null) {

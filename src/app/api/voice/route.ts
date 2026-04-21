@@ -10,6 +10,7 @@
  */
 
 import { transcribe, speak, type TranscribeOptions } from "@/lib/deepgram";
+import { isLocalRequest } from "@/lib/local-guard";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -223,6 +224,10 @@ async function handleConverse(request: Request): Promise<Response> {
 // ── Route handler ────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     if (!process.env.DEEPGRAM_OWNER_API_KEY) {
       return Response.json(

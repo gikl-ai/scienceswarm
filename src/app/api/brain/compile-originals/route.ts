@@ -14,6 +14,7 @@ import {
   saveArtifact,
 } from "@/brain/originals-artifacts";
 import type { ArtifactFormat } from "@/brain/originals-artifacts";
+import { isLocalRequest } from "@/lib/local-guard";
 import { getBrainConfig, getLLMClient, isErrorResponse } from "../_shared";
 
 const VALID_FORMATS = new Set([
@@ -40,6 +41,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
   const config = configOrError;

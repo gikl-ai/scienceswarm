@@ -1,6 +1,7 @@
 import { appendAuditEvent } from "@/lib/state/audit-log";
 import { buildArtifactContextBundle } from "@/lib/artifacts/context-bundle";
 import { validateArtifactCreateRequest } from "@/lib/artifacts/intent";
+import { isLocalRequest } from "@/lib/local-guard";
 import {
   persistArtifact,
   reserveArtifactJob,
@@ -10,6 +11,17 @@ import {
 import { runArtifact } from "@/lib/artifacts/run-artifact";
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json(
+      {
+        error: "Forbidden",
+        assumptions: [],
+        reviewFirst: [],
+      },
+      { status: 403 },
+    );
+  }
+
   let jobContext:
     | {
         jobId: string;

@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { isLocalRequest } from "@/lib/local-guard";
 
 type FeedbackRequest = {
   job_id: unknown;
@@ -35,6 +36,10 @@ function validateBody(
 }
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: FeedbackRequest;
   try {
     body = (await request.json()) as FeedbackRequest;

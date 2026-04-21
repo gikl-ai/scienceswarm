@@ -9,10 +9,15 @@
 import { scanCorpus, approveAndImport } from "@/brain/coldstart";
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { createIngestService } from "@/brain/ingest/service";
+import { isLocalRequest } from "@/lib/local-guard";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 import { getBrainConfig, getLLMClient, isErrorResponse } from "../_shared";
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
   const config = configOrError;
