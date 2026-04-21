@@ -74,6 +74,10 @@ describe("runtime env live reload", () => {
       llmModel: "gpt-5.4",
       ollamaModel: "qwen3:14b",
       openaiApiKey: "sk-saved",
+      agentBackend: null,
+      agentUrl: null,
+      agentApiKey: null,
+      openclawInternalApiKey: null,
     });
     expect(isStrictLocalOnlyEnabled()).toBe(true);
     expect(isLocalProviderConfigured()).toBe(true);
