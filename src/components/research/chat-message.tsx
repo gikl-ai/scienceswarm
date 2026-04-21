@@ -71,7 +71,7 @@ export function ChatMessage({
       className={`flex ${role === "user" ? "justify-end" : "justify-start"}`}
     >
       <div
-        data-chat-selectable="true"
+        data-chat-selectable={role === "user" ? "true" : undefined}
         className={`max-w-2xl rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text ${
           role === "user"
             ? isOpenClawToolsTurn
