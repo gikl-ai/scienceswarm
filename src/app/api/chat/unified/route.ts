@@ -229,23 +229,6 @@ function matchesLocalModel(
   );
 }
 
-function isTrustedLocalRuntimeUrl(rawUrl: string | null | undefined): boolean {
-  if (!rawUrl) return false;
-  try {
-    const { hostname } = new URL(rawUrl);
-    return (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "0.0.0.0" ||
-      hostname === "::1" ||
-      hostname === "[::1]" ||
-      hostname === "host.docker.internal"
-    );
-  } catch {
-    return false;
-  }
-}
-
 function normalizeChatMode(value: unknown): ChatMode {
   return value === "openclaw-tools" ? "openclaw-tools" : "reasoning";
 }
