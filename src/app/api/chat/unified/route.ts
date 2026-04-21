@@ -1282,20 +1282,6 @@ function withWorkspaceFileContext(
   ];
 }
 
-function withAugmentedLastUserMessage(
-  messages: UnifiedChatMessage[],
-  augmentedContent: string,
-): UnifiedChatMessage[] {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === "user") {
-      const next = messages.slice();
-      next[i] = { ...messages[i], content: augmentedContent };
-      return next;
-    }
-  }
-  return messages;
-}
-
 /**
  * Inject the "currently selected file" context into the message list.
  *
@@ -5900,6 +5886,27 @@ async function streamDirectResponse(
   });
 }
 
+async function streamLocalDirectResponse(params: {
+  messages: UnifiedChatMessage[];
+  files: UploadedFileDescriptor[];
+  projectId: string | null;
+  referenceNotes?: WorkspaceReferenceNotes;
+  chatMode: ChatMode;
+}) {
+  const workspaceFileContext = await buildWorkspaceFileContext(
+    params.files,
+    params.projectId,
+    params.referenceNotes,
+  );
+
+  return streamDirectResponse(
+    withWorkspaceFileContext(params.messages, workspaceFileContext),
+    workspaceFileContext?.files ?? [],
+    params.chatMode,
+    params.projectId,
+  );
+}
+
 function streamOpenClawResponse(params: {
   message: string;
   userMessage: string;
@@ -6743,7 +6750,6 @@ export async function handleUnifiedChatPost(
           { status: 400 },
         );
       }
-      await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
     }
 
     // Use rawMessage (the original user text) for reference extraction so
@@ -6796,10 +6802,6 @@ export async function handleUnifiedChatPost(
 
     const agentConfig = resolveAgentConfig();
     const strictLocalOnly = isStrictLocalOnlyEnabled();
-    const selectedAgent = await getConfiguredAgentRuntimeStatus(
-      agentConfig,
-      strictLocalOnly,
-    );
     let privacyErrorPromise: Promise<Response | null> | null = null;
     const getPrivacyError = (): Promise<Response | null> => {
       privacyErrorPromise ??= enforceCloudPrivacy(validatedProjectId);
@@ -6810,6 +6812,35 @@ export async function handleUnifiedChatPost(
       localProviderPromise ??= getLocalProviderStatus(chatMode);
       return localProviderPromise;
     };
+
+    if (chatMode !== "openclaw-tools" && requestedBackend === "direct") {
+      const localProvider = await getLocalProvider();
+      if (localProvider.configured) {
+        if (localProvider.response) {
+          return localProvider.response;
+        }
+        const privacyError = await maybeEnforceCloudPrivacyForLocalProvider(
+          localProvider,
+          validatedProjectId,
+        );
+        if (privacyError) {
+          return privacyError;
+        }
+
+        return await streamLocalDirectResponse({
+          messages,
+          files: mergedFiles,
+          projectId: validatedProjectId,
+          referenceNotes,
+          chatMode,
+        });
+      }
+    }
+
+    const selectedAgent = await getConfiguredAgentRuntimeStatus(
+      agentConfig,
+      strictLocalOnly,
+    );
 
     if (chatMode === "openclaw-tools" && selectedAgent.type !== "openclaw") {
       return Response.json(
@@ -6831,50 +6862,6 @@ export async function handleUnifiedChatPost(
     }
 
     if (selectedAgent.type === "openclaw") {
-      if (chatMode !== "openclaw-tools" && requestedBackend === "direct") {
-        const localProvider = await getLocalProvider();
-        if (localProvider.configured) {
-          if (localProvider.response) {
-            return localProvider.response;
-          }
-          const privacyError = await maybeEnforceCloudPrivacyForLocalProvider(
-            localProvider,
-            validatedProjectId,
-          );
-          if (privacyError) {
-            return privacyError;
-          }
-
-          const rawUserMessage = rawMessage ?? "";
-          const augmentedLocalMessage =
-            await injectBrainContextIntoUserMessage(
-              rawUserMessage,
-              validatedProjectId ?? undefined,
-            );
-          const messagesWithBrainContext =
-            augmentedLocalMessage === rawUserMessage
-              ? messages
-              : withAugmentedLastUserMessage(
-                  messages,
-                  augmentedLocalMessage,
-                );
-          const workspaceFileContext = await buildWorkspaceFileContext(
-            mergedFiles,
-            validatedProjectId,
-            referenceNotes,
-          );
-          return await streamDirectResponse(
-            withWorkspaceFileContext(
-              messagesWithBrainContext,
-              workspaceFileContext,
-            ),
-            workspaceFileContext?.files ?? [],
-            chatMode,
-            validatedProjectId,
-          );
-        }
-      }
-
       if (selectedAgent.status !== "connected") {
         if (chatMode !== "openclaw-tools") {
           const localProvider = await getLocalProvider();
@@ -6890,30 +6877,13 @@ export async function handleUnifiedChatPost(
               return privacyError;
             }
 
-            const rawUserMessage = rawMessage ?? "";
-            const augmentedLocalMessage =
-              await injectBrainContextIntoUserMessage(
-                rawUserMessage,
-                validatedProjectId ?? undefined,
-              );
-            const messagesWithBrainContext =
-              augmentedLocalMessage === rawUserMessage
-                ? messages
-                : withAugmentedLastUserMessage(messages, augmentedLocalMessage);
-            const workspaceFileContext = await buildWorkspaceFileContext(
-              mergedFiles,
-              validatedProjectId,
+            return await streamLocalDirectResponse({
+              messages,
+              files: mergedFiles,
+              projectId: validatedProjectId,
               referenceNotes,
-            );
-            return await streamDirectResponse(
-              withWorkspaceFileContext(
-                messagesWithBrainContext,
-                workspaceFileContext,
-              ),
-              workspaceFileContext?.files ?? [],
               chatMode,
-              validatedProjectId,
-            );
+            });
           }
         }
 
@@ -6940,6 +6910,10 @@ export async function handleUnifiedChatPost(
             },
           },
         );
+      }
+
+      if (validatedProjectId) {
+        await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
       }
 
       const privacyError = await getPrivacyError();
@@ -7307,35 +7281,13 @@ export async function handleUnifiedChatPost(
         return privacyError;
       }
 
-      // Augment `rawMessage` (the user's words only), not `message` which
-      // already has the `[Currently viewing file: …]` prefix baked in. The
-      // active-file content is already attached separately as a system
-      // message via `withActiveFileContext`, so augmenting `message` here
-      // would send the file excerpt twice: once in the system message and
-      // once again inside the brain-context `## User Request` block.
-      const rawUserMessage = rawMessage ?? "";
-      const augmentedLocalMessage = await injectBrainContextIntoUserMessage(
-        rawUserMessage,
-        validatedProjectId ?? undefined,
-      );
-      const messagesWithBrainContext =
-        augmentedLocalMessage === rawUserMessage
-          ? messages
-          : withAugmentedLastUserMessage(messages, augmentedLocalMessage);
-      const workspaceFileContext = await buildWorkspaceFileContext(
-        mergedFiles,
-        validatedProjectId,
+      return await streamLocalDirectResponse({
+        messages,
+        files: mergedFiles,
+        projectId: validatedProjectId,
         referenceNotes,
-      );
-      return await streamDirectResponse(
-        withWorkspaceFileContext(
-          messagesWithBrainContext,
-          workspaceFileContext,
-        ),
-        workspaceFileContext?.files ?? [],
         chatMode,
-        validatedProjectId,
-      );
+      });
     }
 
     const privacyError = await getPrivacyError();

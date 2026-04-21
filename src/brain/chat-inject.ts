@@ -19,6 +19,7 @@ import { buildProjectOrganizerReadout } from "./project-organizer";
 import { readChatThread } from "@/lib/chat-thread-store";
 import { formatProjectOrganizerChatSummary } from "@/lib/project-organizer-summary";
 import { isDefaultGlobalBrainRoot } from "@/lib/state/project-storage";
+import { isLocalProviderConfigured } from "@/lib/local-llm";
 
 const RECENT_THREAD_MESSAGES = 6;
 const MAX_THREAD_MESSAGE_CHARS = 320;
@@ -224,6 +225,10 @@ function buildGbrainStructureSection(projectId?: string): string {
  * and back-links without slowing down the chat response.
  */
 function fireEntityDetection(userMessage: string, projectId?: string): void {
+  if (isLocalProviderConfigured()) {
+    return;
+  }
+
   const config = loadBrainConfig();
   if (!config) return;
 

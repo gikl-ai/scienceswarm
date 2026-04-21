@@ -29,6 +29,27 @@ function ChatHarness({ projectName }: { projectName: string }) {
     <div>
       <button onClick={() => void sendMessage("Hello from the browser")}>Send</button>
       <button onClick={() => void sendMessage("Second queued message")}>Send second</button>
+      <button onClick={() => void sendMessage("Review @Example Paper for me")}>Send explicit file</button>
+      <button
+        onClick={() =>
+          void sendMessage("Summarize this file", {
+            path: "notes/current.md",
+            content: "Current file contents",
+          })
+        }
+      >
+        Send current file
+      </button>
+      <button
+        onClick={() =>
+          void sendMessage("Hello from the browser", {
+            path: "notes/current.md",
+            content: "Current file contents",
+          })
+        }
+      >
+        Send implicit current file
+      </button>
       <button onClick={() => void sendMessage("/audit-revise draft a revision checklist")}>Send slash</button>
       <button onClick={() => setBackend("openclaw")}>Switch OpenClaw</button>
       <button onClick={() => setBackend("direct")}>Switch Direct</button>
@@ -407,6 +428,223 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("uploaded-files-log").textContent).toContain(
       "gbrain:gbrain:wiki/papers/example.md:wiki/papers/example.md",
     );
+  });
+
+  it("only sends chat-context files when the user explicitly references them", async () => {
+    const capturedBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:26b"],
+          configuredLocalModel: "gemma4:26b",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return createSseResponse([{ text: "ok" }], "direct");
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("direct");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add valid gbrain context" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(capturedBodies).toHaveLength(1);
+    });
+    expect(capturedBodies[0]?.files).toEqual([]);
+    expect(capturedBodies[0]?.activeFile).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send explicit file" }));
+
+    await waitFor(() => {
+      expect(capturedBodies).toHaveLength(2);
+    });
+    expect(capturedBodies[1]?.files).toEqual([
+      expect.objectContaining({
+        workspacePath: "gbrain:wiki/papers/example.md",
+        brainSlug: "wiki/papers/example.md",
+      }),
+    ]);
+  });
+
+  it("only sends active-file context when the user explicitly asks for the current file", async () => {
+    const capturedBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:26b"],
+          configuredLocalModel: "gemma4:26b",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return createSseResponse([{ text: "ok" }], "direct");
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("direct");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send implicit current file" }));
+
+    await waitFor(() => {
+      expect(capturedBodies).toHaveLength(1);
+    });
+    expect(capturedBodies[0]?.activeFile).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send current file" }));
+
+    await waitFor(() => {
+      expect(capturedBodies).toHaveLength(2);
+    });
+    expect(capturedBodies[1]?.activeFile).toEqual({
+      path: "notes/current.md",
+      content: "Current file contents",
+    });
+  });
+
+  it("caps local direct chat history before sending", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: null,
+        messages: Array.from({ length: 20 }, (_, index) => ({
+          id: `m-${index}`,
+          role: index % 2 === 0 ? "user" : "assistant",
+          content: `Historical message ${index}`,
+          timestamp: new Date(2026, 0, 1, 0, index).toISOString(),
+        })),
+      }),
+    );
+
+    const capturedBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:26b"],
+          configuredLocalModel: "gemma4:26b",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return createSseResponse([{ text: "ok" }], "direct");
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("direct");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(capturedBodies).toHaveLength(1);
+    });
+
+    expect(Array.isArray(capturedBodies[0]?.messages)).toBe(true);
+    expect((capturedBodies[0]?.messages as unknown[]).length).toBeLessThanOrEqual(13);
   });
 
   it("drops internal file-open and workspace-sync system noise from restored chat", async () => {
