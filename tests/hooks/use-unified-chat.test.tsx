@@ -32,6 +32,7 @@ function ChatHarness({ projectName }: { projectName: string }) {
       <button onClick={() => void sendMessage("Hello from the browser")}>Send</button>
       <button onClick={() => void sendMessage("Second queued message")}>Send second</button>
       <button onClick={() => void sendMessage("Review @Example Paper for me")}>Send explicit file</button>
+      <button onClick={() => void sendMessage("Describe how all files are synchronized")}>Send broad all files</button>
       <button
         onClick={() =>
           void sendMessage("Summarize this file", {
@@ -572,6 +573,66 @@ describe("useUnifiedChat persistence", () => {
       path: "notes/current.md",
       content: "Current file contents",
     });
+  });
+
+  it("does not treat a generic 'all files' phrase as an explicit attachment request", async () => {
+    const capturedBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:26b"],
+          configuredLocalModel: "gemma4:26b",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return createSseResponse([{ text: "ok" }], "direct");
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("direct");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add valid gbrain context" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send broad all files" }));
+
+    await waitFor(() => {
+      expect(capturedBodies).toHaveLength(1);
+    });
+    expect(capturedBodies[0]?.files).toEqual([]);
   });
 
   it("caps local direct chat history before sending", async () => {

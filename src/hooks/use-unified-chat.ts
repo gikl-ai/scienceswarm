@@ -843,7 +843,7 @@ function contentExplicitlyReferencesFile(content: string, aliases: string[]): bo
 }
 
 function shouldIncludeAllExplicitFiles(content: string): boolean {
-  return /\b(attached|uploaded|selected|mentioned)\s+files?\b|\bthese files\b|\bthose files\b|\ball files\b/i.test(content);
+  return /\b(attached|uploaded|selected|mentioned)\s+files?\b|\b(these|those)\s+files\b|\ball\s+(attached|uploaded|selected|mentioned)\s+files\b/i.test(content);
 }
 
 function selectExplicitRequestFiles(
