@@ -1,5 +1,8 @@
 import { execFile } from "node:child_process";
 import { isLocalRequest } from "@/lib/local-guard";
+import { isWslEnvironment } from "@/lib/wsl";
+
+class LocalFolderPickerError extends Error {}
 
 function execFileText(command: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -54,6 +57,28 @@ function hasCommand(name: string): Promise<boolean> {
   });
 }
 
+function convertWindowsPathToWslFallback(path: string): string | null {
+  const trimmed = path.trim();
+  if (!trimmed) return null;
+  if (/^[A-Za-z]:[\\\/]*$/.test(trimmed)) {
+    return `/mnt/${trimmed[0]!.toLowerCase()}`;
+  }
+
+  const match = /^([A-Za-z]):[\\\/]+(.+)$/.exec(trimmed);
+  if (!match) return null;
+  const [, drive, rest] = match;
+  return `/mnt/${drive.toLowerCase()}/${rest.replace(/[\\\/]+/g, "/")}`;
+}
+
+async function translateWindowsPathToWsl(path: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileText("wslpath", ["-u", path]);
+    return normalizeSelectedPath(stdout);
+  } catch {
+    return convertWindowsPathToWslFallback(path);
+  }
+}
+
 async function pickFolderOnMac(): Promise<string | null> {
   const { stdout } = await execFileText("osascript", [
     "-e",
@@ -84,7 +109,9 @@ async function pickFolderOnLinux(): Promise<string | null> {
     return normalizeSelectedPath(stdout);
   }
 
-  throw new Error("No supported local folder picker found. Install zenity or kdialog, or paste a path manually.");
+  throw new LocalFolderPickerError(
+    "No supported local folder picker found. Install zenity or kdialog, or paste a path manually.",
+  );
 }
 
 async function pickFolderOnWindows(): Promise<string | null> {
@@ -105,12 +132,48 @@ async function pickFolderOnWindows(): Promise<string | null> {
   return normalizeSelectedPath(stdout);
 }
 
+async function pickFolderOnWsl(): Promise<string | null> {
+  if (!(await hasCommand("powershell.exe"))) {
+    throw new LocalFolderPickerError(
+      "Windows host folder picker is unavailable in this WSL session. Make sure powershell.exe is on PATH, or paste a path manually.",
+    );
+  }
+
+  const command = [
+    "Add-Type -AssemblyName System.Windows.Forms",
+    "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog",
+    '$dialog.Description = "Choose a folder to import into ScienceSwarm"',
+    "$dialog.ShowNewFolderButton = $false",
+    "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.SelectedPath }",
+  ].join("; ");
+
+  const { stdout } = await execFileText("powershell.exe", [
+    "-NoProfile",
+    "-STA",
+    "-Command",
+    command,
+  ]);
+  const windowsPath = normalizeSelectedPath(stdout);
+  if (!windowsPath) return null;
+
+  const wslPath = await translateWindowsPathToWsl(windowsPath);
+  if (!wslPath) {
+    throw new LocalFolderPickerError(
+      "Windows folder picker returned a path that could not be translated into a WSL path.",
+    );
+  }
+  return wslPath;
+}
+
 async function pickLocalFolder(): Promise<string | null> {
   if (process.platform === "darwin") {
     return pickFolderOnMac();
   }
 
   if (process.platform === "linux") {
+    if (isWslEnvironment()) {
+      return pickFolderOnWsl();
+    }
     return pickFolderOnLinux();
   }
 
@@ -118,7 +181,9 @@ async function pickLocalFolder(): Promise<string | null> {
     return pickFolderOnWindows();
   }
 
-  throw new Error("Local folder picker is not supported on this platform. Paste a path manually instead.");
+  throw new LocalFolderPickerError(
+    "Local folder picker is not supported on this platform. Paste a path manually instead.",
+  );
 }
 
 export async function POST() {
@@ -135,6 +200,15 @@ export async function POST() {
   } catch (error) {
     if (isPickerCancellation(error)) {
       return Response.json({ cancelled: true });
+    }
+
+    if (error instanceof LocalFolderPickerError) {
+      return Response.json(
+        {
+          error: error.message,
+        },
+        { status: 500 },
+      );
     }
 
     return Response.json(
