@@ -2306,8 +2306,9 @@ describe("Project dashboard smoke test", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
-          nanoclaw: "connected",
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
           openhands: "disconnected",
           llmProvider: "openai",
           ollamaModels: [],
