@@ -1,0 +1,24 @@
+{
+  "slug": "scienceswarm-evidence-triangulation",
+  "name": "ScienceSwarm Evidence Triangulation",
+  "description": "Cross-check a scientific, mathematical, or engineering claim across independent primary sources before acting on it.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "evidence",
+    "triage"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "A reusable cross-host skill for validating claims against multiple independent sources and surfacing disagreements clearly.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T00:00:00.000Z",
+  "updatedAt": "2026-04-20T00:00:00.000Z"
+}

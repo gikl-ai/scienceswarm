@@ -1,0 +1,49 @@
+{
+  "name": "scienceswarm",
+  "version": "0.1.0",
+  "description": "Open-source AI research workspace with a markdown-first second brain, MCP tooling, and multi-agent chat routing.",
+  "family": "bundle-plugin",
+  "configSchema": {
+    "OPENAI_API_KEY": {
+      "type": "string",
+      "required": true,
+      "description": "OpenAI API key used for chat, embeddings, and second-brain enrichment",
+      "uiHints": { "sensitive": true }
+    },
+    "OPENCLAW_URL": {
+      "type": "string",
+      "required": false,
+      "description": "OpenClaw gateway websocket URL (defaults to ws://127.0.0.1:18789/ws)"
+    },
+    "BRAIN_ROOT": {
+      "type": "string",
+      "required": false,
+      "description": "Filesystem path to the markdown second brain (defaults to SCIENCESWARM_DIR/brain or ~/.scienceswarm/brain)"
+    },
+    "SCIENCESWARM_USER_HANDLE": {
+      "type": "string",
+      "required": true,
+      "description": "Author handle attached to every brain write (for example @researcher)"
+    }
+  },
+  "mcpServers": {
+    "scienceswarm": {
+      "command": "npx",
+      "args": ["tsx", "scripts/start-mcp-server.ts"]
+    }
+  },
+  "skills": [
+    ".openclaw/skills/scienceswarm-getting-started",
+    ".openclaw/skills/scienceswarm-dashboard",
+    ".openclaw/skills/research-radar",
+    ".openclaw/skills/project-organizer",
+    ".openclaw/skills/audit-revise",
+    ".openclaw/skills/brain-maintenance"
+  ],
+  "_comment_skills": "The runtime loads public product skills from the checked-in .openclaw/skills projection.",
+  "openclaw": {
+    "compat": {
+      "pluginApi": ">=2026.4.0"
+    }
+  }
+}

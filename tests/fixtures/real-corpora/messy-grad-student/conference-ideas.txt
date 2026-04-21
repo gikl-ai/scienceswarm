@@ -1,0 +1,9 @@
+Conference talk ideas for NeurIPS 2026
+
+1. Batch correction as a distributional alignment problem.
+   Frame scVI-style approaches as optimal transport in latent space.
+2. Why scRNA-seq benchmarks are broken.
+   Most papers test on the same three datasets; overfitting the benchmarks
+   is now the dominant failure mode.
+3. The cost of zero-shot: a case study in microscopy foundation models.
+   When does fine-tuning pay off vs. when is zero-shot good enough?

@@ -1,0 +1,176 @@
+import path from "node:path";
+
+import type { ProjectRecord } from "@/brain/gbrain-data-contracts";
+import { isLocalRequest } from "@/lib/local-guard";
+import { getScienceSwarmProjectsRoot } from "@/lib/scienceswarm-paths";
+import {
+  DuplicateProjectError,
+  slugifyProjectName,
+} from "@/lib/projects/project-repository";
+import { listProjectRecordsFromDisk } from "@/lib/projects/project-list-fallback";
+import {
+  materializeProjectFolder,
+} from "@/lib/projects/materialize-project";
+import { getProjectsRouteRepository } from "@/lib/testing/projects-route-overrides";
+import {
+  assertSafeProjectSlug,
+  InvalidSlugError,
+} from "@/lib/state/project-manifests";
+import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+
+interface ProjectMeta {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  lastActive: string;
+  status: "active" | "idle" | "paused" | "archived";
+  projectPageSlug?: string;
+}
+
+const PROJECTS_REPOSITORY_LIST_DEADLINE_MS = 1500;
+
+function toLegacyProjectMeta(record: {
+  slug: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  lastActive: string;
+  status: "active" | "idle" | "paused" | "archived";
+  projectPageSlug: string;
+}): ProjectMeta {
+  return {
+    id: record.slug,
+    slug: record.slug,
+    name: record.name,
+    description: record.description,
+    createdAt: record.createdAt,
+    lastActive: record.lastActive,
+    status: record.status,
+    projectPageSlug: record.projectPageSlug,
+  };
+}
+
+async function listProjectsWithDeadline(): Promise<ProjectRecord[]> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error("PROJECTS_REPOSITORY_LIST_TIMEOUT"));
+    }, PROJECTS_REPOSITORY_LIST_DEADLINE_MS);
+
+    getProjectsRouteRepository()
+      .list()
+      .then((projects) => {
+        clearTimeout(timeout);
+        resolve(projects);
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+  });
+}
+
+export async function GET() {
+  try {
+    const projects = (await listProjectsWithDeadline()).map(toLegacyProjectMeta);
+    return Response.json({ projects });
+  } catch (err) {
+    console.warn("[projects] repository list failed; falling back to disk:", err);
+    try {
+      const projects = (await listProjectRecordsFromDisk()).map(toLegacyProjectMeta);
+      return Response.json({ projects });
+    } catch (fallbackErr) {
+      return Response.json({ error: String(fallbackErr) }, { status: 500 });
+    }
+  }
+}
+export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  try {
+    const body = await request.json();
+
+    if (body.action === "create") {
+      const { name, description } = body;
+      if (!name) {
+        return Response.json({ error: "name required" }, { status: 400 });
+      }
+
+      const trimmedName = String(name).trim();
+      const slug = slugifyProjectName(trimmedName);
+      if (!slug) {
+        return Response.json(
+          { error: "name produces empty slug" },
+          { status: 400 },
+        );
+      }
+
+      let createdBy: string;
+      try {
+        createdBy = getCurrentUserHandle();
+      } catch (error) {
+        return Response.json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : "SCIENCESWARM_USER_HANDLE is not set",
+          },
+          { status: 500 },
+        );
+      }
+
+      const project = await getProjectsRouteRepository().create({
+        name: trimmedName,
+        description: typeof description === "string" ? description : undefined,
+        createdBy,
+      });
+      let materializedPath: string | null = null;
+      let materializationError: string | null = null;
+      try {
+        materializedPath = (await materializeProjectFolder(project)).path;
+      } catch (error) {
+        materializationError =
+          error instanceof Error ? error.message : String(error);
+      }
+
+      return Response.json({
+        project: toLegacyProjectMeta(project),
+        path: materializedPath ?? path.join(getScienceSwarmProjectsRoot(), project.slug),
+        materialized: materializedPath !== null,
+        materializationError,
+        normalization: {
+          requestedName: trimmedName,
+          slug: project.slug,
+          changed: trimmedName !== project.slug,
+        },
+      });
+    }
+
+    if (body.action === "archive" || body.action === "delete") {
+      const { projectId } = body;
+      if (!projectId) {
+        return Response.json(
+          { error: "projectId required" },
+          { status: 400 },
+        );
+      }
+      const safeProjectId = assertSafeProjectSlug(String(projectId));
+      const result = await getProjectsRouteRepository().delete(safeProjectId);
+      return Response.json({ ok: true, existed: result.existed });
+    }
+
+    return Response.json({ error: "Unknown action" }, { status: 400 });
+  } catch (err) {
+    if (err instanceof DuplicateProjectError) {
+      return Response.json({ error: "Project already exists" }, { status: 409 });
+    }
+    if (err instanceof InvalidSlugError) {
+      return Response.json({ error: "Invalid projectId" }, { status: 400 });
+    }
+    return Response.json({ error: String(err) }, { status: 500 });
+  }
+}

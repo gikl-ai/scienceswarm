@@ -1,0 +1,372 @@
+{
+  "generatedAt": "2026-04-20T04:24:57.435Z",
+  "skills": [
+    {
+      "slug": "db-arxiv",
+      "name": "arXiv Database Wrapper",
+      "description": "Fetch papers from arXiv by ID, or search arXiv by query",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "paper"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch papers from arXiv by ID, or search arXiv by query"
+    },
+    {
+      "slug": "audit-revise",
+      "name": "Audit & Revise",
+      "description": "Drive the audit-and-revise flow — ingest → critique → plan → approve → run — for a scientific paper dropped into the ScienceSwarm dashboard. Nine-tool surface locked in plan §1.1.",
+      "tags": [
+        "scienceswarm",
+        "product",
+        "review",
+        "paper"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Drive the audit-and-revise flow — ingest → critique → plan → approve → run — for a scientific paper dropped into the ScienceSwarm dashboard. Nine-tool surface locked in plan §1.1."
+    },
+    {
+      "slug": "db-biorxiv",
+      "name": "bioRxiv / medRxiv Database Wrapper",
+      "description": "Fetch bioRxiv or medRxiv preprints by DOI, or search recent preprints",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "paper"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch bioRxiv or medRxiv preprints by DOI, or search recent preprints"
+    },
+    {
+      "slug": "brain-maintenance",
+      "name": "Brain Maintenance",
+      "description": "Use when the user asks about brain health, brain score, missing embeddings, stale or orphan pages, broken links, citation cleanup, search quality, feature recommendations, or keeping gbrain up to date inside ScienceSwarm.",
+      "tags": [
+        "scienceswarm",
+        "product",
+        "gbrain"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Use when the user asks about brain health, brain score, missing embeddings, stale or orphan pages, broken links, citation cleanup, search quality, feature recommendations, or keeping gbrain up to date inside ScienceSwarm."
+    },
+    {
+      "slug": "db-chembl",
+      "name": "ChEMBL Database Wrapper",
+      "description": "Fetch ChEMBL compounds by molecule ID, or search ChEMBL molecules",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "compound"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch ChEMBL compounds by molecule ID, or search ChEMBL molecules"
+    },
+    {
+      "slug": "db-clinicaltrials",
+      "name": "ClinicalTrials.gov Database Wrapper",
+      "description": "Fetch ClinicalTrials.gov studies by NCT ID, or search trials",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "trial"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch ClinicalTrials.gov studies by NCT ID, or search trials"
+    },
+    {
+      "slug": "db-crossref",
+      "name": "Crossref Database Wrapper",
+      "description": "Fetch scholarly works from Crossref by DOI, or search Crossref by query",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "paper"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch scholarly works from Crossref by DOI, or search Crossref by query"
+    },
+    {
+      "slug": "db-materials-project",
+      "name": "Materials Project Database Wrapper",
+      "description": "Fetch materials from Materials Project by mp-id or search summaries by formula",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "material"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch materials from Materials Project by mp-id or search summaries by formula"
+    },
+    {
+      "slug": "db-openalex",
+      "name": "OpenAlex Database Wrapper",
+      "description": "Fetch OpenAlex works or authors, or search OpenAlex by query",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "paper",
+        "person"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch OpenAlex works or authors, or search OpenAlex by query"
+    },
+    {
+      "slug": "db-orcid",
+      "name": "ORCID Database Wrapper",
+      "description": "Fetch ORCID public records by iD, or search ORCID people",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "person"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch ORCID public records by iD, or search ORCID people"
+    },
+    {
+      "slug": "db-pdb",
+      "name": "PDB Database Wrapper",
+      "description": "Fetch structures from RCSB PDB by PDB ID or search PDB entries",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "structure"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch structures from RCSB PDB by PDB ID or search PDB entries"
+    },
+    {
+      "slug": "project-organizer",
+      "name": "Project Organizer",
+      "description": "Use when the user asks to organize a project, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm.",
+      "tags": [
+        "scienceswarm",
+        "product",
+        "organization"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Use when the user asks to organize a project, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm."
+    },
+    {
+      "slug": "db-pubmed",
+      "name": "PubMed Database Wrapper",
+      "description": "Fetch papers from PubMed by PMID or DOI, or search PubMed by query",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "paper"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch papers from PubMed by PMID or DOI, or search PubMed by query"
+    },
+    {
+      "slug": "research-radar",
+      "name": "Research Radar",
+      "description": "Every N minutes, scan the scientist's tracked topics, query gbrain for relevant signals, synthesize a personalized briefing, and write it back to gbrain as a Timeline entry on each topic's concept page plus a briefings/ summary page.",
+      "tags": [
+        "scienceswarm",
+        "product",
+        "automation",
+        "radar"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Every N minutes, scan the scientist's tracked topics, query gbrain for relevant signals, synthesize a personalized briefing, and write it back to gbrain as a Timeline entry on each topic's concept page plus a briefings/ summary page."
+    },
+    {
+      "slug": "scienceswarm-capture",
+      "name": "ScienceSwarm — Capture & Second Brain",
+      "description": "Help users capture research notes, papers, and ideas into the Second Brain. Use when someone asks about saving notes, uploading papers, brain setup, wiki pages, or knowledge management.",
+      "tags": [
+        "scienceswarm",
+        "product"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Help users capture research notes, papers, and ideas into the Second Brain. Use when someone asks about saving notes, uploading papers, brain setup, wiki pages, or knowledge management."
+    },
+    {
+      "slug": "scienceswarm-dashboard",
+      "name": "ScienceSwarm — Dashboard",
+      "description": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the project workspace, settings, communications panel, or how to configure features in the web interface.",
+      "tags": [
+        "scienceswarm",
+        "product"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the project workspace, settings, communications panel, or how to configure features in the web interface."
+    },
+    {
+      "slug": "scienceswarm-getting-started",
+      "name": "ScienceSwarm — Getting Started",
+      "description": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up the project, run the dev server, connect services, or troubleshoot first-run issues.",
+      "tags": [
+        "scienceswarm",
+        "product"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up the project, run the dev server, connect services, or troubleshoot first-run issues."
+    },
+    {
+      "slug": "scienceswarm-research-radar",
+      "name": "ScienceSwarm — Research Radar",
+      "description": "Help users set up and use the Research Radar feature for personalized daily briefings. Use when someone asks about monitoring papers, getting research updates, configuring radar topics, or running on-demand briefings.",
+      "tags": [
+        "scienceswarm",
+        "product"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Help users set up and use the Research Radar feature for personalized daily briefings. Use when someone asks about monitoring papers, getting research updates, configuring radar topics, or running on-demand briefings."
+    },
+    {
+      "slug": "scienceswarm-evidence-triangulation",
+      "name": "ScienceSwarm Evidence Triangulation",
+      "description": "Cross-check a scientific, mathematical, or engineering claim across independent primary sources before acting on it.",
+      "tags": [
+        "science",
+        "evidence",
+        "triage"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A reusable cross-host skill for validating claims against multiple independent sources and surfacing disagreements clearly."
+    },
+    {
+      "slug": "scienceswarm-paper-to-plan",
+      "name": "ScienceSwarm Paper To Plan",
+      "description": "Turn a paper, method, or technical writeup into a concrete reproduction or implementation plan with validation checkpoints.",
+      "tags": [
+        "science",
+        "implementation",
+        "planning"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A cross-host planning skill for moving from a source artifact to an executable reproduction or implementation plan."
+    },
+    {
+      "slug": "db-semantic-scholar",
+      "name": "Semantic Scholar Database Wrapper",
+      "description": "Fetch papers from Semantic Scholar by ID, or search Semantic Scholar by query",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "paper"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch papers from Semantic Scholar by ID, or search Semantic Scholar by query"
+    },
+    {
+      "slug": "db-uniprot",
+      "name": "UniProt Database Wrapper",
+      "description": "Fetch UniProtKB proteins by accession, or search UniProtKB",
+      "tags": [
+        "scienceswarm",
+        "database",
+        "retrieval",
+        "protein"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fetch UniProtKB proteins by accession, or search UniProtKB"
+    }
+  ]
+}

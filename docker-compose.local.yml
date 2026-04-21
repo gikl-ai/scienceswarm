@@ -1,0 +1,8 @@
+services:
+  openhands:
+    environment:
+      - LLM_PROVIDER=local
+      - LLM_MODEL=${LLM_MODEL:-openai/gemma4:latest}
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      - LLM_API_KEY=${LLM_API_KEY:-ollama-local}
+      - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-32768}

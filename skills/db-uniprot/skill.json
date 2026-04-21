@@ -1,0 +1,23 @@
+{
+  "slug": "db-uniprot",
+  "name": "UniProt Database Wrapper",
+  "description": "Fetch UniProtKB proteins by accession, or search UniProtKB",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "protein"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch UniProtKB proteins by accession, or search UniProtKB",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.286Z",
+  "updatedAt": "2026-04-20T03:48:30.293Z"
+}

@@ -1,0 +1,21 @@
+{
+  "slug": "scienceswarm-research-radar",
+  "name": "ScienceSwarm — Research Radar",
+  "description": "Help users set up and use the Research Radar feature for personalized daily briefings. Use when someone asks about monitoring papers, getting research updates, configuring radar topics, or running on-demand briefings.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "product"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Help users set up and use the Research Radar feature for personalized daily briefings. Use when someone asks about monitoring papers, getting research updates, configuring radar topics, or running on-demand briefings.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.146Z",
+  "updatedAt": "2026-04-20T03:48:30.148Z"
+}

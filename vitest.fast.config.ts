@@ -1,0 +1,51 @@
+import path from "node:path";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  test: {
+    environment: "node",
+    globals: true,
+    setupFiles: ["./tests/setup.ts"],
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.next/**",
+      "tests/e2e/**/*.spec.ts",
+      "tests/e2e/briefings-dream.test.ts",
+      "tests/e2e/capture-entity.test.ts",
+      "tests/e2e/file-upload.test.ts",
+      "tests/e2e/mvp-conversation-to-artifact.test.ts",
+      "tests/e2e/mvp-telegram-capture-to-brief.test.ts",
+      "tests/e2e/mvp-warm-start-to-first-answer.test.ts",
+      "tests/e2e/warmstart.test.ts",
+      "tests/scenarios/**",
+      "tests/chaos/**",
+      "tests/stress/**",
+      "tests/integration/gbrain-contract.test.ts",
+      "tests/brain/api-routes.test.ts",
+      "tests/lib/capture/materialize-memory.test.ts",
+      "tests/brain/gbrain-engine-adapter.test.ts",
+      "tests/lib/capture-service.test.ts",
+      "tests/brain/brain-health-gbrain.test.ts",
+      "tests/brain/search.test.ts",
+      "tests/brain/chat-context.test.ts",
+      "tests/brain/research-briefing.test.ts",
+      "tests/brain/briefing-intelligence.test.ts",
+      "tests/brain/streaming-graph.test.ts",
+      "tests/brain/briefing.test.ts",
+      "tests/integration/api-settings-openclaw.test.ts",
+      "tests/integration/api-workspace.test.ts",
+      "tests/integration/api-telegram-capture.test.ts",
+      "tests/integration/api-workspace-upload.test.ts",
+      "tests/helpers/test-brain.test.ts",
+      "tests/routes/import-project-job-route.test.ts",
+    ],
+  },
+});

@@ -1,0 +1,19 @@
+experiment_id,trait,phenotype,observed,expected_ratio,source_note
+seed_shape,seed shape,round,5474,3,Mendel 1866 monohybrid segregation table
+seed_shape,seed shape,wrinkled,1850,1,Mendel 1866 monohybrid segregation table
+seed_color,seed albumen color,yellow,6022,3,Mendel 1866 monohybrid segregation table
+seed_color,seed albumen color,green,2001,1,Mendel 1866 monohybrid segregation table
+flower_color,flower color,violet_red,705,3,Mendel 1866 monohybrid segregation table
+flower_color,flower color,white,224,1,Mendel 1866 monohybrid segregation table
+pod_shape,pod shape,inflated,882,3,Mendel 1866 monohybrid segregation table
+pod_shape,pod shape,constricted,299,1,Mendel 1866 monohybrid segregation table
+pod_color,unripe pod color,green,428,3,Mendel 1866 monohybrid segregation table
+pod_color,unripe pod color,yellow,152,1,Mendel 1866 monohybrid segregation table
+flower_position,flower position,axial,651,3,Mendel 1866 monohybrid segregation table
+flower_position,flower position,terminal,207,1,Mendel 1866 monohybrid segregation table
+stem_length,stem length,long,787,3,Mendel 1866 monohybrid segregation table
+stem_length,stem length,short,277,1,Mendel 1866 monohybrid segregation table
+dihybrid_seed_shape_color,seed shape x seed color,round_yellow,315,9,Mendel 1866 dihybrid seed character table
+dihybrid_seed_shape_color,seed shape x seed color,round_green,108,3,Mendel 1866 dihybrid seed character table
+dihybrid_seed_shape_color,seed shape x seed color,wrinkled_yellow,101,3,Mendel 1866 dihybrid seed character table
+dihybrid_seed_shape_color,seed shape x seed color,wrinkled_green,32,1,Mendel 1866 dihybrid seed character table

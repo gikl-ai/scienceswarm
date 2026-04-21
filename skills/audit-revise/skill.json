@@ -1,0 +1,23 @@
+{
+  "slug": "audit-revise",
+  "name": "Audit & Revise",
+  "description": "Drive the audit-and-revise flow — ingest → critique → plan → approve → run — for a scientific paper dropped into the ScienceSwarm dashboard. Nine-tool surface locked in plan §1.1.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "product",
+    "review",
+    "paper"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Drive the audit-and-revise flow — ingest → critique → plan → approve → run — for a scientific paper dropped into the ScienceSwarm dashboard. Nine-tool surface locked in plan §1.1.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.118Z",
+  "updatedAt": "2026-04-20T03:48:30.121Z"
+}

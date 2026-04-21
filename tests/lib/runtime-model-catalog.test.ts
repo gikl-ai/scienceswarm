@@ -1,0 +1,106 @@
+import { describe, expect, it } from "vitest";
+
+import { DEFAULT_OPENAI_MODEL } from "@/lib/openai-models";
+import {
+  DEFAULT_LOCAL_CHAT_MODEL,
+  getRankedLocalExecutionModels,
+  OPENHANDS_CONTEXT_TARGET,
+  OPENHANDS_LOCAL_OLLAMA_BASE_URL,
+  OPENHANDS_LOCAL_SENTINEL_API_KEY,
+  OPENHANDS_MINIMUM_CONTEXT,
+  ollamaModelMatches,
+  resolveConfiguredLocalModel,
+  resolveOpenHandsConversationModel,
+  resolveOpenHandsLocalRuntimeConfig,
+  resolveOpenHandsLocalModel,
+  toOpenHandsModelId,
+} from "@/lib/runtime";
+
+describe("runtime model catalog", () => {
+  it("defines the local OpenHands execution profile defaults", () => {
+    expect(DEFAULT_LOCAL_CHAT_MODEL).toBe("gemma4:latest");
+    expect(OPENHANDS_LOCAL_OLLAMA_BASE_URL).toBe(
+      "http://host.docker.internal:11434/v1",
+    );
+    expect(OPENHANDS_LOCAL_SENTINEL_API_KEY).toBe("ollama-local");
+    expect(OPENHANDS_CONTEXT_TARGET).toBe(32768);
+    expect(OPENHANDS_MINIMUM_CONTEXT).toBe(22000);
+  });
+
+  it("keeps Gemma 4 first and records the planned fallback models", () => {
+    const models = getRankedLocalExecutionModels();
+
+    expect(models.map((model) => model.servedModel)).toEqual([
+      "gemma4:latest",
+      "devstral-small-2",
+      "qwen3-coder:30b",
+      "openhands-lm:32b",
+      "qwen3:14b",
+    ]);
+    expect(models[0]).toMatchObject({
+      openHandsModel: "openai/gemma4:latest",
+      pullCommand: "ollama pull gemma4:latest",
+    });
+  });
+
+  it("matches untagged configured models against tag-qualified Ollama models only", () => {
+    expect(ollamaModelMatches("gemma4", "gemma4:latest")).toBe(true);
+    expect(ollamaModelMatches("gemma4", "gemma4")).toBe(true);
+    expect(ollamaModelMatches("gemma4", "gemma4:26b")).toBe(false);
+    expect(ollamaModelMatches("gemma4", "gemma4o-distilled")).toBe(false);
+    expect(ollamaModelMatches("gemma4:latest", "gemma4:latest")).toBe(true);
+    expect(ollamaModelMatches("gemma4:latest", "gemma4:27b")).toBe(false);
+  });
+
+  it("derives OpenHands LiteLLM model ids from the same local model", () => {
+    expect(resolveConfiguredLocalModel({})).toBe("gemma4:latest");
+    expect(resolveConfiguredLocalModel({ OLLAMA_MODEL: "qwen3:14b" })).toBe(
+      "qwen3:14b",
+    );
+    expect(resolveOpenHandsLocalModel({ OLLAMA_MODEL: "qwen3:14b" })).toBe(
+      "openai/qwen3:14b",
+    );
+    expect(toOpenHandsModelId("ollama/gemma4:latest")).toBe(
+      "openai/gemma4:latest",
+    );
+    expect(toOpenHandsModelId("openai/gemma4:latest")).toBe(
+      "openai/gemma4:latest",
+    );
+  });
+
+  it("resolves the OpenHands conversation model from the provider mode", () => {
+    expect(resolveOpenHandsConversationModel({ LLM_PROVIDER: "local" })).toBe(
+      "openai/gemma4:latest",
+    );
+    expect(
+      resolveOpenHandsConversationModel({
+        LLM_PROVIDER: "local",
+        OLLAMA_MODEL: "gemma4:latest",
+        LLM_MODEL: "gpt-5.4",
+      }),
+    ).toBe("openai/gemma4:latest");
+    expect(
+      resolveOpenHandsConversationModel({
+        LLM_PROVIDER: "local",
+        OLLAMA_MODEL: "qwen3:14b",
+      }),
+    ).toBe("openai/qwen3:14b");
+    expect(
+      resolveOpenHandsConversationModel({
+        LLM_PROVIDER: "openai",
+        LLM_MODEL: "gpt-5.4-mini",
+      }),
+    ).toBe("gpt-5.4-mini");
+    expect(resolveOpenHandsConversationModel({})).toBe(DEFAULT_OPENAI_MODEL);
+  });
+
+  it("exposes the local OpenHands runtime config contract", () => {
+    expect(resolveOpenHandsLocalRuntimeConfig({})).toEqual({
+      model: "openai/gemma4:latest",
+      baseUrl: "http://host.docker.internal:11434/v1",
+      apiKey: "ollama-local",
+      contextLength: 32768,
+      minimumContext: 22000,
+    });
+  });
+});

@@ -1,0 +1,23 @@
+{
+  "slug": "db-materials-project",
+  "name": "Materials Project Database Wrapper",
+  "description": "Fetch materials from Materials Project by mp-id or search summaries by formula",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "material"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch materials from Materials Project by mp-id or search summaries by formula",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.173Z",
+  "updatedAt": "2026-04-20T03:48:30.177Z"
+}

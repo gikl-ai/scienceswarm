@@ -1,0 +1,112 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+const execFileMock = vi.fn();
+const mockIsLocal = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+
+vi.mock("node:child_process", () => ({
+  execFile: execFileMock,
+}));
+
+vi.mock("@/lib/local-guard", () => ({
+  isLocalRequest: () => mockIsLocal(),
+}));
+
+describe("POST /api/local-folder-picker", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    execFileMock.mockReset();
+    mockIsLocal.mockResolvedValue(true);
+  });
+
+  it("returns a selected macOS folder path for local requests", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+    execFileMock.mockImplementation((_command: string, _args: string[], callback: (...cbArgs: unknown[]) => void) => {
+      callback(null, "/Users/tester/Documents/project-alpha/\n", "");
+    });
+
+    const { POST } = await import("@/app/api/local-folder-picker/route");
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      path: "/Users/tester/Documents/project-alpha",
+    });
+  });
+
+  it("preserves root selections instead of trimming them into an empty path", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+    execFileMock.mockImplementation((_command: string, _args: string[], callback: (...cbArgs: unknown[]) => void) => {
+      callback(null, "/\n", "");
+    });
+
+    const { POST } = await import("@/app/api/local-folder-picker/route");
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      path: "/",
+    });
+  });
+
+  it("returns cancelled when the user closes the picker", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+    execFileMock.mockImplementation((_command: string, _args: string[], callback: (...cbArgs: unknown[]) => void) => {
+      const error = new Error("User canceled");
+      callback(error, "", "User canceled");
+    });
+
+    const { POST } = await import("@/app/api/local-folder-picker/route");
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ cancelled: true });
+  });
+
+  it("treats Linux exit-code-1 picker dismissals as cancellations", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+    execFileMock.mockImplementation((command: string, _args: string[], callback: (...cbArgs: unknown[]) => void) => {
+      if (command === "which") {
+        callback(null, "/usr/bin/zenity\n", "");
+        return;
+      }
+
+      const error = Object.assign(new Error("zenity exited"), { code: 1 });
+      callback(error, "", "");
+    });
+
+    const { POST } = await import("@/app/api/local-folder-picker/route");
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ cancelled: true });
+  });
+
+  it("launches the Windows picker in STA mode", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+    execFileMock.mockImplementation((_command: string, _args: string[], callback: (...cbArgs: unknown[]) => void) => {
+      callback(null, "C:\\Users\\tester\\project-alpha\\\n", "");
+    });
+
+    const { POST } = await import("@/app/api/local-folder-picker/route");
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    expect(execFileMock).toHaveBeenCalledWith(
+      "powershell",
+      expect.arrayContaining(["-NoProfile", "-STA", "-Command"]),
+      expect.any(Function),
+    );
+    await expect(response.json()).resolves.toEqual({
+      path: "C:\\Users\\tester\\project-alpha",
+    });
+  });
+
+  it("rejects non-local requests", async () => {
+    mockIsLocal.mockResolvedValue(false);
+
+    const { POST } = await import("@/app/api/local-folder-picker/route");
+    const response = await POST();
+
+    expect(response.status).toBe(403);
+  });
+});

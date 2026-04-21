@@ -1,0 +1,392 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_script_path() {
+  local source="${BASH_SOURCE[0]:-$0}"
+  local dir=""
+
+  while [ -L "$source" ]; do
+    dir="$(cd -P "$(dirname "$source")" && pwd)"
+    source="$(readlink "$source")"
+    case "$source" in
+      /*) ;;
+      *) source="$dir/$source" ;;
+    esac
+  done
+
+  printf '%s\n' "$source"
+}
+
+SCRIPT_PATH="$(resolve_script_path)"
+REPO_ROOT="$(cd -P "$(dirname "$SCRIPT_PATH")" && pwd)"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scienceswarm <command> [args]
+
+Commands:
+  install    Run install.sh from the ScienceSwarm checkout
+  start      Run start.sh in the foreground
+  stop       Stop the managed ScienceSwarm launcher and local runtime helpers
+  restart    Stop the current launcher, then start it again
+  status     Show the current local runtime status
+  doctor     Run npm run doctor
+  reset      Run npm run setup:reset
+  help       Show this help
+
+Examples:
+  scienceswarm start
+  scienceswarm restart
+  scienceswarm status
+  scienceswarm reset -- --keep-telegram-bot
+
+Advanced workflows such as `dev:worktree`, tests, and build commands stay on
+their existing `npm run ...` entrypoints.
+EOF
+}
+
+note() {
+  printf '%s\n' "$*"
+}
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+load_repo_env() {
+  # shellcheck source=scripts/openclaw-env.sh
+  source "$REPO_ROOT/scripts/openclaw-env.sh"
+
+  if [ -f "$REPO_ROOT/.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$REPO_ROOT/.env"
+    set +a
+  fi
+
+  if command -v npx >/dev/null 2>&1 && [ -f "$REPO_ROOT/scripts/print-port.ts" ]; then
+    eval "$(
+      cd "$REPO_ROOT" && npx tsx scripts/print-port.ts env 2>/dev/null || true
+    )"
+  fi
+
+  : "${FRONTEND_HOST:=127.0.0.1}"
+  : "${FRONTEND_PORT:=3001}"
+  DATA_ROOT="${SCIENCESWARM_DIR:-$HOME/.scienceswarm}"
+  RUN_ROOT="$DATA_ROOT/run"
+  LAUNCHER_PID_FILE="$RUN_ROOT/launcher.pid"
+  OPENHANDS_CONTAINER_FILE="$RUN_ROOT/openhands.cid"
+
+  if [ -n "${OPENCLAW_PROFILE:-}" ] && [[ "${OPENCLAW_PROFILE}" =~ [^[:space:]] ]]; then
+    OPENCLAW_MODE="profile"
+  else
+    OPENCLAW_MODE="state-dir"
+  fi
+  OPENCLAW_GATEWAY_PID_FILE="$(openclaw_gateway_pid_file)"
+}
+
+read_pid_file() {
+  local path="$1"
+  local raw=""
+
+  [ -f "$path" ] || return 1
+  raw=$(tr -d '[:space:]' < "$path" 2>/dev/null || true)
+  if ! [[ "$raw" =~ ^[0-9]+$ ]] || [ "$raw" -le 0 ]; then
+    rm -f "$path"
+    return 1
+  fi
+  if ! kill -0 "$raw" 2>/dev/null; then
+    rm -f "$path"
+    return 1
+  fi
+  printf '%s\n' "$raw"
+}
+
+read_text_file() {
+  local path="$1"
+  local raw=""
+
+  [ -f "$path" ] || return 1
+  raw=$(tr -d '[:space:]' < "$path" 2>/dev/null || true)
+  [ -n "$raw" ] || return 1
+  printf '%s\n' "$raw"
+}
+
+pid_command_contains() {
+  local pid="$1"
+  local needle="$2"
+  local command=""
+
+  command=$(ps -o command= -p "$pid" 2>/dev/null || true)
+  case "$command" in
+    *"$needle"*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+read_launcher_pid_file() {
+  local pid=""
+
+  pid=$(read_pid_file "$LAUNCHER_PID_FILE" || true)
+  [ -n "$pid" ] || return 1
+  if ! pid_command_contains "$pid" "start.sh"; then
+    rm -f "$LAUNCHER_PID_FILE"
+    return 1
+  fi
+  printf '%s\n' "$pid"
+}
+
+read_openclaw_gateway_pid() {
+  local pid=""
+
+  pid=$(read_pid_file "$OPENCLAW_GATEWAY_PID_FILE" || true)
+  [ -n "$pid" ] || return 1
+  if ! pid_command_contains "$pid" "openclaw"; then
+    rm -f "$OPENCLAW_GATEWAY_PID_FILE"
+    return 1
+  fi
+  printf '%s\n' "$pid"
+}
+
+listener_pid_for_port() {
+  local pid=""
+
+  if ! command -v lsof >/dev/null 2>&1; then
+    return 1
+  fi
+
+  pid=$(lsof -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)
+  [ -n "$pid" ] || return 1
+  printf '%s\n' "$pid"
+}
+
+docker_container_running_state() {
+  local container_id="$1"
+  local raw=""
+
+  if ! command -v docker >/dev/null 2>&1; then
+    return 1
+  fi
+
+  raw=$(docker inspect -f '{{.State.Running}}' "$container_id" 2>/dev/null | tr -d '[:space:]' || true)
+  case "$raw" in
+    true|false)
+      printf '%s\n' "$raw"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+wait_for_pid_exit() {
+  local pid="$1"
+  local attempts="${2:-20}"
+
+  while [ "$attempts" -gt 0 ]; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+    attempts=$((attempts - 1))
+  done
+
+  return 1
+}
+
+kill_pid_group() {
+  local pid="$1"
+  local label="$2"
+
+  if kill -- -"$pid" 2>/dev/null; then
+    note "Stopping $label (process group $pid)..."
+  elif kill "$pid" 2>/dev/null; then
+    note "Stopping $label (pid $pid)..."
+  else
+    return 1
+  fi
+
+  if wait_for_pid_exit "$pid" 15; then
+    return 0
+  fi
+
+  note "$label is still running; forcing it down."
+  kill -KILL -- -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+  wait_for_pid_exit "$pid" 5 || true
+  return 0
+}
+
+stop_openhands_container() {
+  local container_id=""
+
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+
+  container_id=$(read_text_file "$OPENHANDS_CONTAINER_FILE" || true)
+  if [ -z "$container_id" ]; then
+    rm -f "$OPENHANDS_CONTAINER_FILE"
+    return 0
+  fi
+
+  note "Stopping OpenHands container scienceswarm-agent..."
+  docker rm -f "$container_id" >/dev/null 2>&1 || docker rm -f scienceswarm-agent >/dev/null 2>&1 || true
+  rm -f "$OPENHANDS_CONTAINER_FILE"
+}
+
+stop_openclaw_gateway() {
+  local pid=""
+
+  pid=$(read_openclaw_gateway_pid || true)
+  [ -n "$pid" ] || return 0
+  kill_pid_group "$pid" "OpenClaw gateway" || true
+  rm -f "$OPENCLAW_GATEWAY_PID_FILE"
+}
+
+cmd_install() {
+  cd "$REPO_ROOT"
+  exec ./install.sh "$@"
+}
+
+cmd_start() {
+  cd "$REPO_ROOT"
+  exec ./start.sh "$@"
+}
+
+cmd_stop() {
+  local launcher_pid=""
+  local listener_pid=""
+
+  load_repo_env
+
+  launcher_pid=$(read_launcher_pid_file || true)
+  if [ -n "$launcher_pid" ]; then
+    kill_pid_group "$launcher_pid" "ScienceSwarm launcher" || true
+    rm -f "$LAUNCHER_PID_FILE"
+  else
+    listener_pid=$(listener_pid_for_port "$FRONTEND_PORT" || true)
+    if [ -n "$listener_pid" ]; then
+      die "frontend listener detected on $FRONTEND_HOST:$FRONTEND_PORT (pid $listener_pid), but no managed launcher pid file exists. Stop that process manually, then rerun scienceswarm start."
+    fi
+    note "ScienceSwarm launcher is not running."
+  fi
+
+  stop_openhands_container
+  stop_openclaw_gateway
+}
+
+cmd_restart() {
+  cmd_stop
+  note "Restarting ScienceSwarm..."
+  cmd_start "$@"
+}
+
+cmd_status() {
+  local launcher_pid=""
+  local gateway_pid=""
+  local listener_pid=""
+  local openhands_running="stopped"
+  local frontend_status="stopped"
+  local frontend_health="unreachable"
+  local gateway_status="stopped"
+  local openhands_container_id=""
+  local openhands_state=""
+
+  load_repo_env
+
+  launcher_pid=$(read_launcher_pid_file || true)
+  if [ -n "$launcher_pid" ]; then
+    frontend_status="running (launcher pid $launcher_pid)"
+  else
+    listener_pid=$(listener_pid_for_port "$FRONTEND_PORT" || true)
+    if [ -n "$listener_pid" ]; then
+      frontend_status="listener active on $FRONTEND_HOST:$FRONTEND_PORT (pid $listener_pid, unmanaged)"
+    fi
+  fi
+
+  if curl -fsS --max-time 2 "http://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
+    frontend_health="ok"
+  fi
+
+  openhands_container_id=$(read_text_file "$OPENHANDS_CONTAINER_FILE" || true)
+  if [ -n "$openhands_container_id" ]; then
+    openhands_state=$(docker_container_running_state "$openhands_container_id" || true)
+    case "$openhands_state" in
+      true)
+        openhands_running="running"
+        ;;
+      false)
+        openhands_running="stopped (container present)"
+        ;;
+      *)
+      rm -f "$OPENHANDS_CONTAINER_FILE"
+        ;;
+    esac
+  fi
+
+  gateway_pid=$(read_openclaw_gateway_pid || true)
+  if [ -n "$gateway_pid" ]; then
+    gateway_status="running (pid $gateway_pid)"
+  fi
+
+  note "ScienceSwarm status"
+  note "  Repo root: $REPO_ROOT"
+  note "  Data root: $DATA_ROOT"
+  note "  Frontend: $frontend_status"
+  note "  Frontend health: $frontend_health"
+  note "  OpenHands: $openhands_running"
+  note "  OpenClaw gateway: $gateway_status"
+  note "  OpenClaw mode: $OPENCLAW_MODE"
+}
+
+cmd_doctor() {
+  cd "$REPO_ROOT"
+  exec npm run doctor -- "$@"
+}
+
+cmd_reset() {
+  cd "$REPO_ROOT"
+  exec npm run setup:reset -- "$@"
+}
+
+COMMAND="${1:-help}"
+if [ "$#" -gt 0 ]; then
+  shift
+fi
+
+case "$COMMAND" in
+  install)
+    cmd_install "$@"
+    ;;
+  start)
+    cmd_start "$@"
+    ;;
+  stop)
+    cmd_stop "$@"
+    ;;
+  restart)
+    cmd_restart "$@"
+    ;;
+  status)
+    cmd_status "$@"
+    ;;
+  doctor)
+    cmd_doctor "$@"
+    ;;
+  reset)
+    cmd_reset "$@"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    usage >&2
+    die "unknown command '$COMMAND'"
+    ;;
+esac

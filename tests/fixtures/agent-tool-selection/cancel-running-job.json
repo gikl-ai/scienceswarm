@@ -1,0 +1,8 @@
+{
+  "scenario": "cancel-running-job",
+  "prompt": "Cancel the current revision job for hubble-1929.",
+  "context": ["A run_job for revise_paper on hubble-1929 is in progress (handle job_42)"],
+  "expected_tool_sequence": ["check_job", "cancel_job"],
+  "forbidden_tools": ["run_job"],
+  "notes": "Cooperative cancel. The agent should check the job's current status before cancelling so the user sees confirmation, then issue cancel_job. Must NOT restart the same job after cancelling it."
+}

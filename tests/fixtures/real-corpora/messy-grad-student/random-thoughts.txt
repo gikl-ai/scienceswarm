@@ -1,0 +1,10 @@
+Random thoughts 2026-04-01
+
+Does anyone actually use the `data/processed/` directory on the cluster?
+It's grown to 40TB and half of it is from people who graduated years ago.
+
+Wonder if we could build a lineage tracker that notices when nobody has
+touched a file for 18 months and auto-archives. Would probably save more
+money than any research we're doing.
+
+(I should be writing chapter 2.)

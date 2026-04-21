@@ -1,0 +1,8 @@
+{
+  "samples": [
+    {"id": "S001", "concentration": 12.4},
+    {"id": "S002", "concentration": 8.1},
+    {"id": "S003", "concentration": 15.7}
+  ],
+  "units": "ng/uL"
+}

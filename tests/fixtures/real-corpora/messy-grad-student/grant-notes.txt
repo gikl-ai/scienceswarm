@@ -1,0 +1,12 @@
+R01 resubmission notes
+
+Reviewer 1 liked the preliminary data but wanted more single-cell resolution.
+Reviewer 2 had issues with the power analysis — our n was too small for
+the interaction effects we were claiming.
+Reviewer 3 was completely off base and asked for experiments unrelated to
+the specific aims. Advisor says to ignore most of that reviewer.
+
+Resubmission plan:
+- Add the March 2026 perturb-seq pilot as new preliminary data.
+- Redo the power analysis with the corrected effect sizes.
+- Tighten aim 2 so reviewer 3 has less surface area to attack.

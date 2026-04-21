@@ -1,0 +1,14 @@
+{
+  "scenario": "plan-edit-and-reapprove",
+  "prompt": "The revision plan for hubble-1929 needs to drop finding F005, then approve it and run the revision job.",
+  "context": ["hubble-1929-revision-plan exists in draft state"],
+  "expected_tool_sequence": [
+    "resolve_artifact",
+    "read_artifact",
+    "draft_revision_plan",
+    "approve_revision_plan",
+    "run_job"
+  ],
+  "forbidden_tools": [],
+  "notes": "Plan iteration flow. The agent should re-draft the plan without F005, approve the new version, and then run_job. Hard ordering: approve_revision_plan must come before run_job."
+}

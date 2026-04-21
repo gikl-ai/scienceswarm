@@ -1,0 +1,12 @@
+{
+  "scenario": "critique-then-plan",
+  "prompt": "Audit hubble-1929 and draft a revision plan that addresses the main issues.",
+  "context": ["Project has hubble-1929 paper page already ingested"],
+  "expected_tool_sequence": [
+    "resolve_artifact",
+    "critique_artifact",
+    "draft_revision_plan"
+  ],
+  "forbidden_tools": ["run_job", "approve_revision_plan"],
+  "notes": "Common end-to-end audit flow. critique_artifact must come before draft_revision_plan; approve_revision_plan and run_job must not be called without explicit user approval."
+}

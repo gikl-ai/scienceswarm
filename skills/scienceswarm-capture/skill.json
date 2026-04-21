@@ -1,0 +1,21 @@
+{
+  "slug": "scienceswarm-capture",
+  "name": "ScienceSwarm — Capture & Second Brain",
+  "description": "Help users capture research notes, papers, and ideas into the Second Brain. Use when someone asks about saving notes, uploading papers, brain setup, wiki pages, or knowledge management.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "product"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Help users capture research notes, papers, and ideas into the Second Brain. Use when someone asks about saving notes, uploading papers, brain setup, wiki pages, or knowledge management.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.133Z",
+  "updatedAt": "2026-04-20T03:48:30.136Z"
+}

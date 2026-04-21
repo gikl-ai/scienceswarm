@@ -1,0 +1,21 @@
+{
+  "slug": "scienceswarm-getting-started",
+  "name": "ScienceSwarm — Getting Started",
+  "description": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up the project, run the dev server, connect services, or troubleshoot first-run issues.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "product"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up the project, run the dev server, connect services, or troubleshoot first-run issues.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.142Z",
+  "updatedAt": "2026-04-20T03:48:30.144Z"
+}

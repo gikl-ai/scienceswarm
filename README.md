@@ -1,0 +1,113 @@
+# ScienceSwarm
+
+[![CI](https://github.com/gikl-ai/scienceswarm/actions/workflows/ci.yml/badge.svg)](https://github.com/gikl-ai/scienceswarm/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node >=22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](.node-version)
+
+ScienceSwarm is a local-first AI research workspace. It lets you import papers,
+notes, code, and datasets into one project workspace, search and organize that
+material, chat with an assistant that knows your project, and hand off heavier
+execution work to a local agent runtime when needed.
+
+The core system is:
+
+`ScienceSwarm = OpenClaw + OpenHands + gbrain`
+
+- `gbrain` is the knowledge layer and durable research memory
+- `OpenClaw` is the manager agent and communication layer
+- `OpenHands` is the execution agent for heavier tasks
+
+## Why Use ScienceSwarm
+
+- Keep your research corpus in one workspace instead of scattering it across
+  PDFs, notes, scripts, and chat logs
+- Run local-first by default with Ollama and `gemma4:latest`, with optional
+  cloud fallback when you want it
+- Capture and organize work across chat, uploads, project pages, and optional
+  Telegram/OpenClaw flows
+- Use one product for literature review, project memory, agent-assisted coding,
+  and reasoning/audit workflows
+
+## Key Features
+
+- Project-scoped imports for papers, notes, code, and datasets
+- A searchable `gbrain`-backed research memory that enriches chat with project
+  context
+- Direct chat plus OpenClaw-routed chat when the agent runtime is available
+- OpenHands-backed execution for code and longer-running agent tasks
+- A reasoning workspace for critique, review, and structured audit flows
+- Local-first setup with optional integrations for OpenAI, GitHub, Google,
+  Slack, Jira, and Telegram
+
+## Quick Start
+
+### Requirements
+
+- macOS or Linux
+- Node.js 22+
+- No API key is required for the default local path
+- Docker is needed for the OpenHands execution path
+- A Telegram account is only needed if you want Telegram/OpenClaw setup during
+  onboarding
+
+### Install
+
+```bash
+git clone https://github.com/gikl-ai/scienceswarm.git ~/scienceswarm
+cd ~/scienceswarm
+./install.sh
+./scienceswarm start
+```
+
+If `${SCIENCESWARM_BIN_DIR:-$HOME/.local/bin}` is on your `PATH`, the installed
+shim also lets you run `scienceswarm start`.
+
+If you use the one-liner installer, `SCIENCESWARM_INSTALL_DIR` controls the
+checkout path. Runtime state is separate: `SCIENCESWARM_DIR` is the local app-data root
+(default `~/.scienceswarm`), and the brain store defaults to
+`<SCIENCESWARM_DIR>/brain` unless you set `BRAIN_ROOT` to move it elsewhere.
+
+Then open <http://localhost:3001/setup>.
+
+The setup flow initializes the local research store, verifies local runtimes,
+and can connect OpenClaw, OpenHands, Ollama, and Telegram when you want the
+full agent path.
+
+### First Use
+
+1. Complete `/setup`
+2. Open `/dashboard/project`
+3. Import a folder of papers, notes, code, or datasets
+4. Start chatting with a project that already has context
+
+### Frontend-Only Development
+
+If you are working on the UI and do not need the full agent stack:
+
+```bash
+npm run dev
+```
+
+The supported local runtime wrapper is `scienceswarm start|stop|restart|status`.
+
+## Project Status
+
+ScienceSwarm is alpha software.
+
+- APIs, environment variables, and on-disk formats may change without notice.
+- Backward compatibility is not guaranteed between alpha releases.
+- Local state can be lost if you experiment on important data without backups.
+- It is not recommended for production or regulated workflows yet.
+
+This first public release intentionally keeps the repo surface small. The
+README and the shipped code are the primary references for now; the internal
+planning, acceptance, and launch-process docs are not part of this release.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
+and [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE)

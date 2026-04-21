@@ -1,0 +1,12 @@
+{
+  "scenario": "missing-critique",
+  "prompt": "Draft a revision plan for hubble-1929 that addresses the main findings.",
+  "context": ["hubble-1929 exists", "NO critique page exists yet"],
+  "expected_tool_sequence": [
+    "resolve_artifact",
+    "critique_artifact",
+    "draft_revision_plan"
+  ],
+  "forbidden_tools": ["run_job"],
+  "notes": "Missing prerequisite check. The agent must run critique_artifact BEFORE draft_revision_plan whenever no critique page exists for the paper. A well-behaved agent notices the missing dependency and materialises it first."
+}

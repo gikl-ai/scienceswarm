@@ -1,0 +1,8 @@
+{
+  "scenario": "hubble-audit-happy",
+  "prompt": "I want to audit hubble-1929 for problems before resubmission.",
+  "context": ["Project has hubble-1929 paper page already ingested"],
+  "expected_tool_sequence": ["resolve_artifact", "critique_artifact"],
+  "forbidden_tools": ["run_job", "draft_revision_plan"],
+  "notes": "Happy-path audit. Agent should resolve the paper, call critique on it, return brief. Ordering compliance: critique_artifact must NOT be preceded by draft_revision_plan or run_job."
+}

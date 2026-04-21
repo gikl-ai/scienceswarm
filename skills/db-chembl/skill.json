@@ -1,0 +1,23 @@
+{
+  "slug": "db-chembl",
+  "name": "ChEMBL Database Wrapper",
+  "description": "Fetch ChEMBL compounds by molecule ID, or search ChEMBL molecules",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "compound"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch ChEMBL compounds by molecule ID, or search ChEMBL molecules",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.159Z",
+  "updatedAt": "2026-04-20T03:48:30.162Z"
+}
