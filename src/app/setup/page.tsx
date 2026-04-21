@@ -187,6 +187,11 @@ function getServerHydratedSnapshot(): boolean {
   return false;
 }
 
+function isLikelyWindowsBrowser(): boolean {
+  if (typeof window === "undefined") return false;
+  return /^Win/i.test(window.navigator.platform) || /Windows/i.test(window.navigator.userAgent);
+}
+
 export default function SetupPage() {
   const router = useRouter();
   // Intentionally no handle prefill. Previously we fetched
@@ -415,11 +420,16 @@ export default function SetupPage() {
   const autoContinuing = shouldAutoContinue(summary);
   const deferredOpenHands = hasDeferredOpenHands(summary);
   const continueRoute = "/dashboard/project?onboarding=continue";
+  const showWindowsNote = hydrated && isLikelyWindowsBrowser();
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-5 px-4 py-8">
       {hydrated && !submitted && (
-        <BootstrapForm disabled={false} onSubmit={handleSubmit} />
+        <BootstrapForm
+          disabled={false}
+          onSubmit={handleSubmit}
+          showWindowsNote={showWindowsNote}
+        />
       )}
       {hydrated && submitted && (
         <BootstrapProgress
