@@ -1477,12 +1477,28 @@ async function readOpenClawThinkingTraceFromFile(
         continue;
       }
       const messageRecord = message as Record<string, unknown>;
-      if (messageRecord.role !== "assistant" || !Array.isArray(messageRecord.content)) {
+      if (messageRecord.role !== "assistant") {
         continue;
       }
-      const thinkingParts = messageRecord.content
-        .map(extractOpenClawThinkingText)
-        .filter((part): part is string => typeof part === "string" && part.trim().length > 0);
+      const thinkingParts: string[] = [];
+      // Recent OpenClaw versions emit the OpenAI Responses API reasoning
+      // summary at the session.message level (message.thinking) rather than
+      // as an entry in message.content. Pick that up first so the chat
+      // <details> panel fills even when content-array thinking is absent.
+      if (
+        typeof messageRecord.thinking === "string"
+        && messageRecord.thinking.trim().length > 0
+      ) {
+        thinkingParts.push(messageRecord.thinking);
+      }
+      if (Array.isArray(messageRecord.content)) {
+        for (const part of messageRecord.content) {
+          const extracted = extractOpenClawThinkingText(part);
+          if (typeof extracted === "string" && extracted.trim().length > 0) {
+            thinkingParts.push(extracted);
+          }
+        }
+      }
       latestThinking =
         thinkingParts.length > 0 ? thinkingParts.join("\n\n") : null;
     }
