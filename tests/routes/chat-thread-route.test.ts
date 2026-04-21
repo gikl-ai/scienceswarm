@@ -49,6 +49,9 @@ describe("chat thread route", () => {
       body: JSON.stringify({
         project: "alpha-project",
         conversationId: "conv-alpha",
+        // Legacy values from older API clients are normalised to "openclaw"
+        // by the route's normalizeConversationBackend; the persisted file
+        // therefore stores the canonical value.
         conversationBackend: "agent",
         messages: [
           {
@@ -102,7 +105,7 @@ describe("chat thread route", () => {
       "chat.json",
     );
     expect(await readFile(persistedPath, "utf-8")).toContain("\"conversationId\": \"conv-alpha\"");
-    expect(await readFile(persistedPath, "utf-8")).toContain("\"conversationBackend\": \"agent\"");
+    expect(await readFile(persistedPath, "utf-8")).toContain("\"conversationBackend\": \"openclaw\"");
 
     const readResponse = await GET(new Request("http://localhost/api/chat/thread?project=alpha-project"));
     expect(readResponse.status).toBe(200);
@@ -110,7 +113,7 @@ describe("chat thread route", () => {
       version: 1,
       project: "alpha-project",
       conversationId: "conv-alpha",
-      conversationBackend: "agent",
+      conversationBackend: "openclaw",
       messages: [
         {
           id: "m1",
@@ -254,4 +257,37 @@ describe("chat thread route", () => {
       conversationId: "explicit-conv",
     });
   });
+
+  // Belt-and-suspenders: even if a thread file on disk still has the legacy
+  // backend strings (e.g. someone restored a backup before running the
+  // migration script), the read path normalises them to "openclaw" so the
+  // hook never sees a stale value.
+  it.each(["agent", "direct"] as const)(
+    "normalises legacy on-disk conversationBackend %s to openclaw on read",
+    async (legacyBackend) => {
+      const explicitStateRoot = path.join(dataRoot, "projects", "alpha-project", ".brain", "state");
+      const chatPath = path.join(explicitStateRoot, "chat.json");
+      const fsPromises = await import("node:fs/promises");
+      await fsPromises.mkdir(explicitStateRoot, { recursive: true });
+      await fsPromises.writeFile(
+        chatPath,
+        JSON.stringify({
+          version: 1,
+          project: "alpha-project",
+          conversationId: "legacy-conv",
+          conversationBackend: legacyBackend,
+          messages: [],
+        }, null, 2),
+        "utf-8",
+      );
+
+      await expect(readChatThread("alpha-project", explicitStateRoot)).resolves.toMatchObject({
+        conversationId: "legacy-conv",
+        conversationBackend: "openclaw",
+      });
+      // The on-disk file is intentionally untouched by readChatThread; the
+      // explicit migration script is the only path that rewrites it.
+      await expect(readFile(chatPath, "utf-8")).resolves.toContain(`"conversationBackend": "${legacyBackend}"`);
+    },
+  );
 });
