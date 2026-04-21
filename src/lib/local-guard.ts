@@ -146,17 +146,25 @@ function requestOrigin(headersReader: HeaderReader, request?: Request): string |
   }
 }
 
-function browserRequestOrigin(headersReader: HeaderReader): string | null {
-  const directOrigin = normalizeOrigin(headersReader.get("origin"));
-  if (directOrigin) return directOrigin;
+function browserRequestOrigin(
+  headersReader: HeaderReader,
+): { invalid: boolean; origin: string | null } {
+  const rawOrigin = headersReader.get("origin")?.trim();
+  if (rawOrigin) {
+    const origin = normalizeOrigin(rawOrigin);
+    return { invalid: origin === null, origin };
+  }
 
-  const referer = headersReader.get("referer");
-  if (!referer) return null;
+  const referer = headersReader.get("referer")?.trim();
+  if (!referer) {
+    return { invalid: false, origin: null };
+  }
 
   try {
-    return normalizeOrigin(new URL(referer).origin);
+    const origin = normalizeOrigin(new URL(referer).origin);
+    return { invalid: origin === null, origin };
   } catch {
-    return null;
+    return { invalid: true, origin: null };
   }
 }
 
@@ -181,9 +189,13 @@ function isTrustedBrowserRequest(
     return true;
   }
 
-  const origin = browserRequestOrigin(headersReader);
+  const { origin, invalid } = browserRequestOrigin(headersReader);
+  if (invalid) {
+    return false;
+  }
+
   if (!origin) {
-    return fetchSite !== "cross-site";
+    return fetchSite === "same-origin" || fetchSite === "same-site" || fetchSite === "none";
   }
 
   let originHost: string;

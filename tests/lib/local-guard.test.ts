@@ -30,6 +30,20 @@ describe("isLocalRequest", () => {
     ).resolves.toBe(true);
   });
 
+  it("allows browser requests that rely on sec-fetch-site without an origin header", async () => {
+    vi.stubEnv("FRONTEND_HOST", "127.0.0.1");
+
+    await expect(
+      isLocalRequest(
+        new Request("http://localhost:3001/api/setup", {
+          headers: {
+            "sec-fetch-site": "same-origin",
+          },
+        }),
+      ),
+    ).resolves.toBe(true);
+  });
+
   it("rejects cross-site browser requests even when they target localhost", async () => {
     vi.stubEnv("FRONTEND_HOST", "127.0.0.1");
 
@@ -39,6 +53,21 @@ describe("isLocalRequest", () => {
           headers: {
             origin: "https://evil.example",
             "sec-fetch-site": "cross-site",
+          },
+        }),
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it("rejects opaque browser origins like Origin: null", async () => {
+    vi.stubEnv("FRONTEND_HOST", "127.0.0.1");
+
+    await expect(
+      isLocalRequest(
+        new Request("http://localhost:3001/api/setup", {
+          headers: {
+            origin: "null",
+            "sec-fetch-site": "same-origin",
           },
         }),
       ),
