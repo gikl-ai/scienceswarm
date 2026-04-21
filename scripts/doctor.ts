@@ -114,7 +114,7 @@ function checkPlatform(env: Record<string, string>): Check {
       name: "Platform",
       status: "warn",
       detail: `WSL detected. ${mountedLocations.join(" and ")} ${mountedLocations.length === 1 ? "is" : "are"} on /mnt/<drive>, which is slower for imports, scans, and file watching.`,
-      fix: "Move the repo and SCIENCESWARM_DIR into the WSL Linux filesystem (for example ~/scienceswarm and ~/.scienceswarm), then rerun doctor.",
+      fix: "Move the repo, SCIENCESWARM_DIR, and BRAIN_ROOT (if set) into the WSL Linux filesystem (for example ~/scienceswarm and ~/.scienceswarm), then rerun doctor.",
     };
   }
 
