@@ -43,7 +43,7 @@ jobs:
                 | sort_by(.user.login, .submitted_at // "")
                 | group_by(.user.login)
                 | map(last)
-                | map(select($trusted | index(.user.login)))
+                | map(select(.user.login as $login | $trusted | index($login)))
               ' <<<"$reviews_json"
           )
 
