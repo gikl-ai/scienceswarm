@@ -289,6 +289,19 @@ function normalizeChatMode(value: unknown): ChatMode | null {
   return value === "reasoning" || value === "openclaw-tools" ? value : null;
 }
 
+// Derives the restored ChatMode from the most recent persisted message that
+// recorded one. Necessary because the Backend union collapsed to a single
+// member ("openclaw") and can no longer encode reasoning vs tools mode.
+function deriveChatModeFromMessages(messages: Message[]): ChatMode | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const candidate = normalizeChatMode(messages[i]?.chatMode);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 // The server's X-Chat-Backend header can include diagnostic values
 // ("brain-setup", "slash-commands", "none") alongside "openclaw". Since the
 // hook's Backend union is now "openclaw" only, every server-reported value
@@ -1214,7 +1227,8 @@ export function useUnifiedChat(
     pendingHydrationKeyRef.current = storageKey;
     const hydratedMessages = materializeMessages(projectName, restored);
     const restoredBackend: Backend = "openclaw";
-    const restoredChatMode = restored.conversationBackend === "openclaw" ? "openclaw-tools" : "reasoning";
+    const restoredChatMode: ChatMode =
+      deriveChatModeFromMessages(hydratedMessages) ?? "reasoning";
     lastPollRef.current = getPollCursorSeed(hydratedMessages);
     setIsStreaming(false);
     setError(null);
@@ -1254,7 +1268,9 @@ export function useUnifiedChat(
         // auto-probe effect seeded in parallel (e.g. connected OpenClaw).
         if (preferredState.conversationBackend !== null) {
           const preferredBackend: Backend = "openclaw";
-          const preferredChatMode = preferredState.conversationBackend === "openclaw" ? "openclaw-tools" : "reasoning";
+          const preferredChatMode: ChatMode =
+            deriveChatModeFromMessages(preferredMessages)
+            ?? liveChatModeRef.current;
           setBackend(preferredBackend);
           setChatMode(preferredChatMode);
           liveBackendRef.current = preferredBackend;
