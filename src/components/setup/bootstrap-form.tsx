@@ -16,11 +16,13 @@ export interface BootstrapFormValues {
 interface BootstrapFormProps {
   disabled: boolean;
   onSubmit: (values: BootstrapFormValues) => void;
+  showWindowsNote?: boolean;
 }
 
 export function BootstrapForm({
   disabled,
   onSubmit,
+  showWindowsNote = false,
 }: BootstrapFormProps) {
   // Always start blank. Previously we prefilled the handle from
   // process.env.USER via /api/setup/status, which surfaced the
@@ -70,15 +72,17 @@ export function BootstrapForm({
       <p className="mt-2 text-sm leading-6 text-muted">
         A couple of quick things — then we install everything else for you.
       </p>
-      <p
-        className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-900"
-        data-testid="bootstrap-windows-note"
-      >
-        Windows users: ScienceSwarm currently supports Windows via WSL2. Keep
-        the repo and ScienceSwarm data in the WSL Linux filesystem, not under
-        <code className="mx-1 rounded bg-white/70 px-1 py-0.5 text-[11px]">/mnt/c</code>,
-        for better import and file-watching performance.
-      </p>
+      {showWindowsNote && (
+        <p
+          className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-900"
+          data-testid="bootstrap-windows-note"
+        >
+          Windows users: ScienceSwarm currently supports Windows via WSL2. Keep
+          the repo and ScienceSwarm data in the WSL Linux filesystem, not under
+          <code className="mx-1 rounded bg-white/70 px-1 py-0.5 text-[11px]">/mnt/c</code>,
+          for better import and file-watching performance.
+        </p>
+      )}
 
       <div className="mt-5 space-y-4">
         <fieldset className="grid gap-4" data-testid="user-information-section">

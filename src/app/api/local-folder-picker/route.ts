@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { isLocalRequest } from "@/lib/local-guard";
 import { isWslEnvironment } from "@/lib/wsl";
 
+class LocalFolderPickerError extends Error {}
+
 function execFileText(command: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     execFile(command, args, (error, stdout, stderr) => {
@@ -107,7 +109,9 @@ async function pickFolderOnLinux(): Promise<string | null> {
     return normalizeSelectedPath(stdout);
   }
 
-  throw new Error("No supported local folder picker found. Install zenity or kdialog, or paste a path manually.");
+  throw new LocalFolderPickerError(
+    "No supported local folder picker found. Install zenity or kdialog, or paste a path manually.",
+  );
 }
 
 async function pickFolderOnWindows(): Promise<string | null> {
@@ -129,6 +133,12 @@ async function pickFolderOnWindows(): Promise<string | null> {
 }
 
 async function pickFolderOnWsl(): Promise<string | null> {
+  if (!(await hasCommand("powershell.exe"))) {
+    throw new LocalFolderPickerError(
+      "Windows host folder picker is unavailable in this WSL session. Make sure powershell.exe is on PATH, or paste a path manually.",
+    );
+  }
+
   const command = [
     "Add-Type -AssemblyName System.Windows.Forms",
     "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog",
@@ -148,7 +158,7 @@ async function pickFolderOnWsl(): Promise<string | null> {
 
   const wslPath = await translateWindowsPathToWsl(windowsPath);
   if (!wslPath) {
-    throw new Error(
+    throw new LocalFolderPickerError(
       "Windows folder picker returned a path that could not be translated into a WSL path.",
     );
   }
@@ -171,7 +181,9 @@ async function pickLocalFolder(): Promise<string | null> {
     return pickFolderOnWindows();
   }
 
-  throw new Error("Local folder picker is not supported on this platform. Paste a path manually instead.");
+  throw new LocalFolderPickerError(
+    "Local folder picker is not supported on this platform. Paste a path manually instead.",
+  );
 }
 
 export async function POST() {
@@ -188,6 +200,15 @@ export async function POST() {
   } catch (error) {
     if (isPickerCancellation(error)) {
       return Response.json({ cancelled: true });
+    }
+
+    if (error instanceof LocalFolderPickerError) {
+      return Response.json(
+        {
+          error: error.message,
+        },
+        { status: 500 },
+      );
     }
 
     return Response.json(

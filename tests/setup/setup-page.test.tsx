@@ -174,14 +174,25 @@ describe("BootstrapForm", () => {
     expect(button.textContent).not.toMatch(/Set up my brain/);
   });
 
-  it("shows the Windows via WSL2 guidance note", () => {
-    render(<BootstrapForm disabled={false} onSubmit={vi.fn()} />);
+  it("shows the Windows via WSL2 guidance note when requested", () => {
+    render(
+      <BootstrapForm
+        disabled={false}
+        onSubmit={vi.fn()}
+        showWindowsNote={true}
+      />,
+    );
     expect(screen.getByTestId("bootstrap-windows-note").textContent).toContain(
       "Windows users: ScienceSwarm currently supports Windows via WSL2",
     );
     expect(screen.getByTestId("bootstrap-windows-note").textContent).toContain(
       "/mnt/c",
     );
+  });
+
+  it("hides the Windows via WSL2 guidance note by default", () => {
+    render(<BootstrapForm disabled={false} onSubmit={vi.fn()} />);
+    expect(screen.queryByTestId("bootstrap-windows-note")).not.toBeInTheDocument();
   });
 
   it("disables every input when disabled prop is set", () => {
@@ -425,6 +436,51 @@ describe("SetupPage integration", () => {
         target: { value: "alice" },
       });
     });
+  });
+
+  it("shows the Windows note only for Windows browsers", async () => {
+    const originalPlatform = window.navigator.platform;
+    const originalUserAgent = window.navigator.userAgent;
+
+    Object.defineProperty(window.navigator, "platform", {
+      configurable: true,
+      value: "Win32",
+    });
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/api/setup/status")) {
+          return new Response(JSON.stringify({ defaultHandle: "alice" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    try {
+      await act(async () => {
+        render(<SetupPage />);
+      });
+
+      expect(screen.getByTestId("bootstrap-windows-note")).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window.navigator, "platform", {
+        configurable: true,
+        value: originalPlatform,
+      });
+      Object.defineProperty(window.navigator, "userAgent", {
+        configurable: true,
+        value: originalUserAgent,
+      });
+    }
   });
 
   it("streams SSE events from /api/setup/bootstrap, renders the done state, and auto-hands off to the workspace", async () => {
