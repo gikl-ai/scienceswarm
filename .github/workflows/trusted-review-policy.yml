@@ -15,6 +15,10 @@ jobs:
   trusted-review-policy:
     name: Trusted review policy
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'pull_request_review' &&
+       github.event.pull_request.base.ref == 'main')
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -27,6 +31,7 @@ jobs:
         run: |
           set -euo pipefail
 
+          head_sha=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')
           reviews_json=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate)
 
           trusted_author=$(
@@ -38,8 +43,9 @@ jobs:
 
           latest_trusted_reviews=$(
             jq -c \
+              --arg head_sha "$head_sha" \
               --argjson trusted "$TRUSTED_USERS_JSON" '
-                map(select(.user.login != null))
+                map(select(.user.login != null and .commit_id == $head_sha))
                 | sort_by(.user.login, .submitted_at // "")
                 | group_by(.user.login)
                 | map(last)
