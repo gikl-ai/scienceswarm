@@ -31,8 +31,9 @@ Do not introduce a new canonical data store that bypasses `gbrain`.
 
 ## Code Guidance
 
-- API routes live under `src/app/api/` and should return `Response.json()` or
-  `new Response()`, not `NextResponse`.
+- API routes live under `src/app/api/`. Prefer `Response.json()` or
+  `new Response()` for standard handlers, and use `NextResponse` only when a
+  route actually needs its Next.js-specific helpers.
 - Path-specific implementation guidance for the `src/` tree lives in
   `src/AGENTS.md`.
 - Prefer integrating with OpenHands through `src/lib/openhands.ts` and the
