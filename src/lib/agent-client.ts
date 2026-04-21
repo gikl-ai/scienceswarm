@@ -11,6 +11,7 @@
  */
 
 import { getNanoClawUrl, getOpenClawGatewayUrl } from "@/lib/config/ports";
+import { getCurrentLlmRuntimeEnv } from "@/lib/runtime-saved-env";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -62,15 +63,35 @@ function wsToHttp(wsUrl: string): string {
  *   2. OPENCLAW_INTERNAL_API_KEY (legacy, openclaw only)
  *
  * Returns null when AGENT_BACKEND is "none", empty, or missing.
+ *
+ * Reads the runtime-saved env overlay (same one `isLocalProviderConfigured`
+ * uses) so UI-driven changes to AGENT_BACKEND / AGENT_URL / AGENT_API_KEY /
+ * OPENCLAW_INTERNAL_API_KEY take effect on the next request without a server
+ * restart. Pass an explicit `env` argument in tests or when you already have
+ * a materialized env map — when provided, it is used verbatim and the saved
+ * .env overlay is NOT consulted (mirrors `isLocalProviderConfigured`).
  */
-export function resolveAgentConfig(): AgentConfig | null {
-  const type = process.env.AGENT_BACKEND?.trim().toLowerCase();
+export function resolveAgentConfig(
+  env?: Record<string, string | undefined> | NodeJS.ProcessEnv,
+): AgentConfig | null {
+  // When an explicit env is provided, read each value from it directly.
+  // Otherwise, consult the runtime-saved env overlay so UI edits to .env are
+  // picked up on the next request, falling back to process.env when a key is
+  // not part of the mutable overlay (OPENCLAW_URL etc. remain process.env-only).
+  const overlay = env ? null : getCurrentLlmRuntimeEnv(process.env);
+  const source: Record<string, string | undefined> = env ?? process.env;
+
+  const rawBackend = overlay?.agentBackend ?? source.AGENT_BACKEND;
+  const type = rawBackend?.trim().toLowerCase();
   if (!type || type === "none") return null;
 
   // Universal URL takes precedence
-  let url = process.env.AGENT_URL?.trim();
+  let url = (overlay?.agentUrl ?? source.AGENT_URL)?.trim();
 
-  // Legacy fallbacks per agent type
+  // Legacy fallbacks per agent type. These read OPENCLAW_URL/OPENCLAW_PORT/
+  // NANOCLAW_URL/NANOCLAW_PORT directly from process.env via config/ports.ts
+  // — those vars are not part of the mutable runtime overlay and are only
+  // relevant for local dev defaults.
   if (!url) {
     switch (type) {
       case "openclaw": {
@@ -93,10 +114,12 @@ export function resolveAgentConfig(): AgentConfig | null {
   url = url.replace(/\/+$/, "");
 
   // Resolve API key
-  const apiKey =
-    process.env.AGENT_API_KEY?.trim() ||
-    (type === "openclaw" ? process.env.OPENCLAW_INTERNAL_API_KEY?.trim() : undefined) ||
-    undefined;
+  const agentApiKey = (overlay?.agentApiKey ?? source.AGENT_API_KEY)?.trim();
+  const openclawApiKey =
+    type === "openclaw"
+      ? (overlay?.openclawInternalApiKey ?? source.OPENCLAW_INTERNAL_API_KEY)?.trim()
+      : undefined;
+  const apiKey = agentApiKey || openclawApiKey || undefined;
 
   return { type, url, apiKey };
 }
