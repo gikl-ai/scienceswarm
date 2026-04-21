@@ -1,0 +1,22 @@
+{
+  "slug": "brain-maintenance",
+  "name": "Brain Maintenance",
+  "description": "Use when the user asks about brain health, brain score, missing embeddings, stale or orphan pages, broken links, citation cleanup, search quality, feature recommendations, or keeping gbrain up to date inside ScienceSwarm.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "product",
+    "gbrain"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Use when the user asks about brain health, brain score, missing embeddings, stale or orphan pages, broken links, citation cleanup, search quality, feature recommendations, or keeping gbrain up to date inside ScienceSwarm.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.123Z",
+  "updatedAt": "2026-04-20T03:48:30.125Z"
+}

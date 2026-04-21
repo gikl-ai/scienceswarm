@@ -1,0 +1,23 @@
+{
+  "slug": "db-orcid",
+  "name": "ORCID Database Wrapper",
+  "description": "Fetch ORCID public records by iD, or search ORCID people",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "person"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch ORCID public records by iD, or search ORCID people",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.184Z",
+  "updatedAt": "2026-04-20T03:48:30.186Z"
+}

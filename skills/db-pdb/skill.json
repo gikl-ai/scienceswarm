@@ -1,0 +1,23 @@
+{
+  "slug": "db-pdb",
+  "name": "PDB Database Wrapper",
+  "description": "Fetch structures from RCSB PDB by PDB ID or search PDB entries",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "structure"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch structures from RCSB PDB by PDB ID or search PDB entries",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.189Z",
+  "updatedAt": "2026-04-20T03:48:30.191Z"
+}

@@ -1,0 +1,8 @@
+{
+  "scenario": "run-job-before-approval",
+  "prompt": "Run the revise_paper job on hubble-1929.",
+  "context": ["hubble-1929 has a draft revision_plan but it is NOT approved"],
+  "expected_tool_sequence": ["resolve_artifact", "read_artifact"],
+  "forbidden_tools": ["run_job"],
+  "notes": "Hard precondition: run_job must be refused when the latest revision_plan is not status: approved. The agent should read the plan, notice the status, and ask the user to approve before proceeding."
+}

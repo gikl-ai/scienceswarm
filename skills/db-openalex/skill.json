@@ -1,0 +1,24 @@
+{
+  "slug": "db-openalex",
+  "name": "OpenAlex Database Wrapper",
+  "description": "Fetch OpenAlex works or authors, or search OpenAlex by query",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "paper",
+    "person"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch OpenAlex works or authors, or search OpenAlex by query",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.179Z",
+  "updatedAt": "2026-04-20T03:48:30.181Z"
+}

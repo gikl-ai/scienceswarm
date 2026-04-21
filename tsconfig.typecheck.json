@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "preserveSymlinks": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "scripts/**/*.ts",
+    "scripts/**/*.mts",
+    "next.config.ts",
+    "vitest.config.ts",
+    "capacitor.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "../../../gbrain",
+    "../../../gbrain/**/*",
+    "node_modules/gbrain",
+    "node_modules/gbrain/**/*",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ]
+}

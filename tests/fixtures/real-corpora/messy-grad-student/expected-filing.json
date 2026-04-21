@@ -1,0 +1,152 @@
+{
+  "_doc": "Golden manifest for Spec 5 warm-start regression (messy grad student). Values calibrated against the first run of tests/integration/warm-start-golden.test.ts. Any classifier, scanner, or writer change that moves these numbers must land in the same commit as the manifest update.",
+  "_date_prefix_note": "Text-file wiki pages land at wiki/<dir>/<today>-<slug>.md. The test reconstructs <today> at runtime via new Date().toISOString().slice(0,10), matching the writer's exact call.",
+  "_slug_derivation": "basename(path, ext).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60). So 'notes-☃' -> 'notes-' (trailing dash from the stripped snowman), 'résumé-ideas' -> 'r-sum-ideas', 'Untitled 1' -> 'untitled-1'.",
+  "total_files_on_disk": 30,
+  "expected_scanner_files": 29,
+  "expected_scanner_bucket_counts": {
+    "note": 25,
+    "paper": 3,
+    "experiment": 1
+  },
+  "skipped_by_scanner": ["empty.md"],
+  "expected_duplicate_source_filenames": [
+    "watson-crick-1953.md",
+    "duplicate-watson-crick.md"
+  ],
+  "expected_duplicate_skip_count": 1,
+  "expected_pages": [
+    {
+      "source_filename": "franklin-1952-photo51.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "franklin-1952-photo51"
+    },
+    {
+      "source_filename": "watson-crick-1953.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "watson-crick-1953"
+    },
+    {
+      "source_filename": "crispr-cas9-review.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "crispr-cas9-review"
+    },
+    {
+      "source_filename": "hodgkin-huxley-1952.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "hodgkin-huxley-1952"
+    },
+    {
+      "source_filename": "alphafold-2-notes.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "alphafold-2-notes"
+    },
+    {
+      "source_filename": "transformer-attention.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "transformer-attention"
+    },
+    {
+      "source_filename": "thesis-outline.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "thesis-outline"
+    },
+    {
+      "source_filename": "perturb-seq-protocol.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "perturb-seq-protocol"
+    },
+    {
+      "source_filename": "batch-effects-literature.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "batch-effects-literature"
+    },
+    {
+      "source_filename": "pcr-notes.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "pcr-notes"
+    },
+    {
+      "source_filename": "todos.txt",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "todos"
+    },
+    {
+      "source_filename": "journal-club-notes.txt",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "journal-club-notes"
+    },
+    {
+      "source_filename": "grant-notes.txt",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "grant-notes"
+    },
+    {
+      "source_filename": "Untitled 1.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "untitled-1"
+    },
+    {
+      "source_filename": "résumé-ideas.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "r-sum-ideas"
+    },
+    {
+      "source_filename": "notes-☃.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "notes-"
+    },
+    {
+      "source_filename": "corrupt-binary.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "corrupt-binary"
+    },
+    {
+      "source_filename": "large-dump.md",
+      "kind": "text",
+      "wiki_dir": "wiki/resources",
+      "slug": "large-dump"
+    },
+    {
+      "source_filename": "chapter2-methods.tex",
+      "kind": "text",
+      "wiki_dir": "wiki/entities/papers",
+      "slug": "chapter2-methods"
+    },
+    {
+      "source_filename": "thesis-main.tex",
+      "kind": "text",
+      "wiki_dir": "wiki/entities/papers",
+      "slug": "thesis-main"
+    },
+    {
+      "source_filename": "shannon-1948-information-theory.pdf",
+      "kind": "pdf",
+      "wiki_dir": "wiki/entities/papers",
+      "slug": "shannon-1948-information-theory"
+    },
+    {
+      "source_filename": "scrna-pipeline.ipynb",
+      "kind": "ipynb",
+      "wiki_dir": "wiki/experiments",
+      "slug": "scrna-pipeline"
+    }
+  ]
+}

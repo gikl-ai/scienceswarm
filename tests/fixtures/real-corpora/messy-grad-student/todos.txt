@@ -1,0 +1,7 @@
+TODO list from 2026-03-30
+
+- Order more Taq polymerase, we're running low
+- Email Dr. K about the seminar invite
+- Re-analyze the Dec 2025 batch with the updated normalization
+- Back up the raw sequencing runs to cold storage
+- Cancel the unused AWS instance, it's bleeding money

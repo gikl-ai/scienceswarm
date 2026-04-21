@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose a new capability or improvement for ScienceSwarm.
+title: "feat: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea. The more context about the underlying
+        problem, the easier it is to design a good solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that's hard or impossible today?
+      placeholder: |
+        When I upload a PDF, the references section isn't extracted, so I
+        can't quickly see which papers are cited. Right now I have to open
+        the PDF in a separate viewer and copy them manually.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How do you think this could work? Be as specific as you can.
+      placeholder: |
+        Parse the bibliography section on upload and list referenced papers
+        under the Literature tab with a "cited by" badge.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about and why they weren't enough.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, links to prior art, use cases, etc.

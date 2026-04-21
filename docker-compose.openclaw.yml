@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  openclaw:
+    image: openclaw/openclaw:0.9.2
+    container_name: scienceswarm-comms
+    ports:
+      - "${OPENCLAW_PORT:-18789}:18789"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - openclaw-data:/data
+    restart: unless-stopped
+
+volumes:
+  openclaw-data:

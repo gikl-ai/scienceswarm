@@ -1,0 +1,23 @@
+{
+  "slug": "research-radar",
+  "name": "Research Radar",
+  "description": "Every N minutes, scan the scientist's tracked topics, query gbrain for relevant signals, synthesize a personalized briefing, and write it back to gbrain as a Timeline entry on each topic's concept page plus a briefings/ summary page.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "product",
+    "automation",
+    "radar"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Every N minutes, scan the scientist's tracked topics, query gbrain for relevant signals, synthesize a personalized briefing, and write it back to gbrain as a Timeline entry on each topic's concept page plus a briefings/ summary page.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.130Z",
+  "updatedAt": "2026-04-20T03:48:30.132Z"
+}

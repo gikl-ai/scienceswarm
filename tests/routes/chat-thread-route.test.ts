@@ -1,0 +1,257 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readChatThread, writeChatThread } from "@/lib/chat-thread-store";
+
+const mockIsLocal = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+
+vi.mock("@/lib/local-guard", () => ({
+  isLocalRequest: () => mockIsLocal(),
+}));
+
+let dataRoot: string;
+
+describe("chat thread route", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    mockIsLocal.mockResolvedValue(true);
+    dataRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-chat-thread-"));
+    process.env.SCIENCESWARM_DIR = dataRoot;
+  });
+
+  afterEach(async () => {
+    delete process.env.SCIENCESWARM_DIR;
+    await rm(dataRoot, { recursive: true, force: true });
+  });
+
+  it("returns an empty thread for a new project", async () => {
+    const { GET } = await import("@/app/api/chat/thread/route");
+    const response = await GET(new Request("http://localhost/api/chat/thread?project=alpha-project"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      version: 1,
+      project: "alpha-project",
+      conversationId: null,
+      conversationBackend: null,
+      messages: [],
+      artifactProvenance: [],
+    });
+  });
+
+  it("persists a project thread under local brain state and reads it back", async () => {
+    const { GET, POST } = await import("@/app/api/chat/thread/route");
+
+    const writeResponse = await POST(new Request("http://localhost/api/chat/thread", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project: "alpha-project",
+        conversationId: "conv-alpha",
+        conversationBackend: "agent",
+        messages: [
+          {
+            id: "m1",
+            role: "user",
+            content: "hi",
+            timestamp: "2026-04-11T10:00:00.000Z",
+            channel: "web",
+          },
+          {
+            id: "m2",
+            role: "assistant",
+            content: "hello",
+            thinking: "Inspecting the prior import manifest before answering.",
+            timestamp: "2026-04-11T10:00:01.000Z",
+            chatMode: "openclaw-tools",
+            captureClarification: {
+              captureId: "capture-1",
+              rawPath: "raw/captures/web/2026-04-11/capture-1.json",
+              question: "Which project should this capture belong to?",
+              choices: ["alpha", "beta"],
+              capturedContent: "note: hello",
+            },
+            taskPhases: [
+              { id: "reading-file", label: "Reading file", status: "completed" },
+              { id: "done", label: "Done", status: "completed" },
+            ],
+          },
+        ],
+        artifactProvenance: [
+          {
+            projectPath: "figures/ratio-trend.svg",
+            sourceFiles: ["results.md"],
+            prompt: "Create a chart from results.md",
+            tool: "OpenClaw CLI",
+            createdAt: "2026-04-11T10:00:02.000Z",
+          },
+        ],
+      }),
+    }));
+
+    expect(writeResponse.status).toBe(200);
+    await expect(writeResponse.json()).resolves.toEqual({ ok: true });
+
+    const persistedPath = path.join(
+      dataRoot,
+      "projects",
+      "alpha-project",
+      ".brain",
+      "state",
+      "chat.json",
+    );
+    expect(await readFile(persistedPath, "utf-8")).toContain("\"conversationId\": \"conv-alpha\"");
+    expect(await readFile(persistedPath, "utf-8")).toContain("\"conversationBackend\": \"agent\"");
+
+    const readResponse = await GET(new Request("http://localhost/api/chat/thread?project=alpha-project"));
+    expect(readResponse.status).toBe(200);
+    await expect(readResponse.json()).resolves.toEqual({
+      version: 1,
+      project: "alpha-project",
+      conversationId: "conv-alpha",
+      conversationBackend: "agent",
+      messages: [
+        {
+          id: "m1",
+          role: "user",
+          content: "hi",
+          timestamp: "2026-04-11T10:00:00.000Z",
+          channel: "web",
+        },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "hello",
+          thinking: "Inspecting the prior import manifest before answering.",
+          timestamp: "2026-04-11T10:00:01.000Z",
+          chatMode: "openclaw-tools",
+          captureClarification: {
+            captureId: "capture-1",
+            rawPath: "raw/captures/web/2026-04-11/capture-1.json",
+            question: "Which project should this capture belong to?",
+            choices: ["alpha", "beta"],
+            capturedContent: "note: hello",
+          },
+          taskPhases: [
+            { id: "reading-file", label: "Reading file", status: "completed" },
+            { id: "done", label: "Done", status: "completed" },
+          ],
+        },
+      ],
+      artifactProvenance: [
+        {
+          projectPath: "figures/ratio-trend.svg",
+          sourceFiles: ["results.md"],
+          prompt: "Create a chart from results.md",
+          tool: "OpenClaw CLI",
+          createdAt: "2026-04-11T10:00:02.000Z",
+        },
+      ],
+    });
+  });
+
+  it("keeps valid artifact provenance entries even when one entry is malformed", async () => {
+    const { GET, POST } = await import("@/app/api/chat/thread/route");
+
+    const response = await POST(new Request("http://localhost/api/chat/thread", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project: "alpha-project",
+        conversationId: "conv-alpha",
+        messages: [],
+        artifactProvenance: [
+          {
+            projectPath: "figures/ratio-trend.svg",
+            sourceFiles: ["results.md"],
+            prompt: "Create a chart from results.md",
+            tool: "OpenClaw CLI",
+            createdAt: "2026-04-11T10:00:02.000Z",
+          },
+          {
+            projectPath: 123,
+            sourceFiles: ["results.md"],
+            prompt: "bad entry",
+            tool: "OpenClaw CLI",
+            createdAt: "2026-04-11T10:00:02.000Z",
+          },
+        ],
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+
+    const readResponse = await GET(new Request("http://localhost/api/chat/thread?project=alpha-project"));
+    expect(readResponse.status).toBe(200);
+    await expect(readResponse.json()).resolves.toMatchObject({
+      artifactProvenance: [
+        {
+          projectPath: "figures/ratio-trend.svg",
+          sourceFiles: ["results.md"],
+          prompt: "Create a chart from results.md",
+          tool: "OpenClaw CLI",
+          createdAt: "2026-04-11T10:00:02.000Z",
+        },
+      ],
+    });
+  });
+
+  it("migrates a legacy global chat thread into the project root on read", async () => {
+    const legacyPath = path.join(dataRoot, "brain", "state", "chat", "alpha-project.json");
+    await import("node:fs/promises").then(({ mkdir, writeFile }) =>
+      mkdir(path.dirname(legacyPath), { recursive: true }).then(() =>
+        writeFile(
+          legacyPath,
+          JSON.stringify({
+            version: 1,
+            project: "alpha-project",
+            conversationId: "legacy-conv",
+            messages: [
+              {
+                id: "legacy-1",
+                role: "user",
+                content: "hello from legacy storage",
+                timestamp: "2026-04-11T10:00:00.000Z",
+              },
+            ],
+          }, null, 2),
+          "utf-8",
+        ),
+      ),
+    );
+
+    const { GET } = await import("@/app/api/chat/thread/route");
+    const response = await GET(new Request("http://localhost/api/chat/thread?project=alpha-project"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      conversationId: "legacy-conv",
+    });
+    await expect(
+      readFile(
+        path.join(dataRoot, "projects", "alpha-project", ".brain", "state", "chat.json"),
+        "utf-8",
+      ),
+    ).resolves.toContain("\"legacy-conv\"");
+  });
+
+  it("uses an explicit project-local state root without falling back to the default root", async () => {
+    const explicitStateRoot = path.join(dataRoot, "projects", "alpha-project", ".brain", "state");
+
+    await writeChatThread({
+      version: 1,
+      project: "alpha-project",
+      conversationId: "explicit-conv",
+      messages: [],
+    }, explicitStateRoot);
+
+    await expect(
+      readFile(path.join(explicitStateRoot, "chat.json"), "utf-8"),
+    ).resolves.toContain("\"explicit-conv\"");
+    await expect(readChatThread("alpha-project", explicitStateRoot)).resolves.toMatchObject({
+      conversationId: "explicit-conv",
+    });
+  });
+});

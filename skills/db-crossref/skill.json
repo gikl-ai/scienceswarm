@@ -1,0 +1,23 @@
+{
+  "slug": "db-crossref",
+  "name": "Crossref Database Wrapper",
+  "description": "Fetch scholarly works from Crossref by DOI, or search Crossref by query",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "paper"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch scholarly works from Crossref by DOI, or search Crossref by query",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.168Z",
+  "updatedAt": "2026-04-20T03:48:30.171Z"
+}

@@ -1,0 +1,2305 @@
+"use client";
+
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  mergeArtifactProvenanceEntries,
+  normalizeArtifactProvenanceEntries,
+  type ArtifactProvenanceEntry,
+} from "@/lib/artifact-provenance";
+import { looksLikeSlashCommandInput } from "@/lib/openclaw/slash-commands";
+
+import type { Step } from "@/components/research/step-cards";
+
+// ── Types ──────────────────────────────────────────────────────
+
+export interface Message {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  thinking?: string;
+  timestamp: Date;
+  chatMode?: ChatMode;
+  channel?: string;
+  userName?: string;
+  captureClarification?: CaptureClarification;
+  taskPhases?: ChatTaskPhase[];
+  /** Optional backend-emitted agent "step" trail rendered above the message body. */
+  steps?: Step[];
+}
+
+export interface CaptureClarification {
+  captureId: string;
+  rawPath?: string;
+  question: string;
+  choices: string[];
+  capturedContent: string;
+}
+
+export interface ChatTaskPhase {
+  id: string;
+  label: string;
+  status: "pending" | "active" | "completed" | "failed";
+}
+
+export interface GeneratedArtifact {
+  path: string;
+  name: string;
+  createdAt: string;
+}
+
+interface UploadedFile {
+  name: string;
+  size: string;
+  type: string;
+  folder?: string;
+  workspacePath?: string;
+  source?: "workspace" | "gbrain";
+  brainSlug?: string;
+  displayPath?: string;
+  content?: string;
+}
+
+interface WorkspaceChatContextFile {
+  path: string;
+  name?: string;
+  source?: "workspace" | "gbrain";
+  brainSlug?: string;
+  displayPath?: string;
+}
+
+interface WorkspaceTreeNode {
+  name: string;
+  type: "file" | "directory";
+  size?: string;
+  hasCompanion?: boolean;
+  changed?: boolean;
+  children?: WorkspaceTreeNode[];
+}
+
+function workspaceTreeSignature(nodes: WorkspaceTreeNode[]): string {
+  return JSON.stringify(nodes);
+}
+
+interface PolledOpenClawMessage {
+  id?: string;
+  role?: string;
+  content?: string;
+  channel?: string;
+  userId?: string;
+  userName?: string;
+  timestamp?: string;
+}
+
+export type Backend = "openclaw" | "agent" | "direct";
+export type ChatMode = "reasoning" | "openclaw-tools";
+
+interface StoredMessage {
+  id: string;
+  role: Message["role"];
+  content: string;
+  thinking?: string;
+  timestamp: string;
+  chatMode?: ChatMode;
+  channel?: string;
+  userName?: string;
+  captureClarification?: CaptureClarification;
+  taskPhases?: ChatTaskPhase[];
+}
+
+interface StoredChatState {
+  version: 1;
+  conversationId: string | null;
+  conversationBackend?: Backend | null;
+  messages: StoredMessage[];
+  artifactProvenance?: ArtifactProvenanceEntry[];
+}
+
+/**
+ * A file the user is currently viewing/previewing in the workspace.
+ * Sent alongside the chat message so the LLM knows what "it" or "this file"
+ * refers to, without polluting the displayed chat bubble.
+ */
+export interface ActiveFileContext {
+  /** Display path shown to the user, e.g. "results.md" */
+  path: string;
+  /** Raw text content of the file (callers should cap at ~8 000 chars). */
+  content: string;
+}
+
+export interface UseUnifiedChat {
+  messages: Message[];
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+  sendMessage: (content: string, activeFile?: ActiveFileContext) => Promise<void>;
+  isStreaming: boolean;
+  error: string | null;
+  setError: React.Dispatch<React.SetStateAction<string | null>>;
+  backend: Backend;
+  setBackend: React.Dispatch<React.SetStateAction<Backend>>;
+  chatMode: ChatMode;
+  setChatMode: React.Dispatch<React.SetStateAction<ChatMode>>;
+  crossChannelMessages: Message[];
+  uploadedFiles: UploadedFile[];
+  workspaceTree: WorkspaceTreeNode[];
+  generatedArtifacts: GeneratedArtifact[];
+  handleFiles: (files: File[]) => Promise<void>;
+  addWorkspaceFileToChatContext: (file: WorkspaceChatContextFile) => boolean;
+  removeFileFromChatContext: (pathOrName: string) => void;
+  clearChatContext: () => void;
+  refreshWorkspace: (signal?: AbortSignal) => Promise<void>;
+  checkChanges: (signal?: AbortSignal) => Promise<boolean>;
+  recordGeneratedArtifacts: (paths: string[]) => void;
+  clearGeneratedArtifacts: () => void;
+  clearError: () => void;
+  conversationId: string | null;
+  artifactProvenance: ArtifactProvenanceEntry[];
+  /**
+   * true = confirmed reachable, false = confirmed disconnected,
+   * null = unknown (first probe still in flight).
+   */
+  openClawConnected: boolean | null;
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function normalizeGeneratedArtifactPath(value: string): string | null {
+  const normalized = value.trim().replace(/^\/+/, "");
+  return normalized.length > 0 ? normalized : null;
+}
+
+function buildGeneratedArtifact(path: string, createdAt: string): GeneratedArtifact {
+  return {
+    path,
+    name: path.split("/").pop() || path,
+    createdAt,
+  };
+}
+
+function mergeGeneratedArtifacts(
+  existing: GeneratedArtifact[],
+  paths: string[],
+  createdAt = new Date().toISOString(),
+): GeneratedArtifact[] {
+  const normalizedPaths = Array.from(new Set(
+    paths
+      .map((path) => normalizeGeneratedArtifactPath(path))
+      .filter((path): path is string => path !== null),
+  ));
+  if (normalizedPaths.length === 0) {
+    return existing;
+  }
+
+  const merged = new Map(existing.map((artifact) => [artifact.path, artifact]));
+  for (const path of normalizedPaths) {
+    merged.set(path, buildGeneratedArtifact(path, createdAt));
+  }
+
+  return Array.from(merged.values())
+    .sort((left, right) => {
+      const timeDelta = Date.parse(right.createdAt) - Date.parse(left.createdAt);
+      return timeDelta !== 0 ? timeDelta : left.path.localeCompare(right.path);
+    })
+    .slice(0, MAX_GENERATED_ARTIFACTS);
+}
+
+function dispatchGbrainArtifactsUpdated(projectName: string, slugs: string[]): void {
+  if (typeof window === "undefined" || slugs.length === 0) return;
+  window.dispatchEvent(new CustomEvent("scienceswarm:gbrain-artifacts-updated", {
+    detail: { project: projectName, slugs },
+  }));
+}
+
+function makeId(): string {
+  return Date.now().toString() + Math.random().toString(36).slice(2);
+}
+
+function getBasename(filePath: string): string {
+  const segments = filePath.split(/[\\/]+/).filter(Boolean);
+  return segments.at(-1) || filePath;
+}
+
+function hasProjectScope(projectName: string): boolean {
+  return projectName.trim().length > 0;
+}
+
+function getFolderLabel(filePath: string): string {
+  const normalized = filePath.replace(/^\/+/, "");
+  const [folder] = normalized.split("/");
+  return folder || "other";
+}
+
+/**
+ * Mirror the server-side `assertSafeProjectSlug` regex so we never pass a
+ * malformed projectName to APIs that gate on it. If the URL `?name=` value
+ * contains uppercase letters, spaces, or any character outside [a-z0-9-],
+ * those endpoints would otherwise return 400 and the calling .catch() blocks
+ * would silently swallow it, leaving the user with an empty workspace tree
+ * and no visible error. Returning null lets callers fall back to the
+ * unscoped path or skip the request entirely.
+ */
+function safeSlugOrNull(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return /^[a-z0-9-]+$/.test(value) ? value : null;
+}
+
+function normalizeProjectChatError(message: string, projectName: string): string {
+  if (/has no privacy manifest; remote chat is blocked\./i.test(message)) {
+    return (
+      `Project ${projectName} is not ready for remote chat yet. ` +
+      "Use Create empty project or Import project in the workspace panel to generate its privacy manifest, then retry."
+    );
+  }
+
+  if (/is local-only; remote chat is blocked for this project\./i.test(message)) {
+    return (
+      `Project ${projectName} is set to local-only chat. ` +
+      "Use the visible project setup flow to enable remote chat before retrying this slash command."
+    );
+  }
+
+  return message;
+}
+
+function removeEmptyAssistantPlaceholder(messages: Message[], assistantId: string): Message[] {
+  const msg = messages.find((m) => m.id === assistantId);
+  if (msg && !msg.content && !msg.thinking && !msg.taskPhases?.length) {
+    return messages.filter((m) => m.id !== assistantId);
+  }
+  return messages;
+}
+
+function normalizeBackend(value: unknown): Backend | null {
+  return value === "openclaw" || value === "agent" || value === "direct" ? value : null;
+}
+
+function normalizeChatMode(value: unknown): ChatMode | null {
+  return value === "reasoning" || value === "openclaw-tools" ? value : null;
+}
+
+function mapResponseBackend(value: string | null): Backend | null {
+  if (value === "openclaw") {
+    return "openclaw";
+  }
+  if (value === "openhands" || value === "agent" || value === "nanoclaw" || value === "hermes") {
+    return "agent";
+  }
+  if (value === "direct") {
+    return "direct";
+  }
+  return null;
+}
+
+function inferPolledMessageRole(message: PolledOpenClawMessage): "user" | "assistant" | "system" {
+  if (message.role === "assistant" || message.role === "system") {
+    return message.role;
+  }
+  const userId = typeof message.userId === "string" ? message.userId.toLowerCase() : "";
+  if (userId === "assistant" || userId === "agent" || userId === "openclaw") {
+    return "assistant";
+  }
+  if (userId === "system") {
+    return "system";
+  }
+  return "user";
+}
+
+function latestTimestampCursor(seed: string, messages: PolledOpenClawMessage[]): string {
+  return messages.reduce((latest, message) => {
+    if (typeof message.timestamp !== "string") {
+      return latest;
+    }
+    const candidateTime = Date.parse(message.timestamp);
+    const latestTime = Date.parse(latest);
+    if (Number.isNaN(candidateTime)) {
+      return latest;
+    }
+    if (Number.isNaN(latestTime) || candidateTime > latestTime) {
+      return message.timestamp;
+    }
+    return latest;
+  }, seed);
+}
+
+function inferConversationBackend(
+  conversationId: string | null,
+  conversationBackend?: unknown,
+): Backend | null {
+  const explicitBackend = normalizeBackend(conversationBackend);
+  if (explicitBackend) {
+    return explicitBackend;
+  }
+  if (!conversationId) {
+    return null;
+  }
+  return conversationId.startsWith("web:") ? "openclaw" : null;
+}
+
+function getScopedConversationId(
+  conversationId: string | null,
+  conversationBackend: Backend | null,
+  backend: Backend,
+): string | null {
+  if (!conversationId) {
+    return null;
+  }
+  const resolvedBackend = inferConversationBackend(conversationId, conversationBackend);
+  if (!resolvedBackend) {
+    return backend === "openclaw" ? conversationId : null;
+  }
+  return resolvedBackend === backend ? conversationId : null;
+}
+
+const CHAT_STORAGE_PREFIX = "scienceswarm.chat";
+const CHAT_STORAGE_VERSION = 1;
+const MAX_PERSISTED_MESSAGES = 200;
+const MAX_KEEPALIVE_MESSAGES = 50;
+const WORKSPACE_TREE_REFRESH_MS = 15000;
+const WORKSPACE_WATCH_POLL_MS = 5000;
+const MAX_GENERATED_ARTIFACTS = 50;
+const SLASH_COMMAND_START_TIMEOUT_MS = 15_000;
+const SLASH_COMMAND_TIMEOUT_MESSAGE =
+  "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.";
+const QUEUED_ASSISTANT_CONTENT = "Queued...";
+const INTERNAL_SYSTEM_NOISE_PREFIXES = [
+  "[User opened file:",
+  "__FILE_PREVIEW__:",
+  "__FILE_STATIC__:",
+  "new files synced:",
+  "updated since import:",
+  "missing from source:",
+  "changed since import:",
+  "Starting OpenClaw",
+  "OpenClaw is running.",
+  "OpenClaw is starting up.",
+  "Could not auto-start OpenClaw:",
+  "Starting Ollama",
+  "Ollama is running.",
+  "Ollama is starting up.",
+  "Could not auto-start Ollama:",
+];
+
+/**
+ * Prefixes that are internal system noise (not sent to AI) but MUST survive
+ * persistence so the UI can restore inline file-preview cards after refresh.
+ */
+const PERSISTABLE_NOISE_PREFIXES = [
+  "__FILE_PREVIEW__:",
+  "__FILE_STATIC__:",
+];
+
+type RestoredChatState = {
+  messages: Message[];
+  conversationId: string | null;
+  conversationBackend: Backend | null;
+  artifactProvenance: ArtifactProvenanceEntry[];
+  hasStoredState: boolean;
+};
+
+type SendContext = {
+  backend: Backend;
+  chatMode: ChatMode;
+  projectName: string;
+  projectVersion: number;
+  userBackendOverrideVersion: number;
+};
+
+type QueuedSend = {
+  content: string;
+  activeFile?: ActiveFileContext;
+  assistantId: string;
+  context: SendContext;
+  resolve: () => void;
+};
+
+function buildInitialMessages(projectName: string): Message[] {
+  if (!hasProjectScope(projectName)) {
+    return [];
+  }
+
+  return [
+    {
+      id: "1",
+      role: "system",
+      content: `Project **${projectName}** loaded.`,
+      timestamp: new Date(),
+    },
+    {
+      id: "2",
+      role: "assistant",
+      content: `Research workspace ready for **${projectName}**.\n\n` +
+        "Import a research archive or upload files to start organizing papers, code, data, and notes.\n\n" +
+        "Once your materials are in place, ask me to \"organize this project\" and I can cluster likely project threads, surface possible duplicate papers and stale exports, and suggest the next pages or tasks worth creating.",
+      timestamp: new Date(),
+    },
+  ];
+}
+
+function getChatStorageKey(projectName: string): string {
+  return `${CHAT_STORAGE_PREFIX}.${encodeURIComponent(projectName || "__no-project__")}`;
+}
+
+function folderLabelForIngestType(type: string | undefined): string {
+  switch (type) {
+    case "paper":
+      return "papers";
+    case "dataset":
+      return "data";
+    case "code":
+      return "code";
+    case "artifact":
+      return "docs";
+    case "source":
+      return "sources";
+    default:
+      return "other";
+  }
+}
+
+function isPersistableMessage(message: Message): boolean {
+  if (message.role === "assistant" && message.content === QUEUED_ASSISTANT_CONTENT) {
+    return false;
+  }
+
+  if (
+    message.role === "assistant"
+    && message.content.trim().length === 0
+    && !message.thinking?.trim().length
+    && !message.taskPhases?.length
+  ) {
+    return false;
+  }
+
+  return !isInternalSystemNoise(message) || isPersistableNoise(message);
+}
+
+function sanitizeMessagesForPersistence(messages: Message[]): Message[] {
+  return messages.filter((message) => isPersistableMessage(message));
+}
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  let settled = false;
+
+  return new Promise<Response>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      controller.abort();
+      reject(new Error(SLASH_COMMAND_TIMEOUT_MESSAGE));
+    }, timeoutMs);
+
+    fetch(input, { ...init, signal: controller.signal })
+      .then((response) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        resolve(response);
+      })
+      .catch((error) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+function isInternalSystemNoise(message: Message): boolean {
+  if (message.role !== "system") return false;
+  const content = message.content.trim();
+  if (!content) return false;
+  const lines = content.split("\n").map((line) => line.trim()).filter(Boolean);
+
+  return lines.length > 0
+    && lines.every((line) =>
+      INTERNAL_SYSTEM_NOISE_PREFIXES.some((prefix) => line.startsWith(prefix)),
+    );
+}
+
+/** File-preview markers are internal noise but must survive persistence. */
+function isPersistableNoise(message: Message): boolean {
+  if (message.role !== "system") return false;
+  const content = message.content.trim();
+  return PERSISTABLE_NOISE_PREFIXES.some((prefix) => content.startsWith(prefix));
+}
+
+/**
+ * On restore, any `__FILE_PREVIEW__:` becomes `__FILE_STATIC__:` because
+ * there is no active preview state after a page reload.
+ */
+function demoteRestoredPreviews(messages: Message[]): Message[] {
+  return messages.map((m) =>
+    m.role === "system" && m.content.startsWith("__FILE_PREVIEW__:")
+      ? { ...m, content: m.content.replace("__FILE_PREVIEW__:", "__FILE_STATIC__:") }
+      : m,
+  );
+}
+
+function buildQueuedHistory(messages: Message[], assistantId: string): Message[] {
+  const assistantIndex = messages.findIndex((message) => message.id === assistantId);
+  return assistantIndex >= 0 ? messages.slice(0, assistantIndex) : messages;
+}
+
+function restoreMessage(value: unknown): Message | null {
+  if (!value || typeof value !== "object") return null;
+
+  const candidate = value as Partial<StoredMessage>;
+  if (
+    typeof candidate.id !== "string"
+    || (candidate.role !== "system" && candidate.role !== "assistant" && candidate.role !== "user")
+    || typeof candidate.content !== "string"
+    || (candidate.thinking !== undefined && typeof candidate.thinking !== "string")
+    || typeof candidate.timestamp !== "string"
+  ) {
+    return null;
+  }
+
+  const timestamp = new Date(candidate.timestamp);
+  if (Number.isNaN(timestamp.getTime())) {
+    return null;
+  }
+
+  return {
+    id: candidate.id,
+    role: candidate.role,
+    content: candidate.content,
+    thinking: typeof candidate.thinking === "string" ? candidate.thinking : undefined,
+    timestamp,
+    chatMode: normalizeChatMode(candidate.chatMode) ?? undefined,
+    channel: typeof candidate.channel === "string" ? candidate.channel : undefined,
+    userName: typeof candidate.userName === "string" ? candidate.userName : undefined,
+    captureClarification: restoreCaptureClarification(candidate.captureClarification),
+    taskPhases: restoreTaskPhases(candidate.taskPhases),
+  };
+}
+
+function restoreCaptureClarification(value: unknown): CaptureClarification | undefined {
+  if (!value || typeof value !== "object") return undefined;
+
+  const candidate = value as Partial<CaptureClarification>;
+  if (
+    typeof candidate.captureId !== "string"
+    || typeof candidate.question !== "string"
+    || !Array.isArray(candidate.choices)
+    || !candidate.choices.every((choice) => typeof choice === "string")
+    || typeof candidate.capturedContent !== "string"
+  ) {
+    return undefined;
+  }
+
+  return {
+    captureId: candidate.captureId,
+    rawPath: typeof candidate.rawPath === "string" ? candidate.rawPath : undefined,
+    question: candidate.question,
+    choices: candidate.choices,
+    capturedContent: candidate.capturedContent,
+  };
+}
+
+function restoreTaskPhases(value: unknown): ChatTaskPhase[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const phases = value
+    .filter(
+      (entry): entry is Partial<ChatTaskPhase> =>
+        Boolean(entry && typeof entry === "object"),
+    )
+    .map((entry) => {
+      if (
+        typeof entry.id !== "string"
+        || typeof entry.label !== "string"
+        || (
+          entry.status !== "pending"
+          && entry.status !== "active"
+          && entry.status !== "completed"
+          && entry.status !== "failed"
+        )
+      ) {
+        return null;
+      }
+
+      return {
+        id: entry.id,
+        label: entry.label,
+        status: entry.status,
+      } satisfies ChatTaskPhase;
+    })
+    .filter((phase): phase is ChatTaskPhase => phase !== null);
+
+  return phases.length > 0 ? phases : undefined;
+}
+
+function loadStoredChat(projectName: string): RestoredChatState {
+  if (!projectName) {
+    return {
+      messages: [],
+      conversationId: null,
+      conversationBackend: null,
+      artifactProvenance: [],
+      hasStoredState: false,
+    };
+  }
+
+  if (typeof window === "undefined") {
+    return {
+      messages: [],
+      conversationId: null,
+      conversationBackend: null,
+      artifactProvenance: [],
+      hasStoredState: false,
+    };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(getChatStorageKey(projectName));
+    if (!raw) {
+      return {
+        messages: [],
+        conversationId: null,
+        conversationBackend: null,
+        artifactProvenance: [],
+        hasStoredState: false,
+      };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<StoredChatState>;
+    if (parsed.version !== CHAT_STORAGE_VERSION || !Array.isArray(parsed.messages)) {
+      return {
+        messages: [],
+        conversationId: null,
+        conversationBackend: null,
+        artifactProvenance: [],
+        hasStoredState: false,
+      };
+    }
+
+    const restoredMessages = demoteRestoredPreviews(
+      sanitizeMessagesForPersistence(
+        parsed.messages
+        .map((entry) => restoreMessage(entry))
+        .filter((entry): entry is Message => entry !== null),
+      ),
+    );
+    const conversationId = typeof parsed.conversationId === "string" ? parsed.conversationId : null;
+    const conversationBackend = inferConversationBackend(conversationId, parsed.conversationBackend);
+    const artifactProvenance = normalizeArtifactProvenanceEntries(parsed.artifactProvenance);
+
+    return {
+      messages: restoredMessages,
+      conversationId,
+      conversationBackend,
+      artifactProvenance,
+      hasStoredState:
+        restoredMessages.length > 0 || conversationId !== null || artifactProvenance.length > 0,
+    };
+  } catch {
+    return {
+      messages: [],
+      conversationId: null,
+      conversationBackend: null,
+      artifactProvenance: [],
+      hasStoredState: false,
+    };
+  }
+}
+
+function persistChat(
+  projectName: string,
+  messages: Message[],
+  conversationId: string | null,
+  conversationBackend: Backend | null,
+  artifactProvenance: ArtifactProvenanceEntry[],
+): void {
+  if (typeof window === "undefined") return;
+  if (!projectName) return;
+
+  try {
+    const persistedMessages = sanitizeMessagesForPersistence(messages);
+    const stored: StoredChatState = {
+      version: CHAT_STORAGE_VERSION,
+      conversationId,
+      conversationBackend,
+      messages: persistedMessages.slice(-MAX_PERSISTED_MESSAGES).map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        thinking: message.thinking,
+        timestamp: message.timestamp.toISOString(),
+        chatMode: message.chatMode,
+        channel: message.channel,
+        userName: message.userName,
+        captureClarification: message.captureClarification,
+        taskPhases: message.taskPhases,
+      })),
+      artifactProvenance,
+    };
+    window.localStorage.setItem(
+      getChatStorageKey(projectName),
+      JSON.stringify(stored),
+    );
+  } catch {
+    // Ignore storage quota and private-browsing failures.
+  }
+}
+
+function getLatestMessageTimestamp(messages: Message[]): number {
+  return messages.reduce((max, message) => {
+    const value = message.timestamp.getTime();
+    return Number.isNaN(value) ? max : Math.max(max, value);
+  }, 0);
+}
+
+function getPollCursorSeed(messages: Message[]): string {
+  const latestTimestamp = getLatestMessageTimestamp(messages);
+  return latestTimestamp > 0 ? new Date(latestTimestamp).toISOString() : new Date().toISOString();
+}
+
+function extractPromptSourceFiles(content: string): string[] {
+  const matches = new Set<string>();
+  const fileReferencePattern =
+    /(?:^|[\s("'`])((?:~\/|\/)?[A-Za-z0-9._-][A-Za-z0-9._\-\/]*\.[A-Za-z0-9]{1,8})(?=$|[\s)"'`,.:;!?])/g;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = fileReferencePattern.exec(content)) !== null) {
+    const candidate = match[1]?.trim().replace(/^['"`]+|['"`]+$/g, "");
+    if (!candidate || candidate.includes("://")) {
+      continue;
+    }
+    matches.add(candidate.replace(/^\.?\//, ""));
+  }
+
+  return Array.from(matches);
+}
+
+function getUploadedFileReference(file: Pick<UploadedFile, "workspacePath" | "name" | "brainSlug">): string {
+  if (typeof file.brainSlug === "string" && file.brainSlug.trim().length > 0) {
+    return `gbrain:${file.brainSlug.trim()}`;
+  }
+  if (typeof file.workspacePath === "string" && file.workspacePath.trim().length > 0) {
+    return file.workspacePath.trim();
+  }
+  return typeof file.name === "string" ? file.name.trim() : "";
+}
+
+function buildFallbackArtifactProvenance(
+  generatedFiles: string[],
+  prompt: string,
+  sourceFiles: string[],
+  tool: string,
+  createdAt: string,
+): ArtifactProvenanceEntry[] {
+  return generatedFiles.map((projectPath) => ({
+    projectPath,
+    sourceFiles,
+    prompt,
+    tool,
+    createdAt,
+  }));
+}
+
+function materializeMessages(projectName: string, state: RestoredChatState): Message[] {
+  return state.messages.length > 0 ? state.messages : buildInitialMessages(projectName);
+}
+
+function sameMessages(left: Message[], right: Message[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((message, index) => {
+    const candidate = right[index];
+    return Boolean(candidate)
+      && message.id === candidate.id
+      && message.role === candidate.role
+      && message.content === candidate.content
+      && message.thinking === candidate.thinking
+      && message.timestamp.getTime() === candidate.timestamp.getTime()
+      && message.chatMode === candidate.chatMode
+      && message.channel === candidate.channel
+      && message.userName === candidate.userName
+      && sameCaptureClarification(message.captureClarification, candidate.captureClarification)
+      && sameTaskPhases(message.taskPhases, candidate.taskPhases);
+  });
+}
+
+function sameCaptureClarification(
+  left: CaptureClarification | undefined,
+  right: CaptureClarification | undefined,
+): boolean {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  return left.captureId === right.captureId
+    && left.rawPath === right.rawPath
+    && left.question === right.question
+    && left.capturedContent === right.capturedContent
+    && left.choices.length === right.choices.length
+    && left.choices.every((choice, index) => choice === right.choices[index]);
+}
+
+function sameTaskPhases(
+  left: ChatTaskPhase[] | undefined,
+  right: ChatTaskPhase[] | undefined,
+): boolean {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  if (left.length !== right.length) return false;
+
+  return left.every((phase, index) => {
+    const candidate = right[index];
+    return Boolean(candidate)
+      && phase.id === candidate.id
+      && phase.label === candidate.label
+      && phase.status === candidate.status;
+  });
+}
+
+function choosePreferredChatState(localState: RestoredChatState, remoteState: RestoredChatState): RestoredChatState {
+  if (localState.hasStoredState && !remoteState.hasStoredState) {
+    return localState;
+  }
+  if (remoteState.hasStoredState && !localState.hasStoredState) {
+    return remoteState;
+  }
+
+  const localLatest = getLatestMessageTimestamp(localState.messages);
+  const remoteLatest = getLatestMessageTimestamp(remoteState.messages);
+
+  if (remoteLatest > localLatest) {
+    return remoteState;
+  }
+  if (localLatest > remoteLatest) {
+    return localState;
+  }
+  if (remoteState.messages.length > localState.messages.length) {
+    return remoteState;
+  }
+  if (remoteState.artifactProvenance.length > localState.artifactProvenance.length) {
+    return remoteState;
+  }
+  if (!localState.conversationId && remoteState.conversationId) {
+    return remoteState;
+  }
+  return localState;
+}
+
+async function loadStoredChatFromServer(projectName: string): Promise<RestoredChatState | null> {
+  if (!safeSlugOrNull(projectName)) return null;
+
+  try {
+    const res = await fetch(`/api/chat/thread?project=${encodeURIComponent(projectName)}`);
+    if (!res.ok) return null;
+    const raw = await res.json() as Partial<StoredChatState> & { project?: string };
+    if (raw.version !== CHAT_STORAGE_VERSION || !Array.isArray(raw.messages)) {
+      return null;
+    }
+    const restoredMessages = demoteRestoredPreviews(
+      sanitizeMessagesForPersistence(
+        raw.messages
+        .map((entry) => restoreMessage(entry))
+        .filter((entry): entry is Message => entry !== null),
+      ),
+    );
+    const conversationId = typeof raw.conversationId === "string" ? raw.conversationId : null;
+    const conversationBackend = inferConversationBackend(
+      conversationId,
+      (raw as Partial<StoredChatState>).conversationBackend,
+    );
+    const artifactProvenance = normalizeArtifactProvenanceEntries(raw.artifactProvenance);
+
+    return {
+      messages: restoredMessages,
+      conversationId,
+      conversationBackend,
+      artifactProvenance,
+      hasStoredState:
+        restoredMessages.length > 0 || conversationId !== null || artifactProvenance.length > 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function persistChatToServer(
+  projectName: string,
+  messages: Message[],
+  conversationId: string | null,
+  conversationBackend: Backend | null,
+  artifactProvenance: ArtifactProvenanceEntry[],
+  keepalive = false,
+): Promise<void> {
+  if (!safeSlugOrNull(projectName)) return;
+
+  const messageLimit = keepalive ? MAX_KEEPALIVE_MESSAGES : MAX_PERSISTED_MESSAGES;
+  const persistedMessages = sanitizeMessagesForPersistence(messages);
+  const payload = {
+    project: projectName,
+    conversationId,
+    conversationBackend,
+    messages: persistedMessages.slice(-messageLimit).map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      thinking: message.thinking,
+      timestamp: message.timestamp.toISOString(),
+      chatMode: message.chatMode,
+      channel: message.channel,
+      userName: message.userName,
+      captureClarification: message.captureClarification,
+      taskPhases: message.taskPhases,
+    })),
+    artifactProvenance,
+  };
+
+  try {
+    await fetch("/api/chat/thread", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive,
+    });
+  } catch {
+    // Keep local cache authoritative when the local route is temporarily unavailable.
+  }
+}
+
+// ── Hook ───────────────────────────────────────────────────────
+
+export function useUnifiedChat(
+  projectName: string,
+): UseUnifiedChat {
+  const [messages, setMessages] = useState<Message[]>(() => buildInitialMessages(projectName));
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [backend, setBackend] = useState<Backend>("direct");
+  const [chatMode, setChatMode] = useState<ChatMode>("reasoning");
+  const [crossChannelMessages, setCrossChannelMessages] = useState<Message[]>(
+    []
+  );
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [workspaceTree, setWorkspaceTree] = useState<WorkspaceTreeNode[]>([]);
+  const [generatedArtifacts, setGeneratedArtifacts] = useState<GeneratedArtifact[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationBackend, setConversationBackend] = useState<Backend | null>(null);
+  const [openClawConnected, setOpenClawConnected] = useState<boolean | null>(null);
+  const [artifactProvenance, setArtifactProvenance] = useState<ArtifactProvenanceEntry[]>([]);
+
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastPollRef = useRef<string>(new Date().toISOString());
+  const hydratedChatKeyRef = useRef<string | null>(null);
+  const pendingHydrationKeyRef = useRef<string | null>(null);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unloadPersistedRef = useRef(false);
+  const liveMessagesRef = useRef<Message[]>(messages);
+  const liveConversationIdRef = useRef<string | null>(conversationId);
+  const liveConversationBackendRef = useRef<Backend | null>(conversationBackend);
+  const liveArtifactProvenanceRef = useRef<ArtifactProvenanceEntry[]>(artifactProvenance);
+  const liveUploadedFilesRef = useRef<UploadedFile[]>(uploadedFiles);
+  const liveBackendRef = useRef<Backend>(backend);
+  const liveChatModeRef = useRef<ChatMode>(chatMode);
+  const liveProjectNameRef = useRef(projectName);
+  const workspaceTreeSignatureRef = useRef<string>(workspaceTreeSignature([]));
+  const workspaceWatchRevisionRef = useRef<string | null>(null);
+  const workspaceWatchAvailableRef = useRef(false);
+  const projectVersionRef = useRef(0);
+  const initialBackendSetRef = useRef(false);
+  const userBackendOverrideVersionRef = useRef(0);
+  const sendQueueRef = useRef<QueuedSend[]>([]);
+  const sendQueueProcessingRef = useRef(false);
+  const scopedConversationId = getScopedConversationId(conversationId, conversationBackend, backend);
+
+  const applyMessagesUpdate = useCallback((updater: (messages: Message[]) => Message[]) => {
+    const next = updater(liveMessagesRef.current);
+    liveMessagesRef.current = next;
+    setMessages(next);
+  }, []);
+
+  useEffect(() => {
+    liveMessagesRef.current = messages;
+    liveConversationIdRef.current = conversationId;
+    liveConversationBackendRef.current = conversationBackend;
+    liveArtifactProvenanceRef.current = artifactProvenance;
+    liveUploadedFilesRef.current = uploadedFiles;
+    liveBackendRef.current = backend;
+    liveChatModeRef.current = chatMode;
+    liveProjectNameRef.current = projectName;
+  }, [
+    artifactProvenance,
+    backend,
+    chatMode,
+    conversationBackend,
+    conversationId,
+    messages,
+    projectName,
+    uploadedFiles,
+  ]);
+
+  useEffect(() => {
+    workspaceTreeSignatureRef.current = workspaceTreeSignature(workspaceTree);
+  }, [workspaceTree]);
+
+  useEffect(() => {
+    setGeneratedArtifacts([]);
+  }, [projectName]);
+
+  const recordGeneratedArtifacts = useCallback((paths: string[]) => {
+    setGeneratedArtifacts((prev) => mergeGeneratedArtifacts(prev, paths));
+  }, []);
+
+  useEffect(() => {
+    const storageKey = getChatStorageKey(projectName);
+    const restored = loadStoredChat(projectName);
+    projectVersionRef.current += 1;
+    hydratedChatKeyRef.current = null;
+    pendingHydrationKeyRef.current = storageKey;
+    const hydratedMessages = materializeMessages(projectName, restored);
+    const restoredBackend = restored.conversationBackend === "openclaw" ? "openclaw" : "direct";
+    const restoredChatMode = restored.conversationBackend === "openclaw" ? "openclaw-tools" : "reasoning";
+    lastPollRef.current = getPollCursorSeed(hydratedMessages);
+    setIsStreaming(false);
+    setError(null);
+    setMessages(hydratedMessages);
+    setBackend(restoredBackend);
+    setChatMode(restoredChatMode);
+    setConversationId(restored.conversationId);
+    setConversationBackend(restored.conversationBackend);
+    liveBackendRef.current = restoredBackend;
+    liveChatModeRef.current = restoredChatMode;
+    initialBackendSetRef.current = restored.conversationBackend === "openclaw";
+    setArtifactProvenance(restored.artifactProvenance);
+    setCrossChannelMessages(
+      hydratedMessages.filter((message) => message.channel && message.channel !== "web"),
+    );
+
+    if (safeSlugOrNull(projectName)) {
+      void (async () => {
+        const remoteState = await loadStoredChatFromServer(projectName);
+        const activeHydrationKey = pendingHydrationKeyRef.current ?? hydratedChatKeyRef.current;
+        if (!remoteState || activeHydrationKey !== storageKey) {
+          return;
+        }
+        if (
+          liveConversationIdRef.current !== restored.conversationId
+          || !sameMessages(liveMessagesRef.current, hydratedMessages)
+        ) {
+          return;
+        }
+        const preferredState = choosePreferredChatState(restored, remoteState);
+        const preferredMessages = materializeMessages(projectName, preferredState);
+        lastPollRef.current = getPollCursorSeed(preferredMessages);
+        setMessages(preferredMessages);
+        // Only re-apply backend/chatMode when the preferred state actually has a
+        // known conversationBackend. Otherwise we'd clobber a backend that the
+        // auto-probe effect seeded in parallel (e.g. connected OpenClaw).
+        if (preferredState.conversationBackend !== null) {
+          const preferredBackend = preferredState.conversationBackend === "openclaw" ? "openclaw" : "direct";
+          const preferredChatMode = preferredState.conversationBackend === "openclaw" ? "openclaw-tools" : "reasoning";
+          setBackend(preferredBackend);
+          setChatMode(preferredChatMode);
+          liveBackendRef.current = preferredBackend;
+          liveChatModeRef.current = preferredChatMode;
+          initialBackendSetRef.current = preferredState.conversationBackend === "openclaw";
+        }
+        setConversationId(preferredState.conversationId);
+        setConversationBackend(preferredState.conversationBackend);
+        setArtifactProvenance(preferredState.artifactProvenance);
+        setCrossChannelMessages(
+          preferredMessages.filter((message) => message.channel && message.channel !== "web"),
+        );
+      })();
+    }
+  }, [projectName]);
+
+  useEffect(() => {
+    workspaceWatchRevisionRef.current = null;
+    workspaceWatchAvailableRef.current = false;
+  }, [projectName]);
+
+  useEffect(() => {
+    const storageKey = getChatStorageKey(projectName);
+    if (pendingHydrationKeyRef.current === storageKey) {
+      pendingHydrationKeyRef.current = null;
+      hydratedChatKeyRef.current = storageKey;
+      return;
+    }
+    if (hydratedChatKeyRef.current !== storageKey) {
+      return;
+    }
+    persistChat(projectName, messages, conversationId, conversationBackend, artifactProvenance);
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = setTimeout(() => {
+      void persistChatToServer(
+        projectName,
+        messages,
+        conversationId,
+        conversationBackend,
+        artifactProvenance,
+      );
+    }, 150);
+  }, [artifactProvenance, conversationBackend, conversationId, messages, projectName]);
+
+  useEffect(() => {
+    const storageKey = getChatStorageKey(projectName);
+    unloadPersistedRef.current = false;
+
+    const flushChatThread = () => {
+      if (hydratedChatKeyRef.current !== storageKey) {
+        return;
+      }
+      if (unloadPersistedRef.current) {
+        return;
+      }
+      unloadPersistedRef.current = true;
+      void persistChatToServer(
+        projectName,
+        liveMessagesRef.current,
+        liveConversationIdRef.current,
+        liveConversationBackendRef.current,
+        liveArtifactProvenanceRef.current,
+        true,
+      );
+    };
+
+    const resetUnloadFlag = () => {
+      unloadPersistedRef.current = false;
+    };
+
+    window.addEventListener("pagehide", flushChatThread);
+    window.addEventListener("pageshow", resetUnloadFlag);
+    return () => {
+      window.removeEventListener("pagehide", flushChatThread);
+      window.removeEventListener("pageshow", resetUnloadFlag);
+      flushChatThread();
+    };
+  }, [projectName]);
+
+  useEffect(() => {
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Backend detection is now folded into the agent-connectivity effect
+  // further down so we only fire a single /api/chat/unified?action=health
+  // probe on mount instead of two concurrent ~3s WebSocket handshakes.
+
+  const applyWorkspaceTree = useCallback((nextTree: WorkspaceTreeNode[]): boolean => {
+    const nextSignature = workspaceTreeSignature(nextTree);
+    const changed = nextSignature !== workspaceTreeSignatureRef.current;
+
+    if (changed) {
+      workspaceTreeSignatureRef.current = nextSignature;
+      setWorkspaceTree(nextTree);
+    }
+
+    return changed;
+  }, []);
+
+  const fetchWorkspaceTree = useCallback(async (signal?: AbortSignal) => {
+    const safeProjectId = safeSlugOrNull(projectName);
+    if (!safeProjectId) {
+      return applyWorkspaceTree([]);
+    }
+
+    try {
+      const params = new URLSearchParams({ action: "tree" });
+      params.set("projectId", safeProjectId);
+      const res = await fetch(`/api/workspace?${params}`, { signal });
+      const data = await res.json().catch(() => ({}));
+      if (signal?.aborted) {
+        return false;
+      }
+
+      if (typeof data.watchRevision === "string" && data.watchRevision.length > 0) {
+        workspaceWatchRevisionRef.current = data.watchRevision;
+        workspaceWatchAvailableRef.current = true;
+      }
+
+      if (!Array.isArray(data.tree)) {
+        return false;
+      }
+
+      return applyWorkspaceTree(data.tree as WorkspaceTreeNode[]);
+    } catch {
+      return false;
+    }
+  }, [applyWorkspaceTree, projectName]);
+
+  const syncWorkspaceTreeAfterChat = useCallback(async () => {
+    await fetchWorkspaceTree();
+  }, [fetchWorkspaceTree]);
+
+  // ── Cross-channel polling (only when openclaw backend is active) ──
+  useEffect(() => {
+    if (backend !== "openclaw") {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return;
+    }
+
+    pollTimerRef.current = setInterval(async () => {
+      // Only poll when tab is visible
+      if (document.hidden) return;
+
+      try {
+        const params = new URLSearchParams({
+          action: "poll",
+          since: lastPollRef.current,
+        });
+        const safeProjectId = safeSlugOrNull(projectName);
+        if (safeProjectId) params.set("projectId", safeProjectId);
+        if (scopedConversationId) params.set("conversationId", scopedConversationId);
+        if (!safeProjectId && !scopedConversationId) return;
+
+        const res = await fetch(`/api/chat/unified?${params}`);
+        const data = await res.json();
+        let polledMessages: Message[] = [];
+
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
+          polledMessages = data.messages
+            .filter((message: PolledOpenClawMessage) =>
+              typeof message.content === "string"
+              && typeof message.timestamp === "string"
+              && !Number.isNaN(Date.parse(message.timestamp)),
+            )
+            .map((message: PolledOpenClawMessage) => ({
+              id: typeof message.id === "string" ? message.id : makeId(),
+              role: inferPolledMessageRole(message),
+              content: message.content as string,
+              chatMode: "openclaw-tools" as const,
+              channel: typeof message.channel === "string" ? message.channel : undefined,
+              userName: typeof message.userName === "string" ? message.userName : undefined,
+              timestamp: new Date(message.timestamp as string),
+            }));
+
+          const crossChannelMessages = polledMessages.filter(
+            (message: Message) => message.channel && message.channel !== "web",
+          );
+
+          if (crossChannelMessages.length > 0) {
+            setCrossChannelMessages((prev) => {
+              const existingIds = new Set(prev.map((m) => m.id));
+              const unique = crossChannelMessages.filter(
+                (m: Message) => !existingIds.has(m.id)
+              );
+              return [...prev, ...unique];
+            });
+          }
+
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const unique = polledMessages.filter(
+              (message: Message) => !existingIds.has(message.id),
+            );
+            return unique.length > 0 ? [...prev, ...unique] : prev;
+          });
+
+          // Advance cursor to the latest returned message timestamp
+          // to avoid dropping messages due to clock skew
+          const latestTimestamp = latestTimestampCursor(lastPollRef.current, data.messages as PolledOpenClawMessage[]);
+          lastPollRef.current = latestTimestamp;
+        }
+
+        if (Array.isArray(data.generatedFiles) && data.generatedFiles.length > 0) {
+          recordGeneratedArtifacts(data.generatedFiles as string[]);
+          const latestUserPrompt = [...liveMessagesRef.current]
+            .reverse()
+            .find((message) => message.role === "user" && message.channel === "web")
+            ?.content ?? "";
+          const promptSourceFiles = Array.from(
+            new Set([
+              ...extractPromptSourceFiles(latestUserPrompt),
+              ...liveUploadedFilesRef.current
+                .map(getUploadedFileReference)
+                .filter((value) => value.length > 0),
+            ]),
+          );
+          const fallbackCreatedAt = polledMessages.at(-1)?.timestamp.toISOString() ?? new Date().toISOString();
+          const generatedArtifacts = Array.isArray(data.generatedArtifacts)
+            ? normalizeArtifactProvenanceEntries(data.generatedArtifacts)
+            : [];
+          const nextArtifacts = generatedArtifacts.length > 0
+            ? generatedArtifacts.map((artifact) => ({
+              ...artifact,
+              prompt: artifact.prompt || latestUserPrompt,
+              sourceFiles:
+                artifact.sourceFiles.length > 0
+                  ? artifact.sourceFiles
+                  : promptSourceFiles,
+            }))
+            : buildFallbackArtifactProvenance(
+              data.generatedFiles as string[],
+              latestUserPrompt,
+              promptSourceFiles,
+              "OpenClaw CLI",
+              fallbackCreatedAt,
+            );
+          setArtifactProvenance((prev) => mergeArtifactProvenanceEntries(prev, nextArtifacts));
+          await syncWorkspaceTreeAfterChat();
+        }
+      } catch {
+        // Polling is best-effort
+      }
+    }, 5000);
+
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, [backend, projectName, recordGeneratedArtifacts, scopedConversationId, syncWorkspaceTreeAfterChat]);
+
+  const isSendContextCurrent = useCallback(
+    (context: SendContext): boolean =>
+      projectVersionRef.current === context.projectVersion
+      && liveProjectNameRef.current === context.projectName
+      && liveChatModeRef.current === context.chatMode
+      && userBackendOverrideVersionRef.current === context.userBackendOverrideVersion,
+    [],
+  );
+
+  const isSendProjectCurrent = useCallback(
+    (context: SendContext): boolean =>
+      projectVersionRef.current === context.projectVersion
+      && liveProjectNameRef.current === context.projectName,
+    [],
+  );
+
+  // ── Unified send path ──
+  // ── SSE stream consumer ──
+  const consumeSSEStream = useCallback(async (
+    res: Response,
+    assistantId: string,
+    context: SendContext,
+    requestContent: string,
+  ) => {
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No response stream");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let streamDone = false;
+
+    while (!streamDone) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6);
+          if (data === "[DONE]") {
+            streamDone = true;
+            break;
+          }
+
+          let parsed: Record<string, unknown>;
+          try {
+            parsed = JSON.parse(data) as Record<string, unknown>;
+          } catch {
+            /* skip malformed SSE chunks */
+            continue;
+          }
+
+          if (typeof parsed.error === "string" && parsed.error.trim().length > 0) {
+            await reader.cancel().catch(() => undefined);
+            throw new Error(parsed.error);
+          }
+
+          const taskPhases = restoreTaskPhases(parsed.taskPhases);
+          if (taskPhases && isSendContextCurrent(context)) {
+            applyMessagesUpdate((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? { ...m, taskPhases }
+                  : m
+              )
+            );
+          }
+
+          const generatedFiles = Array.isArray(parsed.generatedFiles)
+            ? parsed.generatedFiles.filter((entry: unknown): entry is string => typeof entry === "string")
+            : [];
+          if (generatedFiles.length > 0 && isSendContextCurrent(context)) {
+            recordGeneratedArtifacts(generatedFiles);
+            const promptSourceFiles = Array.from(
+              new Set([
+                ...extractPromptSourceFiles(requestContent),
+                ...liveUploadedFilesRef.current
+                  .map(getUploadedFileReference)
+                  .filter((value) => value.length > 0),
+              ]),
+            );
+            const generatedArtifacts = Array.isArray(parsed.generatedArtifacts)
+              ? normalizeArtifactProvenanceEntries(parsed.generatedArtifacts)
+              : [];
+            const nextArtifacts = generatedArtifacts.length > 0
+              ? generatedArtifacts
+              : buildFallbackArtifactProvenance(
+                generatedFiles,
+                requestContent,
+                promptSourceFiles,
+                "OpenClaw CLI",
+                new Date().toISOString(),
+              );
+            setArtifactProvenance((prev) => mergeArtifactProvenanceEntries(prev, nextArtifacts));
+          }
+
+          if (typeof parsed.text === "string" && parsed.text.length > 0 && isSendContextCurrent(context)) {
+            applyMessagesUpdate((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? { ...m, content: m.content + parsed.text }
+                  : m
+              )
+            );
+          }
+
+          if (typeof parsed.thinking === "string" && parsed.thinking.length > 0 && isSendContextCurrent(context)) {
+            const thinkingChunk = parsed.thinking;
+            const replaceThinking = parsed.replaceThinking === true;
+            applyMessagesUpdate((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      thinking:
+                        replaceThinking
+                          ? thinkingChunk
+                          : (m.thinking || "") + thinkingChunk,
+                    }
+                  : m
+              )
+            );
+          }
+
+          if (typeof parsed.conversationId === "string" && parsed.conversationId.trim().length > 0 && isSendContextCurrent(context)) {
+            liveConversationIdRef.current = parsed.conversationId;
+            liveConversationBackendRef.current = context.backend;
+            setConversationId(parsed.conversationId);
+            setConversationBackend(context.backend);
+          }
+        }
+      }
+    }
+  }, [applyMessagesUpdate, isSendContextCurrent, recordGeneratedArtifacts, setArtifactProvenance]);
+
+  const sendViaUnifiedChat = useCallback(
+    async (
+      content: string,
+      assistantId: string,
+      context: SendContext,
+      activeConversationId: string | null,
+      historyMessages: Message[],
+      activeFile?: ActiveFileContext,
+    ) => {
+      const chatHistory = historyMessages
+        .filter((m) => m.role !== "system")
+        .filter((m) => m.content !== QUEUED_ASSISTANT_CONTENT)
+        .filter((m) => !(m.role === "assistant" && m.content.trim().length === 0))
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      if (!chatHistory.some((message) => message.role === "user" && message.content === content)) {
+        chatHistory.push({ role: "user", content });
+      }
+
+      const requestBody = JSON.stringify({
+        message: content,
+        messages: chatHistory,
+        backend: context.backend,
+        mode: context.chatMode,
+        files: uploadedFiles,
+        ...(hasProjectScope(projectName) ? { projectId: projectName } : {}),
+        conversationId: activeConversationId,
+        streamPhases: true,
+        ...(activeFile ? { activeFile } : {}),
+      });
+      const sendChatRequest = (url: string, timeoutMs?: number) => {
+        const init: RequestInit = {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: requestBody,
+        };
+        return typeof timeoutMs === "number"
+          ? fetchWithTimeout(url, init, timeoutMs)
+          : fetch(url, init);
+      };
+
+      let res: Response;
+      if (looksLikeSlashCommandInput(content)) {
+        res = await sendChatRequest("/api/chat/command", SLASH_COMMAND_START_TIMEOUT_MS);
+      } else {
+        res = await sendChatRequest("/api/chat/unified");
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      const backendHeader = res.headers.get("X-Chat-Backend");
+      const modeHeader = normalizeChatMode(res.headers.get("X-Chat-Mode"));
+
+      if (contentType.includes("text/event-stream")) {
+        const responseBackend = mapResponseBackend(backendHeader) ?? context.backend;
+        await consumeSSEStream(res, assistantId, context, content);
+        if (isSendProjectCurrent(context)) {
+          liveBackendRef.current = responseBackend;
+          setBackend(responseBackend);
+          await syncWorkspaceTreeAfterChat();
+        }
+        return;
+      }
+
+      if (!res.ok) {
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const payload = await res.json().catch(() => null) as { error?: string } | null;
+          const errorMessage =
+            typeof payload?.error === "string" && payload.error.trim().length > 0
+              ? normalizeProjectChatError(payload.error, context.projectName)
+              : null;
+          throw new Error(
+            errorMessage ?? `Unified chat error: ${res.status}`,
+          );
+        }
+        throw new Error((await res.text()) || `Unified chat error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (typeof data.response !== "string" || data.response.trim().length === 0) {
+        throw new Error("OpenClaw returned an empty response. Check the agent logs.");
+      }
+      if (!isSendContextCurrent(context)) {
+        return;
+      }
+      const responseMode = normalizeChatMode(data.mode) ?? modeHeader ?? context.chatMode;
+      const responseBackend = mapResponseBackend(backendHeader) ?? context.backend;
+
+      // Update assistant message with response
+      applyMessagesUpdate((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                content: data.response,
+                thinking: typeof data.thinking === "string" ? data.thinking : m.thinking,
+                chatMode: responseMode,
+              }
+            : m
+        )
+      );
+      liveBackendRef.current = responseBackend;
+      setBackend(responseBackend);
+
+      if (data.conversationId) {
+        liveConversationIdRef.current = data.conversationId;
+        liveConversationBackendRef.current = responseBackend;
+        setConversationId(data.conversationId);
+        setConversationBackend(responseBackend);
+      }
+
+      const generatedFiles = Array.isArray(data.generatedFiles)
+        ? data.generatedFiles.filter((entry: unknown): entry is string => typeof entry === "string")
+        : [];
+      const gbrainArtifacts = Array.isArray(data.gbrainArtifacts)
+        ? data.gbrainArtifacts.filter((entry: unknown): entry is string => typeof entry === "string")
+        : [];
+      dispatchGbrainArtifactsUpdated(projectName, gbrainArtifacts);
+      if (generatedFiles.length > 0) {
+        recordGeneratedArtifacts(generatedFiles);
+        const promptSourceFiles = Array.from(
+          new Set([
+            ...extractPromptSourceFiles(content),
+            ...uploadedFiles
+              .map(getUploadedFileReference)
+              .filter((value) => value.length > 0),
+          ]),
+        );
+        const generatedArtifacts = Array.isArray(data.generatedArtifacts)
+          ? normalizeArtifactProvenanceEntries(data.generatedArtifacts)
+          : [];
+        const nextArtifacts = generatedArtifacts.length > 0
+          ? generatedArtifacts
+          : buildFallbackArtifactProvenance(
+            generatedFiles,
+            content,
+            promptSourceFiles,
+            "OpenClaw CLI",
+            new Date().toISOString(),
+          );
+        setArtifactProvenance((prev) => mergeArtifactProvenanceEntries(prev, nextArtifacts));
+      }
+
+      // Process cross-channel messages
+      if (data.messages && data.messages.length > 0) {
+        const crossMsgs: Message[] = data.messages.map(
+          (m: {
+            id: string;
+            role: string;
+            content: string;
+            channel: string;
+            userName?: string;
+            timestamp: string;
+          }) => ({
+            id: m.id || makeId(),
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            channel: m.channel,
+            userName: m.userName,
+            timestamp: new Date(m.timestamp),
+            chatMode: responseMode,
+          })
+        );
+        setCrossChannelMessages((prev) => {
+          const existingIds = new Set(prev.map((msg) => msg.id));
+          const unique = crossMsgs.filter(
+            (msg: Message) => !existingIds.has(msg.id)
+          );
+          return [...prev, ...unique];
+        });
+      }
+
+      if (isSendProjectCurrent(context)) {
+        await syncWorkspaceTreeAfterChat();
+      }
+    },
+    [
+      consumeSSEStream,
+      applyMessagesUpdate,
+      isSendContextCurrent,
+      isSendProjectCurrent,
+      projectName,
+      recordGeneratedArtifacts,
+      setArtifactProvenance,
+      syncWorkspaceTreeAfterChat,
+      uploadedFiles,
+    ]
+  );
+
+  // Single mount-effect that handles runtime detection off the same
+  // /api/chat/unified?action=health response. Previously we ran two
+  // parallel effects, each firing its own ~3s WebSocket handshake probe
+  // on mount — halving the cold-start cost.
+  useEffect(() => {
+    async function probe() {
+      try {
+        const res = await fetch("/api/chat/unified?action=health");
+        const data = await res.json() as Record<string, unknown>;
+
+        const agentRecord =
+          data.agent && typeof data.agent === "object"
+            ? data.agent as { type?: unknown; status?: unknown }
+            : null;
+        const agentType = typeof agentRecord?.type === "string" ? agentRecord.type : null;
+        const agentOk = agentRecord?.status === "connected";
+        const openClawSelected = agentType === "openclaw";
+        const openhandsOk = data.openhands === "connected";
+        const localSelected = data.llmProvider === "local";
+
+        // Also check legacy fields for backward compat with older servers
+        const legacyOpenClawOk = data.openclaw === "connected";
+        const legacyAgentOk = legacyOpenClawOk || data.nanoclaw === "connected";
+        const openClawReady = openClawSelected || legacyOpenClawOk
+          ? agentOk || legacyOpenClawOk
+          : false;
+        const anyAgentConnected = agentOk || legacyAgentOk;
+        const initialBackend: Backend = localSelected
+          ? "direct"
+          : openClawReady || anyAgentConnected
+            ? "openclaw"
+            : openhandsOk
+              ? "agent"
+              : "direct";
+
+        // Only seed the active backend on the very first probe. After
+        // that we preserve whichever path the current thread last used.
+        if (!initialBackendSetRef.current) {
+          setBackend(initialBackend);
+          liveBackendRef.current = initialBackend;
+          initialBackendSetRef.current = true;
+        }
+
+        setOpenClawConnected(openClawReady);
+      } catch {
+        setOpenClawConnected(false);
+      }
+    }
+    probe();
+    const interval = setInterval(probe, 15_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const drainSendQueue = useCallback(async () => {
+    if (sendQueueProcessingRef.current) {
+      return;
+    }
+
+    sendQueueProcessingRef.current = true;
+    setIsStreaming(true);
+
+    try {
+      while (sendQueueRef.current.length > 0) {
+        const queued = sendQueueRef.current.shift()!;
+        if (!isSendProjectCurrent(queued.context)) {
+          queued.resolve();
+          continue;
+        }
+
+        applyMessagesUpdate((prev) =>
+          prev.map((message) =>
+            message.id === queued.assistantId
+              ? { ...message, content: "" }
+              : message,
+          ),
+        );
+
+        try {
+          const activeConversationId = queued.context.chatMode === "openclaw-tools"
+            ? getScopedConversationId(
+              liveConversationIdRef.current,
+              liveConversationBackendRef.current,
+              "openclaw",
+            )
+            : null;
+          const historyMessages = buildQueuedHistory(liveMessagesRef.current, queued.assistantId);
+
+          await sendViaUnifiedChat(
+            queued.content,
+            queued.assistantId,
+            queued.context,
+            activeConversationId,
+            historyMessages,
+            queued.activeFile,
+          );
+        } catch (err) {
+          if (err instanceof Error && err.name === "AbortError") {
+            // A newer project/backend context superseded this request.
+          } else if (isSendContextCurrent(queued.context)) {
+            setError(
+              err instanceof Error
+                ? err.message
+                : "OpenClaw and OpenHands are both unavailable. Run ./start.sh",
+            );
+          }
+        } finally {
+          if (isSendProjectCurrent(queued.context)) {
+            applyMessagesUpdate((prev) => removeEmptyAssistantPlaceholder(prev, queued.assistantId));
+          }
+          queued.resolve();
+        }
+      }
+    } finally {
+      sendQueueProcessingRef.current = false;
+      setIsStreaming(false);
+    }
+  }, [
+    applyMessagesUpdate,
+    isSendContextCurrent,
+    isSendProjectCurrent,
+    sendViaUnifiedChat,
+  ]);
+
+  // ── Unified send ──
+  const sendMessageFn = useCallback(
+    (content: string, activeFile?: ActiveFileContext): Promise<void> => {
+      const requestContent = content.trim();
+      if (!requestContent) return Promise.resolve();
+
+      if (chatMode === "openclaw-tools" && openClawConnected === false) {
+        setError(
+          "OpenClaw tools mode is selected but OpenClaw is not ready. Start it in Settings and try again."
+        );
+        return Promise.resolve();
+      }
+      const requestedBackend: Backend = chatMode === "openclaw-tools"
+        ? "openclaw"
+        : liveBackendRef.current;
+
+      const userMsg: Message = {
+        id: makeId(),
+        role: "user",
+        content: requestContent,
+        timestamp: new Date(),
+        chatMode,
+        channel: "web",
+      };
+      const assistantId = makeId();
+      const assistantMsg: Message = {
+        id: assistantId,
+        role: "assistant",
+        content: sendQueueProcessingRef.current || sendQueueRef.current.length > 0
+          ? QUEUED_ASSISTANT_CONTENT
+          : "",
+        timestamp: new Date(),
+        chatMode,
+      };
+      const context: SendContext = {
+        backend: requestedBackend,
+        chatMode,
+        projectName,
+        projectVersion: projectVersionRef.current,
+        userBackendOverrideVersion: userBackendOverrideVersionRef.current,
+      };
+
+      liveBackendRef.current = requestedBackend;
+      liveChatModeRef.current = chatMode;
+      setBackend(requestedBackend);
+      applyMessagesUpdate((prev) => [...prev, userMsg, assistantMsg]);
+      setError(null);
+
+      const completion = new Promise<void>((resolve) => {
+        const queued: QueuedSend = {
+          content: requestContent,
+          assistantId,
+          context,
+          resolve,
+        };
+        if (activeFile) {
+          queued.activeFile = activeFile;
+        }
+        sendQueueRef.current.push(queued);
+      });
+
+      void drainSendQueue();
+      return completion;
+    },
+    [
+      applyMessagesUpdate,
+      chatMode,
+      drainSendQueue,
+      openClawConnected,
+      projectName,
+    ]
+  );
+
+  // ── Workspace operations ──
+
+  const refreshWorkspace = useCallback(async (signal?: AbortSignal) => {
+    await fetchWorkspaceTree(signal);
+  }, [fetchWorkspaceTree]);
+
+  const checkChanges = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const res = await fetch("/api/workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal,
+        body: JSON.stringify({ action: "check-changes", projectId: safeSlugOrNull(projectName) }),
+      });
+      const data = await res.json();
+      if (signal?.aborted) return false;
+      const added = Array.isArray(data.added) ? data.added : [];
+      const updated = Array.isArray(data.updated) ? data.updated : [];
+      const missing = Array.isArray(data.missing) ? data.missing : [];
+      const changed = Array.isArray(data.changed) ? data.changed : [];
+      const hasChanges =
+        added.length > 0 || updated.length > 0 || missing.length > 0 || changed.length > 0;
+
+      if (added.length > 0) {
+        recordGeneratedArtifacts(
+          added
+            .map((file: { workspacePath?: string }) => file.workspacePath)
+            .filter((workspacePath: string | undefined): workspacePath is string => typeof workspacePath === "string"),
+        );
+      }
+
+      // Refresh tree to reflect change indicators
+      await refreshWorkspace(signal);
+      return hasChanges;
+    } catch {
+      // Best effort
+      return false;
+    }
+  }, [projectName, recordGeneratedArtifacts, refreshWorkspace]);
+
+  // Fetch workspace tree on mount
+  useEffect(() => {
+    refreshWorkspace();
+  }, [refreshWorkspace]);
+
+  useEffect(() => {
+    const safeProjectId = safeSlugOrNull(projectName);
+    if (!safeProjectId) {
+      return;
+    }
+
+    let disposed = false;
+    let inFlight = false;
+    const tick = async () => {
+      if (disposed || document.hidden || inFlight) {
+        return;
+      }
+
+      inFlight = true;
+      try {
+        const params = new URLSearchParams({ action: "watch", projectId: safeProjectId });
+        const previousRevision = workspaceWatchRevisionRef.current;
+        if (previousRevision) {
+          params.set("since", previousRevision);
+        }
+
+        const res = await fetch(`/api/workspace?${params}`);
+        const data = await res.json().catch(() => ({}));
+        if (disposed || document.hidden) {
+          return;
+        }
+
+        if (typeof data.revision !== "string" || data.revision.length === 0) {
+          return;
+        }
+
+        workspaceWatchAvailableRef.current = true;
+        workspaceWatchRevisionRef.current = data.revision;
+
+        const changed = data.changed === true || (
+          previousRevision !== null && previousRevision !== data.revision
+        );
+        if (changed) {
+          await refreshWorkspace();
+        }
+      } catch {
+        // Keep the slower tree poll active if the watch probe is unavailable.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void tick();
+    }, WORKSPACE_WATCH_POLL_MS);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void tick();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [projectName, refreshWorkspace]);
+
+  useEffect(() => {
+    const safeProjectId = safeSlugOrNull(projectName);
+    if (!safeProjectId) {
+      return;
+    }
+
+    let disposed = false;
+    let inFlight = false;
+    const tick = async () => {
+      if (disposed || document.hidden || inFlight || workspaceWatchAvailableRef.current) {
+        return;
+      }
+      inFlight = true;
+      try {
+        await refreshWorkspace();
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void tick();
+    }, WORKSPACE_TREE_REFRESH_MS);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void tick();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [projectName, refreshWorkspace]);
+
+  // ── File upload ──
+  const handleFiles = useCallback(
+    async (files: File[]) => {
+      setMessages((prev) => [
+        ...prev,
+        { id: makeId(), role: "system", content: `Importing ${files.length} file${files.length !== 1 ? "s" : ""}...`, timestamp: new Date() },
+      ]);
+
+      const organized: Array<{ name: string; folder: string; size: string; type: string }> = [];
+      let workspaceAvailable = false;
+
+      const safeProjectId = safeSlugOrNull(projectName);
+      const failures: Array<{ name: string; code: string; message: string }> = [];
+      for (const file of files) {
+        let uploadedBrainSlug: string | undefined;
+        let uploadedSource: UploadedFile["source"] = "workspace";
+        try {
+          // Canonical audit-revise ingest route: writes a typed gbrain page
+          // (paper/dataset/code) AND dual-writes the original bytes to the
+          // workspace directory so the existing FileTree keeps rendering.
+          // See docs/API_CONTRACTS.md "/api/workspace/upload".
+          const formData = new FormData();
+          formData.append("files", file);
+          if (safeProjectId) formData.append("projectId", safeProjectId);
+          const res = await fetch("/api/workspace/upload", {
+            method: "POST",
+            body: formData,
+          });
+          const payload = (await res.json().catch(() => null)) as
+            | {
+                slugs?: Array<{ slug: string; type: string }>;
+                errors?: Array<{ filename?: string; code?: string; message?: string }>;
+                error?: string;
+              }
+            | null;
+          if (res.ok && payload?.slugs && payload.slugs.length > 0) {
+            workspaceAvailable = true;
+            const entry = payload.slugs[0];
+            uploadedBrainSlug = entry?.slug;
+            uploadedSource = "gbrain";
+            organized.push({
+              name: file.name,
+              folder: folderLabelForIngestType(entry?.type),
+              size: formatFileSize(file.size),
+              type: entry?.type || file.name.split(".").pop() || "file",
+            });
+          } else {
+            // Route returned a failure for this file — either a converter
+            // error (200 with `errors[]`) or a request-level 4xx/5xx. Show
+            // the upstream message so the user knows WHY the file was
+            // rejected instead of seeing a misleading "organized" summary.
+            const upstreamError =
+              payload?.errors?.find((err) => err.filename === file.name)
+                ?.message ??
+              payload?.errors?.[0]?.message ??
+              payload?.error ??
+              `upload failed with status ${res.status}`;
+            const upstreamCode =
+              payload?.errors?.find((err) => err.filename === file.name)
+                ?.code ?? "upload_failed";
+            failures.push({
+              name: file.name,
+              code: upstreamCode,
+              message: upstreamError,
+            });
+            organized.push({
+              name: file.name,
+              folder: "error",
+              size: formatFileSize(file.size),
+              type: file.name.split(".").pop() || "file",
+            });
+          }
+        } catch (err) {
+          failures.push({
+            name: file.name,
+            code: "network_error",
+            message: err instanceof Error ? err.message : "network error",
+          });
+          organized.push({
+            name: file.name,
+            folder: "error",
+            size: formatFileSize(file.size),
+            type: file.name.split(".").pop() || "file",
+          });
+        }
+
+        const latestOrganized = organized.at(-1);
+        const displayPath = latestOrganized?.name
+          ? `${latestOrganized.folder || "other"}/${latestOrganized.name}`
+          : file.name;
+        // Track in uploaded files (lightweight, no full content)
+        setUploadedFiles((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            size: formatFileSize(file.size),
+            type: file.name.split(".").pop() || "file",
+            folder: latestOrganized?.folder || "other",
+            workspacePath: uploadedBrainSlug ? `gbrain:${uploadedBrainSlug}` : displayPath,
+            source: uploadedSource,
+            brainSlug: uploadedBrainSlug,
+            displayPath,
+          },
+        ]);
+      }
+
+      // Show brief summary in chat (not full content). Failures are always
+      // surfaced as a separate paragraph so a single image-only PDF never
+      // looks like a successful ingest.
+      const successes = organized.filter((entry) => entry.folder !== "error");
+      const byFolder = successes.reduce<Record<string, string[]>>((acc, f) => {
+        (acc[f.folder] = acc[f.folder] || []).push(f.name);
+        return acc;
+      }, {});
+
+      const summary = Object.entries(byFolder)
+        .map(([folder, names]) => `  **${folder}/** — ${names.join(", ")}`)
+        .join("\n");
+
+      const lines: string[] = [];
+      if (successes.length > 0) {
+        lines.push(
+          `📂 ${successes.length} file${successes.length !== 1 ? "s" : ""} organized:`,
+          summary,
+        );
+        if (workspaceAvailable) {
+          lines.push("Companion .md files created with metadata.");
+        } else {
+          lines.push("Files tracked in memory (workspace API unavailable).");
+        }
+      }
+      if (failures.length > 0) {
+        lines.push(
+          `⚠️ ${failures.length} file${failures.length !== 1 ? "s" : ""} failed to ingest:`,
+          ...failures.map(
+            (failure) => `  - **${failure.name}**: ${failure.message}`,
+          ),
+        );
+      }
+      if (lines.length === 0) {
+        lines.push("No files were imported.");
+      } else if (successes.length > 0) {
+        lines.push("Ask me about any file.");
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: makeId(),
+          role: "system",
+          content: lines.join("\n"),
+          timestamp: new Date(),
+        },
+      ]);
+    },
+    [projectName]
+  );
+
+  const addWorkspaceFileToChatContext = useCallback((file: WorkspaceChatContextFile) => {
+    const workspacePath = file.path.trim().replace(/^\/+/, "");
+    const brainSlug =
+      typeof file.brainSlug === "string" && file.brainSlug.trim().length > 0
+        ? file.brainSlug.trim()
+        : workspacePath.startsWith("gbrain:")
+          ? workspacePath.slice("gbrain:".length)
+          : "";
+    if (!workspacePath && !brainSlug) {
+      return false;
+    }
+    if (file.source === "gbrain" && !brainSlug) {
+      return false;
+    }
+
+    const isGbrain = brainSlug.length > 0;
+    const dedupeKey = isGbrain ? `gbrain:${brainSlug}`.toLowerCase() : workspacePath.toLowerCase();
+    const alreadyPresent = liveUploadedFilesRef.current.some((entry) => {
+      return getUploadedFileReference(entry).replace(/^\/+/, "").toLowerCase() === dedupeKey;
+    });
+
+    if (alreadyPresent) {
+      return false;
+    }
+
+    const name = file.name?.trim() || getBasename(workspacePath || brainSlug);
+    const extension = name.includes(".") ? (name.split(".").pop() || "file") : "file";
+    const nextFile: UploadedFile = isGbrain
+      ? {
+          name,
+          size: "gbrain page",
+          type: extension,
+          folder: "Brain",
+          source: "gbrain",
+          brainSlug,
+          workspacePath: `gbrain:${brainSlug}`,
+          displayPath: file.displayPath || `gbrain:${brainSlug}`,
+        }
+      : {
+          name,
+          size: "workspace file",
+          type: extension,
+          folder: getFolderLabel(workspacePath),
+          source: "workspace",
+          workspacePath,
+          displayPath: file.displayPath || workspacePath,
+        };
+
+    setUploadedFiles((prev) => {
+      const next = [...prev, nextFile];
+      liveUploadedFilesRef.current = next;
+      return next;
+    });
+    return true;
+  }, []);
+
+  const removeFileFromChatContext = useCallback((pathOrName: string) => {
+    const dedupeKey = pathOrName.trim().replace(/^\/+/, "").toLowerCase();
+    if (!dedupeKey) return;
+
+    setUploadedFiles((prev) => {
+      const next = prev.filter((entry) => {
+        const candidate = (entry.workspacePath || entry.name || "").trim().replace(/^\/+/, "");
+        return candidate.toLowerCase() !== dedupeKey;
+      });
+      liveUploadedFilesRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const clearChatContext = useCallback(() => {
+    liveUploadedFilesRef.current = [];
+    setUploadedFiles([]);
+  }, []);
+
+  // Exposed setBackend wrapper: any caller outside this hook is treated as
+  // an explicit user override, which invalidates in-flight sends so responses
+  // from the old backend don't race in after the user switched away.
+  const setBackendExternal = useCallback<React.Dispatch<React.SetStateAction<Backend>>>(
+    (value) => {
+      userBackendOverrideVersionRef.current += 1;
+      setBackend(value);
+    },
+    [],
+  );
+
+  return {
+    messages,
+    setMessages,
+    sendMessage: sendMessageFn,
+    isStreaming,
+    error,
+    setError,
+    backend,
+    setBackend: setBackendExternal,
+    chatMode,
+    setChatMode,
+    crossChannelMessages,
+    uploadedFiles,
+    workspaceTree,
+    generatedArtifacts,
+    handleFiles,
+    addWorkspaceFileToChatContext,
+    removeFileFromChatContext,
+    clearChatContext,
+    refreshWorkspace,
+    checkChanges,
+    recordGeneratedArtifacts,
+    clearGeneratedArtifacts: () => setGeneratedArtifacts([]),
+    clearError: () => setError(null),
+    conversationId,
+    openClawConnected,
+    artifactProvenance,
+  };
+}

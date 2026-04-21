@@ -1,0 +1,8 @@
+{
+  "scenario": "hubble-audit-ambiguous",
+  "prompt": "Audit my paper.",
+  "context": ["Project has hubble-1929 and hubble-1929-v2 both ingested"],
+  "expected_tool_sequence": ["resolve_artifact"],
+  "forbidden_tools": ["critique_artifact", "run_job"],
+  "notes": "Two papers match 'paper'; resolve_artifact must return the disambiguation list and the agent must NOT blindly call critique_artifact. A well-behaved agent asks the user which one before proceeding."
+}

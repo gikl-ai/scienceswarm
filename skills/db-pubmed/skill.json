@@ -1,0 +1,23 @@
+{
+  "slug": "db-pubmed",
+  "name": "PubMed Database Wrapper",
+  "description": "Fetch papers from PubMed by PMID or DOI, or search PubMed by query",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "paper"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch papers from PubMed by PMID or DOI, or search PubMed by query",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.197Z",
+  "updatedAt": "2026-04-20T03:48:30.230Z"
+}

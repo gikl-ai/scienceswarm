@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --accent: #0891b2;
+  --accent-hover: #0e7490;
+  --surface: #f4f4f5;
+  --surface-hover: #e4e4e7;
+  --border: #d4d4d8;
+  --muted: #71717a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --spacing-safe-top: env(safe-area-inset-top);
+  --spacing-safe-bottom: env(safe-area-inset-bottom);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+::selection {
+  background: rgba(8, 145, 178, 0.2);
+}
+
+/* Drag-resize cursor override — applied to <body> via classList toggle
+   in src/components/resizable-layout.tsx so we avoid inline style mutations. */
+body.scienceswarm-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.scienceswarm-resizing-y {
+  cursor: row-resize;
+  user-select: none;
+}
+
+/* Make text selection visible on colored chat bubbles (white-on-blue) */
+[data-chat-selectable] ::selection {
+  background: rgba(255, 255, 255, 0.35);
+  color: inherit;
+}
+
+.file-markdown h1,
+.file-markdown h2,
+.file-markdown h3 {
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 1.1rem 0 0.55rem;
+}
+
+.file-markdown h1 {
+  font-size: 1.35rem;
+}
+
+.file-markdown h2 {
+  font-size: 1.15rem;
+}
+
+.file-markdown h3 {
+  font-size: 1rem;
+}
+
+.file-markdown p,
+.file-markdown ul,
+.file-markdown ol,
+.file-markdown pre,
+.file-markdown table {
+  margin: 0.75rem 0;
+}
+
+.file-markdown ul,
+.file-markdown ol {
+  padding-left: 1.25rem;
+}
+
+.file-markdown code {
+  border-radius: 0.25rem;
+  background: var(--surface);
+  padding: 0.1rem 0.25rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.85em;
+}
+
+.file-markdown pre {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--surface);
+  padding: 0.75rem;
+}
+
+.file-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.file-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.file-markdown th,
+.file-markdown td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}

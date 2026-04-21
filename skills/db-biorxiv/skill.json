@@ -1,0 +1,23 @@
+{
+  "slug": "db-biorxiv",
+  "name": "bioRxiv / medRxiv Database Wrapper",
+  "description": "Fetch bioRxiv or medRxiv preprints by DOI, or search recent preprints",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "paper"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch bioRxiv or medRxiv preprints by DOI, or search recent preprints",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.155Z",
+  "updatedAt": "2026-04-20T03:48:30.157Z"
+}

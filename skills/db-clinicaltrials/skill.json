@@ -1,0 +1,23 @@
+{
+  "slug": "db-clinicaltrials",
+  "name": "ClinicalTrials.gov Database Wrapper",
+  "description": "Fetch ClinicalTrials.gov studies by NCT ID, or search trials",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "trial"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch ClinicalTrials.gov studies by NCT ID, or search trials",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.164Z",
+  "updatedAt": "2026-04-20T03:48:30.166Z"
+}

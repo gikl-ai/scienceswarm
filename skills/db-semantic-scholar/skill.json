@@ -1,0 +1,23 @@
+{
+  "slug": "db-semantic-scholar",
+  "name": "Semantic Scholar Database Wrapper",
+  "description": "Fetch papers from Semantic Scholar by ID, or search Semantic Scholar by query",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "database",
+    "retrieval",
+    "paper"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fetch papers from Semantic Scholar by ID, or search Semantic Scholar by query",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T03:48:30.234Z",
+  "updatedAt": "2026-04-20T03:48:30.282Z"
+}

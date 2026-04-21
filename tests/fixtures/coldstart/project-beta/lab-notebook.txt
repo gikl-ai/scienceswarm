@@ -1,0 +1,9 @@
+Lab notebook entry, week 14
+
+Tested protocol revision B with the new buffer. Got cleaner extracts but the
+yield was lower than week 12. Need to compare with the control group results
+from the previous experiment before drawing conclusions.
+
+Followups:
+- check pipette calibration
+- repeat with three more samples

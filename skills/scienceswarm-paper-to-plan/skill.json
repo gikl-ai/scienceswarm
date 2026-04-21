@@ -1,0 +1,24 @@
+{
+  "slug": "scienceswarm-paper-to-plan",
+  "name": "ScienceSwarm Paper To Plan",
+  "description": "Turn a paper, method, or technical writeup into a concrete reproduction or implementation plan with validation checkpoints.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "implementation",
+    "planning"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "A cross-host planning skill for moving from a source artifact to an executable reproduction or implementation plan.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-20T00:00:00.000Z",
+  "updatedAt": "2026-04-20T00:00:00.000Z"
+}

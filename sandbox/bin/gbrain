@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""HTTP shim for the host-side gbrain store.
+
+This script is the entire `gbrain` surface available inside the
+`scienceswarm/sandbox:latest` image. It mirrors the subset of the real
+gbrain CLI that the audit-revise job definitions call: `get`, `put`,
+`link`, and `file_upload`.
+
+The sandbox MUST NOT open its own PGLite connection against the host
+gbrain store — PR #301 fixed exactly that lock conflict. Instead this
+shim proxies every call back to the host Next.js server at
+`$SCIENCESWARM_HOST_URL` (typically http://host.docker.internal:3001),
+authenticated with a shared `$SCIENCESWARM_SANDBOX_TOKEN`.
+
+See docs/OPENHANDS_BOUNDARY.md for the architectural note.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import traceback
+from pathlib import Path
+
+import requests
+
+TIMEOUT_SECONDS = 60
+
+
+def _die(msg: str, code: int = 1) -> None:
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def _require_env() -> tuple[str, str]:
+    host = os.environ.get("SCIENCESWARM_HOST_URL")
+    if not host:
+        _die("gbrain: SCIENCESWARM_HOST_URL is not set — the sandbox cannot reach the host store.")
+    token = os.environ.get("SCIENCESWARM_SANDBOX_TOKEN")
+    if not token:
+        _die("gbrain: SCIENCESWARM_SANDBOX_TOKEN is not set — refusing to make unauthenticated calls.")
+    return host.rstrip("/"), token
+
+
+def _auth_headers(token: str, *, json_body: bool = False) -> dict[str, str]:
+    headers = {"x-scienceswarm-sandbox-token": token}
+    if json_body:
+        headers["content-type"] = "application/json"
+    return headers
+
+
+def _handle_network_error(exc: Exception, host: str) -> None:
+    if isinstance(exc, requests.ConnectionError):
+        _die(
+            f"gbrain: cannot reach {host} — is the host server running?",
+            code=2,
+        )
+    if isinstance(exc, requests.Timeout):
+        _die(f"gbrain: request to {host} timed out after {TIMEOUT_SECONDS}s.", code=2)
+    raise exc
+
+
+def _check_response(resp: requests.Response) -> None:
+    if 200 <= resp.status_code < 300:
+        return
+    body = resp.text
+    print(f"gbrain: host returned HTTP {resp.status_code}", file=sys.stderr)
+    if body:
+        print(body, file=sys.stderr)
+    sys.exit(1)
+
+
+def _format_frontmatter(payload: dict) -> str:
+    """Re-serialize a page payload as YAML frontmatter + body.
+
+    The real `gbrain get` CLI emits a `---` delimited YAML block. The
+    revise_paper definition greps this output, so the shape matters. We
+    re-serialize by hand (no PyYAML dependency) to mirror the real CLI.
+    """
+    fm = dict(payload.get("frontmatter") or {})
+    # Splice canonical fields into the top of the block if missing, so
+    # downstream grep patterns like `^type: ` reliably hit.
+    type_val = payload.get("type")
+    if type_val and "type" not in fm:
+        fm["type"] = type_val
+    title_val = payload.get("title")
+    if title_val and "title" not in fm:
+        fm["title"] = title_val
+    # Preserve tags if present; leave other frontmatter keys as-is.
+    lines = ["---"]
+    ordered_keys: list[str] = []
+    for preferred in ("type", "title", "tags"):
+        if preferred in fm:
+            ordered_keys.append(preferred)
+    for key in fm.keys():
+        if key not in ordered_keys:
+            ordered_keys.append(key)
+    for key in ordered_keys:
+        value = fm[key]
+        lines.append(_emit_yaml_kv(key, value))
+    lines.append("---")
+    body = payload.get("content") or ""
+    if not body.startswith("\n"):
+        lines.append("")
+    lines.append(body)
+    return "\n".join(lines)
+
+
+def _emit_yaml_kv(key: str, value) -> str:
+    if isinstance(value, list):
+        rendered = ", ".join(_emit_yaml_scalar(v) for v in value)
+        return f"{key}: [{rendered}]"
+    if isinstance(value, dict):
+        # Compact inline form. Nested structures are rare in our
+        # frontmatter but we handle them defensively.
+        rendered = ", ".join(f"{k}: {_emit_yaml_scalar(v)}" for k, v in value.items())
+        return f"{key}: {{{rendered}}}"
+    return f"{key}: {_emit_yaml_scalar(value)}"
+
+
+def _emit_yaml_scalar(value) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    text = str(value)
+    if text == "" or any(c in text for c in ":#\n[]{},&*!|>'\"%@`"):
+        escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return text
+
+
+def cmd_get(args: argparse.Namespace) -> None:
+    host, token = _require_env()
+    url = f"{host}/api/brain/page"
+    try:
+        resp = requests.get(
+            url,
+            params={"slug": args.slug},
+            headers=_auth_headers(token),
+            timeout=TIMEOUT_SECONDS,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _handle_network_error(exc, host)
+        return
+    _check_response(resp)
+    try:
+        payload = resp.json()
+    except ValueError:
+        _die("gbrain: host returned non-JSON response to GET /api/brain/page")
+        return
+    sys.stdout.write(_format_frontmatter(payload))
+    if not _format_frontmatter(payload).endswith("\n"):
+        sys.stdout.write("\n")
+
+
+def cmd_put(args: argparse.Namespace) -> None:
+    host, token = _require_env()
+    content = sys.stdin.read()
+    url = f"{host}/api/brain/page"
+    body = {"slug": args.slug, "content": content}
+    try:
+        resp = requests.post(
+            url,
+            data=json.dumps(body),
+            headers=_auth_headers(token, json_body=True),
+            timeout=TIMEOUT_SECONDS,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _handle_network_error(exc, host)
+        return
+    _check_response(resp)
+    print(resp.text)
+
+
+def cmd_link(args: argparse.Namespace) -> None:
+    host, token = _require_env()
+    url = f"{host}/api/brain/link"
+    body = {"from": args.from_slug, "to": args.to_slug, "relation": args.link_type}
+    if args.context:
+        body["context"] = args.context
+    try:
+        resp = requests.post(
+            url,
+            data=json.dumps(body),
+            headers=_auth_headers(token, json_body=True),
+            timeout=TIMEOUT_SECONDS,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _handle_network_error(exc, host)
+        return
+    _check_response(resp)
+    print(resp.text)
+
+
+def cmd_file_upload(args: argparse.Namespace) -> None:
+    host, token = _require_env()
+    path = Path(args.path)
+    if not path.is_file():
+        _die(f"gbrain: file not found: {path}")
+    url = f"{host}/api/brain/file-upload"
+    try:
+        with path.open("rb") as fh:
+            files = {"file": (path.name, fh)}
+            data = {"page_slug": args.page, "filename": path.name}
+            resp = requests.post(
+                url,
+                files=files,
+                data=data,
+                headers=_auth_headers(token),
+                timeout=TIMEOUT_SECONDS,
+            )
+    except Exception as exc:  # noqa: BLE001
+        _handle_network_error(exc, host)
+        return
+    _check_response(resp)
+    print(resp.text)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="gbrain",
+        description="HTTP shim for the host gbrain store (sandbox side).",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_get = sub.add_parser("get", help="Fetch a page by slug as YAML frontmatter + body.")
+    p_get.add_argument("slug")
+    p_get.set_defaults(func=cmd_get)
+
+    p_put = sub.add_parser("put", help="Write a page (read full markdown from stdin).")
+    p_put.add_argument("slug")
+    p_put.set_defaults(func=cmd_put)
+
+    p_link = sub.add_parser("link", help="Create a typed link between two pages.")
+    p_link.add_argument("from_slug", metavar="from")
+    p_link.add_argument("to_slug", metavar="to")
+    p_link.add_argument("--link_type", required=True, help="Relation type (e.g. revises).")
+    p_link.add_argument("--context", default=None, help="Optional free-text context.")
+    p_link.set_defaults(func=cmd_link)
+
+    p_up = sub.add_parser("file_upload", help="Upload a local file attached to a page slug.")
+    p_up.add_argument("path")
+    p_up.add_argument("--page", required=True, help="Gbrain page slug to attach to.")
+    p_up.set_defaults(func=cmd_file_upload)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        args.func(args)
+    except SystemExit:
+        raise
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

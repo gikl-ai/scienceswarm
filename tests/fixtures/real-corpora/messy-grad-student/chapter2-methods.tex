@@ -1,0 +1,15 @@
+\chapter{Methods}
+
+\section{Negative Binomial Mixture Model}
+
+We model the observed UMI count $Y_{ij}$ for cell $i$ and gene $j$ as a
+mixture of a zero-inflated component and a negative binomial component:
+
+\begin{equation}
+Y_{ij} \sim \pi_{ij} \delta_0 + (1 - \pi_{ij}) \text{NB}(\mu_{ij}, \phi_j)
+\end{equation}
+
+where $\pi_{ij}$ is the dropout probability, $\mu_{ij}$ is the mean
+expression, and $\phi_j$ is the gene-specific dispersion.
+
+\input{chapter2-em-algorithm}

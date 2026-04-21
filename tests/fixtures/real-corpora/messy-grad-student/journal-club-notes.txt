@@ -1,0 +1,12 @@
+Journal club — 2026-03-05
+
+Presenter: me
+Paper: Segment Anything (Kirillov 2023)
+
+Discussion points:
+- Prompt engineering matters. Box prompts beat point prompts on our data.
+- The mask decoder is small — most compute is in the image encoder.
+- Zero-shot transfer to microscopy was worse than expected; probably
+  needs fine-tuning or domain-specific pretraining.
+- Somebody asked whether the 1B-mask dataset contains any actual science
+  images. Answer: mostly not.

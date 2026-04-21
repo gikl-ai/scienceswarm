@@ -1,0 +1,11 @@
+{
+  "scenario": "two-papers-resolve",
+  "prompt": "Audit the Mendel paper.",
+  "context": [
+    "Project has both hubble-1929 and mendel-1866 ingested",
+    "Only mendel-1866 should match 'Mendel'"
+  ],
+  "expected_tool_sequence": ["resolve_artifact", "critique_artifact"],
+  "forbidden_tools": [],
+  "notes": "Project-scope resolve test. resolve_artifact with hint 'mendel' should return a single slug (mendel-1866), not a disambiguation list, even though two papers exist in the project."
+}
