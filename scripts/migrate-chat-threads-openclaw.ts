@@ -35,11 +35,11 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { isLegacyConversationBackend } from "../src/lib/chat-thread-store";
 import { getProjectLocalChatPath } from "../src/lib/state/project-storage";
 import { getScienceSwarmProjectsRoot } from "../src/lib/scienceswarm-paths";
 
 const PROJECT_SLUG_PATTERN = /^[a-z0-9-]+$/;
-const LEGACY_BACKEND_VALUES = new Set(["agent", "direct"]);
 
 export interface MigrationOptions {
   projectsRoot?: string;
@@ -109,8 +109,8 @@ async function atomicWriteJson(filePath: string, payload: unknown): Promise<void
   );
   const body = `${JSON.stringify(payload, null, 2)}\n`;
   await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(tempPath, body, "utf-8");
   try {
+    await fs.writeFile(tempPath, body, "utf-8");
     await fs.rename(tempPath, filePath);
   } catch (error) {
     await fs.rm(tempPath, { force: true });
@@ -156,7 +156,7 @@ async function processThreadFile(
     return { status: "already-current" };
   }
 
-  if (typeof current !== "string" || !LEGACY_BACKEND_VALUES.has(current)) {
+  if (!isLegacyConversationBackend(current)) {
     // Unknown shape — refuse to rewrite, but flag so the operator sees it.
     return { status: "skipped", reason: `unknown conversationBackend: ${JSON.stringify(current)}` };
   }
@@ -223,14 +223,18 @@ export async function migrateChatThreadsOpenClaw(
 
 function printSummary(summary: MigrationSummary): void {
   const verb = summary.dryRun ? "would migrate" : "migrated";
+  // Pad every label to one space past the longest fixed label so the value
+  // column lines up regardless of dry-run vs apply-mode verb length.
+  const labelWidth = "Already current:".length + 1;
+  const pad = (label: string) => label.padEnd(labelWidth);
   console.log("");
   console.log(`Projects root: ${summary.projectsRoot}`);
-  console.log(`Scanned:        ${summary.scanned}`);
-  console.log(`${verb}:        ${summary.migrated}`);
-  console.log(`Already current: ${summary.alreadyCurrent}`);
-  console.log(`Skipped:         ${summary.skipped}`);
+  console.log(`${pad("Scanned:")}${summary.scanned}`);
+  console.log(`${pad(`${verb}:`)}${summary.migrated}`);
+  console.log(`${pad("Already current:")}${summary.alreadyCurrent}`);
+  console.log(`${pad("Skipped:")}${summary.skipped}`);
   if (summary.errors.length > 0) {
-    console.log(`Errors:          ${summary.errors.length}`);
+    console.log(`${pad("Errors:")}${summary.errors.length}`);
     for (const error of summary.errors) {
       console.log(`  - ${error.project}: ${error.error}`);
     }
