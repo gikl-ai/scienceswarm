@@ -1184,12 +1184,12 @@ describe("Project dashboard smoke test", () => {
     // Assistant bubbles intentionally do NOT carry data-chat-selectable (that
     // attribute drives a white ::selection highlight that would be invisible
     // on the white assistant bubble). Target the outer bubble via its
-    // stable `max-w-2xl` width constraint instead.
+    // stable `data-testid` hook instead — survives layout refactors.
     const firstAssistantGroup = (await screen.findByText("First plan ready."))
-      .closest(".max-w-2xl")
+      .closest("[data-testid='chat-bubble']")
       ?.parentElement?.parentElement as HTMLElement;
     const secondAssistantGroup = (await screen.findByText("Second plan ready."))
-      .closest(".max-w-2xl")
+      .closest("[data-testid='chat-bubble']")
       ?.parentElement?.parentElement as HTMLElement;
 
     expect(within(firstAssistantGroup).getByLabelText("Open generated file research_plan_v1.md")).toBeInTheDocument();
@@ -2260,7 +2260,7 @@ describe("Project dashboard smoke test", () => {
     render(<ProjectPage />);
 
     const message = await screen.findByText("Selectable assistant reply");
-    const selectableContainer = message.closest(".max-w-2xl");
+    const selectableContainer = message.closest("[data-testid='chat-bubble']");
 
     expect(selectableContainer).not.toBeNull();
     expect(selectableContainer).toHaveClass("select-text");
