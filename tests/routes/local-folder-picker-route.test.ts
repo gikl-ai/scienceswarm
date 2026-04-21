@@ -16,6 +16,8 @@ describe("POST /api/local-folder-picker", () => {
     vi.resetModules();
     execFileMock.mockReset();
     mockIsLocal.mockResolvedValue(true);
+    delete process.env.WSL_INTEROP;
+    delete process.env.WSL_DISTRO_NAME;
   });
 
   it("returns a selected macOS folder path for local requests", async () => {
@@ -98,6 +100,35 @@ describe("POST /api/local-folder-picker", () => {
     );
     await expect(response.json()).resolves.toEqual({
       path: "C:\\Users\\tester\\project-alpha",
+    });
+  });
+
+  it("bridges the Windows host picker into WSL paths", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+    process.env.WSL_INTEROP = "/run/WSL/123_interop";
+    execFileMock.mockImplementation((command: string, _args: string[], callback: (...cbArgs: unknown[]) => void) => {
+      if (command === "powershell.exe") {
+        callback(null, "C:\\Users\\tester\\project-alpha\\\r\n", "");
+        return;
+      }
+      if (command === "wslpath") {
+        callback(null, "/mnt/c/Users/tester/project-alpha\n", "");
+        return;
+      }
+      callback(new Error(`unexpected command: ${command}`), "", "");
+    });
+
+    const { POST } = await import("@/app/api/local-folder-picker/route");
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    expect(execFileMock).toHaveBeenCalledWith(
+      "powershell.exe",
+      expect.arrayContaining(["-NoProfile", "-STA", "-Command"]),
+      expect.any(Function),
+    );
+    await expect(response.json()).resolves.toEqual({
+      path: "/mnt/c/Users/tester/project-alpha",
     });
   });
 

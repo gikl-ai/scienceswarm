@@ -174,6 +174,16 @@ describe("BootstrapForm", () => {
     expect(button.textContent).not.toMatch(/Set up my brain/);
   });
 
+  it("shows the Windows via WSL2 guidance note", () => {
+    render(<BootstrapForm disabled={false} onSubmit={vi.fn()} />);
+    expect(screen.getByTestId("bootstrap-windows-note").textContent).toContain(
+      "Windows users: ScienceSwarm currently supports Windows via WSL2",
+    );
+    expect(screen.getByTestId("bootstrap-windows-note").textContent).toContain(
+      "/mnt/c",
+    );
+  });
+
   it("disables every input when disabled prop is set", () => {
     render(<BootstrapForm disabled={true} onSubmit={vi.fn()} />);
     expect(screen.getByTestId("handle-input")).toBeDisabled();
