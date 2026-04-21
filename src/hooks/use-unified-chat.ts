@@ -905,7 +905,7 @@ function trimLocalChatHistory(
     const nextChars = totalChars + content.length;
     if (
       selected.length >= LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES ||
-      (selected.length > 0 && nextChars > LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS)
+      nextChars > LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS
     ) {
       break;
     }

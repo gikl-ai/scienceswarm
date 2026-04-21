@@ -189,6 +189,12 @@ describe("message-handler", () => {
       ).toBeLessThan(fullText.indexOf("I found 12 imported PDFs."));
       expect(fullText).toContain("[DONE]");
       expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockInjectBrainContext).toHaveBeenCalledWith(
+        expect.any(String),
+        "How many PDFs are imported?",
+        undefined,
+        { disableBackgroundEntityDetection: true },
+      );
     });
 
     it("throws before building messages for streaming callers when strict local-only mode is enabled without a local provider", async () => {
@@ -239,6 +245,7 @@ describe("message-handler", () => {
         expect.any(String),
         "hi",
         "alpha-project",
+        { disableBackgroundEntityDetection: false },
       );
     });
 

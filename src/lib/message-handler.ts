@@ -51,7 +51,12 @@ async function buildMessages(
   const system: OpenAI.Chat.ChatCompletionMessageParam[] = [
     {
       role: "system",
-      content: await injectBrainContext(SYSTEM_PROMPT, lastUserMessage, req.projectId ?? undefined),
+      content: await injectBrainContext(
+        SYSTEM_PROMPT,
+        lastUserMessage,
+        req.projectId ?? undefined,
+        { disableBackgroundEntityDetection: isLocalProviderConfigured() },
+      ),
     },
   ];
 
