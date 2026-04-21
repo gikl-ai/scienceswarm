@@ -764,7 +764,7 @@ describe("POST /api/chat/unified", () => {
     expect(streamChat).not.toHaveBeenCalled();
   });
 
-  it("routes slash-like input that is not a registered command through normal chat once", async () => {
+  it("returns 503 for unknown slash-like input when OpenClaw is disconnected (no local fallback)", async () => {
     listOpenClawSkills.mockResolvedValueOnce([
       {
         slug: "project-organizer",
@@ -774,21 +774,23 @@ describe("POST /api/chat/unified", () => {
         emoji: null,
       },
     ]);
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: ["gemma4:latest"],
-      url: "http://localhost:11434",
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
     });
-    hasLocalModel.mockResolvedValueOnce(true);
-    getLocalModel.mockReturnValue("gemma4:latest");
-    mockDirectLLMStream("ordinary slash text");
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "disconnected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 0,
+      sessions: 0,
+    });
 
     const request = new Request("http://localhost/api/chat/command", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-real-ip": "slash-unknown-test",
+        "x-real-ip": "slash-unknown-disconnected-test",
       },
       body: JSON.stringify({
         message: "/tmp",
@@ -798,14 +800,12 @@ describe("POST /api/chat/unified", () => {
 
     const response = await commandPOST(request);
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    await expect(response.text()).resolves.toContain("ordinary slash text");
-    expect(checkRateLimit).toHaveBeenCalledTimes(1);
-    expect(checkRateLimit).toHaveBeenCalledWith("slash-unknown-test", "web");
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body.error).toContain("OpenClaw");
     expect(sendOpenClawMessage).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
-    expect(streamChat).toHaveBeenCalledTimes(1);
+    expect(streamChat).not.toHaveBeenCalled();
   });
 
   it("routes known slash skill commands only through OpenClaw", async () => {
@@ -1059,53 +1059,11 @@ describe("POST /api/chat/unified", () => {
     expect(streamChat).not.toHaveBeenCalled();
   });
 
-  it("does not replay prior slash commands as rewritten prompts in normal unified chat", async () => {
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: ["gemma4:latest"],
-      url: "http://localhost:11434",
-    });
-    hasLocalModel.mockResolvedValueOnce(true);
-    getLocalModel.mockReturnValue("gemma4:latest");
-    mockDirectLLMStream("Plain follow-up answer");
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-real-ip": "slash-history-test",
-      },
-      body: JSON.stringify({
-        message: "What should I do next?",
-        messages: [
-          { role: "user", content: "/capture note this result" },
-          { role: "assistant", content: "Captured it." },
-          { role: "user", content: "What should I do next?" },
-        ],
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    expect(streamChat).toHaveBeenCalledTimes(1);
-    expect(streamChat.mock.calls[0]?.[0]).not.toEqual(
-      expect.objectContaining({
-        messages: expect.arrayContaining([
-          expect.objectContaining({
-            content: expect.stringContaining(
-              "Use the installed ScienceSwarm skill",
-            ),
-          }),
-        ]),
-      }),
-    );
-    await expect(response.text()).resolves.toContain("Plain follow-up answer");
-  });
-
-  it("routes scientific source prompts through the normal local fallback path", async () => {
+  it("returns 503 for normal chat turns when OpenClaw is disconnected (reasoning mode, local configured)", async () => {
+    // Previously: a reasoning-mode turn with local Ollama configured would
+    // silently fall through to the local-direct stream. Now OpenClaw is the
+    // only chat dispatcher, so a disconnected OpenClaw returns 503 with a
+    // clear "Start OpenClaw" error — even if a local model is configured.
     resolveAgentConfig.mockReturnValue({
       type: "openclaw",
       url: "http://localhost:19002",
@@ -1125,24 +1083,12 @@ describe("POST /api/chat/unified", () => {
     });
     hasLocalModel.mockResolvedValueOnce(true);
     getLocalModel.mockReturnValue("gemma4:latest");
-    streamChat.mockResolvedValueOnce(
-      new ReadableStream({
-        start(controller) {
-          const encoder = new TextEncoder();
-          controller.enqueue(
-            encoder.encode('data: {"text":"LLM-backed scientific answer"}\n\n'),
-          );
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        },
-      }),
-    );
 
     const request = new Request("http://localhost/api/chat/unified", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-real-ip": "scientific-source-route-test",
+        "x-real-ip": "disconnected-local-configured-test",
       },
       body: JSON.stringify({
         message: "What source families are available?",
@@ -1155,12 +1101,14 @@ describe("POST /api/chat/unified", () => {
 
     const response = await POST(request);
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
+    expect(response.status).toBe(503);
+    expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
+    const body = await response.json();
+    expect(body.backend).toBe("openclaw");
+    expect(body.error).toContain("OpenClaw");
     expect(sendAgentMessage).not.toHaveBeenCalled();
     expect(sendOpenClawMessage).not.toHaveBeenCalled();
-    expect(streamChat).toHaveBeenCalledTimes(1);
+    expect(streamChat).not.toHaveBeenCalled();
   });
 
   it("does not bypass OpenClaw tools mode for scientific source prompts", async () => {
@@ -1274,19 +1222,17 @@ describe("POST /api/chat/unified", () => {
     expect(body.response).toContain("What institution are you at?");
   });
 
-  it("returns 503 when all backends are down", async () => {
+  it("returns 503 when OpenClaw is not the configured agent", async () => {
+    // Previously this returned 503 only after walking three fallback paths
+    // (local direct, OpenHands, final streamDirectResponse). The new
+    // precondition short-circuits on the agent selector itself.
     resolveAgentConfig.mockReturnValue(null);
-    streamChat.mockRejectedValueOnce(new Error("Direct down"));
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockRejectedValueOnce(new Error("OpenHands down")),
-    );
 
     const request = new Request("http://localhost/api/chat/unified", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-real-ip": "stale-task-active-file-answer",
+        "x-real-ip": "no-openclaw-configured",
       },
       body: JSON.stringify({ message: "Hello", projectId: "alpha-project" }),
     });
@@ -1294,7 +1240,10 @@ describe("POST /api/chat/unified", () => {
     const response = await POST(request);
     expect(response.status).toBe(503);
     const body = await response.json();
-    expect(body.backend).toBe("none");
+    expect(body.backend).toBe("openclaw");
+    expect(body.error).toContain("OpenClaw");
+    expect(streamChat).not.toHaveBeenCalled();
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
   });
 
   it("uses OpenClaw in strict local-only mode when OpenClaw is the selected backend", async () => {
@@ -1336,82 +1285,12 @@ describe("POST /api/chat/unified", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("returns an actionable settings error when the local model is configured but not downloaded", async () => {
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: [],
-      url: "http://localhost:11434",
-    });
-    hasLocalModel.mockResolvedValueOnce(false);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockRejectedValueOnce(new Error("OpenHands down")),
-    );
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-real-ip": "privacy-local-fallback-test",
-      },
-      body: JSON.stringify({ message: "Hello", projectId: "alpha-project" }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(503);
-    const body = await response.json();
-    expect(body.error).toContain("Open Settings -> Local Model via Ollama");
-    expect(body.error).toContain("gemma4");
-    expect(hasLocalModel).not.toHaveBeenCalled();
-    expect(streamChat).not.toHaveBeenCalled();
-  });
-
-  it("allows local fallback when cloud privacy blocks remote chat", async () => {
-    resolveAgentConfig.mockReturnValue({
-      type: "openclaw",
-      url: "http://localhost:19002",
-    });
-    openClawHealthCheck.mockResolvedValueOnce({
-      status: "disconnected",
-      gateway: "ws://127.0.0.1:19002",
-      channels: [],
-      agents: 1,
-      sessions: 2,
-    });
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: ["gemma4:latest"],
-      url: "http://localhost:11434",
-    });
-    enforceCloudPrivacy.mockResolvedValueOnce(
-      Response.json(
-        {
-          error:
-            "Project alpha-project has no privacy manifest; remote chat is blocked.",
-        },
-        { status: 403 },
-      ),
-    );
-    mockDirectLLMStream("Local fallback reply");
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Hello", projectId: "alpha-project" }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    await expect(response.text()).resolves.toContain("Local fallback reply");
-    expect(enforceCloudPrivacy).not.toHaveBeenCalled();
-    expect(streamChat).toHaveBeenCalledTimes(1);
-    expect(sendOpenClawMessage).not.toHaveBeenCalled();
-  });
+  // The two tests that used to live here ("returns an actionable settings
+  // error when the local model is configured but not downloaded" and
+  // "allows local fallback when cloud privacy blocks remote chat") exercised
+  // the local-direct short-circuit and the OpenClaw-disconnected local
+  // fallback respectively. Both are dead code under the chat-only-through-
+  // OpenClaw rule; see the dedicated 503 tests above.
 
   it("uses the per-project workspace for OpenClaw even when a shared workspace exists", async () => {
     const projectRoot = createProjectRoot("alpha-project");
@@ -5752,7 +5631,11 @@ describe("POST /api/chat/unified", () => {
     expect(localHealthCheck).not.toHaveBeenCalled();
   });
 
-  it("honors an explicit direct backend request for local reasoning even when OpenClaw is selected", async () => {
+  it("ignores an explicit `backend: \"direct\"` request and still routes through OpenClaw", async () => {
+    // Previously a client could force the local-direct short-circuit by
+    // sending `backend: "direct"` in the request body. That bypass is gone;
+    // OpenClaw always handles the chat when it is the configured and
+    // connected agent.
     resolveAgentConfig.mockReturnValue({
       type: "openclaw",
       url: "http://localhost:19002",
@@ -5764,13 +5647,7 @@ describe("POST /api/chat/unified", () => {
       agents: 1,
       sessions: 2,
     });
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: ["gemma4:26b"],
-      url: "http://localhost:11434",
-    });
-    mockDirectLLMStream("Direct local answer");
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw direct-override answer");
 
     const request = new Request("http://localhost/api/chat/unified", {
       method: "POST",
@@ -5785,10 +5662,13 @@ describe("POST /api/chat/unified", () => {
     const response = await POST(request);
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    await expect(response.text()).resolves.toContain("Direct local answer");
-    expect(streamChat).toHaveBeenCalledOnce();
-    expect(sendOpenClawMessage).not.toHaveBeenCalled();
+    expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
+    await expect(response.json()).resolves.toMatchObject({
+      backend: "openclaw",
+      response: "OpenClaw direct-override answer",
+    });
+    expect(sendOpenClawMessage).toHaveBeenCalledOnce();
+    expect(streamChat).not.toHaveBeenCalled();
   });
 
   it("includes OpenClaw thinking traces from the session record when available", async () => {
@@ -6076,98 +5956,11 @@ describe("POST /api/chat/unified", () => {
     });
   });
 
-  it("injects second-brain context into the local Ollama streaming path", async () => {
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: ["gemma4:latest"],
-      url: "http://localhost:11434",
-    });
-    hasLocalModel.mockResolvedValueOnce(true);
-    injectBrainContextIntoUserMessage.mockResolvedValueOnce(
-      "gbrain context\n\n## User Request\nHello from local",
-    );
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode('data: {"text":"Local reply"}\n\n'));
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      },
-    });
-    streamChat.mockResolvedValueOnce(stream);
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-real-ip": "198.51.100.24",
-      },
-      body: JSON.stringify({
-        message: "Hello from local",
-        projectId: "alpha-project",
-      }),
-    });
-
-    const response = await POST(request);
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    expect(injectBrainContextIntoUserMessage).not.toHaveBeenCalled();
-    expect(streamChat).toHaveBeenCalledTimes(1);
-    const streamArg = streamChat.mock.calls[0]?.[0] as {
-      messages: Array<{ role: string; content: string }>;
-      projectId?: string | null;
-    };
-    expect(streamArg.projectId).toBe("alpha-project");
-    const lastUser = [...streamArg.messages]
-      .reverse()
-      .find((m) => m.role === "user");
-    expect(lastUser?.content).toBe("Hello from local");
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-    expect(sendOpenClawMessage).not.toHaveBeenCalled();
-  });
-
-  it("does not apply the cloud privacy guard to the local Ollama chat path", async () => {
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: ["gemma4:latest"],
-      url: "http://localhost:11434",
-    });
-    enforceCloudPrivacy.mockResolvedValueOnce(
-      Response.json(
-        {
-          error:
-            "Project alpha-project has no privacy manifest; remote chat is blocked.",
-        },
-        { status: 403 },
-      ),
-    );
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode('data: {"text":"Local reply"}\n\n'));
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      },
-    });
-    streamChat.mockResolvedValueOnce(stream);
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "Hello from local",
-        projectId: "alpha-project",
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    expect(streamChat).toHaveBeenCalledTimes(1);
-  });
+  // The pair of tests that used to live here ("injects second-brain context
+  // into the local Ollama streaming path" and "does not apply the cloud
+  // privacy guard to the local Ollama chat path") exercised the local-direct
+  // short-circuit. That branch was deleted so the chat always dispatches
+  // through OpenClaw.
 
   it("still enforces cloud privacy when the configured Ollama endpoint is remote", async () => {
     isLocalProviderConfigured.mockReturnValue(true);
@@ -6204,539 +5997,4 @@ describe("POST /api/chat/unified", () => {
     expect(streamChat).not.toHaveBeenCalled();
   });
 
-  it("sends attached compiled gbrain topics to the local model for contradiction questions", async () => {
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: ["gemma4:latest"],
-      url: "http://localhost:11434",
-    });
-    mockDirectLLMStream("LLM-grounded contradiction answer");
-    getBrainPage.mockImplementation(async (slug: string) => {
-      if (slug === "wiki/concepts/vector-tropism-drift.md") {
-        return {
-          title: "Vector tropism drift",
-          type: "concept",
-          frontmatter: { type: "concept" },
-          content: [
-            "# Vector tropism drift",
-            "",
-            "Status: CRITICAL REVISION REQUIRED. The old delivery assumption is now contradicted by a new readout.",
-            "",
-            "Positive View: Vector X improves liver transduction in adult mice and was treated as strong liver-targeting evidence.",
-            "",
-            "Contradictory/Null View (Cohort B): New biodistribution readout shows Vector X does not improve liver transduction versus control. (Source: 2026-04-18-vector-x-cohort-b.md)",
-          ].join("\n"),
-        };
-      }
-      return null;
-    });
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "What evidence contradicts the old view?",
-        projectId: "alpha-project",
-        files: [
-          {
-            name: "Vector tropism drift",
-            size: "gbrain page",
-            source: "gbrain",
-            brainSlug: "wiki/concepts/vector-tropism-drift.md",
-            workspacePath: "gbrain:wiki/concepts/vector-tropism-drift.md",
-          },
-        ],
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
-    await expect(response.text()).resolves.toContain(
-      "LLM-grounded contradiction answer",
-    );
-    expect(streamChat).toHaveBeenCalledTimes(1);
-    const streamArg = streamChat.mock.calls[0]?.[0] as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    expect(JSON.stringify(streamArg.messages)).toContain(
-      "Brain page: gbrain:wiki/concepts/vector-tropism-drift.md",
-    );
-    expect(JSON.stringify(streamArg.messages)).toContain(
-      "Contradictory/Null View",
-    );
-    expect(sendOpenClawMessage).not.toHaveBeenCalled();
-  });
-
-  it("sends active stale task context to the local model for next-action questions", async () => {
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: ["gemma4:latest"],
-      url: "http://localhost:11434",
-    });
-    mockDirectLLMStream("LLM-grounded next action");
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "What action should I take next for this stale research task?",
-        projectId: "alpha-project",
-        activeFile: {
-          path: "wiki/tasks/2026-04-18-topic-neutrophil-netosis-timing-assay.md",
-          content: [
-            "# Topic: Neutrophil NETosis timing assay",
-            "",
-            "Research task: quantify whether IL-8 priming changes the NETosis onset time in donor neutrophils.",
-            "Status: running. Last update: 2026-02-12.",
-            "Open question: whether the timing window should be rerun with the donor-matched viability control.",
-            "",
-            "Timeline",
-            "2026-04-18 dream-cycle Research task flagged as stale",
-            "No research task update for 65 days.",
-          ].join("\n"),
-        },
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
-    await expect(response.text()).resolves.toContain(
-      "LLM-grounded next action",
-    );
-    expect(streamChat).toHaveBeenCalledTimes(1);
-    const streamArg = streamChat.mock.calls[0]?.[0] as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    expect(JSON.stringify(streamArg.messages)).toContain(
-      "The user is currently viewing the file",
-    );
-    expect(JSON.stringify(streamArg.messages)).toContain(
-      "Research task: quantify whether IL-8 priming",
-    );
-    expect(JSON.stringify(streamArg.messages)).toContain(
-      "No research task update for 65 days.",
-    );
-    expect(sendOpenClawMessage).not.toHaveBeenCalled();
-  });
-
-  it("sends active compiled topic context to the local model for current-view questions", async () => {
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: ["gemma4:latest"],
-      url: "http://localhost:11434",
-    });
-    mockDirectLLMStream("LLM-grounded current view");
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-real-ip": "active-compiled-current-view",
-      },
-      body: JSON.stringify({
-        message: "What is my current view of this topic?",
-        projectId: "alpha-project",
-        activeFile: {
-          path: "wiki/concepts/tp53-mdm2",
-          content: [
-            "Current view: Nutlin-3 rescue is plausible in wild-type TP53 organoids, but the null p53 transcription result limits confidence.",
-            "",
-            "Visible source context:",
-            "Timeline source: wiki/entities/papers/tp53-screen.md Dream Cycle integrated the TP53 rescue screen.",
-            "Linked source: supports TP53 rescue paper (wiki/entities/papers/tp53-rescue.md)",
-          ].join("\n"),
-        },
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
-    await expect(response.text()).resolves.toContain(
-      "LLM-grounded current view",
-    );
-    expect(streamChat).toHaveBeenCalledTimes(1);
-    const streamArg = streamChat.mock.calls[0]?.[0] as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    expect(JSON.stringify(streamArg.messages)).toContain(
-      "Nutlin-3 rescue is plausible",
-    );
-    expect(JSON.stringify(streamArg.messages)).toContain(
-      "wiki/entities/papers/tp53-screen.md",
-    );
-    expect(sendOpenClawMessage).not.toHaveBeenCalled();
-  });
-
-  it("sends active compiled topic sources to the local model for source questions", async () => {
-    isLocalProviderConfigured.mockReturnValue(true);
-    localHealthCheck.mockResolvedValueOnce({
-      running: true,
-      models: ["gemma4:latest"],
-      url: "http://localhost:11434",
-    });
-    mockDirectLLMStream("LLM-grounded source answer");
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-real-ip": "active-compiled-visible-sources",
-      },
-      body: JSON.stringify({
-        message: "Name the visible sources that shaped the answer.",
-        projectId: "alpha-project",
-        activeFile: {
-          path: "wiki/concepts/tp53-mdm2",
-          content: [
-            "Current view: Nutlin-3 rescue remains plausible but contested.",
-            "",
-            "Visible source context:",
-            "Timeline source: wiki/entities/papers/tp53-screen.md Dream Cycle integrated the TP53 rescue screen.",
-            "Backlink source: contradicts p53 transcription null note (wiki/resources/p53-null-note.md)",
-          ].join("\n"),
-        },
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
-    await expect(response.text()).resolves.toContain(
-      "LLM-grounded source answer",
-    );
-    expect(streamChat).toHaveBeenCalledTimes(1);
-    const streamArg = streamChat.mock.calls[0]?.[0] as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    expect(JSON.stringify(streamArg.messages)).toContain(
-      "Timeline source: wiki/entities/papers/tp53-screen.md",
-    );
-    expect(JSON.stringify(streamArg.messages)).toContain(
-      "Backlink source: contradicts p53 transcription null note",
-    );
-    expect(sendOpenClawMessage).not.toHaveBeenCalled();
-  });
-
-  it("injects second-brain context before sending to non-OpenClaw agents", async () => {
-    const agentCfg = { type: "nanoclaw", url: "http://localhost:19002" };
-    resolveAgentConfig.mockReturnValue(agentCfg);
-    agentHealthCheck.mockResolvedValueOnce({ status: "connected" });
-    injectBrainContextIntoUserMessage.mockReturnValueOnce(
-      "brain context\n\n## User Request\nHello",
-    );
-    sendAgentMessage.mockResolvedValueOnce({
-      response: "Agent reply",
-      conversationId: undefined,
-    });
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Hello", projectId: "alpha-project" }),
-    });
-
-    const response = await POST(request);
-    expect(response.status).toBe(200);
-    expect(injectBrainContextIntoUserMessage).toHaveBeenCalledWith(
-      "Hello",
-      "alpha-project",
-    );
-    const body = await response.json();
-    expect(body.response).toBe("Agent reply");
-    expect(sendAgentMessage).toHaveBeenCalledWith(
-      "brain context\n\n## User Request\nHello",
-      expect.objectContaining({ conversationId: undefined }),
-      agentCfg,
-    );
-    expect(sendOpenClawMessage).not.toHaveBeenCalled();
-  });
-
-  it("streams direct chat with parsed workspace files when files are present", async () => {
-    const workspaceRoot = createSharedWorkspaceRoot();
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode('data: {"text":"Summary"}\n\n'));
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      },
-    });
-
-    writeWorkspaceFile(workspaceRoot, "papers/paper_v16.pdf", "%PDF-test");
-    readFile.mockResolvedValueOnce(Buffer.from("%PDF-test"));
-    parseFile.mockResolvedValueOnce({
-      text: "Parsed PDF text",
-      pages: 12,
-    });
-    streamChat.mockResolvedValueOnce(stream);
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "Summarize paper_v16.pdf",
-        files: [
-          {
-            name: "paper_v16.pdf",
-            size: "584.8 KB",
-            workspacePath: "papers/paper_v16.pdf",
-          },
-        ],
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-Backend")).toBe("direct");
-    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-    expect(streamChat).toHaveBeenCalledWith(
-      expect.objectContaining({
-        channel: "web",
-        files: [{ name: "paper_v16.pdf", size: "584.8 KB" }],
-        messages: expect.arrayContaining([
-          expect.objectContaining({
-            role: "system",
-            content: expect.stringContaining("untrusted user-provided data"),
-          }),
-          expect.objectContaining({
-            role: "user",
-            content: expect.stringContaining("paper_v16.pdf"),
-          }),
-          expect.objectContaining({
-            role: "user",
-            content: "Summarize paper_v16.pdf",
-          }),
-        ]),
-      }),
-    );
-
-    await expect(response.text()).resolves.toContain("Summary");
-  });
-
-  it("reads workspace files from SCIENCESWARM_DIR when configured", async () => {
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      },
-    });
-
-    const dataRoot = path.join(
-      ensureScienceSwarmDir(),
-      "Application Support",
-      "ScienceSwarm",
-    );
-    process.env.SCIENCESWARM_DIR = dataRoot;
-    const workspaceRoot = path.join(dataRoot, "workspace");
-    writeWorkspaceFile(workspaceRoot, "papers/paper_v16.pdf", "%PDF-test");
-    readFile.mockResolvedValueOnce(Buffer.from("%PDF-test"));
-    parseFile.mockResolvedValueOnce({
-      text: "Parsed PDF text",
-      pages: 3,
-    });
-    streamChat.mockResolvedValueOnce(stream);
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "Summarize paper_v16.pdf",
-        files: [
-          {
-            name: "paper_v16.pdf",
-            size: "584.8 KB",
-            workspacePath: "papers/paper_v16.pdf",
-          },
-        ],
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(readFile).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "/Application Support/ScienceSwarm/workspace/papers/paper_v16.pdf",
-      ),
-    );
-  });
-
-  it("reads project-scoped workspace file context from the project root instead of the shared workspace", async () => {
-    const projectRoot = createProjectRoot("alpha-project");
-    const sharedWorkspaceRoot = createSharedWorkspaceRoot();
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      },
-    });
-
-    writeWorkspaceFile(projectRoot, "papers/paper_v16.pdf", "%PDF-project");
-    readFile.mockResolvedValueOnce(Buffer.from("%PDF-project"));
-    parseFile.mockResolvedValueOnce({
-      text: "Parsed project PDF text",
-      pages: 4,
-    });
-    streamChat.mockResolvedValueOnce(stream);
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "Summarize paper_v16.pdf",
-        projectId: "alpha-project",
-        files: [
-          {
-            name: "paper_v16.pdf",
-            size: "584.8 KB",
-            workspacePath: "papers/paper_v16.pdf",
-          },
-        ],
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    const [resolvedPath] = readFile.mock.calls[0];
-    expect(resolvedPath).toBe(
-      realpathSync(path.join(projectRoot, "papers", "paper_v16.pdf")),
-    );
-    expect(resolvedPath).not.toContain(`${path.sep}workspace${path.sep}`);
-    expect(resolvedPath).not.toContain(sharedWorkspaceRoot);
-    expect(streamChat).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectId: "alpha-project",
-        files: [{ name: "paper_v16.pdf", size: "584.8 KB" }],
-      }),
-    );
-  });
-
-  it("only forwards successfully contextualized files to streamChat", async () => {
-    const workspaceRoot = createSharedWorkspaceRoot();
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      },
-    });
-
-    writeWorkspaceFile(workspaceRoot, "papers/paper_v16.pdf", "%PDF-good");
-    readFile.mockResolvedValueOnce(Buffer.from("%PDF-good"));
-    parseFile.mockResolvedValueOnce({
-      text: "Parsed PDF text",
-      pages: 7,
-    });
-    streamChat.mockResolvedValueOnce(stream);
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "Summarize the uploaded papers",
-        files: [
-          {
-            name: "paper_v16.pdf",
-            size: "584.8 KB",
-            workspacePath: "papers/paper_v16.pdf",
-          },
-          {
-            name: "missing.pdf",
-            size: "12 KB",
-            workspacePath: "papers/missing.pdf",
-          },
-        ],
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(streamChat).toHaveBeenCalledWith(
-      expect.objectContaining({
-        files: [{ name: "paper_v16.pdf", size: "584.8 KB" }],
-        messages: expect.arrayContaining([
-          expect.objectContaining({
-            role: "user",
-            content: expect.stringContaining(
-              "Files that could not be read: papers/missing.pdf",
-            ),
-          }),
-        ]),
-      }),
-    );
-  });
-
-  it("does not follow workspace symlinks outside the workspace root", async () => {
-    const workspaceRoot = createSharedWorkspaceRoot();
-    const outsideFile = path.join(
-      ensureScienceSwarmDir(),
-      "outside-secret.pdf",
-    );
-    writeFileSync(outsideFile, "%PDF-secret");
-    const linkPath = path.join(workspaceRoot, "papers", "secret.pdf");
-    mkdirSync(path.dirname(linkPath), { recursive: true });
-    symlinkSync(outsideFile, linkPath);
-
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      },
-    });
-    streamChat.mockResolvedValueOnce(stream);
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "Summarize the linked file",
-        files: [
-          {
-            name: "secret.pdf",
-            size: "12 KB",
-            workspacePath: "papers/secret.pdf",
-          },
-        ],
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(readFile).not.toHaveBeenCalled();
-    expect(streamChat).toHaveBeenCalledWith(
-      expect.objectContaining({
-        files: [],
-        messages: expect.arrayContaining([
-          expect.objectContaining({
-            role: "user",
-            content: expect.stringContaining(
-              "Files that could not be read: papers/secret.pdf",
-            ),
-          }),
-        ]),
-      }),
-    );
-  });
 });
