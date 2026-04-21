@@ -230,20 +230,19 @@ export async function isLocalRequest(request?: Request): Promise<boolean> {
     if (host && !isLoopbackHost(host)) {
       return false;
     }
-  }
+    const ip = forwardedFor(h);
+    if (ip !== null) {
+      return isLoopbackIp(ip) && isTrustedBrowserRequest(h, request);
+    }
 
-  const ip = forwardedFor(h);
-  if (ip !== null) {
-    return isLoopbackIp(ip) && isTrustedBrowserRequest(h, request);
-  }
-
-  if (publicHost) {
     return isLoopbackHost(publicHost) && isTrustedBrowserRequest(h, request);
   }
 
   if (request && process.env.NODE_ENV === "test") {
     // Runtime startup scripts set a frontend host; this fallback only keeps
-    // request-object unit tests from depending on machine env state.
+    // request-object unit tests from depending on machine env state. Do not
+    // trust proxy client-IP headers in this path because they are spoofable
+    // unless the operator has explicitly configured the public frontend host.
     try {
       return (
         isLoopbackHost(new URL(request.url).hostname) &&

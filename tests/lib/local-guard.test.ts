@@ -156,6 +156,19 @@ describe("isLocalRequest", () => {
     ).resolves.toBe(false);
   });
 
+  it("ignores spoofed loopback forwarded headers when no frontend host is configured", async () => {
+    vi.stubEnv("FRONTEND_HOST", "");
+    vi.stubEnv("FRONTEND_PUBLIC_HOST", "");
+
+    await expect(
+      isLocalRequest(
+        new Request("http://203.0.113.10:3001/api/setup", {
+          headers: { "x-forwarded-for": "127.0.0.1" },
+        }),
+      ),
+    ).resolves.toBe(false);
+  });
+
   it("rejects IPv4-mapped IPv6 non-loopback forwarded clients", async () => {
     vi.stubEnv("FRONTEND_HOST", "127.0.0.1");
 
