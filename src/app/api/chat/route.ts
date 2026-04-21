@@ -3,7 +3,13 @@
  * No direct OpenAI calls. Everything goes through OpenClaw → OpenHands.
  */
 
+import { isLocalRequest } from "@/lib/local-guard";
+
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // Redirect to the unified endpoint
   const body = await request.json();
   const message = body.messages?.[body.messages.length - 1]?.content || "";

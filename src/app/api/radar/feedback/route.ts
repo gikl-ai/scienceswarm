@@ -14,12 +14,17 @@
 
 import { getActiveRadar } from "@/lib/radar/store"
 import { recordFeedback, applyFeedbackToRadar } from "@/lib/radar/learn"
+import { isLocalRequest } from "@/lib/local-guard"
 
 function getStateDir(): string {
   return process.env.RADAR_STATE_DIR || process.env.BRAIN_ROOT || "state"
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 })
+  }
+
   try {
     const body = await request.json()
     const { briefingId, signalId, action, matchedTopics } = body

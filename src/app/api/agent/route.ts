@@ -7,10 +7,15 @@ import {
   OPENHANDS_URL,
 } from "@/lib/openhands";
 import { enforceExecutionPrivacy } from "@/lib/privacy-policy";
+import { isLocalRequest } from "@/lib/local-guard";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
 // POST /api/agent — start conversation or send message
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const { action } = body;

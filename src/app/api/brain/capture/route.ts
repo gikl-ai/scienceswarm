@@ -5,6 +5,7 @@ import type {
   SourceRef,
 } from "@/brain/types";
 import { isCaptureChannel, processCapture } from "@/lib/capture";
+import { isLocalRequest } from "@/lib/local-guard";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 import { getBrainConfig, isErrorResponse } from "../_shared";
 
@@ -39,6 +40,10 @@ function isSourceRef(value: unknown): value is SourceRef {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
 

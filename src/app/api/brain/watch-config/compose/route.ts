@@ -1,5 +1,6 @@
 import { getBrainConfig, isErrorResponse } from "../../_shared";
 import { ensureProjectManifest, assertSafeProjectSlug } from "@/lib/state/project-manifests";
+import { isLocalRequest } from "@/lib/local-guard";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 import { compileWatchPlan } from "@/lib/watch/compose";
 
@@ -10,6 +11,10 @@ interface ComposeBody {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
 

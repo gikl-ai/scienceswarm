@@ -8,6 +8,7 @@ import type { StructuredCritiqueJob } from "@/lib/structured-critique-schema";
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { ensureBrainStoreReady, getBrainStore } from "@/brain/store";
 import type { BrainPage } from "@/brain/store";
+import { isLocalRequest } from "@/lib/local-guard";
 import { ensureProjectShellForProjectSlug } from "@/lib/projects/ensure-project-shell";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 
@@ -57,6 +58,10 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: PersistCritiqueRequest;
   try {
     const parsed = await request.json();

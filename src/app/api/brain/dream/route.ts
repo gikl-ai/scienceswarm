@@ -9,6 +9,7 @@ import { runDreamCycle, type DreamCycleMode } from "@/brain/dream-cycle";
 import { readDreamLastRun, writeDreamLastRun } from "@/brain/dream-report";
 import { apiError, getBrainConfig, getLLMClient, isErrorResponse } from "../_shared";
 import { isBrainBackendUnavailableError } from "@/brain/store";
+import { isLocalRequest } from "@/lib/local-guard";
 
 const VALID_MODES: DreamCycleMode[] = ["full", "sweep-only", "enrich-only"];
 
@@ -22,6 +23,10 @@ export async function GET(): Promise<Response> {
 }
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
   const config = configOrError;

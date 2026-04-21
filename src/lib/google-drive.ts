@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { google, type drive_v3 } from "googleapis";
 import { getFrontendUrl } from "@/lib/config/ports";
 
@@ -7,6 +8,8 @@ const SCOPES = [
   "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/drive.metadata.readonly",
 ];
+
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 function getOAuth2Client() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -27,6 +30,43 @@ function getOAuth2Client() {
 
 // In-memory token store (per-session; swap for DB/Redis in production)
 let storedTokens: Record<string, unknown> | null = null;
+const pendingOAuthStates = new Map<string, number>();
+
+function pruneExpiredOAuthStates(now = Date.now()): void {
+  for (const [state, expiresAt] of pendingOAuthStates) {
+    if (expiresAt <= now) {
+      pendingOAuthStates.delete(state);
+    }
+  }
+}
+
+function createPendingOAuthState(): string {
+  pruneExpiredOAuthStates();
+  const state = randomBytes(24).toString("base64url");
+  pendingOAuthStates.set(state, Date.now() + OAUTH_STATE_TTL_MS);
+  return state;
+}
+
+function consumePendingOAuthState(state: string | null | undefined): boolean {
+  if (!state) return false;
+
+  pruneExpiredOAuthStates();
+  const expiresAt = pendingOAuthStates.get(state);
+  if (!expiresAt || expiresAt <= Date.now()) {
+    pendingOAuthStates.delete(state);
+    return false;
+  }
+
+  pendingOAuthStates.delete(state);
+  return true;
+}
+
+export class GoogleDriveOAuthStateError extends Error {
+  constructor(message = "Invalid or expired OAuth state") {
+    super(message);
+    this.name = "GoogleDriveOAuthStateError";
+  }
+}
 
 function getDriveClient(): drive_v3.Drive {
   if (!storedTokens) {
@@ -39,16 +79,26 @@ function getDriveClient(): drive_v3.Drive {
 
 // ── Auth ─────────────────────────────────────────────────────────
 
-export function getAuthUrl(): string {
+export function getAuthUrl(): { state: string; url: string } {
   const oauth2 = getOAuth2Client();
-  return oauth2.generateAuthUrl({
+  const state = createPendingOAuthState();
+  const url = oauth2.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
     prompt: "consent",
+    state,
   });
+  return { state, url };
 }
 
-export async function handleCallback(code: string): Promise<{ success: boolean }> {
+export async function handleCallback(
+  code: string,
+  state: string | null | undefined,
+): Promise<{ success: boolean }> {
+  if (!consumePendingOAuthState(state)) {
+    throw new GoogleDriveOAuthStateError();
+  }
+
   const oauth2 = getOAuth2Client();
   const { tokens } = await oauth2.getToken(code);
   storedTokens = tokens as Record<string, unknown>;

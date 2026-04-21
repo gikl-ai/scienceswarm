@@ -61,6 +61,21 @@ function isLoopbackIp(value: string | null | undefined): boolean {
   return ip === "::1" || ip.startsWith("127.");
 }
 
+function normalizeOrigin(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 function forwardedFor(headersReader: HeaderReader): string | null {
   const realIp = headersReader.get("x-real-ip");
   if (realIp) return realIp;
@@ -100,9 +115,109 @@ function requestHost(headersReader: HeaderReader, request?: Request): string | n
   if (!request) return null;
 
   try {
-    return new URL(request.url).hostname;
+    return new URL(request.url).host;
   } catch {
     return null;
+  }
+}
+
+function requestOrigin(headersReader: HeaderReader, request?: Request): string | null {
+  const host = requestHost(headersReader, request);
+  if (host) {
+    const protoHeader = headersReader.get("x-forwarded-proto");
+    const proto = protoHeader?.split(",")[0]?.trim() || (() => {
+      if (!request) return "http";
+      try {
+        return new URL(request.url).protocol.replace(/:$/, "");
+      } catch {
+        return "http";
+      }
+    })();
+
+    return normalizeOrigin(`${proto}://${host}`);
+  }
+
+  if (!request) return null;
+
+  try {
+    return normalizeOrigin(new URL(request.url).origin);
+  } catch {
+    return null;
+  }
+}
+
+function browserRequestOrigin(
+  headersReader: HeaderReader,
+): { invalid: boolean; origin: string | null } {
+  const rawOrigin = headersReader.get("origin")?.trim();
+  if (rawOrigin) {
+    const origin = normalizeOrigin(rawOrigin);
+    return { invalid: origin === null, origin };
+  }
+
+  const referer = headersReader.get("referer")?.trim();
+  if (!referer) {
+    return { invalid: false, origin: null };
+  }
+
+  try {
+    const origin = normalizeOrigin(new URL(referer).origin);
+    return { invalid: origin === null, origin };
+  } catch {
+    return { invalid: true, origin: null };
+  }
+}
+
+function isBrowserInitiatedRequest(headersReader: HeaderReader): boolean {
+  return Boolean(
+    headersReader.get("sec-fetch-site") ||
+    headersReader.get("origin") ||
+    headersReader.get("referer"),
+  );
+}
+
+function isTrustedBrowserRequest(
+  headersReader: HeaderReader,
+  request?: Request,
+): boolean {
+  const fetchSite = headersReader.get("sec-fetch-site")?.trim().toLowerCase();
+  if (fetchSite === "cross-site") {
+    return false;
+  }
+
+  if (!isBrowserInitiatedRequest(headersReader)) {
+    return true;
+  }
+
+  const { origin, invalid } = browserRequestOrigin(headersReader);
+  if (invalid) {
+    return false;
+  }
+
+  if (!origin) {
+    return fetchSite === "same-origin" || fetchSite === "same-site" || fetchSite === "none";
+  }
+
+  let originHost: string;
+  try {
+    originHost = new URL(origin).hostname;
+  } catch {
+    return false;
+  }
+
+  if (!isLoopbackHost(originHost)) {
+    return false;
+  }
+
+  const targetOrigin = requestOrigin(headersReader, request);
+  if (!targetOrigin) {
+    return false;
+  }
+
+  try {
+    return isLoopbackHost(new URL(targetOrigin).hostname);
+  } catch {
+    return false;
   }
 }
 
@@ -127,20 +242,24 @@ export async function isLocalRequest(request?: Request): Promise<boolean> {
     if (host && !isLoopbackHost(host)) {
       return false;
     }
-  }
+    const ip = forwardedFor(h);
+    if (ip !== null) {
+      return isLoopbackIp(ip) && isTrustedBrowserRequest(h, request);
+    }
 
-  const ip = forwardedFor(h);
-  if (ip !== null) return isLoopbackIp(ip);
-
-  if (publicHost) {
-    return isLoopbackHost(publicHost);
+    return isLoopbackHost(publicHost) && isTrustedBrowserRequest(h, request);
   }
 
   if (request && process.env.NODE_ENV === "test") {
     // Runtime startup scripts set a frontend host; this fallback only keeps
-    // request-object unit tests from depending on machine env state.
+    // request-object unit tests from depending on machine env state. Do not
+    // trust proxy client-IP headers in this path because they are spoofable
+    // unless the operator has explicitly configured the public frontend host.
     try {
-      return isLoopbackHost(new URL(request.url).hostname);
+      return (
+        isLoopbackHost(new URL(request.url).hostname) &&
+        isTrustedBrowserRequest(h, request)
+      );
     } catch {
       return false;
     }

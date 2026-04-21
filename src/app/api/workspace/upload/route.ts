@@ -13,6 +13,7 @@ import type { IngestInputFile } from "@/brain/gbrain-data-contracts";
 import type { BrainConfig } from "@/brain/types";
 import { createLLMClient, type LLMClient } from "@/brain/llm";
 import { resetBrainStore } from "@/brain/store";
+import { isLocalRequest } from "@/lib/local-guard";
 import {
   assertSafeProjectSlug,
   InvalidSlugError,
@@ -57,6 +58,10 @@ interface UploadCompilationSummary {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const formData = await readFormData(request);
   if (!formData) {
     return Response.json(

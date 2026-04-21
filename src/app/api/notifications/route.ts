@@ -50,7 +50,7 @@ export async function POST(request: Request): Promise<Response> {
 
   switch (body.action) {
     case "mark-read": {
-      if (!(await isLocalRequest())) {
+      if (!(await isLocalRequest(request))) {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
       if (!body.id) {
@@ -64,7 +64,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     case "mark-all-read": {
-      if (!(await isLocalRequest())) {
+      if (!(await isLocalRequest(request))) {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
       markAllRead(body.projectId);
@@ -76,6 +76,9 @@ export async function POST(request: Request): Promise<Response> {
       const secret = process.env.INTERNAL_SECRET;
       if (secret && request.headers.get("x-internal-secret") !== secret) {
         return Response.json({ error: "Unauthorized" }, { status: 403 });
+      }
+      if (!secret && !(await isLocalRequest(request))) {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
       }
       if (!body.title || !body.message) {
         return Response.json(

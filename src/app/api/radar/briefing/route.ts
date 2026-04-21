@@ -9,6 +9,7 @@
 import type { BrainStore } from "@/brain/store"
 import { ensureBrainStoreReady } from "@/brain/store"
 
+import { isLocalRequest } from "@/lib/local-guard"
 import { getActiveRadar } from "@/lib/radar/store"
 import { runRadarPipeline } from "@/lib/radar/pipeline"
 import { buildProductionFetchers } from "@/lib/radar/fetchers/index"
@@ -42,6 +43,10 @@ export async function GET(): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 })
+  }
+
   try {
     const stateDir = getStateDir()
     const radar = await getActiveRadar(stateDir)

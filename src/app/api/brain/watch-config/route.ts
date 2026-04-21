@@ -1,5 +1,6 @@
 import { getBrainConfig, isErrorResponse } from "../_shared";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
+import { isLocalRequest } from "@/lib/local-guard";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 import {
   ensureWatchProject,
@@ -30,6 +31,10 @@ function watchErrorResponse(error: unknown): Response {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
 
@@ -62,6 +67,10 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
 

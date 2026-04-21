@@ -9,6 +9,7 @@ import { loadBrainConfig } from "@/brain/config";
 import { createLLMClient } from "@/brain/llm";
 import { handleBriefingAction } from "@/brain/briefing-actions";
 import type { BriefingAction } from "@/brain/briefing-actions";
+import { isLocalRequest } from "@/lib/local-guard";
 
 const VALID_TYPES = new Set([
   "save-paper",
@@ -27,6 +28,10 @@ function validateAction(action: unknown): action is BriefingAction {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;

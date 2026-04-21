@@ -9,9 +9,14 @@ import {
   parseMeetingTranscript,
   ingestMeeting,
 } from "@/brain/meeting-ingest";
+import { isLocalRequest } from "@/lib/local-guard";
 import { getBrainConfig, getLLMClient, isErrorResponse } from "../_shared";
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
   const config = configOrError;

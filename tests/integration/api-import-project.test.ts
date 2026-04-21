@@ -50,6 +50,26 @@ describe("POST /api/import-project", () => {
     expect(data.files.map((file: { path: string }) => file.path)).not.toContain(".DS_Store");
   });
 
+  it("rejects cross-site browser requests", async () => {
+    const absolutePath = await createImportDirectory();
+    const { POST } = await import("@/app/api/import-project/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/import-project", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          origin: "https://evil.example",
+          "sec-fetch-site": "cross-site",
+        },
+        body: JSON.stringify({ path: absolutePath }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
+  });
+
   it("expands tilde-prefixed paths before importing", async () => {
     const absolutePath = await createImportDirectory();
     const tildePath = `~${absolutePath.slice(os.homedir().length)}`;
