@@ -26,6 +26,10 @@ describe("resolveSavedLlmRuntimeEnv", () => {
       llmModel: "gpt-5.4",
       ollamaModel: "gemma4:26b",
       openaiApiKey: "sk-saved",
+      agentBackend: null,
+      agentUrl: null,
+      agentApiKey: null,
+      openclawInternalApiKey: null,
     });
   });
 

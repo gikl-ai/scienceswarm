@@ -141,6 +141,53 @@ describe("agent-client", () => {
       expect(cfg?.type).toBe("hermes");
       expect(cfg?.url).toBe("http://hermes.example.com");
     });
+
+    it("honors an explicit env argument over process.env", async () => {
+      vi.stubEnv("AGENT_BACKEND", "none");
+      const { resolveAgentConfig } = await loadModule();
+      const cfg = resolveAgentConfig({
+        AGENT_BACKEND: "openclaw",
+        AGENT_URL: "http://ui-updated:19002",
+        AGENT_API_KEY: "overlay-key",
+      });
+      expect(cfg).toEqual({
+        type: "openclaw",
+        url: "http://ui-updated:19002",
+        apiKey: "overlay-key",
+      });
+    });
+
+    it("picks up runtime-saved env overlay from .env without a restart", async () => {
+      // Simulate the real bug: UI persists AGENT_BACKEND=openclaw to .env,
+      // but process.env still holds the stale startup snapshot.
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("AGENT_BACKEND", ""); // startup snapshot had nothing
+      vi.stubEnv("AGENT_URL", "");
+
+      const { mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const path = await import("node:path");
+      const tempDir = mkdtempSync(path.join(tmpdir(), "agent-client-overlay-"));
+      writeFileSync(
+        path.join(tempDir, ".env"),
+        "AGENT_BACKEND=openclaw\nAGENT_URL=http://saved:19002\nAGENT_API_KEY=from-ui\n",
+        "utf8",
+      );
+      const originalCwd = process.cwd();
+      process.chdir(tempDir);
+      try {
+        const { resolveAgentConfig } = await loadModule();
+        const cfg = resolveAgentConfig();
+        expect(cfg).toEqual({
+          type: "openclaw",
+          url: "http://saved:19002",
+          apiKey: "from-ui",
+        });
+      } finally {
+        process.chdir(originalCwd);
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("agentHealthCheck", () => {
