@@ -357,8 +357,7 @@ export async function POST(request: Request): Promise<Response> {
             writeGatewayPid(runChild.pid, mode);
           }
           runChild.unref();
-          await wait(2000);
-          return Response.json({ ok: true, running: await isOpenClawRunning() });
+          return Response.json({ ok: true, running: await waitForOpenClawRunning(10_000) });
         }
 
         // Try `gateway start` first. It typically exits quickly after
