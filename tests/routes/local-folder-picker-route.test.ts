@@ -16,6 +16,8 @@ describe("POST /api/local-folder-picker", () => {
     vi.resetModules();
     execFileMock.mockReset();
     mockIsLocal.mockResolvedValue(true);
+    delete process.env.WSL_INTEROP;
+    delete process.env.WSL_DISTRO_NAME;
   });
 
   it("returns a selected macOS folder path for local requests", async () => {
@@ -98,6 +100,60 @@ describe("POST /api/local-folder-picker", () => {
     );
     await expect(response.json()).resolves.toEqual({
       path: "C:\\Users\\tester\\project-alpha",
+    });
+  });
+
+  it("bridges the Windows host picker into WSL paths", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+    process.env.WSL_INTEROP = "/run/WSL/123_interop";
+    execFileMock.mockImplementation((command: string, args: string[], callback: (...cbArgs: unknown[]) => void) => {
+      if (command === "which" && args[0] === "powershell.exe") {
+        callback(null, "/usr/bin/powershell.exe\n", "");
+        return;
+      }
+      if (command === "powershell.exe") {
+        callback(null, "C:\\Users\\tester\\project-alpha\\\r\n", "");
+        return;
+      }
+      if (command === "wslpath") {
+        callback(null, "/mnt/c/Users/tester/project-alpha\n", "");
+        return;
+      }
+      callback(new Error(`unexpected command: ${command}`), "", "");
+    });
+
+    const { POST } = await import("@/app/api/local-folder-picker/route");
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    expect(execFileMock).toHaveBeenCalledWith(
+      "powershell.exe",
+      expect.arrayContaining(["-NoProfile", "-STA", "-Command"]),
+      expect.any(Function),
+    );
+    await expect(response.json()).resolves.toEqual({
+      path: "/mnt/c/Users/tester/project-alpha",
+    });
+  });
+
+  it("returns a descriptive error when powershell.exe is unavailable in WSL", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+    process.env.WSL_INTEROP = "/run/WSL/123_interop";
+    execFileMock.mockImplementation((command: string, args: string[], callback: (...cbArgs: unknown[]) => void) => {
+      if (command === "which" && args[0] === "powershell.exe") {
+        callback(new Error("not found"), "", "");
+        return;
+      }
+      callback(new Error(`unexpected command: ${command}`), "", "");
+    });
+
+    const { POST } = await import("@/app/api/local-folder-picker/route");
+    const response = await POST();
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error:
+        "Windows host folder picker is unavailable in this WSL session. Make sure powershell.exe is on PATH, or paste a path manually.",
     });
   });
 

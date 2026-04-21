@@ -44,6 +44,7 @@ The core system is:
 ### Requirements
 
 - macOS or Linux
+- Windows is supported via WSL2 only for now; native Windows is not yet supported
 - Node.js 22+
 - No API key is required for the default local path
 - Docker is needed for the OpenHands execution path
@@ -72,6 +73,28 @@ Then open <http://localhost:3001/setup>.
 The setup flow initializes the local research store, verifies local runtimes,
 and can connect OpenClaw, OpenHands, Ollama, and Telegram when you want the
 full agent path.
+
+### Windows via WSL2
+
+ScienceSwarm does not support native Windows yet. The supported Windows route is
+Ubuntu on WSL2.
+
+Recommended setup:
+
+1. Install WSL2 and Ubuntu
+2. Install Docker Desktop and enable WSL integration for your Ubuntu distro
+3. Clone the repo inside the Linux filesystem, for example `~/scienceswarm`
+4. Run ScienceSwarm from the WSL shell, not from PowerShell or `cmd.exe`
+5. Keep `SCIENCESWARM_DIR` and `BRAIN_ROOT` in the Linux filesystem too
+
+Important:
+
+- Do not keep the repo under `/mnt/c/...` unless you accept slower file
+  scanning, imports, and file watching
+- Do not point `SCIENCESWARM_DIR` or `BRAIN_ROOT` at mounted Windows drives for
+  normal use
+- After `./scienceswarm start` in WSL, open <http://localhost:3001/setup> from
+  your Windows browser
 
 ### First Use
 

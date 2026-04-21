@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { runOpenClawSync } from "@/lib/openclaw/runner";
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
+import { isMountedWindowsPath, isWslEnvironment } from "@/lib/wsl";
 import {
   buildRuntimeCapabilityContract,
   buildOpenHandsLocalEvidenceSnapshot,
@@ -31,6 +32,7 @@ interface Check {
 }
 
 interface CheckSet {
+  platform: Check;
   node: Check;
   dependencies: Check;
   env: Check;
@@ -77,6 +79,50 @@ function command(name: string, args: string[] = [], timeoutMs = 5000) {
 
 function hasCommand(name: string): boolean {
   return command("sh", ["-lc", `command -v ${name}`], 2000).status === 0;
+}
+
+function checkPlatform(env: Record<string, string>): Check {
+  if (process.platform === "win32") {
+    return {
+      name: "Platform",
+      status: "fail",
+      detail: "Native Windows is not supported yet.",
+      fix: "Use Ubuntu on WSL2, keep the repo under ~/..., and rerun the install from the WSL shell.",
+    };
+  }
+
+  if (!isWslEnvironment()) {
+    return {
+      name: "Platform",
+      status: "ok",
+      detail: process.platform === "darwin" ? "macOS host" : "Linux host",
+    };
+  }
+
+  const repoRoot = resolve(process.cwd());
+  const dataRoot = expandPath(env.SCIENCESWARM_DIR || "~/.scienceswarm");
+  const brainRoot = expandPath(env.BRAIN_ROOT || join(dataRoot, "brain"));
+  const mountedLocations = [
+    isMountedWindowsPath(repoRoot) ? "repo" : null,
+    isMountedWindowsPath(dataRoot) || isMountedWindowsPath(brainRoot)
+      ? "ScienceSwarm data"
+      : null,
+  ].filter((value): value is string => Boolean(value));
+
+  if (mountedLocations.length > 0) {
+    return {
+      name: "Platform",
+      status: "warn",
+      detail: `WSL detected. ${mountedLocations.join(" and ")} ${mountedLocations.length === 1 ? "is" : "are"} on /mnt/<drive>, which is slower for imports, scans, and file watching.`,
+      fix: "Move the repo, SCIENCESWARM_DIR, and BRAIN_ROOT (if set) into the WSL Linux filesystem (for example ~/scienceswarm and ~/.scienceswarm), then rerun doctor.",
+    };
+  }
+
+  return {
+    name: "Platform",
+    status: "ok",
+    detail: "WSL detected. Repo and ScienceSwarm data are in the Linux filesystem, which is the recommended Windows setup.",
+  };
 }
 
 function checkNode(): Check {
@@ -390,6 +436,7 @@ function printRuntimeCapabilities(env: Record<string, string>, checks: CheckSet)
 function main() {
   const env = existsSync(".env") ? parseEnv(readFileSync(".env", "utf8")) : {};
   const checkSet: CheckSet = {
+    platform: checkPlatform(env),
     node: checkNode(),
     dependencies: checkDependencies(),
     env: checkEnv(env),
