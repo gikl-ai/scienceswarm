@@ -361,8 +361,8 @@ const MAX_KEEPALIVE_MESSAGES = 50;
 const WORKSPACE_TREE_REFRESH_MS = 15000;
 const WORKSPACE_WATCH_POLL_MS = 5000;
 const MAX_GENERATED_ARTIFACTS = 50;
-const LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES = 12;
-const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 12_000;
+const LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES = 8;
+const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 8_000;
 const SLASH_COMMAND_START_TIMEOUT_MS = 15_000;
 const SLASH_COMMAND_TIMEOUT_MESSAGE =
   "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.";
@@ -899,6 +899,9 @@ function trimLocalChatHistory(
     const entry = history[index];
     const content = entry?.content ?? "";
     if (!content) {
+      continue;
+    }
+    if (entry.role !== "user") {
       continue;
     }
 
