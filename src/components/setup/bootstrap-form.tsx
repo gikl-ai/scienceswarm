@@ -72,9 +72,51 @@ export function BootstrapForm({
       </p>
 
       <div className="mt-5 space-y-4">
+        <fieldset className="grid gap-4" data-testid="user-information-section">
+          <legend className="text-xs font-semibold uppercase tracking-wider text-muted">
+            User information
+          </legend>
+
+          <label className="block">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Handle
+            </span>
+            <input
+              type="text"
+              value={handle}
+              onChange={(e) => setHandle(e.target.value)}
+              required
+              data-testid="handle-input"
+              className="mt-1 block w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
+              disabled={disabled}
+            />
+            <span className="mt-1 block text-xs text-muted">
+              Used to sign everything you write. Shows up as the author on
+              every brain page.
+            </span>
+          </label>
+
+          <label className="block">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Email (optional)
+            </span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              data-testid="email-input"
+              className="mt-1 block w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
+              disabled={disabled}
+            />
+            <span className="mt-1 block text-xs text-muted">
+              Used for git commit author and radar alerts. Never shared.
+            </span>
+          </label>
+        </fieldset>
+
         <fieldset className="grid gap-2" data-testid="telegram-mode-toggle">
           <legend className="text-xs font-semibold uppercase tracking-wider text-muted">
-            Telegram bot
+            Telegram bot (optional)
           </legend>
           <label className="flex items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2 text-sm">
             <input
@@ -142,48 +184,6 @@ export function BootstrapForm({
             </span>
           </label>
         )}
-        </fieldset>
-
-        <fieldset className="grid gap-4" data-testid="user-information-section">
-          <legend className="text-xs font-semibold uppercase tracking-wider text-muted">
-            User information
-          </legend>
-
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Handle
-            </span>
-            <input
-              type="text"
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              required
-              data-testid="handle-input"
-              className="mt-1 block w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
-              disabled={disabled}
-            />
-            <span className="mt-1 block text-xs text-muted">
-              Used to sign everything you write. Shows up as the author on
-              every brain page.
-            </span>
-          </label>
-
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Email (optional)
-            </span>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              data-testid="email-input"
-              className="mt-1 block w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
-              disabled={disabled}
-            />
-            <span className="mt-1 block text-xs text-muted">
-              Used for git commit author and radar alerts. Never shared.
-            </span>
-          </label>
         </fieldset>
       </div>
 
