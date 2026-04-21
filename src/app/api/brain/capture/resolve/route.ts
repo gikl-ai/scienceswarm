@@ -1,9 +1,14 @@
 import type { CaptureChannel } from "@/brain/types";
 import { isCaptureChannel, resolvePendingCapture } from "@/lib/capture";
+import { isLocalRequest } from "@/lib/local-guard";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 import { getBrainConfig, isErrorResponse } from "../../_shared";
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
 

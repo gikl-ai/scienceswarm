@@ -8,6 +8,7 @@ import {
   searchFiles,
   downloadFile,
 } from "@/lib/google-drive";
+import { isLocalRequest } from "@/lib/local-guard";
 
 // ── GET handler ───────────────────────────────────────────────
 
@@ -71,6 +72,10 @@ export async function GET(request: Request): Promise<Response> {
 // ── POST handler ──────────────────────────────────────────────
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const raw = await request.json().catch(() => null);
     if (!raw || typeof raw !== "object") {

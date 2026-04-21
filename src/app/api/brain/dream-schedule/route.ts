@@ -25,6 +25,7 @@ import {
   shouldRunNow as radarShouldRunNow,
   sendTelegramBriefing,
 } from "@/lib/radar/schedule";
+import { isLocalRequest } from "@/lib/local-guard";
 
 /** Adapt the brain LLMClient (complete) to the radar generate(prompt) interface. */
 function toRadarLLM(llm: LLMClient): { generate(prompt: string): Promise<string> } {
@@ -54,6 +55,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
   const config = configOrError;

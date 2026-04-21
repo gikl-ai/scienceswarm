@@ -89,4 +89,25 @@ describe("POST /api/parse-file", () => {
     expect(body.pages).toBe(12);
     expect(body.name).toBe("paper.pdf");
   });
+
+  it("rejects cross-site browser requests", async () => {
+    const formData = new FormData();
+    formData.append(
+      "file",
+      new File(["name,age\nAlice,30"], "data.csv", { type: "text/csv" }),
+    );
+
+    const request = new Request("http://localhost/api/parse-file", {
+      method: "POST",
+      headers: {
+        origin: "https://evil.example",
+        "sec-fetch-site": "cross-site",
+      },
+      body: formData,
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
+  });
 });

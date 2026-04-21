@@ -8,6 +8,7 @@ import {
   type TransformStep,
 } from "@/lib/data-transform";
 import { generateChartSVG, analyzeData, type ChartSpec } from "@/lib/chart-generator";
+import { isLocalRequest } from "@/lib/local-guard";
 
 interface TransformRequest {
   action: "parse" | "transform" | "chart" | "export" | "auto-analyze";
@@ -19,6 +20,10 @@ interface TransformRequest {
 }
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const body = (await request.json()) as TransformRequest;
 

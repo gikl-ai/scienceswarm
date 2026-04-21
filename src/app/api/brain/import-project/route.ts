@@ -9,6 +9,7 @@ import type { ImportPreview } from "@/brain/types";
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { createIngestService } from "@/brain/ingest/service";
 import { commitImportedProject } from "@/lib/import/commit-import";
+import { isLocalRequest } from "@/lib/local-guard";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 import { getBrainConfig, isErrorResponse } from "../_shared";
@@ -45,6 +46,10 @@ interface ImportCommitBody {
 }
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
 

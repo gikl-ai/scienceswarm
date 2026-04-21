@@ -1,5 +1,6 @@
 import { resolveBrainRoot } from "@/brain/config";
 import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
+import { isLocalRequest } from "@/lib/local-guard";
 import { assertSafeProjectSlug, InvalidSlugError } from "@/lib/state/project-manifests";
 import { getProjectStateRootForBrainRoot, isProjectLocalStateRoot } from "@/lib/state/project-storage";
 import {
@@ -81,6 +82,10 @@ interface PostBody {
 }
 
 export async function POST(request: Request, context: RouteContext): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { projectId } = await context.params;
 
   let slug: string;

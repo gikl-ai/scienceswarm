@@ -27,6 +27,7 @@ import {
   getScienceSwarmProjectsRoot,
   getScienceSwarmWorkspaceRoot,
 } from "@/lib/scienceswarm-paths";
+import { isLocalRequest } from "@/lib/local-guard";
 import { readProjectImportSummary, writeProjectImportSummary } from "@/lib/state/project-import-summary";
 import { readProjectImportSource } from "@/lib/state/project-import-source";
 import { assertSafeProjectSlug, InvalidSlugError } from "@/lib/state/project-manifests";
@@ -761,6 +762,10 @@ async function syncProjectWorkspaceFromImportSource(
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const contentType = request.headers.get("content-type") || "";
 
@@ -798,6 +803,10 @@ export async function POST(request: Request) {
 // ---------------------------------------------------------------------------
 
 export async function GET(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");

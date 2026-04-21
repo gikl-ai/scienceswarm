@@ -1,5 +1,6 @@
 import path from "node:path";
 import { extractPdfText, isPdfExtractError } from "@/lib/pdf-text-extractor";
+import { isLocalRequest } from "@/lib/local-guard";
 import { getScienceSwarmProjectsRoot } from "@/lib/scienceswarm-paths";
 import { assertSafeProjectSlug, InvalidSlugError } from "@/lib/state/project-manifests";
 
@@ -22,6 +23,10 @@ interface PdfExtractBody {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: PdfExtractBody;
   try {
     body = (await request.json()) as PdfExtractBody;

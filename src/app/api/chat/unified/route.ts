@@ -53,6 +53,7 @@ import {
 import { streamChat } from "@/lib/message-handler";
 import { parseFile } from "@/lib/file-parser";
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
+import { isLocalRequest } from "@/lib/local-guard";
 import {
   getScienceSwarmProjectRoot,
   getScienceSwarmWorkspaceRoot,
@@ -6626,6 +6627,10 @@ export async function handleUnifiedChatPost(
   request: Request,
   options: HandleUnifiedChatPostOptions = {},
 ) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const {

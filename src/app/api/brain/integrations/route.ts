@@ -6,6 +6,7 @@
  */
 
 import { getIntegrationStatus, syncAll } from "@/lib/integrations";
+import { isLocalRequest } from "@/lib/local-guard";
 import { getBrainConfig, isErrorResponse } from "../_shared";
 
 export async function GET() {
@@ -26,6 +27,10 @@ interface PostBody {
 }
 
 export async function POST(request: Request) {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: PostBody;
   try {
     body = (await request.json()) as PostBody;
