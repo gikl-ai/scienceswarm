@@ -39,7 +39,6 @@ function detectPythonPath(): string {
 import {
   resolveAgentConfig,
   agentHealthCheck,
-  sendAgentMessage as sendToAgent,
 } from "@/lib/agent-client";
 import { ensureBrainStoreReady, getBrainStore } from "@/brain/store";
 import {
@@ -61,14 +60,12 @@ import {
 import { buildScienceSwarmPromptContextText } from "@/lib/scienceswarm-prompt-config";
 import { type ArtifactProvenanceEntry } from "@/lib/artifact-provenance";
 import { getTargetFolder } from "@/lib/workspace-manager";
-import {
-  startConversation,
-  sendPendingMessage,
-  getEvents,
-  getConversation,
-  extractAgentMessageText,
-  OPENHANDS_URL,
-} from "@/lib/openhands";
+// Only OPENHANDS_URL survives the chat-only-through-OpenClaw rewrite: it is
+// used by the health endpoint to report OpenHands availability for UI
+// surfaces that want to show whether the OpenHands sidecar is up. OpenClaw
+// itself may still talk to OpenHands internally through @/lib/openhands,
+// but the chat route no longer dispatches to OpenHands directly.
+import { OPENHANDS_URL } from "@/lib/openhands";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { enforceCloudPrivacy } from "@/lib/privacy-policy";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
@@ -6858,104 +6855,48 @@ export async function handleUnifiedChatPost(
       return localProviderPromise;
     };
 
-    if (chatMode !== "openclaw-tools" && requestedBackend === "direct") {
-      const localProvider = await getLocalProvider();
-      if (localProvider.configured) {
-        if (localProvider.response) {
-          return localProvider.response;
-        }
-        const privacyError = await maybeEnforceCloudPrivacyForLocalProvider(
-          localProvider,
-          validatedProjectId,
-        );
-        if (privacyError) {
-          return privacyError;
-        }
-
-        return await streamLocalDirectResponse({
-          messages,
-          files: mergedFiles,
-          projectId: validatedProjectId,
-          referenceNotes,
-          chatMode,
-        });
-      }
-    }
-
+    // Chat routes exclusively through OpenClaw. OpenClaw itself may delegate
+    // to OpenHands, Ollama, or any other runtime internally; at this boundary
+    // the only acceptable state is "OpenClaw is the configured agent and is
+    // connected." If either condition fails we return 503 with a clear
+    // "Start OpenClaw" message. No silent fallback to direct local streaming
+    // or to OpenHands — the previous fallbacks surfaced hallucinated tool
+    // calls in the UI because the fallback models ran without the tooling
+    // the UI expected.
     const selectedAgent = await getConfiguredAgentRuntimeStatus(
       agentConfig,
       strictLocalOnly,
     );
 
-    if (chatMode === "openclaw-tools" && selectedAgent.type !== "openclaw") {
+    if (
+      selectedAgent.type !== "openclaw"
+      || selectedAgent.status !== "connected"
+    ) {
+      const privacyError = await getPrivacyError();
+      if (privacyError) {
+        return privacyError;
+      }
       return Response.json(
         {
-          error:
-            "Run with OpenClaw tools requires OpenClaw to be the configured chat runtime.",
-          backend: "none",
+          error: "Chat requires OpenClaw. Start OpenClaw in Settings.",
+          backend: "openclaw",
           mode: chatMode,
           strictLocalOnly,
         },
         {
           status: 503,
           headers: {
-            "X-Chat-Backend": "none",
+            "X-Chat-Backend": "openclaw",
             "X-Chat-Mode": chatMode,
           },
         },
       );
     }
 
-    if (selectedAgent.type === "openclaw") {
-      if (selectedAgent.status !== "connected") {
-        if (chatMode !== "openclaw-tools") {
-          const localProvider = await getLocalProvider();
-          if (localProvider.configured) {
-            if (localProvider.response) {
-              return localProvider.response;
-            }
-            const privacyError = await maybeEnforceCloudPrivacyForLocalProvider(
-              localProvider,
-              validatedProjectId,
-            );
-            if (privacyError) {
-              return privacyError;
-            }
-
-            return await streamLocalDirectResponse({
-              messages,
-              files: mergedFiles,
-              projectId: validatedProjectId,
-              referenceNotes,
-              chatMode,
-            });
-          }
-        }
-
-        const privacyError = await getPrivacyError();
-        if (privacyError) {
-          return privacyError;
-        }
-
-        return Response.json(
-          {
-            error:
-              chatMode === "openclaw-tools"
-                ? "OpenClaw tools mode is selected but OpenClaw is not reachable. Start OpenClaw in Settings before chatting."
-                : "OpenClaw is selected but not reachable, and no local chat fallback is ready. Start OpenClaw in Settings or configure local chat before chatting.",
-            backend: "openclaw",
-            mode: chatMode,
-            strictLocalOnly,
-          },
-          {
-            status: 503,
-            headers: {
-              "X-Chat-Backend": "openclaw",
-              "X-Chat-Mode": chatMode,
-            },
-          },
-        );
-      }
+    {
+      // Preserve the `selectedAgent.type === "openclaw"` block body without
+      // reindenting every line below. The outer precondition above has
+      // already enforced type === "openclaw" && status === "connected".
 
       if (validatedProjectId && !shouldPreMaterializeProjectWorkspace) {
         await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
@@ -7308,215 +7249,6 @@ export async function handleUnifiedChatPost(
         {
           headers: {
             "X-Chat-Backend": "openclaw",
-            "X-Chat-Mode": chatMode,
-          },
-        },
-      );
-    }
-
-    const localProvider = await getLocalProvider();
-    if (localProvider.configured) {
-      if (localProvider.response) {
-        return localProvider.response;
-      }
-      const privacyError = await maybeEnforceCloudPrivacyForLocalProvider(
-        localProvider,
-        validatedProjectId,
-      );
-      if (privacyError) {
-        return privacyError;
-      }
-
-      return await streamLocalDirectResponse({
-        messages,
-        files: mergedFiles,
-        projectId: validatedProjectId,
-        referenceNotes,
-        chatMode,
-      });
-    }
-
-    const privacyError = await getPrivacyError();
-    if (privacyError) {
-      return privacyError;
-    }
-
-    if (strictLocalOnly) {
-      return localProviderError(
-        "Strict local-only mode is enabled. Set LLM_PROVIDER=local and choose a local Ollama model in Settings before chatting.",
-        chatMode,
-      );
-    }
-
-    const workspaceFileContext = await buildWorkspaceFileContext(
-      mergedFiles,
-      validatedProjectId,
-      referenceNotes,
-    );
-    if (workspaceFileContext) {
-      try {
-        return await streamDirectResponse(
-          withWorkspaceFileContext(messages, workspaceFileContext),
-          workspaceFileContext.files,
-          chatMode,
-          validatedProjectId,
-        );
-      } catch (err) {
-        console.warn(
-          "Direct file-context path unavailable, trying agents:",
-          err instanceof Error ? err.message : err,
-        );
-      }
-    }
-
-    const augmentedMessage = await prependScienceSwarmProjectPrompt({
-      message,
-      projectId: validatedProjectId,
-      backend: "agent",
-    });
-    const agentMessage = appendWorkspaceContextToUserMessage(
-      augmentedMessage,
-      workspaceFileContext,
-    );
-
-    // Try the configured agent (OpenClaw, NanoClaw, Hermes, etc.) over HTTP
-    if (agentConfig && agentConfig.type !== "openclaw") {
-      try {
-        if (selectedAgent.status === "connected") {
-          const result = await sendToAgent(
-            agentMessage,
-            { conversationId: conversationId ?? undefined },
-            agentConfig,
-          );
-          return Response.json(
-            {
-              response: result.response,
-              conversationId: result.conversationId,
-              backend: agentConfig.type,
-              mode: chatMode,
-            },
-            {
-              headers: {
-                "X-Chat-Backend": agentConfig.type,
-                "X-Chat-Mode": chatMode,
-              },
-            },
-          );
-        }
-      } catch (err) {
-        // User explicitly configured an agent but it's unreachable — warn before fallthrough
-        console.warn(
-          `Configured agent "${agentConfig.type}" unavailable, falling through to LLM backends:`,
-          err instanceof Error ? err.message : err,
-        );
-      }
-    }
-
-    // OpenHands path (code execution, file access, GitHub)
-    try {
-      const ohHealth = await fetch(`${OPENHANDS_URL}/`, {
-        signal: AbortSignal.timeout(3000),
-      });
-      if (ohHealth.ok) {
-        let convId = conversationId;
-
-        if (!convId) {
-          // Start new conversation
-          const task = await startConversation({
-            message: agentMessage,
-            model: "gpt-5.4",
-          });
-
-          // Poll until ready
-          let status = task;
-          for (let i = 0; i < 30; i++) {
-            if (status.status === "READY" || status.status === "ERROR") break;
-            await new Promise((r) => setTimeout(r, 2000));
-            const tasks = await fetch(
-              `${OPENHANDS_URL}/api/v1/app-conversations/start-tasks?ids=${task.id}`,
-            ).then((r) => r.json());
-            status = tasks[0];
-          }
-
-          if (status.status === "ERROR") {
-            throw new Error(status.detail || "OpenHands agent failed to start");
-          }
-          convId = status.app_conversation_id;
-        } else {
-          // Send to existing conversation
-          await sendPendingMessage(convId, agentMessage);
-        }
-
-        // Poll for agent response
-        let agentResponse = "";
-        for (let attempt = 0; attempt < 30; attempt++) {
-          await new Promise((r) => setTimeout(r, 2000));
-
-          const events = await getEvents(convId, 10);
-          const agentMsgs = events
-            .map(extractAgentMessageText)
-            .filter((m): m is string => m !== null);
-          if (agentMsgs.length > 0) {
-            agentResponse = agentMsgs.join("\n\n");
-          }
-
-          const conv = await getConversation(convId);
-          if (
-            ["idle", "finished", "error", "stuck"].includes(
-              conv.execution_status,
-            )
-          ) {
-            break;
-          }
-        }
-
-        return Response.json(
-          {
-            response:
-              agentResponse || "Agent completed but produced no output.",
-            conversationId: convId,
-            backend: "openhands",
-            mode: chatMode,
-          },
-          {
-            headers: {
-              "X-Chat-Backend": "openhands",
-              "X-Chat-Mode": chatMode,
-            },
-          },
-        );
-      }
-    } catch (err) {
-      console.warn(
-        "OpenHands unavailable:",
-        err instanceof Error ? err.message : err,
-      );
-    }
-
-    // Both agent paths failed — use message-handler as last resort.
-    try {
-      return await streamDirectResponse(
-        withWorkspaceFileContext(messages, workspaceFileContext),
-        workspaceFileContext?.files ?? [],
-        chatMode,
-        validatedProjectId,
-      );
-    } catch (err) {
-      console.error(
-        "All backends failed:",
-        err instanceof Error ? err.message : err,
-      );
-      return Response.json(
-        {
-          error:
-            "Could not reach any AI backend. Check that OpenClaw or OpenHands is running (./start.sh).",
-          backend: "none",
-          mode: chatMode,
-        },
-        {
-          status: 503,
-          headers: {
-            "X-Chat-Backend": "none",
             "X-Chat-Mode": chatMode,
           },
         },
