@@ -1618,7 +1618,7 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).toContain("gbrain:chisq");
   });
 
-  it("injects second-brain context before sending to selected OpenClaw", async () => {
+  it("sends the raw request to selected OpenClaw when no SCIENCESWARM prompt file is present", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     resolveAgentConfig.mockReturnValue({
       type: "openclaw",
@@ -1631,9 +1631,6 @@ describe("POST /api/chat/unified", () => {
       agents: 1,
       sessions: 2,
     });
-    injectBrainContextIntoUserMessage.mockResolvedValueOnce(
-      "brain inventory\n\n## User Request\nEnumerate papers",
-    );
     sendOpenClawMessage.mockResolvedValueOnce("OpenClaw answer");
 
     const request = new Request("http://localhost/api/chat/unified", {
@@ -1649,13 +1646,8 @@ describe("POST /api/chat/unified", () => {
     const response = await POST(request);
 
     expect(response.status).toBe(200);
-    expect(injectBrainContextIntoUserMessage).toHaveBeenCalledWith(
-      "Enumerate papers",
-      "alpha-project",
-    );
     const [[openClawMessage, openClawOptions]] = sendOpenClawMessage.mock.calls;
-    expect(openClawMessage).toContain("brain inventory");
-    expect(openClawMessage).toContain("## User Request\nEnumerate papers");
+    expect(openClawMessage).toContain("\nEnumerate papers\n");
     expect(openClawMessage).toContain(
       `[Workspace: ${projectRoot} — use ABSOLUTE paths for all read/write/exec operations]`,
     );
@@ -1713,8 +1705,9 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
     expect(openClawMessage).toContain("Recent web chat context for continuity");
+    expect(openClawMessage).not.toContain("Assistant:\nCritique: tighten uncertainty treatment.");
     expect(openClawMessage).toContain(
-      "Assistant:\nCritique: tighten uncertainty treatment.",
+      "User:\nPlease audit the uploaded Hubble 1929 paper and propose a revision plan.",
     );
     expect(openClawMessage).toContain("Current user request:");
     expect(openClawMessage).toContain(
@@ -1817,12 +1810,12 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
     expect(openClawMessage).toContain(
-      "[Currently viewing file: notes/example.md]",
+      '<scienceswarm_current_file_context path="notes/example.md">',
     );
     expect(openClawMessage).toContain("` ` `ts");
     expect(openClawMessage).toContain("` ` `\nAfter");
     expect(openClawMessage).not.toContain("```ts\nconsole.log('hi')\n```");
-    expect(openClawMessage.match(/```/g) ?? []).toHaveLength(2);
+    expect(openClawMessage).toContain("<file_content>");
   });
 
   it("sends active stale task context to selected OpenClaw for next-action questions", async () => {
@@ -1876,7 +1869,7 @@ describe("POST /api/chat/unified", () => {
     });
     const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
     expect(openClawMessage).toContain(
-      "[Currently viewing file: wiki/tasks/2026-04-18-topic-neutrophil-netosis-timing-assay.md]",
+      '<scienceswarm_current_file_context path="wiki/tasks/2026-04-18-topic-neutrophil-netosis-timing-assay.md">',
     );
     expect(openClawMessage).toContain(
       "Research task: quantify whether IL-8 priming",
@@ -6316,7 +6309,7 @@ describe("POST /api/chat/unified", () => {
       messages: Array<{ role: string; content: string }>;
     };
     expect(JSON.stringify(streamArg.messages)).toContain(
-      "The user is currently viewing the file",
+      "<scienceswarm_current_file_context",
     );
     expect(JSON.stringify(streamArg.messages)).toContain(
       "Research task: quantify whether IL-8 priming",
@@ -6431,13 +6424,10 @@ describe("POST /api/chat/unified", () => {
     expect(sendOpenClawMessage).not.toHaveBeenCalled();
   });
 
-  it("injects second-brain context before sending to non-OpenClaw agents", async () => {
+  it("sends the raw request to non-OpenClaw agents when no SCIENCESWARM prompt file is present", async () => {
     const agentCfg = { type: "nanoclaw", url: "http://localhost:19002" };
     resolveAgentConfig.mockReturnValue(agentCfg);
     agentHealthCheck.mockResolvedValueOnce({ status: "connected" });
-    injectBrainContextIntoUserMessage.mockReturnValueOnce(
-      "brain context\n\n## User Request\nHello",
-    );
     sendAgentMessage.mockResolvedValueOnce({
       response: "Agent reply",
       conversationId: undefined,
@@ -6451,14 +6441,10 @@ describe("POST /api/chat/unified", () => {
 
     const response = await POST(request);
     expect(response.status).toBe(200);
-    expect(injectBrainContextIntoUserMessage).toHaveBeenCalledWith(
-      "Hello",
-      "alpha-project",
-    );
     const body = await response.json();
     expect(body.response).toBe("Agent reply");
     expect(sendAgentMessage).toHaveBeenCalledWith(
-      "brain context\n\n## User Request\nHello",
+      "Hello",
       expect.objectContaining({ conversationId: undefined }),
       agentCfg,
     );
@@ -6507,16 +6493,13 @@ describe("POST /api/chat/unified", () => {
     expect(sendAgentMessage).not.toHaveBeenCalled();
     expect(streamChat).toHaveBeenCalledWith(
       expect.objectContaining({
+        backend: "direct",
         channel: "web",
         files: [{ name: "paper_v16.pdf", size: "584.8 KB" }],
         messages: expect.arrayContaining([
           expect.objectContaining({
-            role: "system",
-            content: expect.stringContaining("untrusted user-provided data"),
-          }),
-          expect.objectContaining({
             role: "user",
-            content: expect.stringContaining("paper_v16.pdf"),
+            content: expect.stringContaining("<scienceswarm_workspace_file_context>"),
           }),
           expect.objectContaining({
             role: "user",
