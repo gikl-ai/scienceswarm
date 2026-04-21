@@ -710,6 +710,86 @@ describe("useUnifiedChat persistence", () => {
     expect((capturedBodies[0]?.messages as unknown[]).length).toBeLessThanOrEqual(13);
   });
 
+  it("preserves full history and uploaded files for non-local direct fallback chats", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: null,
+        messages: Array.from({ length: 20 }, (_, index) => ({
+          id: `m-${index}`,
+          role: index % 2 === 0 ? "user" : "assistant",
+          content: `Historical message ${index}`,
+          timestamp: new Date(2026, 0, 1, 0, index).toISOString(),
+        })),
+      }),
+    );
+
+    const capturedBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          openclaw: "disconnected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+          llmProvider: "openai",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return createSseResponse([{ text: "ok" }], "direct");
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("direct");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add valid gbrain context" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(capturedBodies).toHaveLength(1);
+    });
+
+    const messages = capturedBodies[0]?.messages as Array<{ role: string; content: string }>;
+    expect(messages).toHaveLength(21);
+    expect(messages[0]).toEqual({ role: "user", content: "Historical message 0" });
+    expect(messages.at(-1)).toEqual({ role: "user", content: "Hello from the browser" });
+    expect(capturedBodies[0]?.files).toEqual([
+      expect.objectContaining({
+        workspacePath: "gbrain:wiki/papers/example.md",
+        brainSlug: "wiki/papers/example.md",
+      }),
+    ]);
+  });
+
   it("drops oversized recent history entries from local direct requests once the char cap is exceeded", async () => {
     window.localStorage.setItem(
       "scienceswarm.chat.alpha-project",

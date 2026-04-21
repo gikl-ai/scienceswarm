@@ -1135,6 +1135,7 @@ export function useUnifiedChat(
   const workspaceWatchAvailableRef = useRef(false);
   const projectVersionRef = useRef(0);
   const initialBackendSetRef = useRef(false);
+  const localProviderActiveRef = useRef(false);
   const userBackendOverrideVersionRef = useRef(0);
   const sendQueueRef = useRef<QueuedSend[]>([]);
   const sendQueueProcessingRef = useRef(false);
@@ -1639,16 +1640,22 @@ export function useUnifiedChat(
         .filter((m) => m.content !== QUEUED_ASSISTANT_CONTENT)
         .filter((m) => !(m.role === "assistant" && m.content.trim().length === 0))
         .map((m) => ({ role: m.role, content: m.content }));
-      const chatHistory = isLocalDirectContext(context)
+      const useLocalDirectOptimizations =
+        localProviderActiveRef.current && isLocalDirectContext(context);
+      const chatHistory = useLocalDirectOptimizations
         ? trimLocalChatHistory(baseHistory)
         : baseHistory;
-      const requestFiles = selectExplicitRequestFiles(
-        content,
-        liveUploadedFilesRef.current,
-      );
-      const requestActiveFile = shouldAttachActiveFileContext(content, activeFile)
-        ? activeFile
-        : undefined;
+      const requestFiles = useLocalDirectOptimizations
+        ? selectExplicitRequestFiles(
+          content,
+          liveUploadedFilesRef.current,
+        )
+        : liveUploadedFilesRef.current;
+      const requestActiveFile = useLocalDirectOptimizations
+        ? shouldAttachActiveFileContext(content, activeFile)
+          ? activeFile
+          : undefined
+        : activeFile;
 
       if (!chatHistory.some((message) => message.role === "user" && message.content === content)) {
         chatHistory.push({ role: "user", content });
@@ -1842,6 +1849,7 @@ export function useUnifiedChat(
         const openClawSelected = agentType === "openclaw";
         const openhandsOk = data.openhands === "connected";
         const localSelected = data.llmProvider === "local";
+        localProviderActiveRef.current = localSelected;
 
         // Also check legacy fields for backward compat with older servers
         const legacyOpenClawOk = data.openclaw === "connected";
@@ -1868,6 +1876,7 @@ export function useUnifiedChat(
 
         setOpenClawConnected(openClawReady);
       } catch {
+        localProviderActiveRef.current = false;
         setOpenClawConnected(false);
       }
     }
