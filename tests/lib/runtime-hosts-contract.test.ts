@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   BUILT_IN_RUNTIME_HOST_PROFILES,
   RuntimeHostCapabilityUnsupported,
+  createRuntimeHostRegistry,
   hasRuntimeHostCapability,
   listRuntimeHostProfiles,
   mapRuntimeHostErrorToApiError,
@@ -100,6 +101,22 @@ describe("runtime host contracts and registry", () => {
     });
   });
 
+  it("keeps custom registry registration isolated from the default registry", () => {
+    const registry = createRuntimeHostRegistry([]);
+
+    expect(registry.list()).toEqual([]);
+    registry.register(requireRuntimeHostProfile("openclaw"));
+
+    expect(registry.list().map((profile) => profile.id)).toEqual(["openclaw"]);
+    expect(listRuntimeHostProfiles().map((profile) => profile.id)).toEqual([
+      "openclaw",
+      "claude-code",
+      "codex",
+      "gemini-cli",
+      "openhands",
+    ]);
+  });
+
   it("lets fake hosts satisfy the ResearchRuntimeHost contract", async () => {
     class FakeHost implements ResearchRuntimeHost {
       profile() {
@@ -190,7 +207,7 @@ describe("runtime host contracts and registry", () => {
     );
 
     expect(apiError).toEqual({
-      status: 409,
+      status: 422,
       body: {
         error: "This runtime does not support the requested action.",
         code: "RUNTIME_HOST_CAPABILITY_UNSUPPORTED",
@@ -199,4 +216,3 @@ describe("runtime host contracts and registry", () => {
     });
   });
 });
-

@@ -310,28 +310,34 @@ export class RuntimeHostRegistry {
   }
 }
 
-export const runtimeHostRegistry = new RuntimeHostRegistry();
+export function createRuntimeHostRegistry(
+  profiles: readonly RuntimeHostProfile[] = BUILT_IN_PROFILES,
+): RuntimeHostRegistry {
+  return new RuntimeHostRegistry(profiles);
+}
+
+const defaultRuntimeHostRegistry = createRuntimeHostRegistry();
 
 export function listRuntimeHostProfiles(): RuntimeHostProfile[] {
-  return runtimeHostRegistry.list();
+  return defaultRuntimeHostRegistry.list();
 }
 
 export function getRuntimeHostProfile(
   hostId: RuntimeHostId | string,
 ): RuntimeHostProfile | null {
-  return runtimeHostRegistry.get(hostId);
+  return defaultRuntimeHostRegistry.get(hostId);
 }
 
 export function requireRuntimeHostProfile(
   hostId: RuntimeHostId | string,
 ): RuntimeHostProfile {
-  return runtimeHostRegistry.require(hostId);
+  return defaultRuntimeHostRegistry.require(hostId);
 }
 
 export function resolveRuntimeHostRecord(
   hostId: RuntimeHostId | string,
 ): RuntimeHostHistoricalRecord {
-  return runtimeHostRegistry.resolveHistorical(hostId);
+  return defaultRuntimeHostRegistry.resolveHistorical(hostId);
 }
 
 export function isRuntimeHostId(value: string): value is RuntimeHostId {

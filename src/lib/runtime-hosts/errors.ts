@@ -56,7 +56,7 @@ export class RuntimeHostCapabilityUnsupported extends RuntimeHostError {
   }) {
     super({
       code: "RUNTIME_HOST_CAPABILITY_UNSUPPORTED",
-      status: 409,
+      status: 422,
       message: `Runtime host ${input.hostId} does not support ${input.capability}.`,
       userMessage: "This runtime does not support the requested action.",
       recoverable: true,
@@ -137,4 +137,3 @@ export function mapRuntimeHostErrorToApiError(error: unknown): RuntimeApiError {
     },
   };
 }
-
