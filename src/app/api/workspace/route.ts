@@ -1206,6 +1206,7 @@ const RAW_RENDERABLE_EXTENSIONS = new Set([
   "jpeg",
   "gif",
   "webp",
+  "avif",
   "svg",
   "html",
   "htm",
@@ -1217,6 +1218,9 @@ const RAW_RENDERABLE_EXTENSIONS = new Set([
   "wav",
   "ogg",
   "m4a",
+  "flac",
+  "opus",
+  "aac",
 ]);
 const SANDBOXED_PREVIEW_EXTENSIONS = new Set(["html", "htm", "svg"]);
 
@@ -1227,6 +1231,7 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
+  avif: "image/avif",
   svg: "image/svg+xml",
   html: "text/html; charset=utf-8",
   htm: "text/html; charset=utf-8",
@@ -1238,6 +1243,9 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   wav: "audio/wav",
   ogg: "audio/ogg",
   m4a: "audio/mp4",
+  flac: "audio/flac",
+  opus: "audio/ogg",
+  aac: "audio/aac",
 };
 
 const HTML_PREVIEW_SHIM_MARKER = "data-scienceswarm-html-preview-shim";

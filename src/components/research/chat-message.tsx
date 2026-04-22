@@ -107,6 +107,12 @@ function getAudioMimeType(ext: string): string | undefined {
       return "audio/ogg";
     case "m4a":
       return "audio/mp4";
+    case "flac":
+      return "audio/flac";
+    case "opus":
+      return "audio/ogg";
+    case "aac":
+      return "audio/aac";
     default:
       return undefined;
   }
@@ -627,7 +633,7 @@ function renderContent(content: string, projectId: string) {
       const workspaceFilePath = normalizeMediaWorkspacePath(filePath);
       const ext = workspaceFilePath.split(".").pop()?.toLowerCase() || "";
       const src = `/api/workspace?action=raw&file=${encodeURIComponent(workspaceFilePath)}&projectId=${encodeURIComponent(projectId)}`;
-      if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) {
+      if (["png", "jpg", "jpeg", "gif", "webp", "avif"].includes(ext)) {
         return (
           <div key={i} className="my-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -644,6 +650,18 @@ function renderContent(content: string, projectId: string) {
               title={filePath}
               className="w-full min-w-0 h-[80vh] min-h-[700px] rounded-lg border border-border bg-white"
               sandbox="allow-scripts"
+            />
+            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+          </div>
+        );
+      }
+      if (ext === "pdf") {
+        return (
+          <div key={i} className="my-2">
+            <iframe
+              src={src}
+              title={filePath}
+              className="w-full min-w-0 h-[80vh] min-h-[600px] rounded-lg border border-border bg-white"
             />
             <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
           </div>
@@ -669,7 +687,7 @@ function renderContent(content: string, projectId: string) {
           </div>
         );
       }
-      if (["mp3", "wav", "ogg", "m4a"].includes(ext)) {
+      if (["mp3", "wav", "ogg", "m4a", "flac", "opus", "aac"].includes(ext)) {
         return (
           <div key={i} className="my-2">
             <audio controls className="w-full">
