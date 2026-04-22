@@ -213,6 +213,12 @@ export function SchedulerPanel({
       setJobName(defaultJobName);
       setJobScript(defaultScript);
       setJobOutputPath(defaultOutputPath);
+      setJobType(defaultJobType);
+      setJobCron(defaultSchedule);
+      setJobEvent("experiment-complete");
+      setJobRunAt("");
+      setJobActionType(defaultActionType);
+      setJobPipelineTemplate(null);
       setView("list");
       await fetchData();
     } finally {
@@ -556,7 +562,11 @@ export function SchedulerPanel({
                 {(["run-script", "transform-data", "generate-chart", "ai-analysis", "pipeline"] as const).map((at) => (
                   <button
                     key={at}
-                    onClick={() => setJobActionType(at)}
+                    onClick={() => {
+                      if (at === jobActionType) return;
+                      setJobActionType(at);
+                      setJobScript(at === "run-script" ? defaultScript : "");
+                    }}
                     className={`text-xs font-medium px-3 py-1.5 rounded-lg border-2 transition-colors ${
                       jobActionType === at
                         ? "border-accent bg-accent/5 text-accent"

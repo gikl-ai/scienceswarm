@@ -510,6 +510,7 @@ describe("GET /api/settings/openclaw", () => {
     installExecFileMock();
 
     const configSets: string[][] = [];
+    const openClawCalls: string[][] = [];
     mockExecFile.mockImplementation((file: string, maybeArgs: unknown, maybeOptions: unknown, maybeCb: unknown) => {
       const args = Array.isArray(maybeArgs) ? maybeArgs as string[] : [];
       const cb =
@@ -525,6 +526,10 @@ describe("GET /api/settings/openclaw", () => {
         return;
       }
 
+      if (file === "openclaw") {
+        openClawCalls.push(args);
+      }
+
       if (file === "openclaw" && args[0] === "config" && args[1] === "set") {
         configSets.push(args);
       }
@@ -538,6 +543,7 @@ describe("GET /api/settings/openclaw", () => {
 
       expect(response.status).toBe(200);
       expect(configSets).toContainEqual(["config", "set", "gateway.port", "23456"]);
+      expect(openClawCalls).toContainEqual(["config", "validate"]);
     } finally {
       if (prevPort === undefined) {
         delete process.env.OPENCLAW_PORT;

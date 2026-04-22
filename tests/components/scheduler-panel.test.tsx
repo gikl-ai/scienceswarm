@@ -83,6 +83,12 @@ describe("SchedulerPanel", () => {
         },
       },
     });
+
+    await screen.findByText("No scheduled jobs or pipelines yet");
+    fireEvent.click(screen.getByRole("button", { name: "+ New Job" }));
+    expect(screen.getByDisplayValue("Nightly project rerun")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("0 0 * * *")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("results/nightly-rerun-result.md")).toBeInTheDocument();
   });
 
   it("shows what scheduled jobs will run and where outputs should appear", async () => {
@@ -124,5 +130,23 @@ describe("SchedulerPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("results/nightly-rerun-result.md")).toBeInTheDocument();
     expect(screen.getByText("0 0 * * *")).toBeInTheDocument();
+  });
+
+  it("clears hidden script state when switching away from run-script actions", async () => {
+    fetchMock.mockResolvedValue({
+      json: async () => ({ jobs: [], pipelines: [] }),
+    });
+
+    render(<SchedulerPanel projectId="project-alpha" />);
+
+    await screen.findByText("No scheduled jobs or pipelines yet");
+    fireEvent.click(screen.getByRole("button", { name: "+ New Job" }));
+    fireEvent.change(screen.getByPlaceholderText(/python experiments/i), {
+      target: { value: "python stale_script.py" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ai-analysis" }));
+    expect(screen.queryByDisplayValue("python stale_script.py")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "run-script" }));
+    expect(screen.queryByDisplayValue("python stale_script.py")).not.toBeInTheDocument();
   });
 });

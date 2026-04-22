@@ -620,6 +620,55 @@ describe("GET /api/workspace?action=tree", () => {
     expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
   });
 
+  it("reports the newest gbrain timestamp in merged watch state", async () => {
+    const projectId = "test-project";
+    const projectDir = path.join(ROOT, "projects", projectId);
+    mkdirSync(path.join(projectDir, "data"), { recursive: true });
+    writeFileSync(path.join(projectDir, "data", "observations.csv"), "condition,accuracy\nbaseline,0.77\n");
+    const sha = "1".repeat(64);
+    const uploadedAt = "2026-04-24T10:00:00.000Z";
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "note") return [];
+      return [
+        {
+          path: "newer-result-page",
+          title: "Newer Result",
+          type: "note",
+          content: "# Newer Result",
+          frontmatter: {
+            type: "note",
+            project: projectId,
+            uploaded_at: uploadedAt,
+            file_refs: [
+              {
+                role: "artifact",
+                fileObjectId: `sha256:${sha}`,
+                sha256: sha,
+                filename: "results/newer-result.md",
+                mime: "text/markdown",
+                sizeBytes: 789,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+
+    const { GET } = await importRoute();
+    const res = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { totalFiles: number; lastModified: string | null };
+    expect(body.totalFiles).toBe(2);
+    expect(body.lastModified).toBe(uploadedAt);
+  });
+
   it("deduplicates gbrain file refs by keeping the freshest artifact for a workspace path", async () => {
     const projectId = "test-project";
     const olderSha = "e".repeat(64);

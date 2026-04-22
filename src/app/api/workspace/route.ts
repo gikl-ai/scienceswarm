@@ -280,13 +280,18 @@ interface GbrainWorkspaceFileEntry {
   updatedAt: string | null;
 }
 
-function gbrainWorkspaceEntryTimestamp(entry: GbrainWorkspaceFileEntry): number {
+function gbrainWorkspaceEntryTimestampValue(entry: GbrainWorkspaceFileEntry): string | null {
   const rawTimestamp =
     entry.pageFrontmatter.uploaded_at ??
     entry.updatedAt ??
     entry.pageFrontmatter.updated_at ??
     entry.pageFrontmatter.created_at;
-  if (typeof rawTimestamp !== "string") return Number.NaN;
+  return typeof rawTimestamp === "string" ? rawTimestamp : null;
+}
+
+function gbrainWorkspaceEntryTimestamp(entry: GbrainWorkspaceFileEntry): number {
+  const rawTimestamp = gbrainWorkspaceEntryTimestampValue(entry);
+  if (!rawTimestamp) return Number.NaN;
   return Date.parse(rawTimestamp);
 }
 
@@ -415,7 +420,9 @@ async function buildGbrainWorkspaceView(
     watch: {
       revision: hash.digest("hex"),
       totalFiles: entries.length,
-      lastModified: null,
+      lastModified: newestIsoTimestamp(
+        entries.map(gbrainWorkspaceEntryTimestampValue),
+      ),
     },
     entries,
   };
@@ -664,8 +671,24 @@ function combineWorkspaceWatchState(params: {
   return {
     revision: hash.digest("hex"),
     totalFiles: params.totalFiles,
-    lastModified: params.diskWatch.lastModified ?? params.gbrainWatch.lastModified,
+    lastModified: newestIsoTimestamp([
+      params.diskWatch.lastModified,
+      params.gbrainWatch.lastModified,
+    ]),
   };
+}
+
+function newestIsoTimestamp(values: Array<string | null>): string | null {
+  let newest: { value: string; time: number } | null = null;
+  for (const value of values) {
+    if (!value) continue;
+    const time = Date.parse(value);
+    if (Number.isNaN(time)) continue;
+    if (!newest || time > newest.time) {
+      newest = { value, time };
+    }
+  }
+  return newest?.value ?? null;
 }
 
 function inferImportedFileType(filename: string): string {
@@ -1151,17 +1174,18 @@ async function handleWatch(projectId: string | null, since: string | null) {
     const gbrainView = await buildGbrainWorkspaceView(projectId);
     const root = resolveWorkspaceRoot(projectId);
     const refs = repairFlatScientistWorkspaceFiles(root, readRefs(root));
-    const legacyTree = buildTree(root, refs, root);
     const legacyWatch = computeWorkspaceWatchState(root);
-    const watch = gbrainView
-      ? combineWorkspaceWatchState({
+    const watch = (() => {
+      if (!gbrainView) return legacyWatch;
+      const legacyTree = buildTree(root, refs, root);
+      return combineWorkspaceWatchState({
           diskWatch: legacyWatch,
           gbrainWatch: gbrainView.watch,
           totalFiles: countFilesInTree(
             mergeWorkspaceTreeNodes(legacyTree, gbrainView.tree),
           ),
-        })
-      : legacyWatch;
+        });
+    })();
     return Response.json({
       revision: watch.revision,
       changed: typeof since === "string" && since.length > 0 ? since !== watch.revision : false,

@@ -253,7 +253,8 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json({ error: "Configure failed" }, { status: 500 });
       }
 
-      const validateResult = await runOpenClaw(configureSteps[2], { timeoutMs: 5000 });
+      const validateStep = configureSteps[configureSteps.length - 1];
+      const validateResult = await runOpenClaw(validateStep, { timeoutMs: 5000 });
       if (!validateResult.ok) {
         return Response.json({ error: "Configure failed" }, { status: 500 });
       }
