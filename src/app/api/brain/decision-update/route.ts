@@ -31,6 +31,31 @@ function dedupeSourceRefs(sourceRefs: SourceRef[]): SourceRef[] {
   return deduped;
 }
 
+function resolveBrainRootPath(root: string, relativePath: string): string {
+  const pathSegments = relativePath.split(/[\\/]+/);
+  const normalizedRelativePath = path.normalize(relativePath);
+
+  if (
+    pathSegments.includes("..")
+    || path.isAbsolute(relativePath)
+    || path.isAbsolute(normalizedRelativePath)
+    || normalizedRelativePath === ".."
+    || normalizedRelativePath.startsWith(`..${path.sep}`)
+  ) {
+    throw new Error("Decision path must stay inside the configured brain root.");
+  }
+
+  const resolvedRoot = path.resolve(root);
+  const resolvedPath = path.resolve(resolvedRoot, normalizedRelativePath);
+  const relativeToRoot = path.relative(resolvedRoot, resolvedPath);
+
+  if (relativeToRoot === "" || relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot)) {
+    throw new Error("Decision path must stay inside the configured brain root.");
+  }
+
+  return resolvedPath;
+}
+
 export async function POST(request: Request): Promise<Response> {
   if (!(await isLocalRequest(request))) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -73,7 +98,12 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Could not resolve decision path" }, { status: 400 });
   }
 
-  const absolutePath = path.join(configOrError.root, decisionPath);
+  let absolutePath: string;
+  try {
+    absolutePath = resolveBrainRootPath(configOrError.root, decisionPath);
+  } catch {
+    return Response.json({ error: "Could not resolve decision path" }, { status: 400 });
+  }
 
   try {
     const existing = await readFile(absolutePath, "utf-8");
@@ -99,7 +129,7 @@ export async function POST(request: Request): Promise<Response> {
     };
 
     const bodyParts = [parsed.content.trimEnd()];
-    if (!/\n## Updates\s*$/m.test(parsed.content) && !parsed.content.includes("\n## Updates\n")) {
+    if (!/^## Updates\s*$/m.test(parsed.content)) {
       bodyParts.push("", "## Updates");
     }
 

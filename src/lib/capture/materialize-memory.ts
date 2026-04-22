@@ -307,9 +307,16 @@ function buildCitations(capture: PersistedRawCapture): string[] {
   );
 
   // Any external source refs (papers, URLs, datasets) get their own
-  // citation line so each fact can be traced back to its origin
-  // independent of the user attribution above.
-  citations.push(...buildSourceRefCitationLines(capture.sourceRefs));
+  // citation line so each fact can be traced back to its origin. Artifact
+  // refs are also useful for workspace provenance; conversation/capture ids
+  // stay in frontmatter to avoid noisy permanent body citations.
+  citations.push(
+    ...buildSourceRefCitationLines(
+      capture.sourceRefs.filter(
+        (ref) => ref.kind === "external" || ref.kind === "artifact",
+      ),
+    ),
+  );
 
   // Synthesis fallback: always emit a compiled-from line keyed to the
   // capture id so even notes with no external refs are grep-able back to

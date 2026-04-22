@@ -2987,8 +2987,17 @@ function ProjectPageContent() {
         },
       ]);
       setInput("");
-      setIsCapturing(true);
       clearError();
+
+      if (intent.mode === "decision-update" && !decisionTarget) {
+        applyCaptureReply(
+          replyMessageId,
+          "No decision selected. Open a decision from Brain Artifacts first, then use `decision update:` to amend it.",
+        );
+        return;
+      }
+
+      setIsCapturing(true);
 
       try {
         const response = await fetch(

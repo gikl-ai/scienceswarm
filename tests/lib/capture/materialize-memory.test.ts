@@ -196,6 +196,35 @@ describe("materializeMemory filing rules (gbrain writer)", () => {
     ).toBe(true);
   });
 
+  it("does not turn conversation and capture refs into noisy body citations", async () => {
+    const result = await materializeMemory({
+      brainRoot: tmpRoot,
+      capture: makeCapture({
+        sourceRefs: [
+          { kind: "conversation", ref: "thread-123" },
+          { kind: "capture", ref: "cap-prior" },
+          { kind: "artifact", ref: "wiki/decisions/alpha" },
+          { kind: "external", ref: "https://example.org/paper" },
+        ],
+      }),
+      project: "demo",
+      confidence: "medium",
+      engine,
+    });
+
+    const slug = derivePageSlug(result.materializedPath!);
+    const page = await engine.getPage(slug);
+    expect(page).not.toBeNull();
+
+    const citationLines = page!.compiled_truth
+      .split("\n")
+      .filter((line) => line.startsWith("[Source:"));
+    expect(citationLines).toContain("[Source: artifact:wiki/decisions/alpha]");
+    expect(citationLines).toContain("[Source: https://example.org/paper]");
+    expect(citationLines).not.toContain("[Source: conversation:thread-123]");
+    expect(citationLines).not.toContain("[Source: capture:cap-prior]");
+  });
+
   it("logs captured pages as recent ingest events for Dream Cycle", async () => {
     const result = await materializeMemory({
       brainRoot: tmpRoot,
@@ -517,15 +546,21 @@ describe("materializeMemory filing rules (gbrain writer)", () => {
 describe("materializeMemory attribution (decision 3A)", () => {
   it("propagates a clear error when SCIENCESWARM_USER_HANDLE is unset", async () => {
     delete process.env.SCIENCESWARM_USER_HANDLE;
-    await expect(
-      materializeMemory({
-        brainRoot: tmpRoot,
-        capture: makeCapture(),
-        project: "demo",
-        confidence: "medium",
-        engine,
-      }),
-    ).rejects.toThrow(/SCIENCESWARM_USER_HANDLE is not set/);
+    const originalCwd = process.cwd();
+    process.chdir(tmpRoot);
+    try {
+      await expect(
+        materializeMemory({
+          brainRoot: tmpRoot,
+          capture: makeCapture(),
+          project: "demo",
+          confidence: "medium",
+          engine,
+        }),
+      ).rejects.toThrow(/SCIENCESWARM_USER_HANDLE is not set/);
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 
   it("uses the configured handle in the inline citation regardless of the external user id", async () => {
