@@ -162,6 +162,12 @@ describe("chat thread route", () => {
       conversationBackend: "openclaw",
       messages: [
         {
+          id: "m0",
+          role: "user",
+          content: "[agents/auth-profiles] should remain in user text",
+          timestamp: "2026-04-11T10:00:00.500Z",
+        },
+        {
           id: "m1",
           role: "assistant",
           content: [
@@ -200,6 +206,12 @@ describe("chat thread route", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       messages: [
+        {
+          id: "m0",
+          role: "user",
+          content: "[agents/auth-profiles] should remain in user text",
+          timestamp: "2026-04-11T10:00:00.500Z",
+        },
         {
           id: "m1",
           role: "assistant",

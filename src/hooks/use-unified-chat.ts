@@ -1450,7 +1450,10 @@ function restoreMessage(value: unknown): Message | null {
   return {
     id: candidate.id,
     role: candidate.role,
-    content: sanitizeOpenClawUserVisibleResponse(candidate.content),
+    content:
+      candidate.role === "user"
+        ? candidate.content
+        : sanitizeOpenClawUserVisibleResponse(candidate.content),
     thinking:
       typeof candidate.thinking === "string"
         ? sanitizeOpenClawUserVisibleResponse(candidate.thinking)
@@ -2376,17 +2379,23 @@ export function useUnifiedChat(
               && typeof message.timestamp === "string"
               && !Number.isNaN(Date.parse(message.timestamp)),
             )
-            .map((message: PolledOpenClawMessage) => ({
-              id: typeof message.id === "string" ? message.id : makeId(),
-              role: inferPolledMessageRole(message),
-              content: sanitizeOpenClawUserVisibleResponse(
-                message.content as string,
-              ),
-              chatMode: "openclaw-tools" as const,
-              channel: typeof message.channel === "string" ? message.channel : undefined,
-              userName: typeof message.userName === "string" ? message.userName : undefined,
-              timestamp: new Date(message.timestamp as string),
-            }));
+            .map((message: PolledOpenClawMessage) => {
+              const role = inferPolledMessageRole(message);
+              return {
+                id: typeof message.id === "string" ? message.id : makeId(),
+                role,
+                content:
+                  role === "user"
+                    ? (message.content as string)
+                    : sanitizeOpenClawUserVisibleResponse(
+                      message.content as string,
+                    ),
+                chatMode: "openclaw-tools" as const,
+                channel: typeof message.channel === "string" ? message.channel : undefined,
+                userName: typeof message.userName === "string" ? message.userName : undefined,
+                timestamp: new Date(message.timestamp as string),
+              };
+            });
 
           const crossChannelMessages = polledMessages.filter(
             (message: Message) => message.channel && message.channel !== "web",

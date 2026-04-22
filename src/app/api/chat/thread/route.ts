@@ -153,7 +153,10 @@ export async function GET(request: Request) {
     ...stored,
     messages: stored.messages.map((message) => ({
       ...message,
-      content: sanitizeOpenClawUserVisibleResponse(message.content),
+      content:
+        message.role === "user"
+          ? message.content
+          : sanitizeOpenClawUserVisibleResponse(message.content),
       thinking:
         typeof message.thinking === "string"
           ? sanitizeOpenClawUserVisibleResponse(message.thinking)

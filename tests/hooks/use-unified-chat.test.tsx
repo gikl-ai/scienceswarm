@@ -543,6 +543,12 @@ describe("useUnifiedChat persistence", () => {
             timestamp: "2026-04-14T20:00:00.000Z",
           },
           {
+            id: "user-message",
+            role: "user",
+            content: "[agents/auth-profiles] leave this user-authored note intact",
+            timestamp: "2026-04-14T20:00:00.500Z",
+          },
+          {
             id: "opened-file",
             role: "system",
             content: "[User opened file: papers/example.pdf] (pdf file, preview shown in chat)",
@@ -609,10 +615,11 @@ describe("useUnifiedChat persistence", () => {
 
     const messageLog = screen.getByTestId("message-log").textContent ?? "";
     expect(messageLog).toContain("Project **alpha-project** loaded.");
+    expect(messageLog).toContain("[agents/auth-profiles] leave this user-authored note intact");
     expect(messageLog).not.toContain("[User opened file:");
     expect(messageLog).not.toContain("new files synced:");
     expect(messageLog).not.toContain("updated since import:");
-    expect(messageLog).not.toContain("[agents/auth-profiles]");
+    expect(messageLog).not.toContain("[agents/auth-profiles] synced openai-codex credentials from external cli");
   });
 
   it("keeps workspace change checks out of the visible chat pane", async () => {
