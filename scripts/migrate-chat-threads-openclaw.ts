@@ -161,6 +161,21 @@ async function processThreadFile(
     return { status: "skipped", reason: `unknown conversationBackend: ${JSON.stringify(current)}` };
   }
 
+  // Lightweight PersistedChatThread shape check before rewriting. The full
+  // `isPersistedThread` guard validates every nested message; this only
+  // covers the top-level required fields so we never silently rewrite an
+  // unrelated JSON object that happens to live at the chat.json path.
+  if (
+    record.version !== 1
+    || typeof record.project !== "string"
+    || !Array.isArray(record.messages)
+  ) {
+    return {
+      status: "skipped",
+      reason: "thread file is missing required PersistedChatThread fields (version, project, messages)",
+    };
+  }
+
   if (dryRun) {
     return { status: "migrated" };
   }

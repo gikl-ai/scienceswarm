@@ -201,6 +201,31 @@ describe("migrate-chat-threads-openclaw script", () => {
     expect(onDisk.conversationBackend).toBe("mystery-future-backend");
   });
 
+  it("skips threads that pass the legacy backend gate but lack required PersistedChatThread fields", async () => {
+    // Object-shaped JSON at the chat.json path with a legacy conversationBackend
+    // but missing version/project/messages — the migrator must NOT rewrite it.
+    const chatPath = await seedThread(fixture.projectsRoot, "alpha-project", {
+      conversationBackend: "agent",
+    });
+
+    const summary = await migrateChatThreadsOpenClaw({
+      projectsRoot: fixture.projectsRoot,
+      log: silentLog,
+      warn: silentWarn,
+    });
+    expect(summary).toMatchObject({
+      scanned: 1,
+      migrated: 0,
+      alreadyCurrent: 0,
+      skipped: 1,
+      errors: [],
+    });
+    // File untouched.
+    const onDisk = JSON.parse(await readFile(chatPath, "utf-8"));
+    expect(onDisk.conversationBackend).toBe("agent");
+    expect(onDisk.version).toBeUndefined();
+  });
+
   it("ignores non-slug directories under the projects root", async () => {
     const chatPath = await seedThread(fixture.projectsRoot, "alpha-project", {
       version: 1,
