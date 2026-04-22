@@ -237,6 +237,7 @@ describe("useUnifiedChat persistence", () => {
   it("restores the prior project conversation and conversationId after remount", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
 
       if (url === "/api/chat/thread?project=alpha-project") {
         return Response.json({
@@ -345,7 +346,6 @@ describe("useUnifiedChat persistence", () => {
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      const method = init?.method ?? "GET";
 
       if (url === "/api/chat/thread?project=alpha-project") {
         return Response.json({

@@ -1030,7 +1030,7 @@ function buildGbrainPreviewTarget(
   path: string,
   node?: FileNode | null,
 ): GbrainPreviewTarget | null {
-  const slug = normalizeBrainArtifactSlug(node?.slug);
+  const slug = node?.slug?.trim().replace(/^gbrain:/, "").replace(/^\/+/, "");
   if (!slug) {
     return extractGbrainPreviewTarget(path);
   }
