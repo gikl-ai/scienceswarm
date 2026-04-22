@@ -16,7 +16,6 @@ on:
 
 permissions:
   contents: read
-  administration: read
 
 concurrency:
   group: posthog-traffic-${{ github.ref }}
@@ -92,7 +91,8 @@ jobs:
                     repo: $repo,
                     referrer: .referrer,
                     count: .count,
-                    uniques: .uniques
+                    uniques: .uniques,
+                    "$insert_id": ("referrers-snapshot-" + $repo + "-" + $yesterday + "-" + .referrer)
                   }
                 }),
               (($paths // [])[] |
@@ -104,7 +104,8 @@ jobs:
                     path: .path,
                     title: .title,
                     count: .count,
-                    uniques: .uniques
+                    uniques: .uniques,
+                    "$insert_id": ("paths-snapshot-" + $repo + "-" + $yesterday + "-" + .path)
                   }
                 })
             ]
@@ -123,8 +124,9 @@ jobs:
             --argjson batch "$batch" \
             '{api_key: $api_key, batch: $batch}')
 
-          curl --fail --silent --show-error \
+          curl --fail --show-error \
             --retry 3 --retry-delay 5 \
+            --write-out '\nHTTP status: %{http_code}\n' \
             -X POST \
             -H 'Content-Type: application/json' \
             -d "$payload" \
