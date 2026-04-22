@@ -235,6 +235,7 @@ export class RuntimeDedupeStore {
   completeOperation(key: string, sessionId?: string): RuntimeDedupeRecord | null {
     const record = this.records.get(key);
     if (!record) return null;
+    if (record.status === "completed") return cloneRecord(record);
 
     const now = this.now();
     const completed: RuntimeDedupeRecord = {
@@ -252,6 +253,7 @@ export class RuntimeDedupeStore {
   failOperation(key: string): RuntimeDedupeRecord | null {
     const record = this.records.get(key);
     if (!record) return null;
+    if (record.status === "completed") return cloneRecord(record);
 
     const failed: RuntimeDedupeRecord = {
       ...record,
