@@ -1,5 +1,4 @@
-import path from "node:path";
-import {
+import fs, {
   closeSync,
   existsSync,
   ftruncateSync,
@@ -12,6 +11,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
+import path from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
@@ -618,6 +618,59 @@ describe("GET /api/workspace?action=tree", () => {
     const watchBody = await watchRes.json() as { totalFiles: number };
     expect(treeBody.totalFiles).toBe(1);
     expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
+  });
+
+  it("computes gbrain watch totals without rebuilding the disk tree", async () => {
+    const projectId = "test-project";
+    const projectDir = path.join(ROOT, "projects", projectId);
+    const papersDir = path.join(projectDir, "papers");
+    mkdirSync(papersDir, { recursive: true });
+    writeFileSync(path.join(papersDir, "duplicate.pdf"), "%PDF-1.4 legacy");
+    writeFileSync(path.join(papersDir, "legacy.pdf"), "%PDF-1.4 legacy-only");
+    const sha = "e".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "paper") return [];
+      return [
+        {
+          path: "duplicate-paper-page",
+          title: "Duplicate Paper Page",
+          type: "paper",
+          content: "# Duplicate Paper Page",
+          frontmatter: {
+            type: "paper",
+            project: projectId,
+            file_refs: [
+              {
+                role: "source",
+                fileObjectId: `sha256:${sha}`,
+                sha256: sha,
+                filename: "duplicate.pdf",
+                mime: "application/pdf",
+                sizeBytes: 123,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+    const readdirSpy = vi.spyOn(fs, "readdirSync");
+
+    const { GET } = await importRoute();
+    const res = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { totalFiles: number };
+    expect(body.totalFiles).toBe(2);
+    const projectReads = readdirSpy.mock.calls
+      .map(([dir]) => String(dir))
+      .filter((dir) => dir === projectDir || dir.startsWith(`${projectDir}${path.sep}`));
+    expect(projectReads).toEqual([projectDir, papersDir]);
   });
 
   it("reports the newest gbrain timestamp in merged watch state", async () => {
