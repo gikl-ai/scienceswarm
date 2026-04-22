@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractFirstJsonObject } from "@/brain/next-experiment-planner";
+import {
+  extractFirstJsonObject,
+  findProjectScopedPage,
+} from "@/brain/next-experiment-planner";
+import type { BrainPage } from "@/brain/store";
 
 describe("extractFirstJsonObject", () => {
   it("extracts one balanced JSON object without swallowing later text", () => {
@@ -29,5 +33,28 @@ describe("extractFirstJsonObject", () => {
     );
 
     expect(JSON.parse(extracted ?? "{}")).toMatchObject({ summary: "fenced" });
+  });
+});
+
+describe("findProjectScopedPage", () => {
+  it("resolves only pages that are already in the active project page set", () => {
+    const projectPages: BrainPage[] = [
+      {
+        path: "wiki/entities/artifacts/project-alpha-plan",
+        title: "Project alpha plan",
+        type: "artifact",
+        content: "Project-local plan.",
+        frontmatter: { project: "project-alpha" },
+      },
+    ];
+
+    expect(
+      findProjectScopedPage(projectPages, "gbrain:wiki/entities/artifacts/project-alpha-plan.md"),
+    ).toMatchObject({
+      path: "wiki/entities/artifacts/project-alpha-plan",
+    });
+    expect(
+      findProjectScopedPage(projectPages, "wiki/entities/artifacts/other-project-plan"),
+    ).toBeNull();
   });
 });

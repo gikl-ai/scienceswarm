@@ -13,13 +13,10 @@ import { isLocalRequest } from "@/lib/local-guard"
 import { getActiveRadar } from "@/lib/radar/store"
 import { runRadarPipeline } from "@/lib/radar/pipeline"
 import { buildProductionFetchers } from "@/lib/radar/fetchers/index"
-
-function getStateDir(): string {
-  return process.env.RADAR_STATE_DIR || process.env.BRAIN_ROOT || "state"
-}
+import { getRadarStateDir } from "@/lib/radar/state-dir"
 
 export async function GET(): Promise<Response> {
-  const stateDir = getStateDir()
+  const stateDir = getRadarStateDir()
 
   try {
     const { readFile } = await import("fs/promises")
@@ -48,7 +45,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const stateDir = getStateDir()
+    const stateDir = getRadarStateDir()
     const radar = await getActiveRadar(stateDir)
 
     if (!radar) {
