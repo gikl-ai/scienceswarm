@@ -557,6 +557,37 @@ describe("runDreamCycle", () => {
     }
   });
 
+  it("persists a dream journal artifact when gbrain write-back is available", async () => {
+    const config = makeConfig();
+    const llm = makeMockLLM();
+    vi.stubEnv("BRAIN_ROOT", TEST_ROOT);
+    vi.stubEnv("BRAIN_PGLITE_PATH", join(TEST_ROOT, "brain.pglite"));
+    vi.stubEnv("SCIENCESWARM_USER_HANDLE", "@test-researcher");
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [] }), { status: 200 }),
+    );
+
+    try {
+      const result = await runDreamCycle(config, llm, "sweep-only");
+
+      expect(result.journalSlug).toBe("journals/2026-04-22-dream-cycle-sweep-only");
+      expect(
+        existsSync(join(TEST_ROOT, "journals", "2026-04-22-dream-cycle-sweep-only.md")),
+      ).toBe(true);
+
+      const journal = readFileSync(
+        join(TEST_ROOT, "journals", "2026-04-22-dream-cycle-sweep-only.md"),
+        "utf-8",
+      );
+      expect(journal).toContain("Dream Cycle Journal");
+      expect(journal).toContain("Mode: sweep-only");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("compiles concept updates from recent evidence during the full dream cycle", async () => {
     const config = makeConfig();
     vi.stubEnv("BRAIN_ROOT", TEST_ROOT);

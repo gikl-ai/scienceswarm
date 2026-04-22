@@ -118,6 +118,11 @@ const KIND_DIRECTORY: Record<CaptureKind, string> = {
   decision: "wiki/decisions",
   hypothesis: "wiki/hypotheses",
   task: "wiki/tasks",
+  survey: "wiki/surveys",
+  method: "wiki/methods",
+  original_synthesis: "wiki/originals",
+  research_packet: "wiki/packets",
+  overnight_journal: "wiki/journals",
 };
 
 const KIND_HEADING: Record<CaptureKind, string> = {
@@ -126,6 +131,11 @@ const KIND_HEADING: Record<CaptureKind, string> = {
   decision: "Decision",
   hypothesis: "Hypothesis",
   task: "Task",
+  survey: "Survey",
+  method: "Method",
+  original_synthesis: "Original synthesis",
+  research_packet: "Research packet",
+  overnight_journal: "Overnight journal",
 };
 
 // gbrain's `Page.type` is a free-form string. We use the capture kind
@@ -138,7 +148,16 @@ const KIND_PAGE_TYPE: Record<CaptureKind, ContentType> = {
   decision: "decision",
   hypothesis: "hypothesis",
   task: "task",
+  survey: "survey",
+  method: "method",
+  original_synthesis: "original_synthesis",
+  research_packet: "research_packet",
+  overnight_journal: "overnight_journal",
 };
+
+function isArtifactCaptureKind(kind: CaptureKind): boolean {
+  return kind === "research_packet" || kind === "overnight_journal";
+}
 
 // Minimal structural shape of the gbrain BrainEngine surface we use here.
 // We re-declare it inline rather than importing from gbrain so that drift
@@ -355,6 +374,10 @@ function manifestUpdater(
         capture.kind === "task"
           ? dedupePaths([...manifest.taskPaths, materializedPath])
           : manifest.taskPaths,
+      artifactPaths:
+        isArtifactCaptureKind(capture.kind)
+          ? dedupePaths([...manifest.artifactPaths, materializedPath])
+          : manifest.artifactPaths,
       activeThreads,
       updatedAt: now,
     };

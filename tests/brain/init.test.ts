@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, readFileSync, rmSync } from "fs";
-import { join } from "path";
+import { basename, join, resolve } from "path";
 import { tmpdir } from "os";
 import { initBrain } from "@/brain/init";
 
@@ -42,6 +42,10 @@ describe("initBrain", () => {
     expect(existsSync(join(TEST_ROOT, "state/projects"))).toBe(true);
     expect(existsSync(join(TEST_ROOT, "state/channels/telegram"))).toBe(true);
     expect(existsSync(join(TEST_ROOT, "state/schedules"))).toBe(true);
+    expect(existsSync(join(TEST_ROOT, "topics"))).toBe(true);
+    expect(existsSync(join(TEST_ROOT, "methods"))).toBe(true);
+    expect(existsSync(join(TEST_ROOT, "packets"))).toBe(true);
+    expect(existsSync(join(TEST_ROOT, "journals"))).toBe(true);
   });
 
   it("creates BRAIN.md with researcher info", () => {
@@ -111,5 +115,32 @@ describe("initBrain", () => {
     const brainMd = readFileSync(join(TEST_ROOT, "BRAIN.md"), "utf-8");
     expect(brainMd).toContain("Original");
     expect(brainMd).not.toContain("Overwrite");
+  });
+
+  it("supports the generic scientist preset override", () => {
+    initBrain({
+      root: TEST_ROOT,
+      brainPreset: "generic_scientist",
+    });
+
+    expect(existsSync(join(TEST_ROOT, "concepts"))).toBe(true);
+    expect(existsSync(join(TEST_ROOT, "conferences"))).toBe(true);
+    expect(existsSync(join(TEST_ROOT, "ideas"))).toBe(true);
+  });
+
+  it("normalizes roots before writing scaffold files", () => {
+    const normalizedRoot = join(tmpdir(), "scienceswarm-brain-test-init-normalized");
+    const inputRoot = join(normalizedRoot, "..", basename(normalizedRoot));
+    rmSync(normalizedRoot, { recursive: true, force: true });
+
+    try {
+      const result = initBrain({ root: inputRoot });
+
+      expect(result.root).toBe(resolve(normalizedRoot));
+      expect(existsSync(join(normalizedRoot, "BRAIN.md"))).toBe(true);
+      expect(existsSync(join(normalizedRoot, "wiki/home.md"))).toBe(true);
+    } finally {
+      rmSync(normalizedRoot, { recursive: true, force: true });
+    }
   });
 });

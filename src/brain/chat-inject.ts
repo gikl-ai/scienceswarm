@@ -205,7 +205,7 @@ function buildGbrainStructureSection(projectId?: string): string {
   const lines = [
     "## Gbrain Structure",
     "gbrain is the source of truth for ScienceSwarm data. Use gbrain page metadata, page paths, file_refs, and source_refs before guessing from filesystem folders.",
-    "Core page types include project, paper, dataset/data, code, artifact, note, task, decision, experiment, concept, person, and frontier_item.",
+    "Core page types include project, paper, dataset/data, code, artifact, note, task, decision, experiment, concept/topic, survey, method, research_packet, overnight_journal, person, and frontier_item.",
     "Imported papers are gbrain pages with type=paper. Their page path, source_path/source_refs, and file_refs identify the original imported file or workspace mirror path.",
     "The project workspace under SCIENCESWARM_DIR/projects/<project> is a browsable mirror/cache, not the durable source of truth.",
   ];

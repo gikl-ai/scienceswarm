@@ -24,6 +24,7 @@ describe("DreamCycleCard", () => {
           lastRun: {
             timestamp: "2026-04-18T08:30:00.000Z",
             mode: "full",
+            journal_slug: "journals/2026-04-18-dream-cycle",
             pages_compiled: 2,
             contradictions_found: 1,
             backlinks_added: 4,
@@ -109,6 +110,8 @@ describe("DreamCycleCard", () => {
     expect(within(compiledTruthColumn!).getByText("RLHF alignment")).toBeInTheDocument();
     expect(within(compiledTruthColumn!).getByText("Reward model drift")).toBeInTheDocument();
     expect(screen.getByText("Review the new RLHF paper.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /open journal/i }));
+    expect(onNavigateBrainPage).toHaveBeenCalledWith("journals/2026-04-18-dream-cycle");
     const rewardModelButton = screen.getByRole("button", { name: /Reward model drift/i });
     expect(rewardModelButton).toHaveClass("min-w-0");
     fireEvent.click(rewardModelButton);
@@ -117,7 +120,7 @@ describe("DreamCycleCard", () => {
     expect(onNavigateBrainPage).toHaveBeenCalledWith("papers/new-rlhf-paper");
     expect(screen.getByText("Review notes")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Review notes/i })).not.toBeInTheDocument();
-    expect(onNavigateBrainPage).toHaveBeenCalledTimes(2);
+    expect(onNavigateBrainPage).toHaveBeenCalledTimes(3);
 
     fireEvent.click(screen.getByRole("button", { name: /run now/i }));
 
