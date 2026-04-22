@@ -50,6 +50,12 @@ import {
 } from "@/brain/setup-flow";
 import { parseFile } from "@/lib/file-parser";
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
+import {
+  buildExperimentDesignCritiqueJob,
+  isExperimentDesignCritiqueRequest,
+  looksLikeExperimentDesignArtifact,
+  summarizeExperimentDesignIteration,
+} from "@/lib/experiment-design-critique";
 import { isLocalRequest } from "@/lib/local-guard";
 import {
   getScienceSwarmProjectRoot,
@@ -3568,6 +3574,266 @@ function readWorkspaceArtifactText(
   } catch {
     return null;
   }
+}
+
+const ITERATION_CRITIQUE_HINT_RE =
+  /\b(re-critique|recritique|re-review|re-audit|what improved|what changed|still weak|iteration|revised design)\b/i;
+
+function parsePersistedCritiqueResultFromPageContent(content: string): {
+  findings: Array<{ flaw_type?: string; description: string }>;
+} | null {
+  const match = content.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1]) as {
+      findings?: Array<{ flaw_type?: string; description?: string }>;
+    };
+    if (!Array.isArray(parsed.findings)) return null;
+    return {
+      findings: parsed.findings.filter(
+        (
+          finding,
+        ): finding is { flaw_type?: string; description: string } =>
+          !!finding && typeof finding.description === "string",
+      ),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function findLatestPriorExperimentDesignCritique(params: {
+  projectId: string;
+  sourceFilename: string;
+}): Promise<{
+  findings: Array<{ flaw_type?: string; description: string }>;
+  } | null> {
+  await ensureBrainStoreReady();
+  const pages = await getBrainStore().listPages({ type: "critique", limit: 250 });
+  const matchingPages = pages.filter((page) => {
+    const frontmatter = page.frontmatter ?? {};
+    return (
+      frontmatter.project === params.projectId
+      && frontmatter.source_filename === params.sourceFilename
+    );
+  });
+
+  matchingPages.sort((left, right) => {
+    const leftUploaded = Date.parse(String(left.frontmatter?.uploaded_at ?? ""));
+    const rightUploaded = Date.parse(String(right.frontmatter?.uploaded_at ?? ""));
+    const leftTime = Number.isFinite(leftUploaded) ? leftUploaded : 0;
+    const rightTime = Number.isFinite(rightUploaded) ? rightUploaded : 0;
+    return rightTime - leftTime;
+  });
+
+  for (const page of matchingPages) {
+    const parsed = parsePersistedCritiqueResultFromPageContent(page.content ?? "");
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+async function maybeHandleExperimentDesignCritique(params: {
+  request: Request;
+  chatMode: ChatMode | null;
+  userIntentMessage: string;
+  activeFile: { path: string; content: string } | null;
+  mergedFiles: UploadedFileDescriptor[];
+  projectId: string | null;
+}): Promise<Response | null> {
+  if (!isExperimentDesignCritiqueRequest(params.userIntentMessage)) {
+    return null;
+  }
+
+  if (!params.projectId) {
+    return Response.json(
+      {
+        response:
+          "Open a project and select the design memo or protocol you want critiqued, then ask again. ScienceSwarm only saves this critique loop when it has a project workspace to attach it to.",
+        backend: "openclaw",
+        mode: params.chatMode,
+        generatedFiles: [],
+      },
+      {
+        headers: {
+          "X-Chat-Backend": "openclaw",
+          "X-Chat-Mode": params.chatMode ?? "reasoning",
+        },
+      },
+    );
+  }
+
+  const projectRoot = getScienceSwarmProjectRoot(params.projectId);
+  const activeFilePath = params.activeFile?.path?.trim();
+  let sourceText: string | null = null;
+  let sourcePath: string | null = null;
+
+  if (activeFilePath && params.activeFile?.content.trim()) {
+    sourceText = params.activeFile.content.trim();
+    sourcePath = activeFilePath.replace(/^\/+/, "");
+  } else {
+    const candidates = params.mergedFiles.filter((file) => {
+      const workspacePath =
+        typeof file.workspacePath === "string"
+          ? file.workspacePath.trim().replace(/^\/+/, "")
+          : "";
+      if (!workspacePath) return false;
+      if (!/\.(?:md|markdown|txt|rst)$/i.test(workspacePath)) return false;
+      return looksLikeExperimentDesignArtifact(workspacePath);
+    });
+    const chosen = candidates[0];
+    const chosenPath =
+      typeof chosen?.workspacePath === "string"
+        ? chosen.workspacePath.trim().replace(/^\/+/, "")
+        : "";
+    if (chosenPath) {
+      sourceText = readWorkspaceArtifactText(projectRoot, chosenPath, 16_000);
+      sourcePath = chosenPath;
+    }
+  }
+
+  if (!sourceText || !sourcePath) {
+    return Response.json(
+      {
+        response:
+          "ScienceSwarm could not find a visible text protocol or experiment-plan file to critique. Open the design memo in the project preview, or reference a `.md`/`.txt` plan file in your request, then retry.",
+        backend: "openclaw",
+        mode: params.chatMode,
+        generatedFiles: [],
+      },
+      {
+        headers: {
+          "X-Chat-Backend": "openclaw",
+          "X-Chat-Mode": params.chatMode ?? "reasoning",
+        },
+      },
+    );
+  }
+
+  const sourceFilename = path.basename(sourcePath);
+  const shouldCompareIteration = ITERATION_CRITIQUE_HINT_RE.test(
+    params.userIntentMessage,
+  );
+  const previousCritique = shouldCompareIteration
+    ? await findLatestPriorExperimentDesignCritique({
+        projectId: params.projectId,
+        sourceFilename,
+      }).catch(() => null)
+    : null;
+  const job = buildExperimentDesignCritiqueJob({
+    workspacePath: sourcePath,
+    sourceFilename,
+    title: sourceFilename.replace(/\.[a-z0-9]+$/i, ""),
+    text: sourceText,
+  });
+
+  let persisted:
+    | {
+        brain_slug?: string;
+        project_url?: string;
+      }
+    | null = null;
+  try {
+    const saveResponse = await fetch(
+      new URL("/api/brain/critique", params.request.url),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job,
+          sourceFilename,
+          projectSlug: params.projectId,
+        }),
+      },
+    );
+    persisted = (await saveResponse.json().catch(() => null)) as {
+      brain_slug?: string;
+      project_url?: string;
+    } | null;
+    if (!saveResponse.ok) {
+      persisted = null;
+    }
+  } catch {
+    persisted = null;
+  }
+
+  const result = job.result;
+  const topFindings = result?.findings.slice(0, 4) ?? [];
+  const iterationSummary =
+    previousCritique && result?.findings
+      ? summarizeExperimentDesignIteration(previousCritique.findings, result.findings)
+      : null;
+  const iterationLines =
+    iterationSummary &&
+    (iterationSummary.improved.length > 0
+      || iterationSummary.stillWeak.length > 0
+      || iterationSummary.newRisks.length > 0)
+      ? [
+          "",
+          "What improved since the last critique:",
+          ...(iterationSummary.improved.length > 0
+            ? iterationSummary.improved.map((item) => `- ${item}`)
+            : ["- No previously flagged issue was fully resolved in this revision."]),
+          "",
+          "Still needs attention:",
+          ...(iterationSummary.stillWeak.length > 0
+            ? iterationSummary.stillWeak.map((item) => `- ${item}`)
+            : ["- No prior high-salience weakness remains obvious in the current memo."]),
+          ...(iterationSummary.newRisks.length > 0
+            ? [
+                "",
+                "New or newly emphasized risks:",
+                ...iterationSummary.newRisks.map((item) => `- ${item}`),
+              ]
+            : []),
+        ]
+      : [];
+  const critiqueSummary = [
+    `**Experimental design critique: ${sourceFilename}**`,
+    "",
+    result?.author_feedback?.overall_summary ||
+      "ScienceSwarm reviewed the visible experiment plan and found several design risks.",
+    ...iterationLines,
+    "",
+    "Top issues:",
+    ...topFindings.map((finding) => `- ${finding.description}`),
+    "",
+    persisted?.brain_slug
+      ? `Saved critique artifact: [[${persisted.brain_slug}]]`
+      : "Critique completed, but ScienceSwarm could not save the artifact to gbrain in this pass.",
+  ].join("\n");
+
+  const generatedPath = persisted?.brain_slug
+    ? `gbrain:${persisted.brain_slug}`
+    : null;
+
+  return Response.json(
+    {
+      response: critiqueSummary,
+      backend: "openclaw",
+      mode: params.chatMode,
+      generatedFiles: generatedPath ? [generatedPath] : [],
+      generatedArtifacts: generatedPath
+        ? [
+            {
+              projectPath: generatedPath,
+              artifactSlug: persisted?.brain_slug,
+              sourceFiles: [sourcePath],
+              prompt: params.userIntentMessage,
+              tool: "ScienceSwarm design critique",
+              createdAt: new Date().toISOString(),
+            },
+          ]
+        : [],
+      gbrainArtifacts: persisted?.brain_slug ? [persisted.brain_slug] : [],
+    },
+    {
+      headers: {
+        "X-Chat-Backend": "openclaw",
+        "X-Chat-Mode": params.chatMode ?? "reasoning",
+      },
+    },
+  );
 }
 
 function buildRevisionNeedsApprovalResponse(params: {
@@ -7119,6 +7385,19 @@ export async function handleUnifiedChatPost(
           },
         },
       );
+    }
+
+    const experimentDesignCritiqueResponse =
+      await maybeHandleExperimentDesignCritique({
+        request,
+        chatMode,
+        userIntentMessage,
+        activeFile,
+        mergedFiles,
+        projectId: validatedProjectId,
+      });
+    if (experimentDesignCritiqueResponse) {
+      return experimentDesignCritiqueResponse;
     }
 
     const agentConfig = resolveAgentConfig();
