@@ -147,6 +147,14 @@ interface ProjectImportSummaryResponse {
   lastImport: LatestImportSummary | null;
 }
 
+interface MultimodalInterpretationResponse {
+  response?: string;
+  savePath?: string;
+  filesConsidered?: string[];
+  unsupportedInputs?: string[];
+  error?: string;
+}
+
 interface SlashCommandCatalogResponse {
   commands?: SlashCommandOption[];
   error?: string;
@@ -545,6 +553,30 @@ function parseExplicitCaptureIntent(
   }
 
   return null;
+}
+
+function looksLikeMultimodalInterpretRequest(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) return false;
+
+  const analysisIntent =
+    /\b(interpret|analy[sz]e|synthesi[sz]e|summari[sz]e|explain|readout|read out)\b/.test(
+      normalized,
+    );
+  if (!analysisIntent) {
+    return false;
+  }
+
+  const packetHint =
+    /\b(combined|together|across|multimodal|mixed|packet|experiment|results?)\b/.test(
+      normalized,
+    );
+  const fileHint =
+    /\b(note|caption|table|csv|figure|image|plot|upload(?:ed)?|input|files?)\b/.test(
+      normalized,
+    );
+
+  return packetHint || fileHint;
 }
 
 function formatCaptureKind(kind: CaptureKind): string {
@@ -1176,6 +1208,7 @@ function ProjectPageContent() {
   const [brainBootstrapState, setBrainBootstrapState] =
     useState<BrainBootstrapState>({ status: "loading" });
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isInterpretingPacket, setIsInterpretingPacket] = useState(false);
   const [, setProjectFiles] = useState<FileNode[]>(initialFiles);
   const [, setOrganizeBadge] = useState<string | null>(null);
   const [gbrainNodes, setGbrainNodes] = useState<FileNode[]>([]);
@@ -1248,6 +1281,7 @@ function ProjectPageContent() {
     clearChatContext,
     checkChanges,
     refreshWorkspace,
+    recordGeneratedArtifacts,
     setError,
     clearError,
     conversationId,
@@ -3029,7 +3063,102 @@ function ProjectPageContent() {
     ],
   );
 
-  const isChatBusy = isCapturing;
+  const handleMultimodalInterpretation = useCallback(
+    async (text: string) => {
+      if (!activeProjectSlug || isInterpretingPacket || isStreaming) return;
+
+      const trimmed = text.trim();
+      const userMessageId = makeLocalMessageId();
+      const replyMessageId = makeLocalMessageId();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: userMessageId,
+          role: "user",
+          content: trimmed,
+          timestamp: new Date(),
+          channel: "web",
+        },
+        {
+          id: replyMessageId,
+          role: "assistant",
+          content: "Interpreting mixed project evidence...",
+          timestamp: new Date(),
+        },
+      ]);
+      setInput("");
+      setIsInterpretingPacket(true);
+      clearError();
+
+      try {
+        const response = await fetch("/api/brain/multimodal-interpret", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project: activeProjectSlug,
+            prompt: trimmed,
+            files: uploadedFiles.map((file) => ({
+              workspacePath: file.workspacePath,
+              displayPath: file.displayPath,
+            })),
+          }),
+        });
+
+        const payload = (await response
+          .json()
+          .catch(() => ({}))) as MultimodalInterpretationResponse;
+        if (!response.ok || typeof payload.response !== "string") {
+          throw new Error(
+            typeof payload.error === "string"
+              ? payload.error
+              : "Multimodal interpretation failed",
+          );
+        }
+
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === replyMessageId
+              ? { ...message, content: payload.response! }
+              : message,
+          ),
+        );
+
+        if (typeof payload.savePath === "string" && payload.savePath.length > 0) {
+          recordGeneratedArtifacts([payload.savePath]);
+        }
+        await refreshWorkspace();
+      } catch (error) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === replyMessageId
+              ? {
+                  ...message,
+                  content:
+                    error instanceof Error
+                      ? error.message
+                      : "Multimodal interpretation failed",
+                }
+              : message,
+          ),
+        );
+      } finally {
+        setIsInterpretingPacket(false);
+      }
+    },
+    [
+      activeProjectSlug,
+      clearError,
+      isInterpretingPacket,
+      isStreaming,
+      recordGeneratedArtifacts,
+      refreshWorkspace,
+      setMessages,
+      uploadedFiles,
+    ],
+  );
+
+  const isChatBusy = isCapturing || isInterpretingPacket;
   const filesRenderInChat = filePreviewLocation === "chat-pane";
 
   const moveInputCursorToEnd = useCallback((value: string) => {
@@ -3172,6 +3301,11 @@ function ProjectPageContent() {
         return;
       }
 
+      if (activeProjectSlug && looksLikeMultimodalInterpretRequest(trimmed)) {
+        void handleMultimodalInterpretation(trimmed);
+        return;
+      }
+
       // The preview pane is part of the visible scientist workflow. If a user
       // opens a report item and asks "what next?", attach that current view as
       // active-file context without requiring a separate context-chip action.
@@ -3180,7 +3314,9 @@ function ProjectPageContent() {
     },
     [
       activePreviewFile,
+      activeProjectSlug,
       handleCaptureIntent,
+      handleMultimodalInterpretation,
       isChatBusy,
       recordPromptHistory,
       sendMessage,
@@ -3475,7 +3611,7 @@ function ProjectPageContent() {
               </span>
             )}
 
-            {(isStreaming || isCritiquing || isAutoAnalyzing) && (
+            {(isStreaming || isCritiquing || isAutoAnalyzing || isInterpretingPacket) && (
               <div className="flex items-center gap-2 text-xs font-medium text-accent">
                 <Spinner size="h-3.5 w-3.5" testId="chat-activity-spinner" />
                 {isCritiquing
@@ -3484,6 +3620,8 @@ function ProjectPageContent() {
                     : critiqueJob?.status === "RUNNING"
                       ? "Critiquing..."
                       : "Critiquing..."
+                  : isInterpretingPacket
+                    ? "Interpreting packet..."
                   : isAutoAnalyzing
                     ? "Analyzing..."
                     : "Thinking..."}
