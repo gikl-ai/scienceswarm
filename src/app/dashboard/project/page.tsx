@@ -58,6 +58,7 @@ import {
   InlineChart,
   splitContentWithCharts,
 } from "@/components/research/inline-chart";
+import { SchedulerPanel } from "@/components/research/scheduler-panel";
 import {
   buildWorkspaceHrefForSlug,
   persistLastProjectSlug,
@@ -4657,6 +4658,35 @@ function ProjectPageContent() {
                           Refreshing the latest project understanding from linked evidence...
                         </div>
                       ) : null}
+                    </section>
+                  )}
+                  {activeProjectSlug && (
+                    <section className="rounded-[28px] border border-border bg-white p-6 shadow-sm">
+                      <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                            Automation & Reruns
+                          </p>
+                          <h2 className="mt-1 text-lg font-semibold text-foreground">
+                            Schedule repeatable project checks
+                          </h2>
+                          <p className="mt-1 max-w-2xl text-sm text-muted">
+                            Keep recurring validation tied to the project, the
+                            command that will run, the next run time, and the
+                            output path where results should appear.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 min-h-[420px] overflow-hidden rounded-2xl border border-border bg-white">
+                        <SchedulerPanel
+                          projectId={activeProjectSlug}
+                          defaultJobName="Nightly project rerun"
+                          defaultJobType="recurring"
+                          defaultSchedule="0 0 * * *"
+                          defaultActionType="run-script"
+                          defaultOutputPath="results/nightly-rerun-result.md"
+                        />
+                      </div>
                     </section>
                   )}
                   {showEmptyStateImport && (
