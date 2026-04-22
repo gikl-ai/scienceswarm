@@ -335,6 +335,24 @@
       "summary": "A cross-host planning skill for moving from a source artifact to an executable reproduction or implementation plan."
     },
     {
+      "slug": "scienceswarm-research-reasoning",
+      "name": "ScienceSwarm Research Reasoning",
+      "description": "Use optional reasoning prompt patterns for research questions without committing the project to a fixed UI workflow.",
+      "tags": [
+        "science",
+        "reasoning",
+        "evidence"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Optional reasoning patterns for evidence maps, design critique, next experiments, model-system fit, target prioritization, multimodal interpretation, and decision updates."
+    },
+    {
       "slug": "db-semantic-scholar",
       "name": "Semantic Scholar Database Wrapper",
       "description": "Fetch papers from Semantic Scholar by ID, or search Semantic Scholar by query",

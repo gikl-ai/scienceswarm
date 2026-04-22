@@ -504,6 +504,55 @@ describe("GET /api/settings/openclaw", () => {
     }
   });
 
+  it("persists the configured OpenClaw gateway port during configure", async () => {
+    const prevPort = process.env.OPENCLAW_PORT;
+    process.env.OPENCLAW_PORT = "23456";
+    installExecFileMock();
+
+    const configSets: string[][] = [];
+    const openClawCalls: string[][] = [];
+    mockExecFile.mockImplementation((file: string, maybeArgs: unknown, maybeOptions: unknown, maybeCb: unknown) => {
+      const args = Array.isArray(maybeArgs) ? maybeArgs as string[] : [];
+      const cb =
+        typeof maybeOptions === "function"
+          ? maybeOptions as (error: Error | null, stdout?: string, stderr?: string) => void
+          : typeof maybeCb === "function"
+            ? maybeCb as (error: Error | null, stdout?: string, stderr?: string) => void
+            : null;
+      if (!cb) return;
+
+      if (file === "which" && args[0] === "openclaw") {
+        cb(null, "/usr/local/bin/openclaw\n", "");
+        return;
+      }
+
+      if (file === "openclaw") {
+        openClawCalls.push(args);
+      }
+
+      if (file === "openclaw" && args[0] === "config" && args[1] === "set") {
+        configSets.push(args);
+      }
+
+      cb(null, "", "");
+    });
+
+    try {
+      const { POST } = await import("@/app/api/settings/openclaw/route");
+      const response = await POST(localRequest({ action: "configure" }));
+
+      expect(response.status).toBe(200);
+      expect(configSets).toContainEqual(["config", "set", "gateway.port", "23456"]);
+      expect(openClawCalls).toContainEqual(["config", "validate"]);
+    } finally {
+      if (prevPort === undefined) {
+        delete process.env.OPENCLAW_PORT;
+      } else {
+        process.env.OPENCLAW_PORT = prevPort;
+      }
+    }
+  });
+
   it("prefers the saved .env local provider over conflicting process env values", async () => {
     const fsPromises = await import("node:fs/promises");
     const readFileMock = fsPromises.readFile as unknown as ReturnType<typeof vi.fn>;
@@ -754,6 +803,44 @@ describe("GET /api/settings/openclaw", () => {
         delete process.env.OPENCLAW_PROFILE;
       } else {
         process.env.OPENCLAW_PROFILE = prevProfile;
+      }
+    }
+  });
+
+  it("starts state-dir gateways on the configured port and fails if they stay unreachable", async () => {
+    vi.useFakeTimers();
+    const prevPort = process.env.OPENCLAW_PORT;
+    process.env.OPENCLAW_PORT = "23456";
+    mockHealthCheck.mockResolvedValue(disconnectedOpenClawStatus());
+    installExecFileMock();
+    mockSpawn.mockImplementation(() => makeFakeChild({ exitCode: 0, autoExit: false }));
+
+    try {
+      const { POST } = await import("@/app/api/settings/openclaw/route");
+      const responsePromise = POST(localRequest({ action: "start" }));
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(11_000);
+      const response = await responsePromise;
+
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        running: false,
+        error: expect.stringContaining("gateway did not become reachable"),
+      });
+      expect(mockSpawn).toHaveBeenCalledWith(
+        "openclaw",
+        expect.arrayContaining(["gateway", "run", "--port", "23456", "--bind", "loopback"]),
+        expect.objectContaining({
+          cwd: process.cwd(),
+          detached: true,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+      if (prevPort === undefined) {
+        delete process.env.OPENCLAW_PORT;
+      } else {
+        process.env.OPENCLAW_PORT = prevPort;
       }
     }
   });

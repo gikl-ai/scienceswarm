@@ -145,7 +145,7 @@ echo "    ./scienceswarm start"
 if [ "$CLI_SHIM_INSTALLED" = "true" ] && cli_bin_on_path; then
   echo "    or scienceswarm start"
 fi
-echo "    Then open http://localhost:${FRONTEND_PORT}/setup"
+echo "    Then open https://localhost:${FRONTEND_PORT}/setup"
 echo ""
 if [ "$CLI_SHIM_INSTALLED" = "true" ] && cli_bin_on_path; then
   echo "  CLI installed at $CLI_BIN_DIR/scienceswarm"

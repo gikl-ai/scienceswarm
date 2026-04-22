@@ -221,13 +221,83 @@ function formatPagesForPrompt(pages: BrainPage[]): string {
     .join("\n\n");
 }
 
-function extractJsonObject(content: string): string | null {
-  const fencedMatch = content.match(/```json\s*([\s\S]*?)```/i);
-  if (fencedMatch?.[1]) {
-    return fencedMatch[1].trim();
+function collectBalancedJsonObjects(content: string): string[] {
+  const objects: string[] = [];
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < content.length; index += 1) {
+    const character = content[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (character === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (character === "{") {
+      if (depth === 0) start = index;
+      depth += 1;
+      continue;
+    }
+
+    if (character === "}" && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        objects.push(content.slice(start, index + 1).trim());
+        start = -1;
+      }
+    }
   }
-  const objectMatch = content.match(/\{[\s\S]*\}/);
-  return objectMatch?.[0]?.trim() ?? null;
+
+  return objects;
+}
+
+function jsonCandidatesFromModelResponse(content: string): string[] {
+  const candidates: string[] = [];
+  const fencedPattern = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+  while ((match = fencedPattern.exec(content)) !== null) {
+    if (match[1]?.trim()) {
+      candidates.push(match[1].trim());
+    }
+  }
+
+  const trimmed = content.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    candidates.push(trimmed);
+  }
+
+  candidates.push(...collectBalancedJsonObjects(content));
+  return Array.from(new Set(candidates));
+}
+
+export function parseEvidenceMapModelJson(content: string): {
+  parsed: unknown | null;
+  candidateFound: boolean;
+} {
+  const candidates = jsonCandidatesFromModelResponse(content);
+  for (const candidate of candidates) {
+    try {
+      return { parsed: JSON.parse(candidate), candidateFound: true };
+    } catch {
+      // Keep looking; local models can wrap valid JSON after a malformed echo.
+    }
+  }
+
+  return { parsed: null, candidateFound: candidates.length > 0 };
 }
 
 function normalizeSource(entry: unknown, pages: Map<string, BrainPage>): EvidenceSource | null {
@@ -494,7 +564,8 @@ Rules:
 - Only put items in tensions when the evidence is genuinely in tension, not merely broad.
 - Prefer specific, falsifiable claims over general summaries.
 - Preserve disagreement instead of flattening it into one narrative.
-- Keep the output compact and high signal.`;
+- Keep the output compact and high signal.
+- Return JSON only. Do not include markdown fences, commentary, or explanations.`;
 
 export async function POST(request: Request) {
   if (!(await isLocalRequest(request))) {
@@ -566,27 +637,24 @@ export async function POST(request: Request) {
         formatPagesForPrompt(selectedPages),
       ].join("\n"),
       model: config.synthesisModel,
+      responseFormat: "json_object",
     });
 
-    const jsonPayload = extractJsonObject(completion.content);
-    if (!jsonPayload) {
+    const parsedJson = parseEvidenceMapModelJson(completion.content);
+    if (!parsedJson.candidateFound) {
       return Response.json(
         { error: "Evidence map model response did not contain valid JSON." },
         { status: 502 },
       );
     }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(jsonPayload);
-    } catch {
+    if (parsedJson.parsed === null) {
       return Response.json(
         { error: "Evidence map model response contained malformed JSON." },
         { status: 502 },
       );
     }
     const pageMap = new Map(selectedPages.map((page) => [page.path, page]));
-    const payload = normalizeEvidenceMapPayload(parsed, pageMap, question);
+    const payload = normalizeEvidenceMapPayload(parsedJson.parsed, pageMap, question);
     const timestamp = new Date().toISOString();
     const generatedBy = (() => {
       try {

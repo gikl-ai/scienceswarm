@@ -22,7 +22,9 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import StructuredCritiquePage from "@/app/dashboard/reasoning/page";
+import StructuredCritiquePage, {
+  SUBMIT_BUTTON_LABEL,
+} from "@/app/dashboard/reasoning/page";
 
 const STORAGE_KEY = "structured-critique-history.v1";
 const POLL_TIMEOUT_MESSAGE =
@@ -196,6 +198,15 @@ function makeEmptyHostedCritiqueHistory() {
   return Response.json({ jobs: [] });
 }
 
+async function openRecentAnalysis(label: string | RegExp) {
+  if (!screen.queryByText(label)) {
+    fireEvent.click(
+      screen.getByRole("button", { name: /Recent Reasoning Analyses/i }),
+    );
+  }
+  fireEvent.click(await screen.findByText(label));
+}
+
 describe("Critique workspace", () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -238,8 +249,9 @@ describe("Critique workspace", () => {
       await screen.findByText("Analyze a paper, memo, or argument for reasoning flaws."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Missing assumptions, causal overreach, unsupported generalization/),
+      screen.getByText(/Upload a PDF or paste text to deeply analyze the logic of a piece/),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View example report" })).toBeInTheDocument();
     expect(screen.getByText("Choose a PDF")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
@@ -281,7 +293,7 @@ describe("Critique workspace", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens the newest saved gbrain audit when browser history is empty", async () => {
+  it("lists saved gbrain audits without opening one until the user chooses it", async () => {
     const newestResult = {
       ...makeCompletedJob().result,
       title: "Newest saved text audit",
@@ -379,6 +391,15 @@ describe("Critique workspace", () => {
     render(<StructuredCritiquePage />);
 
     expect(
+      await screen.findByText("Analyze a paper, memo, or argument for reasoning flaws."),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Newest text critique")).toBeInTheDocument();
+    expect(screen.getByText("hubble-1929.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("Newest saved text audit")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Newest text critique"));
+
+    expect(
       await screen.findByText("Newest saved text audit"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Older PDF audit")).not.toBeInTheDocument();
@@ -429,9 +450,14 @@ describe("Critique workspace", () => {
 
     render(<StructuredCritiquePage />);
 
+    expect(
+      await screen.findByText("Analyze a paper, memo, or argument for reasoning flaws."),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("remote-paper.pdf")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("remote-paper.pdf"));
+
     expect(await screen.findByText("Audit for Synthetic Biology Draft")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Saved to brain" })).toBeInTheDocument();
-    expect(await screen.findByText("remote-paper.pdf")).toBeInTheDocument();
   });
 
   it("renders the issue-driven workspace for a completed job", async () => {
@@ -439,6 +465,8 @@ describe("Critique workspace", () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
 
     render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
 
     expect(await screen.findByText("Audit for Synthetic Biology Draft")).toBeInTheDocument();
     expect(screen.getByText("3 findings")).toBeInTheDocument();
@@ -486,6 +514,8 @@ describe("Critique workspace", () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
 
     render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
 
     expect(await screen.findByText("Audit for Synthetic Biology Draft")).toBeInTheDocument();
 
@@ -541,6 +571,8 @@ describe("Critique workspace", () => {
 
     const { rerender } = render(<StructuredCritiquePage />);
 
+    await openRecentAnalysis("paper.pdf");
+
     expect(await screen.findByText("Audit for Synthetic Biology Draft")).toBeInTheDocument();
     await waitFor(() => {
       expect(saveAttempts).toBe(1);
@@ -558,6 +590,8 @@ describe("Critique workspace", () => {
 
     render(<StructuredCritiquePage />);
 
+    await openRecentAnalysis("paper.pdf");
+
     expect((await screen.findAllByText("missing_assumption")).length).toBeGreaterThanOrEqual(1);
     fireEvent.click(screen.getByRole("button", { name: "Fallacy" }));
 
@@ -569,7 +603,7 @@ describe("Critique workspace", () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
-  it("submits feedback only after both answers are selected", async () => {
+  it("does not show the structured-critique feedback harness in the workspace", async () => {
     const completedJob = makeCompletedJob();
     const feedbackRequests: RequestInit[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -592,41 +626,26 @@ describe("Critique workspace", () => {
           project_url: "/dashboard/project?name=paper&brain_slug=paper-critique",
         });
       }
-      expect(String(input)).toBe("/api/structured-critique/feedback");
-      expect(init).toBeDefined();
-      feedbackRequests.push(init as RequestInit);
-      return Response.json({ ok: true });
+      if (String(input) === "/api/structured-critique/feedback") {
+        feedbackRequests.push(init as RequestInit);
+        return Response.json({ ok: true });
+      }
+      throw new Error(`Unexpected fetch: ${String(input)}`);
     });
     vi.stubGlobal("fetch", fetchMock);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
 
     render(<StructuredCritiquePage />);
 
+    await openRecentAnalysis("paper.pdf");
+
     await screen.findByText("Audit for Synthetic Biology Draft");
 
-    fireEvent.click(screen.getByTitle("Useful"));
-
-    expect(screen.getByText("Choose the remaining answer to send feedback.")).toBeInTheDocument();
+    expect(screen.queryByTitle("Useful")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Not useful")).not.toBeInTheDocument();
+    expect(screen.queryByText("Would you revise?")).not.toBeInTheDocument();
+    expect(screen.queryByText("Choose the remaining answer to send feedback.")).not.toBeInTheDocument();
     expect(feedbackRequests).toHaveLength(0);
-
-    fireEvent.click(screen.getByRole("button", { name: "yes" }));
-
-    await waitFor(() => {
-      expect(feedbackRequests).toHaveLength(1);
-    });
-
-    const init = feedbackRequests[0];
-    expect(init.method).toBe("POST");
-    expect(JSON.parse(String(init.body))).toEqual({
-      job_id: "job-completed-1",
-      finding_id: "finding-1",
-      useful: true,
-      would_revise: true,
-    });
-
-    expect(
-      await screen.findByText(/Feedback recorded and added to this output's evaluation history/i),
-    ).toBeInTheDocument();
   });
 
   it("shows a warning and available findings on partial failure", async () => {
@@ -634,6 +653,8 @@ describe("Critique workspace", () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([failedJob]));
 
     render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
 
     expect(await screen.findByText(/Analysis partially completed\./)).toBeInTheDocument();
     expect(screen.getByText("Audit for Synthetic Biology Draft")).toBeInTheDocument();
@@ -648,6 +669,8 @@ describe("Critique workspace", () => {
 
     render(<StructuredCritiquePage />);
 
+    await openRecentAnalysis("paper.pdf");
+
     expect(await screen.findByText(HOSTED_DESCARTES_RECOVERY_MESSAGE)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
@@ -657,6 +680,8 @@ describe("Critique workspace", () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([cancelledJob]));
 
     render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
 
     expect(
       await screen.findByText(cancelledJob.error_message as string),
@@ -669,6 +694,8 @@ describe("Critique workspace", () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([zeroFindingJob]));
 
     render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
 
     expect(await screen.findByText("No reasoning flaws detected in this document.")).toBeInTheDocument();
     expect(
@@ -721,7 +748,9 @@ describe("Critique workspace", () => {
             .repeat(4),
       },
     });
-    const analyzeButton = await screen.findByRole("button", { name: "Analyze" });
+    const analyzeButton = await screen.findByRole("button", {
+      name: SUBMIT_BUTTON_LABEL,
+    });
     await waitFor(() => {
       expect(analyzeButton).toBeEnabled();
     });
@@ -746,7 +775,7 @@ describe("Critique workspace", () => {
     });
   });
 
-  it("enables Analyze for a single-sentence pasted text submission", async () => {
+  it("enables the reasoning-engine submit button for a single-sentence pasted text submission", async () => {
     let submittedForm: FormData | null = null;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -790,7 +819,9 @@ describe("Critique workspace", () => {
       },
     });
 
-    const analyzeButton = await screen.findByRole("button", { name: "Analyze" });
+    const analyzeButton = await screen.findByRole("button", {
+      name: SUBMIT_BUTTON_LABEL,
+    });
     await waitFor(() => {
       expect(analyzeButton).toBeEnabled();
     });
@@ -814,7 +845,7 @@ describe("Critique workspace", () => {
     );
   });
 
-  it("lets the user reopen an older audit from recent history", async () => {
+  it("lets the user open an audit from recent history", async () => {
     const newerBase = makeCompletedJob();
     const newerJob = {
       ...newerBase,
@@ -841,9 +872,14 @@ describe("Critique workspace", () => {
 
     render(<StructuredCritiquePage />);
 
+    expect(
+      await screen.findByText("Analyze a paper, memo, or argument for reasoning flaws."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Recent Reasoning Analyses/i }));
+    fireEvent.click(await screen.findByText("newer.pdf"));
+
     expect(await screen.findByText("Newer Audit")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Recent Reasoning Analyses/i }));
     fireEvent.click(screen.getByText("older.pdf"));
 
     expect(await screen.findByText("Older Audit")).toBeInTheDocument();
@@ -935,7 +971,7 @@ describe("Critique workspace", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Analyze" }));
+      fireEvent.click(screen.getByRole("button", { name: SUBMIT_BUTTON_LABEL }));
       for (let i = 0; i < 600; i += 1) {
         await Promise.resolve();
       }
@@ -1044,7 +1080,7 @@ describe("Critique workspace", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Analyze" }));
+      fireEvent.click(screen.getByRole("button", { name: SUBMIT_BUTTON_LABEL }));
       for (let i = 0; i < 200; i += 1) {
         await Promise.resolve();
       }
@@ -1099,6 +1135,6 @@ describe("Critique workspace", () => {
         /ScienceSwarm reasoning is temporarily unavailable\. Try again in a few minutes\./,
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Analyze" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: SUBMIT_BUTTON_LABEL })).toBeDisabled();
   });
 });

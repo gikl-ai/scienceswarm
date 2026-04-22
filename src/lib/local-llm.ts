@@ -77,6 +77,7 @@ export async function listModels(): Promise<string[]> {
 export async function completeLocal(
   messages: Array<{ role: string; content: string }>,
   model?: string,
+  options?: { format?: "json" },
 ): Promise<string> {
   const url = getOllamaUrl();
   const modelName = model || getLocalModel();
@@ -88,6 +89,7 @@ export async function completeLocal(
       model: modelName,
       messages,
       stream: false,
+      ...(options?.format ? { format: options.format } : {}),
     }),
     signal: AbortSignal.timeout(60_000),
   });

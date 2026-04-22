@@ -386,7 +386,6 @@ function isLikelyDuplicatePolledUserMessage(
 function normalizeReplayMessageContent(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
-
 function isLikelyDuplicatePolledAssistantMessage(
   existingMessages: Message[],
   candidate: Message,
@@ -404,15 +403,43 @@ function isLikelyDuplicatePolledAssistantMessage(
     return false;
   }
 
-  return existingMessages.some((message) => {
-    if (message.role !== "assistant") {
-      return false;
-    }
-    if (message.channel && message.channel !== "web") {
-      return false;
-    }
-    return normalizeReplayMessageContent(message.content) === candidateContent;
-  });
+  const latestSettledWebAssistant = [...existingMessages]
+    .reverse()
+    .find((message) =>
+      message.role === "assistant"
+      && (!message.channel || message.channel === "web")
+      && !isTransientAssistantScratchpad(message),
+    );
+
+  if (!latestSettledWebAssistant) {
+    return false;
+  }
+
+  if (
+    normalizeReplayMessageContent(latestSettledWebAssistant.content)
+    !== candidateContent
+  ) {
+    return false;
+  }
+
+  const newerWebUserMessageExists = existingMessages.some((message) =>
+    message.role === "user"
+    && (!message.channel || message.channel === "web")
+    && message.timestamp.getTime() > latestSettledWebAssistant.timestamp.getTime(),
+  );
+
+  if (newerWebUserMessageExists) {
+    return false;
+  }
+
+  return (
+    // POST responses stamp web completions on the client while polled
+    // completions carry server-side timestamps. Match the user-message
+    // dedupe window and assume clocks stay roughly NTP-aligned within 30 s.
+    Math.abs(
+      latestSettledWebAssistant.timestamp.getTime() - candidate.timestamp.getTime(),
+    ) <= 30_000
+  );
 }
 
 function isTransientAssistantScratchpad(message: Message): boolean {

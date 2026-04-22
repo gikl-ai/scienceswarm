@@ -8,11 +8,6 @@ export function RadarBriefingView() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [feedbackNotice, setFeedbackNotice] = useState<{
-    message: string;
-    savedPath?: string;
-  } | null>(null);
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const fetchBriefing = useCallback(async () => {
     setLoading(true);
@@ -49,7 +44,6 @@ export function RadarBriefingView() {
         return;
       }
       setBriefing(data ?? null);
-      setDismissed(new Set());
     } catch {
       setError("Failed to generate briefing.");
     } finally {
@@ -57,49 +51,9 @@ export function RadarBriefingView() {
     }
   }
 
-  async function sendFeedback(
-    signalId: string,
-    action: string,
-    item: DashboardBriefingItem,
-  ) {
-    if (action === "dismiss") {
-      setDismissed((prev) => new Set([...prev, signalId]));
-    }
-    try {
-      const res = await fetch("/api/radar/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          briefingId: briefing?.id,
-          signalId,
-          action,
-          matchedTopics: item.matchedTopics,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        message?: string;
-        savedPath?: string;
-      };
-      if (!res.ok) {
-        setFeedbackNotice({
-          message: data.error ?? "Feedback could not be recorded.",
-        });
-        return;
-      }
-      setFeedbackNotice({
-        message: data.message ?? "Feedback recorded for future matches.",
-        savedPath: data.savedPath,
-      });
-    } catch {
-      setFeedbackNotice({ message: "Feedback could not be recorded." });
-    }
-  }
-
   const allItems = briefing
     ? [...(briefing.matters ?? []), ...(briefing.horizon ?? [])]
     : [];
-  const visibleItems = allItems.filter((item) => !dismissed.has(item.signalId));
 
   return (
     <div className="space-y-4">
@@ -130,25 +84,6 @@ export function RadarBriefingView() {
         </p>
       )}
 
-      {feedbackNotice && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-          {feedbackNotice.message}
-          {feedbackNotice.savedPath && (
-            <>
-              {" "}
-              <a
-                href={`/dashboard/gbrain?brain_slug=${encodeURIComponent(
-                  feedbackNotice.savedPath.replace(/\.md$/i, "")
-                )}`}
-                className="font-semibold underline"
-              >
-                Open saved brain note
-              </a>
-            </>
-          )}
-        </p>
-      )}
-
       {loading && (
         <p className="text-sm text-muted">Loading briefing...</p>
       )}
@@ -159,7 +94,7 @@ export function RadarBriefingView() {
         </p>
       )}
 
-      {!loading && briefing?.nothingToday && visibleItems.length === 0 && (
+      {!loading && briefing?.nothingToday && allItems.length === 0 && (
         <div className="rounded-xl border border-border bg-surface/50 px-4 py-5 text-center">
           <p className="text-sm font-medium">Quiet day</p>
           <p className="mt-1 text-xs text-muted">
@@ -168,11 +103,10 @@ export function RadarBriefingView() {
         </div>
       )}
 
-      {visibleItems.map((item) => (
+      {allItems.map((item) => (
         <BriefingCard
           key={item.signalId}
           item={item}
-          onAction={(action) => sendFeedback(item.signalId, action, item)}
         />
       ))}
 
@@ -190,10 +124,8 @@ export function RadarBriefingView() {
 
 function BriefingCard({
   item,
-  onAction,
 }: {
   item: DashboardBriefingItem;
-  onAction: (action: string) => void;
 }) {
   return (
     <div className="rounded-xl border border-border bg-background p-4 space-y-2">
@@ -217,23 +149,6 @@ function BriefingCard({
 
       <p className="text-xs text-foreground leading-relaxed">{item.whyItMatters}</p>
 
-      {item.programMatches.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface/50 px-3 py-2 text-xs text-foreground">
-          <p className="font-semibold">Why this changes your program</p>
-          {item.programMatches.map((match) => (
-            <div key={`${match.area}-${match.reference}`} className="mt-2 space-y-1">
-              <p>
-                <span className="font-medium capitalize">{match.area}</span>
-                {": "}
-                {match.reference}
-              </p>
-              <p className="text-muted">{match.whyThisMatters}</p>
-              <p className="text-muted">Next check: {match.recommendedAction}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
       {item.tldr && (
         <p className="rounded-lg bg-surface/60 px-3 py-2 text-xs text-muted italic">
           {item.tldr}
@@ -253,29 +168,6 @@ function BriefingCard({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 pt-1">
-        <button
-          type="button"
-          onClick={() => onAction("save-to-brain")}
-          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-accent hover:text-accent"
-        >
-          Save to brain
-        </button>
-        <button
-          type="button"
-          onClick={() => onAction("more-like-this")}
-          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-accent hover:text-accent"
-        >
-          More like this
-        </button>
-        <button
-          type="button"
-          onClick={() => onAction("dismiss")}
-          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted hover:border-border hover:text-foreground"
-        >
-          Dismiss
-        </button>
-      </div>
     </div>
   );
 }
