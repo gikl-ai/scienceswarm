@@ -43,6 +43,9 @@ The core system is:
 - Dream Cycle and Research Radar overnight runs that leave auditable journal
   artifacts in the brain
 - A reasoning workspace for critique, review, and structured audit flows
+- Private local installation of third-party market plugin bundles from pinned
+  upstream GitHub refs, with local OpenClaw, Codex, and Claude Code exposure
+  but no automatic promotion into the public ScienceSwarm catalog
 - Local-first setup with optional integrations for OpenAI, GitHub, Google,
   Slack, Jira, and Telegram
 
@@ -117,6 +120,34 @@ Important:
 4. Start chatting with a project that already has context
 5. Run a literature packet from chat or MCP when you want a deterministic
    multi-source landscape review with durable packet/journal outputs
+
+### Private Market Plugins
+
+ScienceSwarm keeps two distinct skill/plugin surfaces:
+
+- Repo-backed workspace skills under `skills/` are the canonical first-party
+  and public catalog authoring path.
+- Third-party market plugin installs are private and user-local by default.
+
+Use the dashboard Skills view and switch to the `Installed` catalog to install
+a third-party plugin bundle from GitHub by `repo`, `ref`, and bundle `path`
+such as `plugins/life-science-research`.
+
+ScienceSwarm first inspects the upstream bundle, records the requested ref plus
+resolved commit SHA, then stores a pinned private bundle snapshot under
+`SCIENCESWARM_DIR/market/plugins/<plugin>/bundle`. From that local snapshot it:
+
+- installs the bundle into the local OpenClaw state under
+  `SCIENCESWARM_DIR/openclaw`
+- projects bundled skills into repo-local `.codex/skills/`
+- projects bundled skills into repo-local `.claude/skills/`
+
+These installs are not added to `skills/public-index.json`, are not promoted
+into the public ScienceSwarm catalog automatically, and stay local by default.
+ScienceSwarm also exposes explicit `Inspect`, `Update from upstream`, and
+`Reinstall hosts` actions so provenance and trust stay visible instead of
+hidden behind a one-shot import. Third-party bundles may include scripts or
+other executable files, so review upstream sources before installing them.
 
 ### Frontend-Only Development
 
