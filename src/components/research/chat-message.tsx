@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer } from "react";
 import type {
   ChatTaskPhase,
   MessageProgressEntry,
@@ -786,6 +786,28 @@ export function ChatMessage({
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
   const isOpenClawToolsTurn = chatMode === "openclaw-tools" && role !== "system";
+  const hasCopyableText = content.trim().length > 0 && !isStreaming;
+  const timestampText = `${timestamp.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })} · ${timestamp.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+  const footerTextClass = role === "user" ? "text-white/75" : "text-muted/55";
+  const selectionClass = role === "user"
+    ? "selection:bg-white/45 selection:text-slate-900"
+    : "selection:bg-accent/25 selection:text-slate-900";
+  const copyButtonClass =
+    role === "user"
+      ? "rounded border border-white/35 bg-transparent px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:border-white/70 hover:text-white"
+      : "rounded border border-border bg-white px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-accent hover:text-accent";
+  const copyToClipboard = useCallback(() => {
+    const clipboard = navigator.clipboard;
+    if (!clipboard?.writeText) return;
+    void clipboard.writeText(content).catch(() => {});
+  }, [content]);
 
   return (
     <div
@@ -894,17 +916,26 @@ export function ChatMessage({
         )}
 
         {/* Message content */}
-        <div className="whitespace-pre-wrap select-text">{renderContent(content, projectId)}</div>
+        <div className={`whitespace-pre-wrap select-text ${selectionClass}`}>
+          {renderContent(content, projectId)}
+        </div>
 
-        {/* Timestamp for cross-channel messages */}
-        {isCrossChannel && (
-          <div className="mt-2 text-[9px] text-muted/40">
-            {timestamp.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+        <div className="mt-2 flex items-center justify-between gap-3">
+          {hasCopyableText ? (
+            <button
+              type="button"
+              onClick={copyToClipboard}
+              className={copyButtonClass}
+              title="Copy message to clipboard"
+            >
+              Copy
+            </button>
+          ) : (
+            <div />
+          )}
+          <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
+        </div>
           </div>
-        )}
       </div>
     </div>
   );
