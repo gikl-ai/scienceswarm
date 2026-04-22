@@ -397,7 +397,7 @@ describe("ChatMessage", () => {
     const iframe = container.querySelector("iframe");
     expect(iframe).not.toBeNull();
     expect(iframe?.getAttribute("src")).toContain("file=reports%2Fpaper.pdf");
-    expect(iframe?.getAttribute("sandbox")).toBe("allow-same-origin");
+    expect(iframe?.getAttribute("sandbox")).toBe("allow-same-origin allow-downloads");
   });
 
   it("keeps saved html filename hints scoped to each embed", () => {
