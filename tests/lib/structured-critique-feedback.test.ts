@@ -77,6 +77,52 @@ describe("getStructuredCritiqueFeedbackDir", () => {
     ]);
   });
 
+  it("preserves existing new-path feedback when importing legacy records", async () => {
+    const root = await makeTempScienceSwarmDir();
+    const legacyRecord = makeFeedbackRecord("legacy-job", "finding-a");
+    const existingRecord = makeFeedbackRecord("existing-job", "finding-b");
+
+    await writeLegacyFeedback(root, [legacyRecord]);
+    await writeNewFeedback([existingRecord]);
+
+    await expect(readStructuredCritiqueFeedback()).resolves.toEqual([
+      existingRecord,
+      legacyRecord,
+    ]);
+  });
+
+  it("serializes first-run legacy imports across concurrent appends", async () => {
+    const root = await makeTempScienceSwarmDir();
+    const legacyRecord = makeFeedbackRecord("legacy-job", "finding-a");
+    const firstRecord = makeFeedbackRecord("new-job", "finding-b");
+    const secondRecord = makeFeedbackRecord("second-job", "finding-c");
+
+    await writeLegacyFeedback(root, [legacyRecord]);
+    await Promise.all([
+      appendStructuredCritiqueFeedback(firstRecord),
+      appendStructuredCritiqueFeedback(secondRecord),
+    ]);
+
+    await expect(readStructuredCritiqueFeedback()).resolves.toEqual([
+      secondRecord,
+      firstRecord,
+      legacyRecord,
+    ]);
+  });
+
+  it("does not duplicate legacy records after the first import", async () => {
+    const root = await makeTempScienceSwarmDir();
+    const legacyRecord = makeFeedbackRecord("legacy-job", "finding-a");
+
+    await writeLegacyFeedback(root, [legacyRecord]);
+    await readStructuredCritiqueFeedback();
+    await readStructuredCritiqueFeedback();
+
+    await expect(readStructuredCritiqueFeedback()).resolves.toEqual([
+      legacyRecord,
+    ]);
+  });
+
   it("does not import legacy defaults when an explicit feedback directory is configured", async () => {
     const root = await makeTempScienceSwarmDir();
     process.env.STRUCTURED_CRITIQUE_FEEDBACK_DIR = path.join(
@@ -113,19 +159,34 @@ async function writeLegacyFeedback(
   );
 }
 
+async function writeNewFeedback(
+  records: StructuredCritiqueFeedbackRecord[],
+): Promise<void> {
+  await fs.mkdir(getStructuredCritiqueFeedbackDir(), { recursive: true });
+  await fs.writeFile(
+    getStructuredCritiqueFeedbackPath(),
+    records.map((record) => JSON.stringify(record)).join("\n") + "\n",
+    "utf-8",
+  );
+}
+
 function makeFeedbackRecord(
   jobId: string,
   findingId: string,
 ): StructuredCritiqueFeedbackRecord {
+  const timestamps: Record<string, string> = {
+    "legacy-job": "2026-04-22T21:00:00.000Z",
+    "existing-job": "2026-04-22T21:04:00.000Z",
+    "new-job": "2026-04-22T21:05:00.000Z",
+    "second-job": "2026-04-22T21:06:00.000Z",
+  };
+
   return {
     job_id: jobId,
     finding_id: findingId,
     useful: true,
     would_revise: false,
-    timestamp:
-      jobId === "legacy-job"
-        ? "2026-04-22T21:00:00.000Z"
-        : "2026-04-22T21:05:00.000Z",
+    timestamp: timestamps[jobId] ?? "2026-04-22T21:03:00.000Z",
     user_id: "local-user",
   };
 }
