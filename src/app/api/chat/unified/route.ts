@@ -112,6 +112,14 @@ import { ensureProjectShellForProjectSlug } from "@/lib/projects/ensure-project-
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 import { readSavedLlmRuntimeEnv } from "@/lib/runtime-saved-env";
 import {
+  getDefaultRuntimeHostRouter,
+  type RuntimeHostRouter,
+} from "@/lib/runtime-hosts/router";
+import type {
+  RuntimeDataIncluded,
+  RuntimeTurnMode,
+} from "@/lib/runtime-hosts/contracts";
+import {
   artifactSourceWorkspaceKeysForPage,
   buildArtifactSourceSnapshotFromPage,
 } from "@/lib/artifact-source-snapshots";
@@ -148,6 +156,39 @@ interface WorkspaceReferenceMergeResult {
   referenceNotes: WorkspaceReferenceNotes;
 }
 
+function buildOpenClawRuntimeDataIncluded(
+  message: string,
+  files: UploadedFileDescriptor[],
+): RuntimeDataIncluded[] {
+  const parseRuntimeBytes = (size: string | undefined): number | undefined => {
+    const bytes = Number.parseInt(size ?? "", 10);
+    return Number.isNaN(bytes) ? undefined : bytes;
+  };
+
+  return [
+    {
+      kind: "prompt",
+      label: "User prompt",
+      bytes: Buffer.byteLength(message, "utf8"),
+    },
+    ...files.map((file): RuntimeDataIncluded => ({
+      kind: file.source === "gbrain" ? "gbrain-excerpt" : "workspace-file",
+      label: file.workspacePath ?? file.brainSlug ?? file.name ?? "Attached file",
+      bytes: parseRuntimeBytes(file.size),
+    })),
+  ];
+}
+
+function markRuntimeTurn(
+  router: RuntimeHostRouter,
+  sessionId: string | null,
+  status: "completed" | "failed",
+  errorCode?: string,
+): void {
+  if (!sessionId) return;
+  router.finishTurn(sessionId, { status, errorCode });
+}
+
 interface AgentRuntimeStatus {
   type: string;
   status: "connected" | "disconnected";
@@ -155,7 +196,13 @@ interface AgentRuntimeStatus {
 }
 
 type ChatMode = "reasoning" | "openclaw-tools";
-type RequestedBackend = "openclaw" | "agent" | "direct";
+
+const RUNTIME_HANDLER_ERROR_CODE = "RUNTIME_HANDLER_ERROR";
+const RUNTIME_CLIENT_DISCONNECTED_ERROR_CODE = "RUNTIME_CLIENT_DISCONNECTED";
+
+function runtimeTurnModeForChatMode(chatMode: ChatMode): RuntimeTurnMode {
+  return chatMode === "openclaw-tools" ? "mcp-tool" : "chat";
+}
 
 const MAX_CONTEXT_FILES = 10;
 const AUTO_PROJECT_CONTEXT_MAX_FILES = 3;
@@ -281,12 +328,6 @@ function matchesLocalModel(
 
 function normalizeChatMode(value: unknown): ChatMode {
   return value === "openclaw-tools" ? "openclaw-tools" : "reasoning";
-}
-
-function normalizeRequestedBackend(value: unknown): RequestedBackend | null {
-  return value === "openclaw" || value === "agent" || value === "direct"
-    ? value
-    : null;
 }
 
 export function shouldPreMaterializeProjectWorkspaceForTurn(params: {
@@ -7195,6 +7236,8 @@ function streamOpenClawResponse(params: {
   forceToolExecution?: boolean;
   sendToOpenClaw: SendOpenClawMessage;
   enableArtifactRepair?: boolean;
+  onComplete?: () => void;
+  onFail?: (errorCode?: string) => void;
 }): Response {
   const encoder = new TextEncoder();
   let streamClosed = false;
@@ -7368,6 +7411,7 @@ function streamOpenClawResponse(params: {
                   null,
                 ),
               });
+              params.onComplete?.();
               return;
             }
 
@@ -7411,6 +7455,7 @@ function streamOpenClawResponse(params: {
                   completedIds,
                 ),
               });
+              params.onFail?.(RUNTIME_HANDLER_ERROR_CODE);
               return;
             }
 
@@ -7464,6 +7509,7 @@ function streamOpenClawResponse(params: {
                   null,
                 ),
               });
+              params.onComplete?.();
               return;
             }
             if (
@@ -7522,6 +7568,7 @@ function streamOpenClawResponse(params: {
                   completedIds,
                 ),
               });
+              params.onFail?.("RUNTIME_TRANSPORT_ERROR");
               return;
             }
             importedOutputs = {
@@ -7555,6 +7602,7 @@ function streamOpenClawResponse(params: {
                   completedIds,
                 ),
               });
+              params.onFail?.("RUNTIME_TRANSPORT_ERROR");
               return;
             }
             importedOutputs = {
@@ -7578,6 +7626,7 @@ function streamOpenClawResponse(params: {
                 null,
               ),
             });
+            params.onComplete?.();
           } catch (err) {
             console.warn(
               "OpenClaw stream failed during unified response:",
@@ -7595,6 +7644,7 @@ function streamOpenClawResponse(params: {
                 completedIds,
               ),
             });
+            params.onFail?.("RUNTIME_TRANSPORT_ERROR");
           } finally {
             thinkingTraceStreamer.stop();
             closeStream();
@@ -7603,6 +7653,7 @@ function streamOpenClawResponse(params: {
       },
       cancel() {
         streamClosed = true;
+        params.onFail?.(RUNTIME_CLIENT_DISCONNECTED_ERROR_CODE);
       },
     }),
     {
@@ -7823,6 +7874,8 @@ export async function handleUnifiedChatPost(
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const runtimeRouter = getDefaultRuntimeHostRouter();
+  let runtimeTurnSessionId: string | null = null;
   let responseChatMode: ChatMode = "reasoning";
   let attemptedOpenClawTurn = false;
 
@@ -7831,7 +7884,6 @@ export async function handleUnifiedChatPost(
     const {
       message: fallbackMessage = "",
       messages: rawMessages,
-      backend: rawBackend,
       mode: rawMode,
       conversationId,
       files: rawFiles = [],
@@ -7841,7 +7893,6 @@ export async function handleUnifiedChatPost(
     } = body;
     const chatMode = normalizeChatMode(rawMode);
     responseChatMode = chatMode;
-    const requestedBackend = normalizeRequestedBackend(rawBackend);
     const commandTransport = options.commandTransport === true;
     const messagesRaw = normalizeMessages(rawMessages, fallbackMessage);
     const rawMessage = latestUserMessage(messagesRaw);
@@ -8099,6 +8150,35 @@ export async function handleUnifiedChatPost(
         return privacyError;
       }
 
+      const preparedRuntimeTurn = runtimeRouter.prepareTurn({
+        hostId: "openclaw",
+        projectPolicy: "local-only",
+        projectId: validatedProjectId,
+        conversationId: typeof conversationId === "string" ? conversationId : null,
+        mode: runtimeTurnModeForChatMode(chatMode),
+        prompt: userIntentMessage,
+        inputFileRefs: mergedFiles
+          .map((file) => file.workspacePath ?? file.brainSlug ?? file.name ?? "")
+          .filter((value) => value.length > 0),
+        dataIncluded: buildOpenClawRuntimeDataIncluded(
+          userIntentMessage,
+          mergedFiles,
+        ),
+        approvalState: "not-required",
+      });
+      runtimeTurnSessionId = preparedRuntimeTurn.session.id;
+      const completeRuntimeTurn = (response: Response): Response => {
+        markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "completed");
+        return response;
+      };
+      const failRuntimeTurn = (
+        response: Response,
+        errorCode = "RUNTIME_TRANSPORT_ERROR",
+      ): Response => {
+        markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "failed", errorCode);
+        return response;
+      };
+
       const { sendAgentMessage: sendToOpenClaw } =
         await import("@/lib/openclaw");
       const openClawConversationId = buildOpenClawSessionId(
@@ -8144,7 +8224,7 @@ export async function handleUnifiedChatPost(
             importedFiles: [approvalRecord],
           });
         }
-        return await responseWithOpenClawResult({
+        return completeRuntimeTurn(await responseWithOpenClawResult({
           responseText: buildPlanApprovalOnlyResponse({
             workspacePath: approvedWorkspacePath,
             approvalRecordPath: approvalRecord?.workspacePath ?? null,
@@ -8156,7 +8236,7 @@ export async function handleUnifiedChatPost(
           generatedFiles: approvalRecord ? [approvalRecord] : [],
           sourceFiles,
           prompt: userIntentMessage,
-        });
+        }));
       }
       const taskPhases =
         streamPhases === true
@@ -8179,7 +8259,7 @@ export async function handleUnifiedChatPost(
             ? existsSync(path.join(projectRoot, paths.plan))
             : false;
         if (!planExists) {
-          return await responseWithOpenClawResult({
+          return completeRuntimeTurn(await responseWithOpenClawResult({
             responseText: buildMissingRevisionPlanResponse({ paths }),
             conversationId: openClawConversationId,
             mode: chatMode,
@@ -8188,7 +8268,7 @@ export async function handleUnifiedChatPost(
             generatedFiles: [],
             sourceFiles,
             prompt: userIntentMessage,
-          });
+          }));
         }
 
         const requestConfersApproval =
@@ -8220,7 +8300,7 @@ export async function handleUnifiedChatPost(
             : await getPersistentRevisionApprovalState({ projectRoot, paths }),
         );
         if (!approvalState.hasApproval || approvalState.needsFreshApproval) {
-          return await responseWithOpenClawResult({
+          return completeRuntimeTurn(await responseWithOpenClawResult({
             responseText: buildRevisionNeedsApprovalResponse({
               paths,
               hasApproval: approvalState.hasApproval,
@@ -8232,7 +8312,7 @@ export async function handleUnifiedChatPost(
             generatedFiles: [],
             sourceFiles,
             prompt: userIntentMessage,
-          });
+          }));
         }
       }
       const useCompactArtifactContext = shouldUseCompactOpenClawArtifactContext(
@@ -8270,6 +8350,17 @@ export async function handleUnifiedChatPost(
           taskPhases,
           forceToolExecution,
           sendToOpenClaw,
+          onComplete: () => {
+            markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "completed");
+          },
+          onFail: (errorCode) => {
+            markRuntimeTurn(
+              runtimeRouter,
+              runtimeTurnSessionId,
+              "failed",
+              errorCode,
+            );
+          },
         });
       }
       const workspaceFileContext = useCompactArtifactContext
@@ -8292,7 +8383,7 @@ export async function handleUnifiedChatPost(
         sessionId: openClawConversationId,
       });
       if (fastRevisionOutputs) {
-        return Response.json(
+        return completeRuntimeTurn(Response.json(
           {
             response: sanitizeOpenClawUserVisibleResponse(
               fastRevisionOutputs.response,
@@ -8316,7 +8407,7 @@ export async function handleUnifiedChatPost(
               "X-Chat-Mode": chatMode,
             },
           },
-        );
+        ));
       }
       attemptedOpenClawTurn = true;
       const response = await sendOpenClawMessageWithArtifactRetry({
@@ -8339,7 +8430,7 @@ export async function handleUnifiedChatPost(
         projectId: validatedProjectId,
       });
       if (!response) {
-        return Response.json(
+        return failRuntimeTurn(Response.json(
           {
             error: "OpenClaw returned an empty response. Check the agent logs.",
             backend: "openclaw",
@@ -8353,27 +8444,30 @@ export async function handleUnifiedChatPost(
               "X-Chat-Mode": chatMode,
             },
           },
-        );
+        ));
       }
       if (isOpenClawFailureOutput(response)) {
-        return Response.json(
-          {
-            response:
-              buildOpenClawVisibleFailureResponse(response) ??
-              "ScienceSwarm could not complete this request. Your workspace files are preserved. Check Settings, then retry.",
-            conversationId: openClawConversationId,
-            backend: "openclaw",
-            mode: chatMode,
-            generatedFiles: [],
-            sourceFiles,
-            strictLocalOnly,
-          },
-          {
-            headers: {
-              "X-Chat-Backend": "openclaw",
-              "X-Chat-Mode": chatMode,
+        return failRuntimeTurn(
+          Response.json(
+            {
+              response:
+                buildOpenClawVisibleFailureResponse(response) ??
+                "ScienceSwarm could not complete this request. Your workspace files are preserved. Check Settings, then retry.",
+              conversationId: openClawConversationId,
+              backend: "openclaw",
+              mode: chatMode,
+              generatedFiles: [],
+              sourceFiles,
+              strictLocalOnly,
             },
-          },
+            {
+              headers: {
+                "X-Chat-Backend": "openclaw",
+                "X-Chat-Mode": chatMode,
+              },
+            },
+          ),
+          RUNTIME_HANDLER_ERROR_CODE,
         );
       }
 
@@ -8430,7 +8524,7 @@ export async function handleUnifiedChatPost(
         generatedFiles: requestedArtifactOutputs.generatedFiles,
       };
 
-      return Response.json(
+      return completeRuntimeTurn(Response.json(
         {
           response: sanitizeOpenClawUserVisibleResponse(importedOutputs.response),
           thinking:
@@ -8454,9 +8548,15 @@ export async function handleUnifiedChatPost(
             "X-Chat-Mode": chatMode,
           },
         },
-      );
+      ));
     }
   } catch (err) {
+    markRuntimeTurn(
+      runtimeRouter,
+      runtimeTurnSessionId,
+      "failed",
+      RUNTIME_HANDLER_ERROR_CODE,
+    );
     if (attemptedOpenClawTurn) {
       const visibleFailure = buildOpenClawVisibleFailureResponse(err);
       if (visibleFailure) {
