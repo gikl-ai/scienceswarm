@@ -85,6 +85,23 @@ export interface RankedSignal extends Signal {
   explanation: string // why this matters to the user
 }
 
+export type FrontierProgramArea =
+  | "hypothesis"
+  | "decision"
+  | "experiment"
+  | "question"
+  | "method"
+  | "topic"
+
+export interface FrontierProgramMatch {
+  area: FrontierProgramArea
+  reference: string
+  whyThisMatters: string
+  recommendedAction: string
+  evidence: string[]
+  confidence: "low" | "medium" | "high"
+}
+
 export interface RadarBriefing {
   id: string
   radarId: string
@@ -92,12 +109,15 @@ export interface RadarBriefing {
   matters: Array<{
     signal: RankedSignal
     whyItMatters: string
+    programMatches?: FrontierProgramMatch[]
   }>
   horizon: Array<{
     signal: RankedSignal
     whyItMatters: string
+    programMatches?: FrontierProgramMatch[]
   }>
   nothingToday: boolean
+  quietReason?: string
   stats: {
     signalsFetched: number
     signalsRanked: number

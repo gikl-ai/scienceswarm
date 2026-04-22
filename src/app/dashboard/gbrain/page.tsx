@@ -80,6 +80,10 @@ function GbrainPageContent() {
         : "workspace";
   const activeProjectSlug = safeProjectSlugOrNull(projectSlugFromUrl);
   const activeView: GbrainView = searchParams.get("view") === "skills" ? "skills" : "pages";
+  const requestedBrainPageSlug = useMemo(
+    () => normalizeBrainArtifactSlug(requestedBrainSlug),
+    [requestedBrainSlug],
+  );
   const [brainBootstrapState, setBrainBootstrapState] = useState<BrainBootstrapState>({ status: "loading" });
   const [projectBrief, setProjectBrief] = useState<DashboardProjectBrief | null>(null);
   const [selectedArtifact, setSelectedArtifact] = useState<BrainArtifactState>({ status: "idle" });
@@ -280,16 +284,15 @@ function GbrainPageContent() {
       return;
     }
 
-    const normalizedSlug = normalizeBrainArtifactSlug(requestedBrainSlug);
-    if (!normalizedSlug || brainBootstrapState.status !== "ready") {
+    if (!requestedBrainPageSlug || brainBootstrapState.status !== "ready") {
       setSelectedArtifact({ status: "idle" });
       return;
     }
 
     const controller = new AbortController();
-    void loadBrainArtifact(normalizedSlug, controller.signal);
+    void loadBrainArtifact(requestedBrainPageSlug, controller.signal);
     return () => controller.abort();
-  }, [activeView, brainBootstrapState.status, loadBrainArtifact, requestedBrainSlug]);
+  }, [activeView, brainBootstrapState.status, loadBrainArtifact, requestedBrainPageSlug]);
 
   const selectedProjectLabel = useMemo(() => activeProjectSlug ?? "No project selected", [activeProjectSlug]);
 
@@ -361,7 +364,7 @@ function GbrainPageContent() {
         </div>
       </section>
 
-      {activeView === "pages" && !activeProjectSlug && (
+      {activeView === "pages" && !activeProjectSlug && !requestedBrainPageSlug && (
         <section className="m-4 rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">
           <div className="flex flex-col items-center text-center">
             <h2 className="text-lg font-semibold">No project selected</h2>
@@ -446,13 +449,15 @@ function GbrainPageContent() {
         </div>
       )}
 
-      {activeView === "pages" && activeProjectSlug && (
+      {activeView === "pages" && (activeProjectSlug || requestedBrainPageSlug) && (
         <>
-          <DreamCycleCard
-            enabled={brainBootstrapState.status === "ready"}
-            projectBrief={projectBrief}
-            onNavigateBrainPage={handleNavigateBrainPage}
-          />
+          {activeProjectSlug && (
+            <DreamCycleCard
+              enabled={brainBootstrapState.status === "ready"}
+              projectBrief={projectBrief}
+              onNavigateBrainPage={handleNavigateBrainPage}
+            />
+          )}
 
           {brainBootstrapState.status === "error" && (
             <section
@@ -477,10 +482,12 @@ function GbrainPageContent() {
             </section>
           )}
 
-          <BrainSearchPanel
-            enabled={brainBootstrapState.status === "ready"}
-            onOpenResult={handleNavigateBrainPage}
-          />
+          {activeProjectSlug && (
+            <BrainSearchPanel
+              enabled={brainBootstrapState.status === "ready"}
+              onOpenResult={handleNavigateBrainPage}
+            />
+          )}
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 md:p-4">
             <div className="min-h-0 flex-1 overflow-hidden rounded-[24px] border border-border bg-white shadow-sm">

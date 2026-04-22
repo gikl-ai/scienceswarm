@@ -89,6 +89,9 @@ describe("synthesizeBriefing", () => {
 
     expect(briefing.matters).toHaveLength(1)
     expect(briefing.matters[0].signal.id).toBe("s1")
+    expect(briefing.matters[0].programMatches?.[0]?.reference).toContain(
+      "mechanistic interpretability"
+    )
     expect(briefing.horizon).toHaveLength(1)
     expect(briefing.nothingToday).toBe(false)
     expect(briefing.radarId).toBe("radar-1")
@@ -120,6 +123,7 @@ describe("synthesizeBriefing", () => {
     )
 
     expect(briefing.nothingToday).toBe(true)
+    expect(briefing.quietReason).toContain("none cleared the threshold")
     expect(briefing.matters).toHaveLength(0)
     expect(mockLLM.generate).not.toHaveBeenCalled()
   })
@@ -135,6 +139,7 @@ describe("synthesizeBriefing", () => {
     )
 
     expect(briefing.nothingToday).toBe(true)
+    expect(briefing.quietReason).toContain("no new external signals")
     expect(briefing.stats.sourcesFailed).toContain("arxiv-cs-ai")
   })
 })
