@@ -73,6 +73,32 @@ type BrainSaveStatus =
   | { state: "saved"; slug: string; url: string; projectUrl?: string }
   | { state: "error"; error: string };
 
+type StructuredCritiqueFeedbackRecord = {
+  job_id: string;
+  finding_id: string;
+  useful: boolean;
+  would_revise: boolean;
+  comment?: string;
+  timestamp: string;
+  user_id: string;
+};
+
+type StructuredCritiqueFeedbackSummary = {
+  total: number;
+  useful: number;
+  notUseful: number;
+  wouldRevise: number;
+  wouldNotRevise: number;
+  latestTimestamp: string | null;
+  unresolvedConcerns: number;
+};
+
+type StructuredCritiqueFeedbackResponse = {
+  records?: StructuredCritiqueFeedbackRecord[];
+  record?: StructuredCritiqueFeedbackRecord;
+  summary?: StructuredCritiqueFeedbackSummary;
+};
+
 type PersistCritiqueResponse = {
   brain_slug?: string;
   url?: string;
@@ -1002,6 +1028,43 @@ function FindingDetail({
   const [feedbackSent, setFeedbackSent] = useState(false);
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackRecords, setFeedbackRecords] = useState<StructuredCritiqueFeedbackRecord[]>([]);
+  const [feedbackSummary, setFeedbackSummary] = useState<StructuredCritiqueFeedbackSummary | null>(null);
+
+  useEffect(() => {
+    if (!finding.finding_id) {
+      setFeedbackRecords([]);
+      setFeedbackSummary(null);
+      return;
+    }
+    const findingId = finding.finding_id;
+    let cancelled = false;
+    const loadFeedback = async () => {
+      try {
+        const params = new URLSearchParams({
+          job_id: jobId,
+          finding_id: findingId,
+        });
+        const response = await fetch(`/api/structured-critique/feedback?${params.toString()}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const payload = (await response.json().catch(() => null)) as
+          | StructuredCritiqueFeedbackResponse
+          | null;
+        if (!payload || cancelled) return;
+        setFeedbackRecords(payload.records ?? []);
+        setFeedbackSummary(payload.summary ?? null);
+      } catch {
+        // Feedback history is helpful but should not block reading the critique.
+      }
+    };
+    void loadFeedback();
+    return () => {
+      cancelled = true;
+    };
+  }, [finding.finding_id, jobId]);
 
   const submitFeedback = async (nextUseful: boolean, nextWouldRevise: boolean) => {
     setIsSubmittingFeedback(true);
@@ -1015,12 +1078,17 @@ function FindingDetail({
           finding_id: finding.finding_id,
           useful: nextUseful,
           would_revise: nextWouldRevise,
+          ...(feedbackComment.trim() ? { comment: feedbackComment.trim() } : {}),
         }),
       });
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      const payload = (await response.json().catch(() => null)) as
+        | (StructuredCritiqueFeedbackResponse & { error?: string })
+        | null;
       if (!response.ok) {
         throw new Error(payload?.error || "Feedback could not be saved");
       }
+      setFeedbackRecords(payload?.records ?? (payload?.record ? [payload.record] : []));
+      setFeedbackSummary(payload?.summary ?? null);
       setFeedbackSent(true);
     } catch (err) {
       setFeedbackError(err instanceof Error ? err.message : "Feedback could not be saved");
@@ -1126,10 +1194,41 @@ function FindingDetail({
           <span className="text-xs text-muted">
             Feedback unavailable for this finding.
           </span>
-        ) : feedbackSent ? (
-          <span className="text-sm text-emerald-600 font-medium">Thanks!</span>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {feedbackSummary && feedbackSummary.total > 0 ? (
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                <p className="font-semibold">Evaluation history for this output</p>
+                <p className="mt-1">
+                  {feedbackSummary.total} review{feedbackSummary.total === 1 ? "" : "s"}:
+                  {" "}
+                  {feedbackSummary.useful} helpful,
+                  {" "}
+                  {feedbackSummary.notUseful} not helpful,
+                  {" "}
+                  {feedbackSummary.wouldRevise} would revise.
+                </p>
+                <p className="mt-1">
+                  Correction status: {feedbackSummary.unresolvedConcerns > 0
+                    ? "concern recorded; no corrected successor is linked yet."
+                    : "no unresolved concern recorded for this finding."}
+                </p>
+                {feedbackRecords[0]?.comment ? (
+                  <p className="mt-1 text-emerald-800">
+                    Latest note: {feedbackRecords[0].comment}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {feedbackSent ? (
+              <span className="text-sm text-emerald-600 font-medium">
+                Feedback recorded and added to this output&apos;s evaluation history.
+              </span>
+            ) : null}
+
+            {!feedbackSent && (
+              <>
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
@@ -1177,6 +1276,17 @@ function FindingDetail({
                 no
               </button>
             </div>
+            <label className="block text-xs text-muted">
+              Optional note or friction
+              <textarea
+                value={feedbackComment}
+                onChange={(event) => setFeedbackComment(event.target.value)}
+                rows={2}
+                className="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-foreground"
+                placeholder="What was helpful, wrong, confusing, or painful?"
+                disabled={isSubmittingFeedback}
+              />
+            </label>
             {isSubmittingFeedback ? (
               <span className="text-xs text-muted">Saving feedback...</span>
             ) : feedbackError ? (
@@ -1184,6 +1294,8 @@ function FindingDetail({
             ) : useful !== null || wouldRevise !== null ? (
               <span className="text-xs text-muted">Choose the remaining answer to send feedback.</span>
             ) : null}
+              </>
+            )}
           </div>
         )}
       </div>

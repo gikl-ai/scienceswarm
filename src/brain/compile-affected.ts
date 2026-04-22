@@ -83,8 +83,8 @@ const STOP_WORDS = new Set([
 export async function compileAffectedConceptsForSource(
   input: CompileAffectedInput,
 ): Promise<CompileAffectedResult> {
-  await ensureBrainStoreReady();
-  const store = getBrainStore();
+  await ensureBrainStoreReady({ root: input.config.root });
+  const store = getBrainStore({ root: input.config.root });
   const sourceSlug = normalizeSlug(input.sourceSlug);
   const sourcePage = await store.getPage(sourceSlug).catch(() => null);
   const sourceTitle = input.sourceTitle ?? sourcePage?.title ?? titleFromSlug(sourceSlug);

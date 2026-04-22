@@ -4,6 +4,8 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { initBrain } from "@/brain/init";
 import { buildGuideBriefing, buildProjectBrief } from "@/brain/briefing";
+import { logEvent } from "@/brain/cost";
+import { ensureBrainStoreReady, getBrainStore, resetBrainStore } from "@/brain/store";
 import type { BrainConfig } from "@/brain/types";
 import { readProjectManifest, writeProjectManifest } from "@/lib/state/project-manifests";
 import { writeProjectWatchConfig } from "@/lib/watch/store";
@@ -11,6 +13,7 @@ import { writeProjectWatchConfig } from "@/lib/watch/store";
 const TEST_ROOT = join(tmpdir(), "scienceswarm-brain-test-briefing");
 const BRAIN_ROOT = join(TEST_ROOT, "brain");
 const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
+const ORIGINAL_SCIENCESWARM_USER_HANDLE = process.env.SCIENCESWARM_USER_HANDLE;
 
 function projectBrainRoot(slug = "alpha"): string {
   return join(TEST_ROOT, "projects", slug, ".brain");
@@ -38,16 +41,23 @@ function makeConfig(): BrainConfig {
 beforeEach(() => {
   rmSync(TEST_ROOT, { recursive: true, force: true });
   process.env.SCIENCESWARM_DIR = TEST_ROOT;
+  process.env.SCIENCESWARM_USER_HANDLE = "briefing-tester";
   initBrain({ root: BRAIN_ROOT, name: "Test Researcher" });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await resetBrainStore();
   rmSync(TEST_ROOT, { recursive: true, force: true });
   vi.unstubAllGlobals();
   if (ORIGINAL_SCIENCESWARM_DIR) {
     process.env.SCIENCESWARM_DIR = ORIGINAL_SCIENCESWARM_DIR;
   } else {
     delete process.env.SCIENCESWARM_DIR;
+  }
+  if (ORIGINAL_SCIENCESWARM_USER_HANDLE) {
+    process.env.SCIENCESWARM_USER_HANDLE = ORIGINAL_SCIENCESWARM_USER_HANDLE;
+  } else {
+    delete process.env.SCIENCESWARM_USER_HANDLE;
   }
 });
 
@@ -294,6 +304,82 @@ describe("briefing core", () => {
     expect(brief.nextMove.recommendation).toBe(
       "Import a local archive or add a clear project description for Alpha Project so the brief can become specific.",
     );
+  });
+
+  it("prioritizes the latest event-backed project evidence even when manifest paths use project wiki paths", async () => {
+    mkdirSync(projectWikiPath("alpha", "wiki/projects"), { recursive: true });
+    mkdirSync(projectWikiPath("alpha", "wiki/resources"), { recursive: true });
+    writeFileSync(
+      projectWikiPath("alpha", "wiki/projects/alpha.md"),
+      "---\n" +
+        "type: project\n" +
+        "title: Alpha Project\n" +
+        "status: active\n" +
+        "project: alpha\n" +
+        "---\n" +
+        "# Alpha Project\n\n" +
+        "## Summary\n" +
+        "Baseline project description.\n",
+    );
+    writeFileSync(
+      projectWikiPath("alpha", "wiki/resources/working-view.md"),
+      "---\n" +
+        "type: note\n" +
+        "title: Working view\n" +
+        "project: alpha\n" +
+        "date: 2026-04-22\n" +
+        "---\n" +
+        "# Working view\n" +
+        "Combined inhibition leaves a survivor population with unclear mechanism.\n",
+    );
+    writeFileSync(
+      projectWikiPath("alpha", "wiki/resources/washout-followup.md"),
+      "---\n" +
+        "type: note\n" +
+        "title: Washout follow-up\n" +
+        "project: alpha\n" +
+        "date: 2026-04-22\n" +
+        "---\n" +
+        "# Washout follow-up\n" +
+        "Washout and rechallenge weaken rebound and strengthen a persister-state explanation.\n",
+    );
+
+    await writeProjectManifest(
+      {
+        version: 1,
+        projectId: "alpha",
+        slug: "alpha",
+        title: "Alpha Project",
+        privacy: "cloud-ok",
+        status: "active",
+        projectPagePath: "wiki/projects/alpha.md",
+        sourceRefs: [],
+        decisionPaths: [],
+        taskPaths: [],
+        artifactPaths: [],
+        frontierPaths: [],
+        activeThreads: [],
+        dedupeKeys: [],
+        updatedAt: "2026-04-22T00:00:00.000Z",
+      },
+    );
+
+    await ensureBrainStoreReady();
+    await getBrainStore().importCorpus(projectBrainRoot("alpha"));
+    logEvent(makeConfig(), {
+      ts: "2026-04-22T16:00:00.000Z",
+      type: "ingest",
+      created: ["wiki/resources/washout-followup.md"],
+    });
+
+    const brief = await buildProjectBrief({
+      config: makeConfig(),
+      project: "alpha",
+    });
+
+    expect(brief.topMatters[0].summary).toContain("Washout and rechallenge weaken rebound");
+    expect(brief.topMatters[0].evidence[0]).toContain("washout-followup.md");
+    expect(brief.nextMove.recommendation).toContain("Washout follow-up");
   });
 
   it("builds a compatibility guide briefing with reading suggestions", async () => {

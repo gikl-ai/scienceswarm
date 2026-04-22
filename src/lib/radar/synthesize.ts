@@ -1,5 +1,9 @@
 import type { Radar, RankedSignal, RadarBriefing } from "./types"
 import { randomUUID } from "crypto"
+import {
+  explainQuietFrontierState,
+  matchFrontierSignalToProgram,
+} from "./frontier-program-matcher"
 
 interface LLMClient {
   generate(prompt: string): Promise<string>
@@ -62,6 +66,11 @@ export async function synthesizeBriefing(
       matters: [],
       horizon: [],
       nothingToday: true,
+      quietReason: explainQuietFrontierState(
+        radar,
+        ranked.length,
+        fetchStats.signalsFetched
+      ),
       stats: {
         signalsFetched: fetchStats.signalsFetched,
         signalsRanked: ranked.length,
@@ -129,12 +138,20 @@ export async function synthesizeBriefing(
       .map((m) => ({
         signal: signalMap.get(m.signalId)!,
         whyItMatters: m.whyItMatters,
+        programMatches: matchFrontierSignalToProgram(
+          signalMap.get(m.signalId)!,
+          radar
+        ),
       })),
     horizon: (synthesis.horizon ?? [])
       .filter((h) => signalMap.has(h.signalId))
       .map((h) => ({
         signal: signalMap.get(h.signalId)!,
         whyItMatters: h.whyItMatters,
+        programMatches: matchFrontierSignalToProgram(
+          signalMap.get(h.signalId)!,
+          radar
+        ),
       })),
     nothingToday: false,
     stats: {

@@ -16,6 +16,7 @@ export interface FileReference {
   importedAt: string;
   lastChecked?: string;
   changed?: boolean;
+  localEditedAt?: string;
 }
 
 export interface ReferencesFile {
@@ -160,12 +161,31 @@ export function hashContent(content: string | Buffer): string {
 }
 
 export function slugifyWorkspaceSegment(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "untitled";
+  let slug = "";
+  let needsSeparator = false;
+  for (const character of input.trim().toLowerCase()) {
+    const code = character.charCodeAt(0);
+    const isSafe =
+      (code >= 48 && code <= 57)
+      || (code >= 97 && code <= 122);
+
+    if (isSafe) {
+      if (needsSeparator && slug.length > 0) {
+        slug += "-";
+      }
+      slug += character;
+      needsSeparator = false;
+      if (slug.length >= 80) break;
+      continue;
+    }
+
+    needsSeparator = slug.length > 0;
+  }
+
+  while (slug.endsWith("-")) {
+    slug = slug.slice(0, -1);
+  }
+  return slug || "untitled";
 }
 
 export function getProjectWorkspaceRoot(

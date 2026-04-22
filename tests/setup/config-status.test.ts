@@ -689,11 +689,14 @@ describe("getConfigStatus", () => {
 
   it("echoes non-secret keys (SCIENCESWARM_DIR, GOOGLE_CLIENT_ID, GITHUB_ID) verbatim so the UI can pre-fill", async () => {
     const dir = path.join(tmpHome, "data");
+    const brainRoot = path.join(tmpHome, "brain");
     await fs.mkdir(dir);
+    await fs.mkdir(brainRoot);
     await writeEnvLocal(
       repoRoot,
       [
         `SCIENCESWARM_DIR=${dir}`,
+        `BRAIN_ROOT=${brainRoot}`,
         "GOOGLE_CLIENT_ID=google-client-id-123",
         "GITHUB_ID=github-client-id-456",
         "OPENAI_API_KEY=sk-real",
@@ -701,6 +704,7 @@ describe("getConfigStatus", () => {
     );
     const status = await getConfigStatus(repoRoot);
     expect(status.rawValues["SCIENCESWARM_DIR"]).toBe(dir);
+    expect(status.rawValues["BRAIN_ROOT"]).toBe(brainRoot);
     expect(status.rawValues["GOOGLE_CLIENT_ID"]).toBe(
       "google-client-id-123",
     );
