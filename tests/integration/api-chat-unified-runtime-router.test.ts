@@ -323,11 +323,13 @@ describe("runtime host router", () => {
       expect.objectContaining({
         hostId: "openclaw",
         projectId: "project-alpha",
+        conversationId: "web-project-alpha-session-1",
         prompt: "Summarize the latest notes",
       }),
     );
     expect(result.result).toMatchObject({
       hostId: "openclaw",
+      sessionId: "web-project-alpha-session-1",
       message: "adapter response",
     });
     expect(sessionStore.listSessions()).toEqual([
@@ -357,6 +359,59 @@ describe("runtime host router", () => {
       privacyClass: "local-network",
       adapterProof: "declared-local",
     });
+
+    const profile = {
+      ...requireRuntimeHostProfile("openclaw"),
+      id: "codex" as const,
+    };
+    const profiledAdapter = createOpenClawRuntimeHostAdapter({
+      profile,
+      sendAgentMessage: async () => "profiled adapter response",
+    });
+
+    await expect(profiledAdapter.sendTurn({
+      hostId: "codex",
+      projectId: "project-alpha",
+      conversationId: "conversation-alpha",
+      mode: "chat",
+      prompt: "Test the profile id",
+      inputFileRefs: [],
+      dataIncluded: [],
+      approvalState: "not-required",
+      preview: {
+        allowed: true,
+        projectPolicy: "local-only",
+        hostId: "codex",
+        mode: "chat",
+        effectivePrivacyClass: "local-network",
+        destinations: [
+          {
+            hostId: "codex",
+            label: profile.label,
+            privacyClass: "local-network",
+          },
+        ],
+        dataIncluded: [],
+        proof: {
+          projectGatePassed: true,
+          operationPrivacyClass: "local-network",
+          adapterProof: "declared-local",
+        },
+        blockReason: null,
+        requiresUserApproval: false,
+        accountDisclosure: {
+          authMode: profile.authMode,
+          provider: profile.authProvider,
+          billingClass: "local-compute",
+          accountSource: "local-service",
+          costCopyRequired: false,
+        },
+      },
+    })).resolves.toMatchObject({
+      hostId: "codex",
+      sessionId: "conversation-alpha",
+      message: "profiled adapter response",
+    });
   });
 });
 
@@ -370,6 +425,12 @@ describe("/api/chat/unified runtime router facade", () => {
         {
           role: "user",
           content: "Hello from the runtime facade",
+        },
+      ],
+      files: [
+        {
+          name: "empty.txt",
+          size: "0",
         },
       ],
     }));
@@ -398,6 +459,12 @@ describe("/api/chat/unified runtime router facade", () => {
           allowed: true,
           hostId: "openclaw",
           effectivePrivacyClass: "local-network",
+          dataIncluded: expect.arrayContaining([
+            expect.objectContaining({
+              label: "empty.txt",
+              bytes: 0,
+            }),
+          ]),
         }),
       }),
     ]);

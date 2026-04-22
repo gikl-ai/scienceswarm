@@ -103,7 +103,7 @@ export class OpenClawRuntimeHostAdapter implements ResearchRuntimeHost {
     });
 
     return {
-      hostId: "openclaw",
+      hostId: this.runtimeProfile.id,
       sessionId: request.conversationId ?? request.preview.hostId,
       message,
     };

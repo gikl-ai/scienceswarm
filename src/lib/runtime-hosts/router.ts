@@ -125,7 +125,7 @@ export class RuntimeHostRouter {
     const request: RuntimeTurnRequest = {
       hostId: host.id,
       projectId: input.projectId,
-      conversationId: session.id,
+      conversationId: input.conversationId,
       mode: input.mode,
       prompt: input.prompt,
       promptHash: input.promptHash,

@@ -154,6 +154,11 @@ function buildOpenClawRuntimeDataIncluded(
   message: string,
   files: UploadedFileDescriptor[],
 ): RuntimeDataIncluded[] {
+  const parseRuntimeBytes = (size: string | undefined): number | undefined => {
+    const bytes = Number.parseInt(size ?? "", 10);
+    return Number.isNaN(bytes) ? undefined : bytes;
+  };
+
   return [
     {
       kind: "prompt",
@@ -163,7 +168,7 @@ function buildOpenClawRuntimeDataIncluded(
     ...files.map((file): RuntimeDataIncluded => ({
       kind: file.source === "gbrain" ? "gbrain-excerpt" : "workspace-file",
       label: file.workspacePath ?? file.brainSlug ?? file.name ?? "Attached file",
-      bytes: Number.parseInt(file.size ?? "", 10) || undefined,
+      bytes: parseRuntimeBytes(file.size),
     })),
   ];
 }
