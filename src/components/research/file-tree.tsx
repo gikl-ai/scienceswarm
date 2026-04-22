@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export interface FileNode {
   name: string;
@@ -45,6 +45,8 @@ export function FileTreeNode({
   selectedPath,
   path,
   onDelete,
+  expandedPaths,
+  onToggleDirectory,
 }: {
   node: FileNode;
   depth: number;
@@ -52,11 +54,15 @@ export function FileTreeNode({
   selectedPath: string | null;
   path: string;
   onDelete?: (path: string, node: FileNode) => void;
+  expandedPaths?: ReadonlySet<string>;
+  onToggleDirectory?: (path: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(depth < 2);
+  const [localExpanded, setLocalExpanded] = useState(false);
   const fullPath = getNodePath(node, path);
   const isSelected = selectedPath === fullPath;
   const canDelete = onDelete !== undefined && node.source !== "gbrain";
+  const isControlled = expandedPaths !== undefined && onToggleDirectory !== undefined;
+  const expanded = isControlled ? expandedPaths.has(fullPath) : localExpanded;
 
   if (node.type === "directory") {
     return (
@@ -68,9 +74,16 @@ export function FileTreeNode({
         >
           <button
             type="button"
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => {
+              if (isControlled) {
+                onToggleDirectory(fullPath);
+              } else {
+                setLocalExpanded(!expanded);
+              }
+            }}
             className="flex-1 flex items-center gap-1.5 px-2 py-1 text-left"
             style={{ paddingLeft: `${depth * 16 + 4}px` }}
+            aria-expanded={expanded}
           >
             <span className="text-[10px] text-muted w-3">{expanded ? "▼" : "▶"}</span>
             <span>📁</span>
@@ -99,6 +112,8 @@ export function FileTreeNode({
                 selectedPath={selectedPath}
                 path={fullPath}
                 onDelete={onDelete}
+                expandedPaths={expandedPaths}
+                onToggleDirectory={onToggleDirectory}
               />
             ))}
           </div>
@@ -169,6 +184,21 @@ export function FileTree({
 }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
+  const directoryPaths = useMemo(() => collectDirectoryPaths(files), [files]);
+  const hasDirectories = directoryPaths.length > 0;
+
+  const toggleDirectory = (path: string) => {
+    setExpandedPaths((current) => {
+      const next = new Set(current);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
 
   const dragHandlers = onDropFiles
     ? {
@@ -208,48 +238,72 @@ export function FileTree({
     >
       <div className="flex items-center justify-between px-3 py-2 border-b-2 border-border">
         <span className="text-xs font-bold text-muted uppercase tracking-wider">Workspace</span>
-        <div className="relative">
-          <button
-            onClick={() => setAddMenuOpen(!addMenuOpen)}
-            className="text-xs text-accent hover:text-accent-hover transition-colors font-medium"
-            title="Add files"
-          >
-            + Add
-          </button>
-          {addMenuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-48 bg-white border-2 border-border rounded-lg shadow-lg z-20 overflow-hidden">
-              <button
-                onClick={() => { onUpload(); setAddMenuOpen(false); }}
-                className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2"
-              >
-                Upload Files
-              </button>
-              {onUploadFolder && (
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center overflow-hidden rounded border border-border bg-white">
+            <button
+              type="button"
+              onClick={() => setExpandedPaths(new Set())}
+              disabled={!hasDirectories}
+              className="flex h-6 w-7 items-center justify-center text-[10px] text-muted transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              title="Collapse all folders"
+              aria-label="Collapse all folders"
+            >
+              ▸▸
+            </button>
+            <button
+              type="button"
+              onClick={() => setExpandedPaths(new Set(directoryPaths))}
+              disabled={!hasDirectories}
+              className="flex h-6 w-7 items-center justify-center border-l border-border text-[10px] text-muted transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              title="Expand all folders"
+              aria-label="Expand all folders"
+            >
+              ▾▾
+            </button>
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setAddMenuOpen(!addMenuOpen)}
+              className="text-xs text-accent hover:text-accent-hover transition-colors font-medium"
+              title="Add files"
+            >
+              + Add
+            </button>
+            {addMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-white border-2 border-border rounded-lg shadow-lg z-20 overflow-hidden">
                 <button
-                  onClick={() => { onUploadFolder(); setAddMenuOpen(false); }}
-                  className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2 border-t border-border"
+                  onClick={() => { onUpload(); setAddMenuOpen(false); }}
+                  className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2"
                 >
-                  <span>📁</span> Import Local Folder
+                  Upload Files
                 </button>
-              )}
-              {onImportFromDrive && (
-                <button
-                  onClick={() => { onImportFromDrive(); setAddMenuOpen(false); }}
-                  className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2 border-t border-border"
-                >
-                  Import from Drive
-                </button>
-              )}
-              {onCheckChanges && (
-                <button
-                  onClick={() => { onCheckChanges(); setAddMenuOpen(false); }}
-                  className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2 border-t border-border"
-                >
-                  Check for Changes
-                </button>
-              )}
-            </div>
-          )}
+                {onUploadFolder && (
+                  <button
+                    onClick={() => { onUploadFolder(); setAddMenuOpen(false); }}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2 border-t border-border"
+                  >
+                    <span>📁</span> Import Local Folder
+                  </button>
+                )}
+                {onImportFromDrive && (
+                  <button
+                    onClick={() => { onImportFromDrive(); setAddMenuOpen(false); }}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2 border-t border-border"
+                  >
+                    Import from Drive
+                  </button>
+                )}
+                {onCheckChanges && (
+                  <button
+                    onClick={() => { onCheckChanges(); setAddMenuOpen(false); }}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2 border-t border-border"
+                  >
+                    Check for Changes
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto py-1">
@@ -284,10 +338,25 @@ export function FileTree({
               onSelect={onSelect}
               selectedPath={selectedPath}
               path=""
+              expandedPaths={expandedPaths}
+              onToggleDirectory={toggleDirectory}
             />
           ))
         )}
       </div>
     </div>
   );
+}
+
+export function collectDirectoryPaths(nodes: FileNode[], parentPath = ""): string[] {
+  return nodes.flatMap((node) => {
+    const fullPath = getNodePath(node, parentPath);
+    if (node.type !== "directory") {
+      return [];
+    }
+    return [
+      fullPath,
+      ...collectDirectoryPaths(node.children ?? [], fullPath),
+    ];
+  });
 }

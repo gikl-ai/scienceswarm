@@ -280,13 +280,18 @@ interface GbrainWorkspaceFileEntry {
   updatedAt: string | null;
 }
 
-function gbrainWorkspaceEntryTimestamp(entry: GbrainWorkspaceFileEntry): number {
+function gbrainWorkspaceEntryTimestampValue(entry: GbrainWorkspaceFileEntry): string | null {
   const rawTimestamp =
     entry.pageFrontmatter.uploaded_at ??
     entry.updatedAt ??
     entry.pageFrontmatter.updated_at ??
     entry.pageFrontmatter.created_at;
-  if (typeof rawTimestamp !== "string") return Number.NaN;
+  return typeof rawTimestamp === "string" ? rawTimestamp : null;
+}
+
+function gbrainWorkspaceEntryTimestamp(entry: GbrainWorkspaceFileEntry): number {
+  const rawTimestamp = gbrainWorkspaceEntryTimestampValue(entry);
+  if (!rawTimestamp) return Number.NaN;
   return Date.parse(rawTimestamp);
 }
 
@@ -415,7 +420,9 @@ async function buildGbrainWorkspaceView(
     watch: {
       revision: hash.digest("hex"),
       totalFiles: entries.length,
-      lastModified: null,
+      lastModified: newestIsoTimestamp(
+        entries.map(gbrainWorkspaceEntryTimestampValue),
+      ),
     },
     entries,
   };
@@ -592,6 +599,96 @@ function insertGbrainTreeNode(
     level = dir.children ?? [];
     dir.children = level;
   }
+}
+
+function cloneTreeNode(node: TreeNode): TreeNode {
+  return {
+    ...node,
+    children: node.children?.map(cloneTreeNode),
+  };
+}
+
+function sortWorkspaceTree(nodes: TreeNode[]): TreeNode[] {
+  return nodes
+    .map((node) => ({
+      ...node,
+      children: node.children ? sortWorkspaceTree(node.children) : undefined,
+    }))
+    .sort((left, right) => {
+      if (left.type !== right.type) {
+        return left.type === "directory" ? -1 : 1;
+      }
+      return left.name.localeCompare(right.name);
+    });
+}
+
+function mergeWorkspaceTreeNodes(
+  diskTree: TreeNode[],
+  gbrainTree: TreeNode[],
+): TreeNode[] {
+  const merged = diskTree.map(cloneTreeNode);
+
+  for (const gbrainNode of gbrainTree) {
+    const existingIndex = merged.findIndex((node) => node.name === gbrainNode.name);
+    if (existingIndex < 0) {
+      merged.push(cloneTreeNode(gbrainNode));
+      continue;
+    }
+
+    const existing = merged[existingIndex];
+    if (existing.type === "directory" && gbrainNode.type === "directory") {
+      merged[existingIndex] = {
+        ...existing,
+        children: mergeWorkspaceTreeNodes(
+          existing.children ?? [],
+          gbrainNode.children ?? [],
+        ),
+      };
+      continue;
+    }
+
+    // gbrain metadata is authoritative for exact path conflicts, but it should
+    // not hide unrelated source files that still live in the project workspace.
+    merged[existingIndex] = cloneTreeNode(gbrainNode);
+  }
+
+  return sortWorkspaceTree(merged);
+}
+
+function combineWorkspaceWatchState(params: {
+  diskWatch: WorkspaceWatchState;
+  gbrainWatch: WorkspaceWatchState;
+  totalFiles: number;
+}): WorkspaceWatchState {
+  const hash = crypto.createHash("sha1");
+  hash.update(
+    `disk:${params.diskWatch.revision}:${params.diskWatch.totalFiles}:${params.diskWatch.lastModified ?? ""}\n`,
+  );
+  hash.update(
+    `gbrain:${params.gbrainWatch.revision}:${params.gbrainWatch.totalFiles}:${params.gbrainWatch.lastModified ?? ""}\n`,
+  );
+
+  return {
+    revision: hash.digest("hex"),
+    totalFiles: params.totalFiles,
+    lastModified: newestIsoTimestamp([
+      params.diskWatch.lastModified,
+      params.gbrainWatch.lastModified,
+    ]),
+  };
+}
+
+function newestIsoTimestamp(values: Array<string | null>): string | null {
+  let newest: { value: string; time: number } | null = null;
+  for (const value of values) {
+    if (!value) continue;
+    const time = Date.parse(value);
+    if (Number.isNaN(time)) continue;
+    if (!newest || time > newest.time) {
+      newest = { value, time };
+    }
+  }
+  return newest?.value ?? null;
 }
 
 function inferImportedFileType(filename: string): string {
@@ -1018,16 +1115,6 @@ async function handleUpload(request: Request) {
 }
 
 async function handleList(projectId: string | null) {
-  const gbrainView = await buildGbrainWorkspaceView(projectId);
-  if (gbrainView) {
-    return Response.json({
-      tree: gbrainView.tree,
-      totalFiles: gbrainView.totalFiles,
-      watchRevision: gbrainView.watch.revision,
-      lastModified: gbrainView.watch.lastModified,
-    });
-  }
-
   if (projectId) {
     // Skip legacy repair for archived (soft-deleted) projects — repairing
     // them would resurrect the project record.
@@ -1053,15 +1140,32 @@ async function handleList(projectId: string | null) {
   const root = resolveWorkspaceRoot(projectId);
   const refs = repairFlatScientistWorkspaceFiles(root, readRefs(root));
   const legacyTree = buildTree(root, refs, root);
-  const totalFiles = refs.files.length > 0
+  const legacyTotalFiles = refs.files.length > 0
     ? refs.files.length
     : countFilesInTree(legacyTree);
-  const watch = computeWorkspaceWatchState(root);
+  const legacyWatch = computeWorkspaceWatchState(root);
+  const gbrainView = await buildGbrainWorkspaceView(projectId);
+  if (gbrainView) {
+    const mergedTree = mergeWorkspaceTreeNodes(legacyTree, gbrainView.tree);
+    const totalFiles = countFilesInTree(mergedTree);
+    const watch = combineWorkspaceWatchState({
+      diskWatch: legacyWatch,
+      gbrainWatch: gbrainView.watch,
+      totalFiles,
+    });
+    return Response.json({
+      tree: mergedTree,
+      totalFiles,
+      watchRevision: watch.revision,
+      lastModified: watch.lastModified,
+    });
+  }
+
   return Response.json({
     tree: legacyTree,
-    totalFiles,
-    watchRevision: watch.revision,
-    lastModified: watch.lastModified,
+    totalFiles: legacyTotalFiles,
+    watchRevision: legacyWatch.revision,
+    lastModified: legacyWatch.lastModified,
   });
 }
 
@@ -1069,10 +1173,19 @@ async function handleWatch(projectId: string | null, since: string | null) {
   if (projectId) {
     const gbrainView = await buildGbrainWorkspaceView(projectId);
     const root = resolveWorkspaceRoot(projectId);
-    if (!gbrainView) {
-      repairFlatScientistWorkspaceFiles(root, readRefs(root));
-    }
-    const watch = gbrainView?.watch ?? computeWorkspaceWatchState(root);
+    const refs = repairFlatScientistWorkspaceFiles(root, readRefs(root));
+    const legacyWatch = computeWorkspaceWatchState(root);
+    const watch = (() => {
+      if (!gbrainView) return legacyWatch;
+      const legacyTree = buildTree(root, refs, root);
+      return combineWorkspaceWatchState({
+          diskWatch: legacyWatch,
+          gbrainWatch: gbrainView.watch,
+          totalFiles: countFilesInTree(
+            mergeWorkspaceTreeNodes(legacyTree, gbrainView.tree),
+          ),
+        });
+    })();
     return Response.json({
       revision: watch.revision,
       changed: typeof since === "string" && since.length > 0 ? since !== watch.revision : false,
@@ -1206,6 +1319,7 @@ const RAW_RENDERABLE_EXTENSIONS = new Set([
   "jpeg",
   "gif",
   "webp",
+  "avif",
   "svg",
   "html",
   "htm",
@@ -1230,6 +1344,7 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
+  avif: "image/avif",
   svg: "image/svg+xml",
   html: "text/html; charset=utf-8",
   htm: "text/html; charset=utf-8",
