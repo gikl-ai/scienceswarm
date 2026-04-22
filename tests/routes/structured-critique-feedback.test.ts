@@ -1,16 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mkdirMock, appendFileMock, readFileMock } = vi.hoisted(() => ({
+const {
+  accessMock,
+  appendFileMock,
+  closeMock,
+  mkdirMock,
+  openMock,
+  readFileMock,
+  rmMock,
+  writeFileMock,
+} = vi.hoisted(() => ({
+  accessMock: vi.fn().mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" })),
   mkdirMock: vi.fn().mockResolvedValue(undefined),
   appendFileMock: vi.fn().mockResolvedValue(undefined),
+  closeMock: vi.fn().mockResolvedValue(undefined),
+  openMock: vi.fn(),
   readFileMock: vi.fn().mockResolvedValue(""),
+  rmMock: vi.fn().mockResolvedValue(undefined),
+  writeFileMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("fs", () => ({
   promises: {
+    access: accessMock,
     mkdir: mkdirMock,
     appendFile: appendFileMock,
+    open: openMock,
     readFile: readFileMock,
+    rm: rmMock,
+    writeFile: writeFileMock,
   },
 }));
 
@@ -26,10 +44,17 @@ function makeRequest(body: unknown): Request {
 
 describe("/api/structured-critique/feedback", () => {
   beforeEach(() => {
+    accessMock.mockReset();
+    accessMock.mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" }));
     mkdirMock.mockClear();
     appendFileMock.mockClear();
+    closeMock.mockClear();
+    openMock.mockReset();
+    openMock.mockResolvedValue({ close: closeMock });
     readFileMock.mockReset();
     readFileMock.mockResolvedValue("");
+    rmMock.mockClear();
+    writeFileMock.mockClear();
   });
 
   it("accepts valid feedback and returns 200 with ok: true", async () => {
@@ -56,7 +81,7 @@ describe("/api/structured-critique/feedback", () => {
       },
     });
 
-    expect(mkdirMock).toHaveBeenCalledOnce();
+    expect(mkdirMock).toHaveBeenCalled();
     expect(appendFileMock).toHaveBeenCalledOnce();
 
     const writtenLine = appendFileMock.mock.calls[0][1] as string;

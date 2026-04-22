@@ -517,6 +517,18 @@ function latestTimestampCursor(seed: string, messages: PolledOpenClawMessage[]):
   }, seed);
 }
 
+function laterTimestampCursor(current: string, candidate: string): string {
+  const currentTime = Date.parse(current);
+  const candidateTime = Date.parse(candidate);
+  if (Number.isNaN(candidateTime)) {
+    return current;
+  }
+  if (Number.isNaN(currentTime) || candidateTime > currentTime) {
+    return candidate;
+  }
+  return current;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
     ? value as Record<string, unknown>
@@ -3024,6 +3036,10 @@ export function useUnifiedChat(
       if (contentType.includes("text/event-stream")) {
         const responseBackend = mapResponseBackend(backendHeader) ?? context.backend;
         await consumeSSEStream(res, assistantId, context, content, requestFiles);
+        lastPollRef.current = laterTimestampCursor(
+          lastPollRef.current,
+          new Date().toISOString(),
+        );
         if (isSendProjectCurrent(context)) {
           liveBackendRef.current = responseBackend;
           setBackend(responseBackend);
@@ -3056,12 +3072,10 @@ export function useUnifiedChat(
       }
       const responseMode = normalizeChatMode(data.mode) ?? modeHeader ?? context.chatMode;
       const responseBackend = mapResponseBackend(backendHeader) ?? context.backend;
-      const completedAt = new Date().toISOString();
-      const previousPollTime = Date.parse(lastPollRef.current);
-      const completedTime = Date.parse(completedAt);
-      if (Number.isNaN(previousPollTime) || completedTime > previousPollTime) {
-        lastPollRef.current = completedAt;
-      }
+      lastPollRef.current = laterTimestampCursor(
+        lastPollRef.current,
+        new Date().toISOString(),
+      );
 
       // Update assistant message with response
       applyMessagesUpdate((prev) =>

@@ -1991,6 +1991,126 @@ describe("useUnifiedChat persistence", () => {
     });
   });
 
+  it("advances the OpenClaw poll cursor after streamed web replies", async () => {
+    const scheduledIntervals: Array<() => void | Promise<void>> = [];
+    vi.spyOn(globalThis, "setInterval").mockImplementation(((
+      callback: TimerHandler,
+    ) => {
+      if (typeof callback === "function") {
+        scheduledIntervals.push(callback as () => void | Promise<void>);
+      }
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof setInterval);
+
+    const previousCursor = "2000-01-01T00:00:00.000Z";
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: "web-alpha-project-session-1",
+        conversationBackend: "openclaw",
+        messages: [
+          {
+            id: "assistant-old",
+            role: "assistant",
+            channel: "web",
+            content: "Earlier answer",
+            timestamp: previousCursor,
+          },
+        ],
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: "web-alpha-project-session-1",
+          conversationBackend: "openclaw",
+          messages: [
+            {
+              id: "assistant-old",
+              role: "assistant",
+              channel: "web",
+              content: "Earlier answer",
+              timestamp: previousCursor,
+            },
+          ],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+        });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            text: "Streamed cursor answer.",
+            conversationId: "web-alpha-project-session-1",
+            backend: "openclaw",
+          },
+        ]);
+      }
+
+      if (url.startsWith("/api/chat/unified?action=poll")) {
+        return Response.json({
+          backend: "openclaw",
+          conversationId: "web-alpha-project-session-1",
+          messages: [],
+        });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Streamed cursor answer.");
+    });
+
+    await act(async () => {
+      for (const callback of scheduledIntervals) {
+        await callback?.();
+      }
+    });
+
+    const pollCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).startsWith("/api/chat/unified?action=poll"),
+    );
+    expect(pollCall).toBeTruthy();
+    const pollUrl = new URL(String(pollCall?.[0]), "http://localhost");
+    expect(Date.parse(pollUrl.searchParams.get("since") ?? "")).toBeGreaterThan(
+      Date.parse(previousCursor),
+    );
+    expect(pollUrl.searchParams.get("conversationId")).toBe("web-alpha-project-session-1");
+  });
+
   it("tracks generated files returned directly from a chat turn before the workspace tabs refresh", async () => {
     let treeVersion = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
