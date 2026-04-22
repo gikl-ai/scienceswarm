@@ -1,3 +1,5 @@
+import { formatOpenClawContextOverflowMessage } from "@/lib/openclaw/error-messages";
+
 export function sanitizeOpenClawUserVisibleResponse(
   response: string,
   options?: { trimEnd?: boolean },
@@ -7,13 +9,7 @@ export function sanitizeOpenClawUserVisibleResponse(
     /^Context overflow:/im.test(normalized) ||
     /\bprompt too large for the model\b/i.test(normalized)
   ) {
-    return [
-      "ScienceSwarm could not complete this request because the research agent context became too large for the current turn.",
-      "",
-      "Your uploaded files and existing artifacts are still preserved in the workspace.",
-      "",
-      "Start a fresh project chat or retry after removing extra attached context.",
-    ].join("\n");
+    return formatOpenClawContextOverflowMessage();
   }
 
   const sanitized = normalized
