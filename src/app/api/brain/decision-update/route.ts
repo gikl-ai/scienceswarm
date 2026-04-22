@@ -92,7 +92,13 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "content is required" }, { status: 400 });
   }
 
-  const safeProject = assertSafeProjectSlug(project);
+  let safeProject: string;
+  try {
+    safeProject = assertSafeProjectSlug(project);
+  } catch {
+    return Response.json({ error: "project must be a safe bare slug" }, { status: 400 });
+  }
+
   const decisionPath = buildMirroredBrainPagePath(slug, "decision");
   if (!decisionPath) {
     return Response.json({ error: "Could not resolve decision path" }, { status: 400 });

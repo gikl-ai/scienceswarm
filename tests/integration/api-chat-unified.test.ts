@@ -1085,7 +1085,7 @@ describe("POST /api/chat/unified", () => {
     expect(artifactPath).toBeTruthy();
     expect(
       readFileSync(
-        path.join(ensureScienceSwarmDir(), "workspace", artifactPath ?? ""),
+        path.join(ensureScienceSwarmDir(), "projects", "alpha-project", artifactPath ?? ""),
         "utf-8",
       ),
     ).toContain("## Missing Metadata ScienceSwarm Will Not Assume");
@@ -1167,7 +1167,7 @@ describe("POST /api/chat/unified", () => {
     expect(artifactPath).toBeTruthy();
     expect(
       readFileSync(
-        path.join(ensureScienceSwarmDir(), "workspace", artifactPath ?? ""),
+        path.join(ensureScienceSwarmDir(), "projects", "alpha-project", artifactPath ?? ""),
         "utf-8",
       ),
     ).toContain("## Thin Evidence and Missing Information");

@@ -1,4 +1,5 @@
 import { interpretMultimodalResultPacket } from "@/brain/multimodal-result-interpreter";
+import { isLocalRequest } from "@/lib/local-guard";
 import {
   assertSafeProjectSlug,
   InvalidSlugError,
@@ -19,6 +20,10 @@ interface RequestBody {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const configOrError = getBrainConfig();
   if (isErrorResponse(configOrError)) return configOrError;
   const config = configOrError;
