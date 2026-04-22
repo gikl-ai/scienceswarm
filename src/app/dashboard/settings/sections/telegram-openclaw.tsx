@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { TelegramBotReady } from "@/components/setup/telegram-bot-ready";
 import { TelegramCodePrompt } from "@/components/setup/telegram-code-prompt";
@@ -110,8 +110,13 @@ export function TelegramOpenClawSection({
   const [refreshingPending, setRefreshingPending] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
+  const didMountRef = useRef(false);
 
   useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
     if (connecting) return;
     setPhoneDraft(initialPhone);
     setMode(telegram.configured ? "reuse" : "fresh");

@@ -319,7 +319,7 @@ describe("ChatMessage", () => {
     expect(screen.queryByText(/Read docs\/results_table\.csv/)).not.toBeInTheDocument();
   });
 
-  it("does not render a stored progress transcript after a completed assistant turn", () => {
+  it("renders a stored progress transcript after a completed assistant turn", () => {
     render(
       <ChatMessage
         role="assistant"
@@ -334,9 +334,10 @@ describe("ChatMessage", () => {
     );
 
     expect(screen.getByText("Final answer")).toBeInTheDocument();
-    expect(screen.queryByRole("log")).not.toBeInTheDocument();
-    expect(screen.queryByText("Planning how to inspect the chart files.")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Read docs\/results_table\.csv/)).not.toBeInTheDocument();
+    const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent("Planning how to inspect the chart files.");
+    expect(progressLog).toHaveTextContent("Read docs/results_table.csv");
+    expect(progressLog).not.toHaveTextContent("Working (");
   });
 
   it("renders workspace media hints as chat media", () => {
@@ -353,6 +354,21 @@ describe("ChatMessage", () => {
       "src",
       "/api/workspace?action=raw&file=docs%2Fresults_chart.png&projectId=project-alpha",
     );
+  });
+
+  it("renders AVIF MEDIA references as inline image", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:figures/diagram.avif"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-21T10:00:15.000Z")}
+      />,
+    );
+
+    const image = screen.getByAltText("figures/diagram.avif");
+    expect(image.tagName).toBe("IMG");
+    expect(image.getAttribute("src")).toContain("file=figures%2Fdiagram.avif");
   });
 
   it("maps absolute OpenClaw media paths to managed raw previews", () => {
@@ -387,6 +403,41 @@ describe("ChatMessage", () => {
 
     expect(container.querySelector("video source")).toHaveAttribute("type", "video/mp4");
     expect(container.querySelector("audio source")).toHaveAttribute("type", "audio/mp4");
+  });
+
+  it("renders PDF MEDIA references as inline iframe", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:reports/paper.pdf"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:06:00.000Z")}
+      />,
+    );
+
+    const iframe = container.querySelector("iframe");
+    expect(iframe).not.toBeNull();
+    expect(iframe?.getAttribute("src")).toContain("file=reports%2Fpaper.pdf");
+    expect(iframe?.getAttribute("sandbox")).toBe("allow-same-origin allow-downloads");
+  });
+
+  it("renders FLAC/OPUS/AAC MEDIA references as inline audio", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:audio/song.flac\nMEDIA:audio/clip.opus\nMEDIA:audio/voice.aac"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:07:00.000Z")}
+      />,
+    );
+
+    const audioElements = container.querySelectorAll("audio");
+    expect(audioElements).toHaveLength(3);
+
+    const sources = container.querySelectorAll("audio source");
+    expect(sources[0]).toHaveAttribute("type", "audio/flac");
+    expect(sources[1]).toHaveAttribute("type", "audio/ogg; codecs=opus");
+    expect(sources[2]).toHaveAttribute("type", "audio/aac");
   });
 
   it("keeps saved html filename hints scoped to each embed", () => {

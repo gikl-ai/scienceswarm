@@ -58,6 +58,7 @@ import {
   InlineChart,
   splitContentWithCharts,
 } from "@/components/research/inline-chart";
+import { SchedulerPanel } from "@/components/research/scheduler-panel";
 import {
   buildWorkspaceHrefForSlug,
   persistLastProjectSlug,
@@ -115,35 +116,6 @@ interface Message {
   captureClarification?: CaptureClarification;
 }
 
-interface DashboardProjectBrief {
-  project: string;
-  generatedAt: string;
-  topMatters: Array<{
-    summary: string;
-    evidence: string[];
-  }>;
-  unresolvedRisks: Array<{
-    risk: string;
-    evidence: string[];
-  }>;
-  nextMove?: {
-    recommendation?: string;
-    assumptions?: string[];
-    missingEvidence?: string[];
-  };
-  dueTasks?: Array<{
-    path: string;
-    title: string;
-    status: string;
-  }>;
-  frontier?: Array<{
-    path: string;
-    title: string;
-    status: string;
-    whyItMatters: string;
-  }>;
-}
-
 interface LatestImportSummary {
   name: string;
   preparedFiles: number;
@@ -153,17 +125,6 @@ interface LatestImportSummary {
   generatedAt: string;
   source: string;
 }
-
-interface ProjectUnderstandingDelta {
-  changedAt: string;
-  summary: string;
-  previousRecommendation?: string;
-  nextRecommendation?: string;
-  whyItChanged: string[];
-  evidence: string[];
-}
-
-type ProjectUnderstandingStatus = "idle" | "loading" | "ready" | "error";
 
 interface ProjectImportSummaryResponse {
   project: string;
@@ -181,19 +142,6 @@ interface MultimodalInterpretationResponse {
 interface SlashCommandCatalogResponse {
   commands?: SlashCommandOption[];
   error?: string;
-}
-
-interface EvidenceMapResponse {
-  brain_slug?: string;
-  project_url?: string;
-  error?: string;
-  summary?: {
-    question?: string;
-    claimCount?: number;
-    tensionCount?: number;
-    sourcePageCount?: number;
-    honestyNote?: string;
-  };
 }
 
 type SlashCommandStatus = "idle" | "loading" | "ready" | "error";
@@ -227,18 +175,6 @@ type BrainBootstrapState =
       radar?: BrainRadarStatus | null;
     }
   | { status: "error"; message: string };
-
-type EvidenceMapStatus =
-  | { state: "idle" }
-  | { state: "running" }
-  | {
-      state: "saved";
-      slug: string;
-      question: string;
-      claimCount?: number;
-      tensionCount?: number;
-    }
-  | { state: "error"; error: string };
 
 type ImportSummaryState = "loading" | "ready" | "empty" | "error";
 const SCIENCESWARM_SIGN_IN_URL = getScienceSwarmSignInUrl();
@@ -317,99 +253,6 @@ function storeProjectTreeVisibilityMode(
   } catch {
     // Ignore storage failures; visibility still updates for this session.
   }
-}
-
-function normalizeProjectBriefRecommendation(
-  brief: DashboardProjectBrief | null | undefined,
-): string {
-  return brief?.nextMove?.recommendation?.trim() ?? "";
-}
-
-function buildProjectUnderstandingDelta(
-  previousBrief: DashboardProjectBrief | null,
-  nextBrief: DashboardProjectBrief,
-): ProjectUnderstandingDelta | null {
-  if (!previousBrief) return null;
-
-  const previousRecommendation =
-    normalizeProjectBriefRecommendation(previousBrief);
-  const nextRecommendation = normalizeProjectBriefRecommendation(nextBrief);
-  const previousTopMatters = previousBrief.topMatters ?? [];
-  const nextTopMatters = nextBrief.topMatters ?? [];
-  const previousUnresolvedRisks = previousBrief.unresolvedRisks ?? [];
-  const nextUnresolvedRisks = nextBrief.unresolvedRisks ?? [];
-  const previousTopMatter = previousTopMatters[0]?.summary?.trim() ?? "";
-  const nextTopMatter = nextTopMatters[0]?.summary?.trim() ?? "";
-  const previousTopRisk =
-    previousUnresolvedRisks[0]?.risk?.trim() ?? "";
-  const nextTopRisk = nextUnresolvedRisks[0]?.risk?.trim() ?? "";
-  const previousFrontier = previousBrief.frontier?.[0]?.title?.trim() ?? "";
-  const nextFrontier = nextBrief.frontier?.[0]?.title?.trim() ?? "";
-
-  const changedAreas: string[] = [];
-  if (previousRecommendation !== nextRecommendation) {
-    changedAreas.push("the recommended next move");
-  }
-  if (previousTopMatter !== nextTopMatter) {
-    changedAreas.push("the top matter driving the project");
-  }
-  if (previousTopRisk !== nextTopRisk) {
-    changedAreas.push("the leading unresolved risk");
-  }
-  if (previousFrontier !== nextFrontier) {
-    changedAreas.push("the frontier item worth watching");
-  }
-
-  if (changedAreas.length === 0) {
-    return null;
-  }
-
-  const whyItChanged = Array.from(
-    new Set(
-      [
-        ...nextTopMatters.slice(0, 2).map((item) => item.summary.trim()),
-        ...nextUnresolvedRisks.slice(0, 1).map((item) => item.risk.trim()),
-      ].filter(Boolean),
-    ),
-  );
-  const evidence = Array.from(
-    new Set(
-      [
-        ...nextTopMatters.flatMap((item) => item.evidence ?? []),
-        ...nextUnresolvedRisks.flatMap((item) => item.evidence ?? []),
-        ...(nextBrief.nextMove?.missingEvidence ?? []),
-      ].filter(Boolean),
-    ),
-  ).slice(0, 4);
-
-  return {
-    changedAt: nextBrief.generatedAt,
-    summary: `ScienceSwarm updated ${joinWithCommas(changedAreas)} after new project evidence arrived.`,
-    previousRecommendation: previousRecommendation || undefined,
-    nextRecommendation: nextRecommendation || undefined,
-    whyItChanged,
-    evidence,
-  };
-}
-
-function joinWithCommas(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? "the project understanding";
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
-}
-
-function formatProjectUnderstandingTime(value?: string): string {
-  if (!value) return "Not updated yet";
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) return value;
-  const deltaMs = Date.now() - parsed;
-  if (deltaMs < 60_000) return "Updated just now";
-  const minutes = Math.round(deltaMs / 60_000);
-  if (minutes < 60) return `Updated ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `Updated ${hours} hour${hours === 1 ? "" : "s"} ago`;
-  const days = Math.round(hours / 24);
-  return `Updated ${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 function normalizeChatContextPath(value?: string): string {
@@ -1412,18 +1255,6 @@ function ProjectPageContent() {
   >(null);
   const [mobileProjectListOpen, setMobileProjectListOpen] = useState(false);
   const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
-  const [projectBrief, setProjectBrief] =
-    useState<DashboardProjectBrief | null>(null);
-  const [evidenceMapQuestion, setEvidenceMapQuestion] = useState("");
-  const [evidenceMapStatus, setEvidenceMapStatus] =
-    useState<EvidenceMapStatus>({ state: "idle" });
-  const [projectUnderstandingStatus, setProjectUnderstandingStatus] =
-    useState<ProjectUnderstandingStatus>("idle");
-  const [projectUnderstandingError, setProjectUnderstandingError] = useState<
-    string | null
-  >(null);
-  const [projectUnderstandingDelta, setProjectUnderstandingDelta] =
-    useState<ProjectUnderstandingDelta | null>(null);
   const [latestImportSummary, setLatestImportSummary] =
     useState<LatestImportSummary | null>(null);
   const [, setImportSummaryState] = useState<ImportSummaryState>("loading");
@@ -1445,7 +1276,6 @@ function ProjectPageContent() {
   const rightWorkspaceRef = useRef<HTMLDivElement>(null);
   const filePreviewRef = useRef<FilePreviewState>({ status: "idle" });
   const filePreviewLocationRef = useRef(filePreviewLocation);
-  const lastProjectBriefRef = useRef<DashboardProjectBrief | null>(null);
   const gbrainArtifactRefreshControllerRef = useRef<AbortController | null>(
     null,
   );
@@ -1475,11 +1305,6 @@ function ProjectPageContent() {
 
   useEffect(() => {
     setMobileProjectListOpen(false);
-  }, [activeProjectSlug]);
-
-  useEffect(() => {
-    setEvidenceMapQuestion("");
-    setEvidenceMapStatus({ state: "idle" });
   }, [activeProjectSlug]);
 
   useEffect(() => {
@@ -1688,66 +1513,6 @@ function ProjectPageContent() {
       }
     }
   }, [filePreview]);
-
-  const loadProjectBrief = useCallback(
-    async (signal?: AbortSignal) => {
-      if (!activeProjectSlug) {
-        lastProjectBriefRef.current = null;
-        setProjectBrief(null);
-        setProjectUnderstandingStatus("idle");
-        setProjectUnderstandingError(null);
-        setProjectUnderstandingDelta(null);
-        return;
-      }
-
-      setProjectUnderstandingStatus("loading");
-      setProjectUnderstandingError(null);
-
-      try {
-        const res = await fetch(
-          `/api/brain/brief?project=${encodeURIComponent(activeProjectSlug)}`,
-          {
-            signal,
-          },
-        );
-
-        if (!res.ok) {
-          setProjectBrief(null);
-          setProjectUnderstandingStatus("error");
-          setProjectUnderstandingError(
-            `Project understanding failed to refresh (${res.status}).`,
-          );
-          return;
-        }
-
-        const data = (await res.json()) as DashboardProjectBrief;
-        if (signal?.aborted || (data.project && data.project !== activeProjectSlug)) {
-          return;
-        }
-        const delta = buildProjectUnderstandingDelta(
-          lastProjectBriefRef.current,
-          data,
-        );
-        if (delta) {
-          setProjectUnderstandingDelta(delta);
-        }
-        lastProjectBriefRef.current = data;
-        setProjectBrief(data);
-        setProjectUnderstandingStatus("ready");
-      } catch (error: unknown) {
-        if (!(error instanceof Error && error.name === "AbortError")) {
-          setProjectBrief(null);
-          setProjectUnderstandingStatus("error");
-          setProjectUnderstandingError(
-            error instanceof Error
-              ? error.message
-              : "Project understanding failed to refresh.",
-          );
-        }
-      }
-    },
-    [activeProjectSlug],
-  );
 
   const loadImportSummary = useCallback(
     async (signal?: AbortSignal) => {
@@ -1989,7 +1754,6 @@ function ProjectPageContent() {
       await Promise.all([
         loadBrainStatus(),
         loadGbrainNodes(signal),
-        loadProjectBrief(signal),
         loadImportSummary(signal),
         checkChanges(signal),
       ]);
@@ -1999,7 +1763,6 @@ function ProjectPageContent() {
       loadBrainStatus,
       loadGbrainNodes,
       loadImportSummary,
-      loadProjectBrief,
     ],
   );
 
@@ -2032,7 +1795,6 @@ function ProjectPageContent() {
         await Promise.all([
           loadBrainStatus(),
           loadGbrainNodes(controller.signal),
-          loadProjectBrief(controller.signal),
           loadImportSummary(controller.signal),
         ]);
       } finally {
@@ -2074,7 +1836,6 @@ function ProjectPageContent() {
     loadBrainStatus,
     loadGbrainNodes,
     loadImportSummary,
-    loadProjectBrief,
   ]);
 
   useEffect(() => {
@@ -2098,7 +1859,6 @@ function ProjectPageContent() {
       gbrainArtifactRefreshControllerRef.current = controller;
       void Promise.all([
         loadGbrainNodes(controller.signal),
-        loadProjectBrief(controller.signal),
         loadImportSummary(controller.signal),
       ]);
     };
@@ -2114,21 +1874,13 @@ function ProjectPageContent() {
         handleGbrainArtifactsUpdated,
       );
     };
-  }, [activeProjectSlug, loadGbrainNodes, loadImportSummary, loadProjectBrief]);
-
-  useEffect(() => {
-    lastProjectBriefRef.current = null;
-    setProjectUnderstandingDelta(null);
-    setProjectUnderstandingError(null);
-    setProjectUnderstandingStatus(activeProjectSlug ? "loading" : "idle");
-  }, [activeProjectSlug]);
+  }, [activeProjectSlug, loadGbrainNodes, loadImportSummary]);
 
   useEffect(() => {
     const controller = new AbortController();
-    void loadProjectBrief(controller.signal);
     void loadImportSummary(controller.signal);
     return () => controller.abort();
-  }, [loadImportSummary, loadProjectBrief]);
+  }, [loadImportSummary]);
 
   // Auto-remediation: detect missing services and start them automatically.
   // Replaces the old passive "services are offline" banner with active
@@ -2161,7 +1913,6 @@ function ProjectPageContent() {
     // so this refresh follows real project tree changes without refetching
     // gbrain pages on every watch poll.
     const controller = new AbortController();
-    void loadProjectBrief(controller.signal);
     void loadImportSummary(controller.signal);
     void loadGbrainNodes(controller.signal);
     return () => controller.abort();
@@ -2169,7 +1920,6 @@ function ProjectPageContent() {
     activeProjectSlug,
     loadGbrainNodes,
     loadImportSummary,
-    loadProjectBrief,
     workspaceTree,
   ]);
 
@@ -2226,10 +1976,7 @@ function ProjectPageContent() {
     !hasImportedArchive &&
     workspaceTree.length === 0 &&
     uploadedFiles.length === 0 &&
-    !latestImportSummary &&
-    (!projectBrief ||
-      ((projectBrief.dueTasks?.length ?? 0) === 0 &&
-        (projectBrief.frontier?.length ?? 0) === 0));
+    !latestImportSummary;
 
   // ── Auto-organize uploaded files into the project tree ──
   const handleProjectUpload = useCallback(
@@ -3110,85 +2857,6 @@ function ProjectPageContent() {
       setMessages,
     ],
   );
-
-  const openBrainArtifactInWorkspace = useCallback(
-    (brainSlug: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (activeProjectSlug) {
-        params.set("name", activeProjectSlug);
-      }
-      params.set("brain_slug", brainSlug);
-      router.replace(`${pathname}?${params.toString()}`);
-    },
-    [activeProjectSlug, pathname, router, searchParams],
-  );
-
-  const handleBuildEvidenceMap = useCallback(async () => {
-    if (!activeProjectSlug) return;
-
-    const question =
-      evidenceMapQuestion.trim() ||
-      projectBrief?.nextMove?.recommendation?.trim() ||
-      "What does the current project evidence support, and where does it disagree?";
-
-    setEvidenceMapStatus({ state: "running" });
-    setPaneMode("both");
-
-    try {
-      const res = await fetch("/api/brain/evidence-map", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: activeProjectSlug,
-          question,
-          focusBrainSlug:
-            selectedFileNode?.source === "gbrain" && selectedFileNode.slug
-              ? selectedFileNode.slug
-              : undefined,
-        }),
-      });
-
-      const payload = (await res.json().catch(() => ({}))) as EvidenceMapResponse;
-      if (!res.ok || !payload.brain_slug) {
-        throw new Error(
-          payload.error ?? `Evidence map request failed (${res.status})`,
-        );
-      }
-
-      await refreshProjectState();
-      openBrainArtifactInWorkspace(payload.brain_slug);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `${Date.now()}-evidence-map`,
-          role: "system",
-          content: `Saved evidence map: [[${payload.brain_slug}]]`,
-          timestamp: new Date(),
-        },
-      ]);
-      setEvidenceMapQuestion(question);
-      setEvidenceMapStatus({
-        state: "saved",
-        slug: payload.brain_slug,
-        question: payload.summary?.question ?? question,
-        claimCount: payload.summary?.claimCount,
-        tensionCount: payload.summary?.tensionCount,
-      });
-    } catch (error) {
-      setEvidenceMapStatus({
-        state: "error",
-        error: error instanceof Error ? error.message : "Evidence map failed",
-      });
-    }
-  }, [
-    activeProjectSlug,
-    evidenceMapQuestion,
-    openBrainArtifactInWorkspace,
-    projectBrief?.nextMove?.recommendation,
-    refreshProjectState,
-    selectedFileNode,
-    setMessages,
-  ]);
 
   const getWebCaptureUserId = useCallback((): string => {
     if (typeof window === "undefined") {
@@ -4186,12 +3854,6 @@ function ProjectPageContent() {
                     : "Thinking..."}
               </div>
             )}
-            {evidenceMapStatus.state === "running" && (
-              <div className="flex items-center gap-2 text-xs font-medium text-accent">
-                <Spinner size="h-3.5 w-3.5" testId="evidence-map-spinner" />
-                Analyzing evidence...
-              </div>
-            )}
             {latestPdfFile ? (
               !isAuthLoaded ? (
                 <button
@@ -4350,75 +4012,6 @@ function ProjectPageContent() {
                     <X size={14} />
                   </button>
                 </div>
-                {activeProjectSlug && (
-                  <div className="shrink-0 border-b border-border bg-white px-3 py-3">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-                          Evidence Map
-                        </p>
-                        <p className="mt-1 text-xs text-muted">
-                          Extract core claims, source provenance, tensions, and
-                          uncertainty from imported project evidence.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleBuildEvidenceMap()}
-                        disabled={evidenceMapStatus.state === "running"}
-                        className="inline-flex h-9 items-center justify-center rounded border border-border bg-white px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {evidenceMapStatus.state === "running"
-                          ? "Analyzing..."
-                          : "Analyze evidence"}
-                      </button>
-                    </div>
-                    <div className="mt-3 flex flex-col gap-2 md:flex-row">
-                      <input
-                        type="text"
-                        value={evidenceMapQuestion}
-                        onChange={(event) =>
-                          setEvidenceMapQuestion(event.target.value)
-                        }
-                        placeholder="Question or active disagreement to focus on"
-                        disabled={evidenceMapStatus.state === "running"}
-                        className="h-10 flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
-                      />
-                    </div>
-                    {selectedFileNode?.source === "gbrain" && selectedFileNode.slug && (
-                      <p className="mt-2 text-[11px] text-muted">
-                        Including the open artifact{" "}
-                        <span className="font-semibold text-foreground">
-                          {selectedFileNode.name}
-                        </span>{" "}
-                        in this run.
-                      </p>
-                    )}
-                    {evidenceMapStatus.state === "saved" && (
-                      <p className="mt-2 text-[11px] text-muted">
-                        Saved {evidenceMapStatus.claimCount ?? 0} claims and{" "}
-                        {evidenceMapStatus.tensionCount ?? 0} tensions to{" "}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openBrainArtifactInWorkspace(
-                              evidenceMapStatus.slug,
-                            )
-                          }
-                          className="font-semibold text-foreground underline underline-offset-2"
-                        >
-                          {evidenceMapStatus.slug}
-                        </button>
-                        .
-                      </p>
-                    )}
-                    {evidenceMapStatus.state === "error" && (
-                      <p className="mt-2 text-[11px] text-red-700">
-                        {evidenceMapStatus.error}
-                      </p>
-                    )}
-                  </div>
-                )}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-surface/30 select-text">
                   {!activeProjectSlug && messages.length === 0 && (
                     <section className="rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">
@@ -4443,220 +4036,30 @@ function ProjectPageContent() {
                   {activeProjectSlug && (
                     <section className="rounded-[28px] border border-border bg-white p-6 shadow-sm">
                       <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
+                        <div>
                           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                            Project Understanding
+                            Automation & Reruns
                           </p>
                           <h2 className="mt-1 text-lg font-semibold text-foreground">
-                            {projectBrief?.nextMove?.recommendation?.trim()
-                              ? "ScienceSwarm's current read on what matters now"
-                              : "ScienceSwarm is still building the current working view"}
+                            Schedule repeatable project checks
                           </h2>
-                          <p className="mt-1 text-sm text-muted">
-                            {projectUnderstandingStatus === "loading"
-                              ? "Refreshing project understanding..."
-                              : projectUnderstandingStatus === "error"
-                                ? projectUnderstandingError ||
-                                  "Project understanding could not refresh."
-                                : formatProjectUnderstandingTime(
-                                    projectBrief?.generatedAt,
-                                  )}
+                          <p className="mt-1 max-w-2xl text-sm text-muted">
+                            Keep recurring validation tied to the project, the
+                            command that will run, the next run time, and the
+                            output path where results should appear.
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void refreshProjectState();
-                          }}
-                          className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-border bg-white px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
-                        >
-                          Refresh
-                        </button>
                       </div>
-
-                      {projectUnderstandingDelta ? (
-                        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
-                            Latest Change
-                          </p>
-                          <p className="mt-2 text-sm font-medium text-emerald-950">
-                            {projectUnderstandingDelta.summary}
-                          </p>
-                          <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                            <div className="rounded-xl border border-emerald-200 bg-white/80 p-3">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-                                Previous View
-                              </p>
-                              <p className="mt-2 text-sm text-foreground">
-                                {projectUnderstandingDelta.previousRecommendation ||
-                                  "No earlier recommendation was visible yet."}
-                              </p>
-                            </div>
-                            <div className="rounded-xl border border-emerald-200 bg-white/80 p-3">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-                                Current View
-                              </p>
-                              <p className="mt-2 text-sm text-foreground">
-                                {projectUnderstandingDelta.nextRecommendation ||
-                                  "ScienceSwarm did not change the next move."}
-                              </p>
-                            </div>
-                          </div>
-                          {projectUnderstandingDelta.whyItChanged.length > 0 ? (
-                            <div className="mt-3">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-                                Why It Changed
-                              </p>
-                              <ul className="mt-2 space-y-2 text-sm text-foreground">
-                                {projectUnderstandingDelta.whyItChanged.map(
-                                  (item) => (
-                                    <li key={item} className="rounded-xl bg-white/80 px-3 py-2">
-                                      {item}
-                                    </li>
-                                  ),
-                                )}
-                              </ul>
-                            </div>
-                          ) : null}
-                          {projectUnderstandingDelta.evidence.length > 0 ? (
-                            <div className="mt-3">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-                                Evidence That Drove The Update
-                              </p>
-                              <ul className="mt-2 space-y-2 text-sm text-foreground">
-                                {projectUnderstandingDelta.evidence.map((item) => (
-                                  <li key={item} className="rounded-xl bg-white/80 px-3 py-2">
-                                    {item}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {!projectUnderstandingDelta &&
-                      projectBrief &&
-                      (projectBrief.nextMove?.missingEvidence?.length ||
-                        (projectBrief.unresolvedRisks?.length ?? 0) > 0) ? (
-                        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">
-                            No Meaningful Belief Change Detected
-                          </p>
-                          <p className="mt-2 text-sm font-medium text-amber-950">
-                            ScienceSwarm is keeping the current project view in place because the linked evidence does not yet justify a confident update.
-                          </p>
-                          <p className="mt-2 text-sm text-amber-900">
-                            Treat downstream guidance as low confidence until the missing evidence or leading risk is resolved.
-                          </p>
-                        </div>
-                      ) : null}
-
-                      {projectBrief ? (
-                        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-                          <div className="rounded-2xl border border-border bg-surface/40 p-4">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-                              Current Next Move
-                            </p>
-                            <p className="mt-2 text-sm font-medium leading-6 text-foreground">
-                              {projectBrief.nextMove?.recommendation?.trim() ||
-                                "No recommendation yet. Add more evidence or capture the current working theory first."}
-                            </p>
-                            {projectBrief.nextMove?.assumptions?.length ? (
-                              <div className="mt-3">
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-                                  Assumptions
-                                </p>
-                                <ul className="mt-2 space-y-2 text-sm text-foreground">
-                                  {projectBrief.nextMove.assumptions
-                                    .slice(0, 3)
-                                    .map((item) => (
-                                      <li key={item} className="rounded-xl bg-white px-3 py-2">
-                                        {item}
-                                      </li>
-                                    ))}
-                                </ul>
-                              </div>
-                            ) : null}
-                            {projectBrief.nextMove?.missingEvidence?.length ? (
-                              <div className="mt-3">
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-                                  Missing Evidence
-                                </p>
-                                <ul className="mt-2 space-y-2 text-sm text-foreground">
-                                  {projectBrief.nextMove.missingEvidence
-                                    .slice(0, 3)
-                                    .map((item) => (
-                                      <li key={item} className="rounded-xl bg-white px-3 py-2">
-                                        {item}
-                                      </li>
-                                    ))}
-                                </ul>
-                              </div>
-                            ) : null}
-                          </div>
-
-                          <div className="grid gap-4">
-                            <div className="rounded-2xl border border-border bg-surface/40 p-4">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-                                Top Matters
-                              </p>
-                              <ul className="mt-2 space-y-2 text-sm text-foreground">
-                                {(projectBrief.topMatters?.length ?? 0) > 0 ? (
-                                  projectBrief.topMatters?.slice(0, 3).map((item) => (
-                                    <li key={item.summary} className="rounded-xl bg-white px-3 py-2">
-                                      <div>{item.summary}</div>
-                                      {item.evidence[0] ? (
-                                        <div className="mt-1 text-xs text-muted">
-                                          Evidence: {item.evidence[0]}
-                                        </div>
-                                      ) : null}
-                                    </li>
-                                  ))
-                                ) : (
-                                  <li className="rounded-xl bg-white px-3 py-2 text-muted">
-                                    No high-signal project matters have been synthesized yet.
-                                  </li>
-                                )}
-                              </ul>
-                            </div>
-
-                            <div className="rounded-2xl border border-border bg-surface/40 p-4">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-                                Downstream Guidance
-                              </p>
-                              <ul className="mt-2 space-y-2 text-sm text-foreground">
-                                {projectBrief.dueTasks?.[0] ? (
-                                  <li className="rounded-xl bg-white px-3 py-2">
-                                    Next task: {projectBrief.dueTasks[0].title}
-                                  </li>
-                                ) : null}
-                                {projectBrief.frontier?.[0] ? (
-                                  <li className="rounded-xl bg-white px-3 py-2">
-                                    Frontier watch: {projectBrief.frontier[0].title}
-                                  </li>
-                                ) : null}
-                                {projectBrief.unresolvedRisks?.[0] ? (
-                                  <li className="rounded-xl bg-white px-3 py-2">
-                                    Leading risk: {projectBrief.unresolvedRisks[0].risk}
-                                  </li>
-                                ) : null}
-                                {(projectBrief.dueTasks?.length ?? 0) === 0 &&
-                                (projectBrief.frontier?.length ?? 0) === 0 &&
-                                (projectBrief.unresolvedRisks?.length ?? 0) === 0 ? (
-                                  <li className="rounded-xl bg-white px-3 py-2 text-muted">
-                                    ScienceSwarm does not have enough linked evidence yet to push confident downstream guidance.
-                                  </li>
-                                ) : null}
-                              </ul>
-                            </div>
-                          </div>
-                        </div>
-                      ) : projectUnderstandingStatus === "loading" ? (
-                        <div className="mt-4 rounded-2xl border border-border bg-surface/40 px-4 py-5 text-sm text-muted">
-                          Refreshing the latest project understanding from linked evidence...
-                        </div>
-                      ) : null}
+                      <div className="mt-4 min-h-[420px] overflow-hidden rounded-2xl border border-border bg-white">
+                        <SchedulerPanel
+                          projectId={activeProjectSlug}
+                          defaultJobName="Nightly project rerun"
+                          defaultJobType="recurring"
+                          defaultSchedule="0 0 * * *"
+                          defaultActionType="run-script"
+                          defaultOutputPath="results/nightly-rerun-result.md"
+                        />
+                      </div>
                     </section>
                   )}
                   {showEmptyStateImport && (

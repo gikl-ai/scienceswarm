@@ -79,7 +79,9 @@ checkout path. Runtime state is separate: `SCIENCESWARM_DIR` is the local app-da
 (default `~/.scienceswarm`), and the brain store defaults to
 `<SCIENCESWARM_DIR>/brain` unless you set `BRAIN_ROOT` to move it elsewhere.
 
-Then open <http://localhost:3001/setup>.
+Then open <https://localhost:3001/setup>. Safari blocks HTTP by default in local
+debug workflows on some systems, so ScienceSwarm starts with local HTTPS by
+default.
 
 The setup flow initializes the local research store, verifies local runtimes,
 defaults new installs to the `scientific_research` brain preset, and can
@@ -109,7 +111,7 @@ Important:
   scanning, imports, and file watching
 - Do not point `SCIENCESWARM_DIR` or `BRAIN_ROOT` at mounted Windows drives for
   normal use
-- After `./scienceswarm start` in WSL, open <http://localhost:3001/setup> from
+- After `./scienceswarm start` in WSL, open <https://localhost:3001/setup> from
   your Windows browser
 
 ### First Use
