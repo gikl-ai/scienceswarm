@@ -123,14 +123,16 @@ export function applyRuntimeEventRetention(input: {
 
   if (policy.eventTtlMs !== null) {
     const cutoff = now.getTime() - policy.eventTtlMs;
-    const retained = events.filter((event) => {
+    const retained: RuntimeEvent[] = [];
+    for (const event of events) {
       const eventTime = Date.parse(event.createdAt);
-      return Number.isFinite(eventTime) && eventTime >= cutoff;
-    });
-    for (const dropped of events.slice(0, events.length - retained.length)) {
-      droppedApproximateBytes += approximateEventBytes(dropped);
+      if (Number.isFinite(eventTime) && eventTime >= cutoff) {
+        retained.push(event);
+      } else {
+        droppedApproximateBytes += approximateEventBytes(event);
+        droppedEventCount += 1;
+      }
     }
-    droppedEventCount += events.length - retained.length;
     events = retained;
   }
 

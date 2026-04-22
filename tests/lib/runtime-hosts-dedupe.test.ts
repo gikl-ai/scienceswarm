@@ -133,6 +133,38 @@ describe("runtime dedupe policy", () => {
     });
   });
 
+  it("keeps completion and failure marking idempotent after a record completes", () => {
+    let nowMs = Date.parse("2026-04-22T10:00:00.000Z");
+    const store = createRuntimeDedupeStore({
+      now: () => new Date(nowMs),
+    });
+    const key = "runtime:chat:idempotent-complete";
+
+    store.claimOperation({
+      key,
+      operation: "chat",
+      sessionId: "session-1",
+    });
+    const firstCompletion = store.completeOperation(key);
+
+    nowMs += 60_000;
+    expect(store.completeOperation(key, "session-2")).toEqual(firstCompletion);
+    expect(store.failOperation(key)).toEqual(firstCompletion);
+    expect(
+      store.claimOperation({
+        key,
+        operation: "chat",
+        sessionId: "session-3",
+      }),
+    ).toMatchObject({
+      decision: "deduped-completed",
+      record: {
+        sessionId: "session-1",
+        expiresAt: "2026-04-22T10:02:00.000Z",
+      },
+    });
+  });
+
   it("uses ten-minute task/compare windows and 24-hour artifact import/writeback windows", () => {
     let nowMs = Date.parse("2026-04-22T10:00:00.000Z");
     const store = createRuntimeDedupeStore({
