@@ -1,0 +1,132 @@
+name: PostHog GitHub traffic sync
+
+# Daily forward of repo Traffic API stats to PostHog so we keep history
+# beyond GitHub's built-in 14-day window. Pairs with the README tracking
+# pixel for live impression counts.
+#
+# Security: this workflow does not consume any user-controlled event inputs
+# (issue/PR titles/bodies, commit messages, head_ref, etc.). The only
+# expression interpolations are github.repository, secrets, and the
+# auto-provided GITHUB_TOKEN, all of which are trusted.
+
+on:
+  schedule:
+    - cron: '17 4 * * *'  # 04:17 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  administration: read
+
+concurrency:
+  group: posthog-traffic-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Forward Traffic API stats to PostHog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          POSTHOG_PROJECT_KEY: ${{ secrets.POSTHOG_PROJECT_KEY }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${POSTHOG_PROJECT_KEY:-}" ]; then
+            echo "::warning::POSTHOG_PROJECT_KEY secret not set; skipping forward"
+            exit 0
+          fi
+
+          distinct_id="github_repo:${REPO}"
+          yesterday=$(date -u -d 'yesterday' +%Y-%m-%dT00:00:00Z)
+          echo "Building batch for ${REPO} (yesterday=${yesterday})"
+
+          views_json=$(gh api "/repos/${REPO}/traffic/views")
+          clones_json=$(gh api "/repos/${REPO}/traffic/clones")
+          referrers_json=$(gh api "/repos/${REPO}/traffic/popular/referrers")
+          paths_json=$(gh api "/repos/${REPO}/traffic/popular/paths")
+
+          batch=$(jq -n \
+            --arg distinct_id "$distinct_id" \
+            --arg yesterday "$yesterday" \
+            --arg repo "$REPO" \
+            --argjson views "$views_json" \
+            --argjson clones "$clones_json" \
+            --argjson referrers "$referrers_json" \
+            --argjson paths "$paths_json" \
+            '
+            [
+              (($views.views // []) | map(select(.timestamp == $yesterday))[] |
+                {
+                  event: "github_traffic_views_daily",
+                  distinct_id: $distinct_id,
+                  timestamp: .timestamp,
+                  properties: {
+                    repo: $repo,
+                    count: .count,
+                    uniques: .uniques,
+                    "$insert_id": ("views-" + $repo + "-" + .timestamp)
+                  }
+                }),
+              (($clones.clones // []) | map(select(.timestamp == $yesterday))[] |
+                {
+                  event: "github_traffic_clones_daily",
+                  distinct_id: $distinct_id,
+                  timestamp: .timestamp,
+                  properties: {
+                    repo: $repo,
+                    count: .count,
+                    uniques: .uniques,
+                    "$insert_id": ("clones-" + $repo + "-" + .timestamp)
+                  }
+                }),
+              (($referrers // [])[] |
+                {
+                  event: "github_traffic_referrers_snapshot",
+                  distinct_id: $distinct_id,
+                  properties: {
+                    repo: $repo,
+                    referrer: .referrer,
+                    count: .count,
+                    uniques: .uniques
+                  }
+                }),
+              (($paths // [])[] |
+                {
+                  event: "github_traffic_paths_snapshot",
+                  distinct_id: $distinct_id,
+                  properties: {
+                    repo: $repo,
+                    path: .path,
+                    title: .title,
+                    count: .count,
+                    uniques: .uniques
+                  }
+                })
+            ]
+            ')
+
+          event_count=$(echo "$batch" | jq 'length')
+          echo "Posting ${event_count} events to PostHog"
+
+          if [ "$event_count" = "0" ]; then
+            echo "Nothing to forward"
+            exit 0
+          fi
+
+          payload=$(jq -n \
+            --arg api_key "$POSTHOG_PROJECT_KEY" \
+            --argjson batch "$batch" \
+            '{api_key: $api_key, batch: $batch}')
+
+          curl --fail --silent --show-error \
+            --retry 3 --retry-delay 5 \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            -d "$payload" \
+            https://us.i.posthog.com/batch/
+          echo "Done"
