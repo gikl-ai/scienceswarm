@@ -382,6 +382,82 @@ function isLikelyDuplicatePolledUserMessage(
   });
 }
 
+function isTransientAssistantScratchpad(message: Message): boolean {
+  if (message.role !== "assistant") {
+    return false;
+  }
+
+  if (message.channel && message.channel !== "web") {
+    return false;
+  }
+
+  if (message.content === QUEUED_ASSISTANT_CONTENT) {
+    return true;
+  }
+
+  const hasTransientState =
+    Boolean(message.thinking?.trim().length)
+    || Boolean(message.activityLog?.length)
+    || Boolean(message.progressLog?.length)
+    || Boolean(message.taskPhases?.length);
+  if (!hasTransientState) {
+    return false;
+  }
+
+  if (message.content.trim().length === 0) {
+    return true;
+  }
+
+  return (
+    message.taskPhases?.some((phase) => phase.status !== "completed") ?? false
+  );
+}
+
+function mergePolledMessagesIntoTranscript(
+  existingMessages: Message[],
+  polledMessages: Message[],
+): Message[] {
+  if (polledMessages.length === 0) {
+    return existingMessages;
+  }
+
+  const nextMessages = [...existingMessages];
+  const existingIds = new Set(existingMessages.map((message) => message.id));
+  const uniqueMessages = polledMessages.filter(
+    (message) =>
+      !existingIds.has(message.id)
+      && !isLikelyDuplicatePolledUserMessage(existingMessages, message),
+  );
+
+  for (const message of uniqueMessages) {
+    const isWebAssistantCompletion =
+      message.role === "assistant"
+      && (!message.channel || message.channel === "web");
+    if (isWebAssistantCompletion) {
+      const pendingIndex = nextMessages.findLastIndex((existingMessage) =>
+        isTransientAssistantScratchpad(existingMessage),
+      );
+      if (pendingIndex >= 0) {
+        const pendingMessage = nextMessages[pendingIndex];
+        nextMessages[pendingIndex] = {
+          ...pendingMessage,
+          id: message.id,
+          content: message.content,
+          timestamp: message.timestamp,
+          channel: message.channel,
+          userName: message.userName,
+          role: message.role,
+        };
+        continue;
+      }
+    }
+
+    nextMessages.push(message);
+  }
+
+  return nextMessages;
+}
+
 function latestTimestampCursor(seed: string, messages: PolledOpenClawMessage[]): string {
   return messages.reduce((latest, message) => {
     if (typeof message.timestamp !== "string") {
@@ -2372,6 +2448,16 @@ export function useUnifiedChat(
         const data = await res.json();
         let polledMessages: Message[] = [];
 
+        if (
+          typeof data.conversationId === "string"
+          && data.conversationId.trim().length > 0
+        ) {
+          liveConversationIdRef.current = data.conversationId;
+          liveConversationBackendRef.current = "openclaw";
+          setConversationId(data.conversationId);
+          setConversationBackend("openclaw");
+        }
+
         if (Array.isArray(data.messages) && data.messages.length > 0) {
           polledMessages = data.messages
             .filter((message: PolledOpenClawMessage) =>
@@ -2412,13 +2498,14 @@ export function useUnifiedChat(
           }
 
           setMessages((prev) => {
-            const existingIds = new Set(prev.map((m) => m.id));
-            const unique = polledMessages.filter(
-              (message: Message) =>
-                !existingIds.has(message.id)
-                && !isLikelyDuplicatePolledUserMessage(prev, message),
+            const nextMessages = mergePolledMessagesIntoTranscript(
+              prev,
+              polledMessages,
             );
-            return unique.length > 0 ? [...prev, ...unique] : prev;
+            return nextMessages.length > prev.length
+              || nextMessages.some((message, index) => message !== prev[index])
+              ? nextMessages
+              : prev;
           });
 
           // Advance cursor to the latest returned message timestamp
@@ -2991,6 +3078,7 @@ export function useUnifiedChat(
 
         try {
           const shouldReuseOpenClawConversation =
+            hasProjectScope(queued.context.projectName) ||
             queued.context.chatMode === "openclaw-tools" ||
             shouldForceOpenClawToolExecution(queued.content);
           const activeConversationId = shouldReuseOpenClawConversation

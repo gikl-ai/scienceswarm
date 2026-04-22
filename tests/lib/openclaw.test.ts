@@ -1,3 +1,6 @@
+import path from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -580,5 +583,77 @@ describe("OpenClaw conversation polling", () => {
         content: "The chart is ready in results/r3-chart.svg.",
       }),
     ]);
+  });
+
+  it("falls back to the durable session log when CLI history is unavailable", async () => {
+    const scienceswarmDir = mkdtempSync(
+      path.join(tmpdir(), "scienceswarm-openclaw-history-"),
+    );
+    vi.stubEnv("SCIENCESWARM_DIR", scienceswarmDir);
+
+    const sessionId = "web-alpha-project-session-1";
+    const sessionFile = path.join(
+      scienceswarmDir,
+      "openclaw",
+      "agents",
+      "main",
+      "sessions",
+      `${sessionId}.jsonl`,
+    );
+    mkdirSync(path.dirname(sessionFile), { recursive: true });
+    writeFileSync(
+      sessionFile,
+      [
+        JSON.stringify({
+          type: "session",
+          id: sessionId,
+          timestamp: "2026-04-15T05:00:00.000Z",
+        }),
+        JSON.stringify({
+          type: "message",
+          id: "user-1",
+          timestamp: "2026-04-15T05:00:01.000Z",
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "Run the experiment." }],
+          },
+        }),
+        JSON.stringify({
+          type: "message",
+          id: "assistant-thinking",
+          timestamp: "2026-04-15T05:00:02.000Z",
+          message: {
+            role: "assistant",
+            content: [{ type: "thinking", thinking: "Planning." }],
+          },
+        }),
+        JSON.stringify({
+          type: "message",
+          id: "assistant-final",
+          timestamp: "2026-04-15T05:00:03.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: "Finished. Saved reports/baseline_vs_adaptation_summary.md.",
+              },
+            ],
+          },
+        }),
+      ].join("\n"),
+    );
+
+    await expect(
+      getConversationMessagesSince(sessionId, "2026-04-15T05:00:00.500Z"),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "assistant-final",
+        channel: "web",
+        content: "Finished. Saved reports/baseline_vs_adaptation_summary.md.",
+      }),
+    ]);
+
+    rmSync(scienceswarmDir, { recursive: true, force: true });
   });
 });
