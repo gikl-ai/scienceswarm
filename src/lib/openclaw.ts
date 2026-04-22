@@ -303,7 +303,14 @@ export async function healthCheck(): Promise<OpenClawStatus> {
   };
 }
 
-/** Send a message through OpenClaw agent and get a response */
+/**
+ * Send a message through OpenClaw agent and get a response.
+ *
+ * Prefers the WebSocket gateway transport so callers see real-time tool /
+ * text / lifecycle events through `onEvent`. Falls back to the CLI when the
+ * gateway is unreachable, the caller wants channel delivery (Slack/Telegram
+ * etc.), or the call doesn't supply a session id.
+ */
 export async function sendAgentMessage(
   message: string,
   options?: {
@@ -313,8 +320,32 @@ export async function sendAgentMessage(
     deliver?: boolean;
     cwd?: string;
     timeoutMs?: number;
+    /**
+     * Called for every non-infra event observed during a WS turn. Ignored
+     * when the call falls back to the CLI transport (the CLI is batch).
+     */
+    onEvent?: (event: unknown) => void;
   }
 ): Promise<string> {
+  // WS gateway is only used for in-process chat turns. Channel delivery
+  // and unsessioned calls keep the CLI path so we don't change semantics.
+  if (options?.session && !options?.channel && !options?.deliver) {
+    try {
+      const { sendMessageViaGateway } = await import(
+        "@/lib/openclaw/gateway-ws-client"
+      );
+      const result = await sendMessageViaGateway(options.session, message, {
+        timeoutMs: options.timeoutMs ?? 600_000,
+        onEvent: options.onEvent,
+      });
+      return result.text;
+    } catch {
+      // Gateway unavailable (no token, gateway not running, auth failed,
+      // turn timed out, etc.) — fall through to the CLI path so the caller
+      // still gets a response.
+    }
+  }
+
   const args = ["agent", "-m", message];
 
   if (options?.agent) args.push("--agent", options.agent);
@@ -327,9 +358,6 @@ export async function sendAgentMessage(
   });
 
   if (!result.ok) {
-    // Preserve the previous throw-on-error shape so callers relying on
-    // rejected promises (e.g. the embedded fallback path in the gateway
-    // agent client) still see an Error with the CLI's stderr attached.
     throw new Error(
       result.stderr?.trim() || `openclaw agent failed with code ${result.code ?? "unknown"}`,
     );
