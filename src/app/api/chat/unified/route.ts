@@ -222,7 +222,17 @@ interface RevisionArtifactWorkspacePaths {
 
 type SendOpenClawMessage = (
   message: string,
-  options?: { session?: string; cwd?: string; timeoutMs?: number },
+  options?: {
+    session?: string;
+    cwd?: string;
+    timeoutMs?: number;
+    /**
+     * Called for every non-infra event observed during a WS gateway turn.
+     * The unified route uses this to forward tool / text / lifecycle deltas
+     * to the browser as `progress` SSE events. CLI fallbacks ignore it.
+     */
+    onEvent?: (event: unknown) => void;
+  },
 ) => Promise<string>;
 
 function isValidTimestamp(value: string | null): value is string {
@@ -5995,6 +6005,15 @@ function streamOpenClawResponse(params: {
             await thinkingTraceStreamer.flush();
             sendEvent(payload);
           };
+          // Wrap the caller-provided sendToOpenClaw so any per-turn WS event
+          // (tool start/result, text/lifecycle deltas) is forwarded to the
+          // browser as a `progress` SSE event. Falls back transparently when
+          // the underlying transport is the CLI, which never emits events.
+          const sendToOpenClawWithProgress: SendOpenClawMessage = (msg, opts) =>
+            params.sendToOpenClaw(msg, {
+              ...opts,
+              onEvent: (event) => sendEvent({ progress: event }),
+            });
           try {
             sendEvent({
               taskPhases: snapshotOpenClawTaskPhases(
@@ -6036,7 +6055,7 @@ function streamOpenClawResponse(params: {
               params.enableArtifactRepair === false
                 ? null
                 : await runOpenClawRevisionArtifactOnly({
-                    sendToOpenClaw: params.sendToOpenClaw,
+                    sendToOpenClaw: sendToOpenClawWithProgress,
                     userMessage: params.userMessage,
                     files: params.files,
                     projectId: params.projectId,
@@ -6106,7 +6125,7 @@ function streamOpenClawResponse(params: {
             }
 
             const response = await sendOpenClawMessageWithArtifactRetry({
-              sendToOpenClaw: params.sendToOpenClaw,
+              sendToOpenClaw: sendToOpenClawWithProgress,
               message: buildOpenClawMessage(
                 params.message,
                 params.files,
@@ -6232,7 +6251,7 @@ function streamOpenClawResponse(params: {
             }
             importedOutputs =
               await maybeRetryOpenClawRevisionArtifactCompleteness({
-                sendToOpenClaw: params.sendToOpenClaw,
+                sendToOpenClaw: sendToOpenClawWithProgress,
                 response: importedOutputs.response,
                 generatedFiles: importedOutputs.generatedFiles,
                 userMessage: params.userMessage,
@@ -6243,7 +6262,7 @@ function streamOpenClawResponse(params: {
               });
             const auditArtifactOutputs =
               await maybeRepairOpenClawAuditArtifacts({
-                sendToOpenClaw: params.sendToOpenClaw,
+                sendToOpenClaw: sendToOpenClawWithProgress,
                 response: importedOutputs.response,
                 generatedFiles: importedOutputs.generatedFiles,
                 userMessage: params.userMessage,
@@ -6276,7 +6295,7 @@ function streamOpenClawResponse(params: {
             };
             const requestedArtifactOutputs =
               await maybeRepairMissingRequestedArtifacts({
-                sendToOpenClaw: params.sendToOpenClaw,
+                sendToOpenClaw: sendToOpenClawWithProgress,
                 response: importedOutputs.response,
                 generatedFiles: importedOutputs.generatedFiles,
                 userMessage: params.userMessage,
