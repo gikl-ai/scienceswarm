@@ -777,7 +777,9 @@ export function ChatMessage({
     role === "assistant"
       ? Array.isArray(progressLog) && progressLog.length > 0
         ? progressLog
-      : buildFallbackProgressLog(thinking, visibleActivityLog)
+        : isStreaming
+          ? buildFallbackProgressLog(thinking, visibleActivityLog)
+          : []
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
