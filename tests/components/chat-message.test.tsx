@@ -294,7 +294,7 @@ describe("ChatMessage", () => {
     expect(screen.queryByText(/Read docs\/results_table\.csv/)).not.toBeInTheDocument();
   });
 
-  it("does not render a stored progress transcript after a completed assistant turn", () => {
+  it("renders a stored progress transcript after a completed assistant turn", () => {
     render(
       <ChatMessage
         role="assistant"
@@ -309,9 +309,10 @@ describe("ChatMessage", () => {
     );
 
     expect(screen.getByText("Final answer")).toBeInTheDocument();
-    expect(screen.queryByRole("log")).not.toBeInTheDocument();
-    expect(screen.queryByText("Planning how to inspect the chart files.")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Read docs\/results_table\.csv/)).not.toBeInTheDocument();
+    const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent("Planning how to inspect the chart files.");
+    expect(progressLog).toHaveTextContent("Read docs/results_table.csv");
+    expect(progressLog).not.toHaveTextContent("Working (");
   });
 
   it("renders workspace media hints as chat media", () => {
