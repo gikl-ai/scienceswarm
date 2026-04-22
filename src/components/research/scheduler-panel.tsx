@@ -94,7 +94,30 @@ type View = "list" | "new-job" | "new-pipeline" | "job-detail" | "pipeline-detai
 
 // ── Component ──────────────────────────────────────────────────
 
-export function SchedulerPanel() {
+interface SchedulerPanelProps {
+  projectId?: string | null;
+  defaultJobName?: string;
+  defaultJobType?: "once" | "recurring" | "on-event";
+  defaultSchedule?: string;
+  defaultActionType?: JobAction["type"];
+  defaultScript?: string;
+  defaultOutputPath?: string;
+}
+
+function readStringConfig(config: Record<string, unknown> | undefined, key: string): string | null {
+  const value = config?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+export function SchedulerPanel({
+  projectId,
+  defaultJobName = "",
+  defaultJobType = "once",
+  defaultSchedule = "0 0 * * *",
+  defaultActionType = "run-script",
+  defaultScript = "",
+  defaultOutputPath = "",
+}: SchedulerPanelProps = {}) {
   const [view, setView] = useState<View>("list");
   const [jobs, setJobs] = useState<ScheduledJob[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -103,13 +126,14 @@ export function SchedulerPanel() {
   const [loading, setLoading] = useState(false);
 
   // New Job form state
-  const [jobName, setJobName] = useState("");
-  const [jobType, setJobType] = useState<"once" | "recurring" | "on-event">("once");
-  const [jobCron, setJobCron] = useState("0 0 * * *");
+  const [jobName, setJobName] = useState(defaultJobName);
+  const [jobType, setJobType] = useState<"once" | "recurring" | "on-event">(defaultJobType);
+  const [jobCron, setJobCron] = useState(defaultSchedule);
   const [jobEvent, setJobEvent] = useState("experiment-complete");
   const [jobRunAt, setJobRunAt] = useState("");
-  const [jobActionType, setJobActionType] = useState<JobAction["type"]>("run-script");
-  const [jobScript, setJobScript] = useState("");
+  const [jobActionType, setJobActionType] = useState<JobAction["type"]>(defaultActionType);
+  const [jobScript, setJobScript] = useState(defaultScript);
+  const [jobOutputPath, setJobOutputPath] = useState(defaultOutputPath);
   const [jobPipelineTemplate, setJobPipelineTemplate] = useState<string | null>(null);
 
   // New Pipeline form state
@@ -160,10 +184,16 @@ export function SchedulerPanel() {
             schedule: jobType === "recurring" ? jobCron : undefined,
             triggerEvent: jobType === "on-event" ? jobEvent : undefined,
             runAt: jobType === "once" && jobRunAt ? new Date(jobRunAt).toISOString() : undefined,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             action: {
               type: jobActionType,
               script: jobActionType === "run-script" ? jobScript : undefined,
-              config: {},
+              config: {
+                ...(projectId ? { projectId } : {}),
+                ...(jobOutputPath.trim()
+                  ? { expectedOutputPath: jobOutputPath.trim() }
+                  : {}),
+              },
               pipelineSteps: jobActionType === "pipeline" && jobPipelineTemplate
                 ? templates[jobPipelineTemplate]?.steps
                     .map((s) => ({
@@ -180,8 +210,9 @@ export function SchedulerPanel() {
           },
         }),
       });
-      setJobName("");
-      setJobScript("");
+      setJobName(defaultJobName);
+      setJobScript(defaultScript);
+      setJobOutputPath(defaultOutputPath);
       setView("list");
       await fetchData();
     } finally {
@@ -539,13 +570,41 @@ export function SchedulerPanel() {
             </div>
 
             {jobActionType === "run-script" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-1.5">Script or Command</label>
+                  <textarea
+                    value={jobScript}
+                    onChange={(e) => setJobScript(e.target.value)}
+                    placeholder="e.g., python experiments/project_alpha_eval.py --dataset data/original-observations.csv --output results/rerun-result.md"
+                    rows={3}
+                    className="w-full bg-surface border-2 border-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-accent transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-1.5">Expected Output Path</label>
+                  <input
+                    type="text"
+                    value={jobOutputPath}
+                    onChange={(e) => setJobOutputPath(e.target.value)}
+                    placeholder="e.g., results/nightly-rerun-result.md"
+                    className="w-full bg-surface border-2 border-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-accent transition-colors"
+                  />
+                  <p className="mt-1 text-[10px] text-muted">
+                    This appears in job details so reruns stay tied to a visible project artifact.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {jobActionType !== "run-script" && (
               <div>
-                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-1.5">Script Path</label>
+                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-1.5">Expected Output Path</label>
                 <input
                   type="text"
-                  value={jobScript}
-                  onChange={(e) => setJobScript(e.target.value)}
-                  placeholder="e.g., experiments/exp_001_baseline/run.py"
+                  value={jobOutputPath}
+                  onChange={(e) => setJobOutputPath(e.target.value)}
+                  placeholder="e.g., results/nightly-analysis.md"
                   className="w-full bg-surface border-2 border-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-accent transition-colors"
                 />
               </div>
@@ -643,6 +702,47 @@ export function SchedulerPanel() {
         {/* ── Job Detail View ── */}
         {view === "job-detail" && selectedJob && (
           <div className="p-4 space-y-4">
+            {(() => {
+              const expectedOutputPath = readStringConfig(
+                selectedJob.action.config,
+                "expectedOutputPath",
+              );
+              const jobProjectId = readStringConfig(selectedJob.action.config, "projectId");
+              return (
+                <div className="rounded-lg border-2 border-border bg-white p-4">
+                  <h3 className="text-xs font-bold text-muted uppercase tracking-wider">
+                    What This Job Will Run
+                  </h3>
+                  <dl className="mt-3 grid gap-3 text-xs">
+                    {jobProjectId ? (
+                      <div>
+                        <dt className="text-muted">Project</dt>
+                        <dd className="mt-1 font-mono text-foreground">{jobProjectId}</dd>
+                      </div>
+                    ) : null}
+                    {selectedJob.action.script ? (
+                      <div>
+                        <dt className="text-muted">Script or command</dt>
+                        <dd className="mt-1 whitespace-pre-wrap rounded bg-surface px-3 py-2 font-mono text-foreground">
+                          {selectedJob.action.script}
+                        </dd>
+                      </div>
+                    ) : (
+                      <div>
+                        <dt className="text-muted">Action</dt>
+                        <dd className="mt-1 font-mono text-foreground">{selectedJob.action.type}</dd>
+                      </div>
+                    )}
+                    {expectedOutputPath ? (
+                      <div>
+                        <dt className="text-muted">Expected output</dt>
+                        <dd className="mt-1 font-mono text-foreground">{expectedOutputPath}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                </div>
+              );
+            })()}
             {/* Status + meta */}
             <div className="bg-surface border-2 border-border rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
