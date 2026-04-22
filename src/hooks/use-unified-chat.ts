@@ -7,6 +7,7 @@ import {
   type ArtifactProvenanceEntry,
 } from "@/lib/artifact-provenance";
 import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
+import { sanitizeOpenClawUserVisibleResponse } from "@/lib/openclaw/response-sanitizer";
 import { looksLikeSlashCommandInput } from "@/lib/openclaw/slash-commands";
 
 import type { Step } from "@/components/research/step-cards";
@@ -1449,8 +1450,14 @@ function restoreMessage(value: unknown): Message | null {
   return {
     id: candidate.id,
     role: candidate.role,
-    content: candidate.content,
-    thinking: typeof candidate.thinking === "string" ? candidate.thinking : undefined,
+    content:
+      candidate.role === "user"
+        ? candidate.content
+        : sanitizeOpenClawUserVisibleResponse(candidate.content),
+    thinking:
+      typeof candidate.thinking === "string"
+        ? sanitizeOpenClawUserVisibleResponse(candidate.thinking)
+        : undefined,
     activityLog: restoreActivityLog(candidate.activityLog),
     progressLog: restoreProgressLog(candidate.progressLog),
     timestamp,
@@ -2372,15 +2379,23 @@ export function useUnifiedChat(
               && typeof message.timestamp === "string"
               && !Number.isNaN(Date.parse(message.timestamp)),
             )
-            .map((message: PolledOpenClawMessage) => ({
-              id: typeof message.id === "string" ? message.id : makeId(),
-              role: inferPolledMessageRole(message),
-              content: message.content as string,
-              chatMode: "openclaw-tools" as const,
-              channel: typeof message.channel === "string" ? message.channel : undefined,
-              userName: typeof message.userName === "string" ? message.userName : undefined,
-              timestamp: new Date(message.timestamp as string),
-            }));
+            .map((message: PolledOpenClawMessage) => {
+              const role = inferPolledMessageRole(message);
+              return {
+                id: typeof message.id === "string" ? message.id : makeId(),
+                role,
+                content:
+                  role === "user"
+                    ? (message.content as string)
+                    : sanitizeOpenClawUserVisibleResponse(
+                      message.content as string,
+                    ),
+                chatMode: "openclaw-tools" as const,
+                channel: typeof message.channel === "string" ? message.channel : undefined,
+                userName: typeof message.userName === "string" ? message.userName : undefined,
+                timestamp: new Date(message.timestamp as string),
+              };
+            });
 
           const crossChannelMessages = polledMessages.filter(
             (message: Message) => message.channel && message.channel !== "web",
@@ -2638,7 +2653,15 @@ export function useUnifiedChat(
           ) {
             const finalText =
               typeof parsed.text === "string" && parsed.text.length > 0
-                ? parsed.text
+                ? sanitizeOpenClawUserVisibleResponse(parsed.text, {
+                    trimEnd: false,
+                  })
+                : null;
+            const nextThinking =
+              typeof parsed.thinking === "string" && parsed.thinking.length > 0
+                ? sanitizeOpenClawUserVisibleResponse(parsed.thinking, {
+                    trimEnd: false,
+                  })
                 : null;
             const replaceThinking = parsed.replaceThinking === true;
             applyMessagesUpdate((prev) =>
@@ -2656,18 +2679,18 @@ export function useUnifiedChat(
                             : m.content + finalText
                           : m.content,
                       thinking:
-                        typeof parsed.thinking === "string" && parsed.thinking.length > 0
+                        nextThinking !== null && nextThinking.length > 0
                           ? replaceThinking
-                            ? parsed.thinking
-                            : (m.thinking || "") + parsed.thinking
+                            ? nextThinking
+                            : (m.thinking || "") + nextThinking
                           : m.thinking,
                       progressLog:
-                        typeof parsed.thinking === "string" && parsed.thinking.length > 0
+                        nextThinking !== null && nextThinking.length > 0
                           ? appendProgressLog(
                             m.progressLog,
                             buildThinkingProgressDeltaEntries(
                               m.thinking,
-                              parsed.thinking,
+                              nextThinking,
                               replaceThinking,
                             ),
                           )
@@ -2799,8 +2822,11 @@ export function useUnifiedChat(
           m.id === assistantId
             ? {
                 ...m,
-                content: data.response,
-                thinking: typeof data.thinking === "string" ? data.thinking : m.thinking,
+                content: sanitizeOpenClawUserVisibleResponse(data.response),
+                thinking:
+                  typeof data.thinking === "string"
+                    ? sanitizeOpenClawUserVisibleResponse(data.thinking)
+                    : m.thinking,
                 chatMode: responseMode,
               }
             : m
