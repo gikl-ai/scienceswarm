@@ -384,7 +384,7 @@ describe("ChatMessage", () => {
 
     const sources = container.querySelectorAll("audio source");
     expect(sources[0]).toHaveAttribute("type", "audio/flac");
-    expect(sources[1]).toHaveAttribute("type", "audio/ogg");
+    expect(sources[1]).toHaveAttribute("type", "audio/ogg; codecs=opus");
     expect(sources[2]).toHaveAttribute("type", "audio/aac");
   });
 

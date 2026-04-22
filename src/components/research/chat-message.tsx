@@ -110,7 +110,7 @@ function getAudioMimeType(ext: string): string | undefined {
     case "flac":
       return "audio/flac";
     case "opus":
-      return "audio/ogg";
+      return "audio/ogg; codecs=opus";
     case "aac":
       return "audio/aac";
     default:

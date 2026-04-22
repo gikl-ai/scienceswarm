@@ -1242,7 +1242,7 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   ogg: "audio/ogg",
   m4a: "audio/mp4",
   flac: "audio/flac",
-  opus: "audio/ogg",
+  opus: "audio/ogg; codecs=opus",
   aac: "audio/aac",
 };
 
