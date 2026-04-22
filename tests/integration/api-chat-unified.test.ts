@@ -157,7 +157,11 @@ vi.mock("@/lib/openhands", () => ({
 }));
 
 import { POST as commandPOST } from "@/app/api/chat/command/route";
-import { GET, POST } from "@/app/api/chat/unified/route";
+import {
+  __resetConfiguredAgentRuntimeStatusCacheForTests,
+  GET,
+  POST,
+} from "@/app/api/chat/unified/route";
 
 let scienceswarmDir: string | null = null;
 
@@ -233,6 +237,7 @@ function mockDirectLLMStream(text: string): void {
 }
 
 beforeEach(() => {
+  __resetConfiguredAgentRuntimeStatusCacheForTests();
   vi.unstubAllGlobals();
   isLocalRequest.mockReset();
   resolveAgentConfig.mockReset();
@@ -876,6 +881,46 @@ describe("GET /api/chat/unified", () => {
     // Legacy field
     expect(body.openclaw).toBe("connected");
     expect(body.channels).toEqual(["telegram"]);
+  });
+
+  it("reuses a fresh OpenClaw runtime status between the health probe and the next POST", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValue({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: ["telegram"],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("Hello back");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
+    );
+
+    const healthResponse = await GET(
+      new Request("http://localhost/api/chat/unified?action=health"),
+    );
+    expect(healthResponse.status).toBe(200);
+
+    const postResponse = await POST(new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "runtime-status-cache-test",
+      },
+      body: JSON.stringify({
+        message: "Hi",
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    }));
+
+    expect(postResponse.status).toBe(200);
+    expect(openClawHealthCheck).toHaveBeenCalledTimes(1);
+    expect(sendOpenClawMessage).toHaveBeenCalledTimes(1);
   });
 
   it("reports ready from direct OpenAI availability when no local provider is selected", async () => {

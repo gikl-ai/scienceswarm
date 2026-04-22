@@ -6260,7 +6260,27 @@ async function importOpenClawOutputsFromMessages(params: {
   };
 }
 
-async function getConfiguredAgentRuntimeStatus(
+const AGENT_RUNTIME_STATUS_CACHE_TTL_MS = 5_000;
+
+type AgentRuntimeStatusCacheEntry = {
+  expiresAt: number;
+  status: AgentRuntimeStatus;
+};
+
+const configuredAgentRuntimeStatusCache = new Map<string, AgentRuntimeStatusCacheEntry>();
+const configuredAgentRuntimeStatusInflight = new Map<string, Promise<AgentRuntimeStatus>>();
+
+function configuredAgentRuntimeStatusCacheKey(
+  agentConfig: ReturnType<typeof resolveAgentConfig>,
+  strictLocalOnly: boolean,
+): string {
+  return JSON.stringify({
+    strictLocalOnly,
+    agentConfig: agentConfig ?? null,
+  });
+}
+
+async function loadConfiguredAgentRuntimeStatus(
   agentConfig: ReturnType<typeof resolveAgentConfig>,
   strictLocalOnly: boolean,
 ): Promise<AgentRuntimeStatus> {
@@ -6304,6 +6324,49 @@ async function getConfiguredAgentRuntimeStatus(
     status: "disconnected",
     channels: [],
   };
+}
+
+async function getConfiguredAgentRuntimeStatus(
+  agentConfig: ReturnType<typeof resolveAgentConfig>,
+  strictLocalOnly: boolean,
+): Promise<AgentRuntimeStatus> {
+  const cacheKey = configuredAgentRuntimeStatusCacheKey(
+    agentConfig,
+    strictLocalOnly,
+  );
+  const now = Date.now();
+  const cached = configuredAgentRuntimeStatusCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.status;
+  }
+
+  const inflight = configuredAgentRuntimeStatusInflight.get(cacheKey);
+  if (inflight) {
+    return inflight;
+  }
+
+  const nextStatusPromise = loadConfiguredAgentRuntimeStatus(
+    agentConfig,
+    strictLocalOnly,
+  )
+    .then((status) => {
+      configuredAgentRuntimeStatusCache.set(cacheKey, {
+        status,
+        expiresAt: Date.now() + AGENT_RUNTIME_STATUS_CACHE_TTL_MS,
+      });
+      return status;
+    })
+    .finally(() => {
+      configuredAgentRuntimeStatusInflight.delete(cacheKey);
+    });
+
+  configuredAgentRuntimeStatusInflight.set(cacheKey, nextStatusPromise);
+  return nextStatusPromise;
+}
+
+export function __resetConfiguredAgentRuntimeStatusCacheForTests() {
+  configuredAgentRuntimeStatusCache.clear();
+  configuredAgentRuntimeStatusInflight.clear();
 }
 
 function streamOpenClawResponse(params: {
