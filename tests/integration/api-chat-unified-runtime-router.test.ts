@@ -72,6 +72,7 @@ vi.mock("@/lib/local-guard", () => ({
 
 vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
+  gatewayHealthCheck: openClawHealthCheck,
   sendAgentMessage: sendOpenClawMessage,
   getConversationMessagesSince: vi.fn(),
 }));
@@ -134,7 +135,10 @@ vi.mock("@/lib/openhands", () => ({
   OPENHANDS_URL: "http://openhands.test",
 }));
 
-import { POST } from "@/app/api/chat/unified/route";
+import {
+  __resetConfiguredAgentRuntimeStatusCacheForTests,
+  POST,
+} from "@/app/api/chat/unified/route";
 import {
   createRuntimeEventStore,
   createRuntimeHostRouter,
@@ -265,6 +269,7 @@ class FakeOpenClawHost implements ResearchRuntimeHost {
 }
 
 beforeEach(() => {
+  __resetConfiguredAgentRuntimeStatusCacheForTests();
   vi.clearAllMocks();
   isLocalRequest.mockResolvedValue(true);
   resolveAgentConfig.mockReturnValue({
@@ -556,7 +561,6 @@ describe("/api/chat/unified runtime router facade", () => {
       ],
     }));
     const body = await response.json();
-
     expect(response.status).toBe(200);
     expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
     expect(body).toMatchObject({
@@ -628,14 +632,49 @@ describe("/api/chat/unified runtime router facade", () => {
     }));
     const body = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(body).toEqual({
-      error: "Failed to process chat request. Please try again.",
+    expect(response.status).toBe(502);
+    expect(body).toMatchObject({
+      error: expect.any(String),
+      backend: "openclaw",
+      mode: "reasoning",
     });
     expect(getDefaultRuntimeSessionStore().listSessions()).toEqual([
       expect.objectContaining({
         hostId: "openclaw",
         conversationId: "web:alpha-project:session-2",
+        status: "failed",
+        errorCode: "RUNTIME_HANDLER_ERROR",
+      }),
+    ]);
+  });
+
+  it("records OpenClaw failure output as a handler failure", async () => {
+    sendOpenClawMessage.mockResolvedValueOnce(
+      "OpenClaw error: model not found.",
+    );
+
+    const response = await POST(request({
+      backend: "openclaw",
+      message: "Trigger an agent-level failure",
+      conversationId: "web:alpha-project:session-3",
+      messages: [
+        {
+          role: "user",
+          content: "Trigger an agent-level failure",
+        },
+      ],
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      backend: "openclaw",
+      conversationId: "web-alpha-project-session-3",
+    });
+    expect(getDefaultRuntimeSessionStore().listSessions()).toEqual([
+      expect.objectContaining({
+        hostId: "openclaw",
+        conversationId: "web:alpha-project:session-3",
         status: "failed",
         errorCode: "RUNTIME_HANDLER_ERROR",
       }),
@@ -672,5 +711,44 @@ describe("/api/chat/unified runtime router facade", () => {
         }),
       }),
     ]);
+  });
+
+  it("fails the runtime session when an SSE client disconnects", async () => {
+    let resolveOpenClawMessage: (value: string) => void = () => {};
+    sendOpenClawMessage.mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        resolveOpenClawMessage = resolve;
+      }),
+    );
+
+    const response = await POST(request({
+      backend: "openclaw",
+      mode: "openclaw-tools",
+      message: "Start a long analysis",
+      streamPhases: true,
+      messages: [
+        {
+          role: "user",
+          content: "Start a long analysis",
+        },
+      ],
+    }));
+    const reader = response.body?.getReader();
+
+    expect(response.status).toBe(200);
+    expect(reader).toBeDefined();
+    await reader?.read();
+    await reader?.cancel();
+    expect(getDefaultRuntimeSessionStore().listSessions()).toEqual([
+      expect.objectContaining({
+        hostId: "openclaw",
+        mode: "mcp-tool",
+        status: "failed",
+        errorCode: "RUNTIME_CLIENT_DISCONNECTED",
+      }),
+    ]);
+
+    resolveOpenClawMessage("OpenClaw routed response");
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 });

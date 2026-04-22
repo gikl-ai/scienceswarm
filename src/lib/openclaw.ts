@@ -1,14 +1,14 @@
 /**
  * OpenClaw Integration
  *
- * Uses the `openclaw agent` CLI command for message routing.
- * The CLI handles auth, session management, and channel delivery.
- *
- * For health checks, uses `openclaw status` parsed output.
+ * Prefers the OpenClaw gateway WebSocket for session-scoped web chat turns so
+ * dashboard messages do not pay CLI spawn overhead. The CLI remains the
+ * compatibility path for health/status probes, explicit channel delivery, and
+ * non-web invocation modes that still rely on upstream CLI semantics.
  */
 
 import path from "node:path";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { getOpenClawGatewayUrl } from "@/lib/config/ports";
 import { getScienceSwarmOpenClawStateDir } from "@/lib/scienceswarm-paths";
 import { runOpenClaw, runOpenClawSync } from "@/lib/openclaw/runner";
@@ -48,12 +48,42 @@ export interface OpenClawStatus {
   sessions: number;
 }
 
+export interface OpenClawGatewayStatus {
+  status: "connected" | "disconnected";
+  gateway: string;
+}
+
+const OPENCLAW_SESSION_FILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
+const MAX_PERSISTED_WEB_SESSION_METADATA = 4096;
+const persistedWebSessionMetadata = new Set<string>();
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
 function fallbackGatewayUrl(): string {
   return gatewayBaseUrl();
+}
+
+function normalizeOpenClawSessionFileId(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || !OPENCLAW_SESSION_FILE_ID_PATTERN.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+function openClawSessionDirectory(): string {
+  return path.resolve(
+    getScienceSwarmOpenClawStateDir(),
+    "agents",
+    "main",
+    "sessions",
+  );
+}
+
+function gatewayHealthUrl(): string {
+  return gatewayBaseUrl().replace(/^ws:/, "http:").replace(/^wss:/, "https:");
 }
 
 function stripAnsi(value: string): string {
@@ -212,6 +242,33 @@ async function embeddedTurnReady(): Promise<boolean> {
   return isRecord(data) && modelStatusHasEmbeddedTurnPath(data);
 }
 
+async function probeGatewayHealth(timeoutMs: number): Promise<{
+  reachable: boolean;
+  gateway: string;
+}> {
+  try {
+    const httpUrl = gatewayHealthUrl();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${httpUrl}/health`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        return { reachable: false, gateway: "" };
+      }
+      const body = (await res.json()) as { ok?: boolean };
+      return body.ok === true
+        ? { reachable: true, gateway: httpUrl }
+        : { reachable: false, gateway: "" };
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return { reachable: false, gateway: "" };
+  }
+}
+
 function inferMessageRole(message: OpenClawMessage): "user" | "assistant" | "system" {
   if (message.role === "assistant" || message.role === "system") {
     return message.role;
@@ -266,13 +323,10 @@ async function readConversationHistoryFromSessionFile(
   conversationId: string,
   limit: number,
 ): Promise<OpenClawMessage[]> {
-  const sessionFile = path.join(
-    getScienceSwarmOpenClawStateDir(),
-    "agents",
-    "main",
-    "sessions",
-    `${conversationId}.jsonl`,
-  );
+  const sessionFile = openClawSessionFilePath(conversationId);
+  if (!sessionFile) {
+    return [];
+  }
 
   let raw: string;
   try {
@@ -341,6 +395,117 @@ async function readConversationHistoryFromSessionFile(
   return messages.slice(-limit);
 }
 
+function openClawSessionFilePath(conversationId: string): string | null {
+  const sessionFileId = normalizeOpenClawSessionFileId(conversationId);
+  if (!sessionFileId) {
+    return null;
+  }
+
+  const sessionDir = openClawSessionDirectory();
+  const relativeSessionFile = path.normalize(`${sessionFileId}.jsonl`);
+  if (
+    path.isAbsolute(relativeSessionFile) ||
+    relativeSessionFile !== path.basename(relativeSessionFile)
+  ) {
+    return null;
+  }
+
+  const sessionFile = path.resolve(sessionDir, relativeSessionFile);
+  const sessionDirPrefix = sessionDir.endsWith(path.sep)
+    ? sessionDir
+    : `${sessionDir}${path.sep}`;
+  if (!sessionFile.startsWith(sessionDirPrefix)) {
+    return null;
+  }
+  const relativeToSessionDir = path.relative(sessionDir, sessionFile);
+  if (
+    relativeToSessionDir.length === 0 ||
+    relativeToSessionDir.startsWith("..") ||
+    path.isAbsolute(relativeToSessionDir)
+  ) {
+    return null;
+  }
+
+  return sessionFile;
+}
+
+function shouldUseGatewayForWebSession(options?: {
+  channel?: string;
+  session?: string;
+  deliver?: boolean;
+  cwd?: string;
+  timeoutMs?: number;
+  onEvent?: (event: unknown) => void;
+}): options is {
+  channel: "web";
+  session: string;
+  deliver?: boolean;
+  cwd?: string;
+  timeoutMs?: number;
+  onEvent?: (event: unknown) => void;
+} {
+  return Boolean(
+    options?.session &&
+    options.channel === "web" &&
+    !options.deliver,
+  );
+}
+
+function shouldUseGatewayTransport(options?: {
+  channel?: string;
+  session?: string;
+  deliver?: boolean;
+  cwd?: string;
+}): boolean {
+  return Boolean(
+    shouldUseGatewayForWebSession(options) ||
+    (
+      options?.session &&
+      !options.channel &&
+      !options.deliver &&
+      !options.cwd
+    ),
+  );
+}
+
+async function persistWebSessionMetadata(
+  session: string,
+  cwd?: string,
+): Promise<void> {
+  if (!cwd) {
+    return;
+  }
+
+  const cacheKey = `${session}:${cwd}`;
+  if (persistedWebSessionMetadata.has(cacheKey)) {
+    return;
+  }
+
+  const sessionFile = openClawSessionFilePath(session);
+  if (!sessionFile) {
+    return;
+  }
+
+  if (persistedWebSessionMetadata.size >= MAX_PERSISTED_WEB_SESSION_METADATA) {
+    persistedWebSessionMetadata.clear();
+  }
+
+  const sessionDir = openClawSessionDirectory();
+  persistedWebSessionMetadata.add(cacheKey);
+  try {
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(
+      sessionFile,
+      `${JSON.stringify({ type: "session", id: session, cwd })}\n`,
+      { flag: "a" },
+    );
+  } catch {
+    persistedWebSessionMetadata.delete(cacheKey);
+    // Best-effort only. The gateway may still maintain the canonical session
+    // file; skipping this metadata should not break the turn itself.
+  }
+}
+
 /** Check if OpenClaw is running and reachable */
 export async function healthCheck(): Promise<OpenClawStatus> {
   // Fast path: HTTP-ping the gateway health endpoint to detect a running
@@ -348,27 +513,8 @@ export async function healthCheck(): Promise<OpenClawStatus> {
   // only determines *connectivity* — channel/agent/session data still
   // comes from the CLI probe below so that callers like broadcastMessage
   // and getConfiguredAgentRuntimeStatus see the real channel list.
-  let httpReachable = false;
-  let httpGateway = "";
-  try {
-    const httpUrl = gatewayBaseUrl().replace(/^ws:/, "http:").replace(/^wss:/, "https:");
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
-    try {
-      const res = await fetch(`${httpUrl}/health`, { signal: controller.signal });
-      if (res.ok) {
-        const body = (await res.json()) as { ok?: boolean };
-        if (body.ok) {
-          httpReachable = true;
-          httpGateway = httpUrl;
-        }
-      }
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch {
-    // gateway not reachable via HTTP; fall through to CLI probe
-  }
+  const { reachable: httpReachable, gateway: httpGateway } =
+    await probeGatewayHealth(3000);
 
   const statusResult = await runOpenClaw(["status", "--json"], { timeoutMs: 12000 });
   if (statusResult.ok) {
@@ -472,12 +618,36 @@ export async function healthCheck(): Promise<OpenClawStatus> {
 }
 
 /**
+ * Lightweight gateway-only readiness probe for hot chat-turn paths.
+ *
+ * Unlike `healthCheck()`, this avoids the expensive CLI status scan and only
+ * verifies that the web gateway required for session-scoped dashboard chat is
+ * responding. Use this when the caller only needs to know whether a web turn
+ * can be attempted right now; inventory fields like `channels` still require
+ * the full `healthCheck()` path.
+ */
+export async function gatewayHealthCheck(): Promise<OpenClawGatewayStatus> {
+  const { reachable, gateway } = await probeGatewayHealth(1500);
+  if (!reachable) {
+    return {
+      status: "disconnected",
+      gateway: "",
+    };
+  }
+
+  return {
+    status: "connected",
+    gateway,
+  };
+}
+
+/**
  * Send a message through OpenClaw agent and get a response.
  *
- * Prefers the WebSocket gateway transport so callers see real-time tool /
- * text / lifecycle events through `onEvent`. Falls back to the CLI when the
- * gateway is unreachable, the caller wants channel delivery (Slack/Telegram
- * etc.), or the call doesn't supply a session id.
+ * Prefers the WebSocket gateway transport for session-scoped in-process turns.
+ * Dashboard web chat (`channel: "web"`) is WS-only and does NOT fall back to
+ * the CLI on gateway failure. Explicit channel delivery and non-web
+ * compatibility paths still use the CLI.
  */
 export async function sendAgentMessage(
   message: string,
@@ -495,15 +665,14 @@ export async function sendAgentMessage(
     onEvent?: (event: unknown) => void;
   }
 ): Promise<string> {
-  // WS gateway is only used for in-process chat turns. Channel delivery
-  // and unsessioned calls keep the CLI path so we don't change semantics.
-  if (
-    options?.session &&
-    !options?.channel &&
-    !options?.deliver &&
-    !options?.cwd
-  ) {
+  const useGatewayTransport = shouldUseGatewayTransport(options);
+  const useGatewayWebSession = shouldUseGatewayForWebSession(options);
+
+  if (useGatewayTransport && options?.session) {
     try {
+      if (useGatewayWebSession) {
+        await persistWebSessionMetadata(options.session, options.cwd);
+      }
       const { sendMessageViaGateway } = await import(
         "@/lib/openclaw/gateway-ws-client"
       );
@@ -527,12 +696,12 @@ export async function sendAgentMessage(
       const { isGatewayPostAckError } = await import(
         "@/lib/openclaw/gateway-ws-client"
       );
-      if (isGatewayPostAckError(err)) {
+      if (useGatewayWebSession || isGatewayPostAckError(err)) {
         throw err;
       }
       // Pre-ACK gateway failure (no token, gateway not running, auth failed,
-      // pre-send transport error, etc.) — fall through to the CLI path so
-      // the caller still gets a response.
+      // pre-send transport error, etc.) — fall through to the CLI path only
+      // for the legacy non-web compatibility mode.
     }
   }
 
