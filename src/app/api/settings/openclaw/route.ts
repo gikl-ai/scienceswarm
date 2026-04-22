@@ -238,10 +238,11 @@ export async function POST(request: Request): Promise<Response> {
       const configureSteps: readonly (readonly string[])[] = [
         ["config", "set", "gateway.mode", "local"],
         ["config", "set", "gateway.bind", "loopback"],
+        ["config", "set", "gateway.port", String(getOpenClawPort())],
         ["config", "validate"],
       ];
 
-      for (const step of configureSteps.slice(0, 2)) {
+      for (const step of configureSteps.slice(0, 3)) {
         const result = await runOpenClaw(step, { timeoutMs: 5000 });
         if (!result.ok) {
           return Response.json({ error: "Configure failed" }, { status: 500 });
@@ -252,7 +253,8 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json({ error: "Configure failed" }, { status: 500 });
       }
 
-      const validateResult = await runOpenClaw(configureSteps[2], { timeoutMs: 5000 });
+      const validateStep = configureSteps[configureSteps.length - 1];
+      const validateResult = await runOpenClaw(validateStep, { timeoutMs: 5000 });
       if (!validateResult.ok) {
         return Response.json({ error: "Configure failed" }, { status: 500 });
       }
@@ -302,7 +304,15 @@ export async function POST(request: Request): Promise<Response> {
           // ScienceSwarm-managed state-dir mode, run the gateway process
           // directly so the wrapper-provided env remains attached.
           const runChild = spawnOpenClaw(
-            ["gateway", "run", "--allow-unconfigured"],
+            [
+              "gateway",
+              "run",
+              "--allow-unconfigured",
+              "--port",
+              String(getOpenClawPort()),
+              "--bind",
+              "loopback",
+            ],
             {
               mode,
               extraEnv,
@@ -315,7 +325,18 @@ export async function POST(request: Request): Promise<Response> {
             writeGatewayPid(runChild.pid, mode);
           }
           runChild.unref();
-          return Response.json({ ok: true, running: await waitForOpenClawRunning(10_000) });
+          const running = await waitForOpenClawRunning(10_000);
+          if (!running) {
+            return Response.json(
+              {
+                error:
+                  "OpenClaw start command ran, but the gateway did not become reachable. Check the OpenClaw logs or retry Start.",
+                running: false,
+              },
+              { status: 503 },
+            );
+          }
+          return Response.json({ ok: true, running: true });
         }
 
         // Try `gateway start` first. It typically exits quickly after
@@ -351,7 +372,15 @@ export async function POST(request: Request): Promise<Response> {
         // spawning a second gateway process on the same port.
         if (startExit !== 0 && startExit !== "timeout") {
           const runChild = spawnOpenClaw(
-            ["gateway", "run", "--allow-unconfigured"],
+            [
+              "gateway",
+              "run",
+              "--allow-unconfigured",
+              "--port",
+              String(getOpenClawPort()),
+              "--bind",
+              "loopback",
+            ],
             {
               mode,
               extraEnv,
