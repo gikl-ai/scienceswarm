@@ -384,13 +384,29 @@ describe("ChatMessage", () => {
     expect(container.querySelector("audio source")).toHaveAttribute("type", "audio/mp4");
   });
 
+  it("renders PDF MEDIA references as inline iframe", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:reports/paper.pdf"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:06:00.000Z")}
+      />,
+    );
+
+    const iframe = container.querySelector("iframe");
+    expect(iframe).not.toBeNull();
+    expect(iframe?.getAttribute("src")).toContain("file=reports%2Fpaper.pdf");
+    expect(iframe?.getAttribute("sandbox")).toBe("allow-same-origin allow-downloads");
+  });
+
   it("renders FLAC/OPUS/AAC MEDIA references as inline audio", () => {
     const { container } = render(
       <ChatMessage
         role="assistant"
         content={"MEDIA:audio/song.flac\nMEDIA:audio/clip.opus\nMEDIA:audio/voice.aac"}
         projectId="project-alpha"
-        timestamp={new Date("2026-04-20T10:06:00.000Z")}
+        timestamp={new Date("2026-04-20T10:07:00.000Z")}
       />,
     );
 
