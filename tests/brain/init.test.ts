@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, readFileSync, rmSync } from "fs";
-import { join } from "path";
+import { basename, join, resolve } from "path";
 import { tmpdir } from "os";
 import { initBrain } from "@/brain/init";
 
@@ -126,5 +126,21 @@ describe("initBrain", () => {
     expect(existsSync(join(TEST_ROOT, "concepts"))).toBe(true);
     expect(existsSync(join(TEST_ROOT, "conferences"))).toBe(true);
     expect(existsSync(join(TEST_ROOT, "ideas"))).toBe(true);
+  });
+
+  it("normalizes roots before writing scaffold files", () => {
+    const normalizedRoot = join(tmpdir(), "scienceswarm-brain-test-init-normalized");
+    const inputRoot = join(normalizedRoot, "..", basename(normalizedRoot));
+    rmSync(normalizedRoot, { recursive: true, force: true });
+
+    try {
+      const result = initBrain({ root: inputRoot });
+
+      expect(result.root).toBe(resolve(normalizedRoot));
+      expect(existsSync(join(normalizedRoot, "BRAIN.md"))).toBe(true);
+      expect(existsSync(join(normalizedRoot, "wiki/home.md"))).toBe(true);
+    } finally {
+      rmSync(normalizedRoot, { recursive: true, force: true });
+    }
   });
 });

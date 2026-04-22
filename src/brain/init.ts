@@ -28,7 +28,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { isAbsolute, join, relative, resolve } from "path";
 import { loadBrainPreset } from "./presets";
 import { type BrainPresetId, normalizeBrainPreset } from "./presets/types";
 import { resolveBrainFile } from "./template-paths";
@@ -115,10 +115,10 @@ interface InstallerCompatOptions extends InitOptions {
  * `connectGbrain`) do not regress.
  */
 export function initBrain(options: InitOptions): InitResult {
-  const { root } = options;
+  const root = resolve(options.root);
   const preset = loadBrainPreset(normalizeBrainPreset(options.brainPreset));
 
-  if (existsSync(join(root, "BRAIN.md"))) {
+  if (existsSync(resolvePathWithinRoot(root, "BRAIN.md"))) {
     return {
       root,
       created: false,
@@ -138,12 +138,12 @@ export function initBrain(options: InitOptions): InitResult {
   // against test teardown (rmSync on the brain root while PGLite is
   // still writing `brain.pglite-journal`).
   for (const dir of BRAIN_DIRS) {
-    mkdirSync(join(root, dir), { recursive: true });
+    mkdirSync(resolvePathWithinRoot(root, dir), { recursive: true });
   }
   for (const dir of preset.directories) {
-    mkdirSync(join(root, dir), { recursive: true });
+    mkdirSync(resolvePathWithinRoot(root, dir), { recursive: true });
   }
-  mkdirSync(join(root, "wiki"), { recursive: true });
+  mkdirSync(resolvePathWithinRoot(root, "wiki"), { recursive: true });
 
   // Legacy filesystem scaffolding — read templates exactly as before.
   const brainContent = preset.brainTemplate
@@ -151,35 +151,35 @@ export function initBrain(options: InitOptions): InitResult {
     .replace("{e.g., Computational Biology}", options.field ?? "{your field}")
     .replace("{e.g., MIT CSAIL}", options.institution ?? "{your institution}")
     .replace("{comma-separated list}", "{your active projects}");
-  writeFileSync(join(root, "BRAIN.md"), brainContent);
+  writeFileSync(resolvePathWithinRoot(root, "BRAIN.md"), brainContent);
 
   const homeTemplate = readFileSync(
     join(TEMPLATE_DIR, "home.md"),
     "utf-8"
   );
-  writeFileSync(join(root, "wiki/home.md"), homeTemplate);
+  writeFileSync(resolvePathWithinRoot(root, "wiki/home.md"), homeTemplate);
 
   const overviewTemplate = readFileSync(
     join(TEMPLATE_DIR, "overview.md"),
     "utf-8"
   );
-  writeFileSync(join(root, "wiki/overview.md"), overviewTemplate);
+  writeFileSync(resolvePathWithinRoot(root, "wiki/overview.md"), overviewTemplate);
 
   const indexTemplate = readFileSync(
     join(TEMPLATE_DIR, "index.md"),
     "utf-8"
   );
-  writeFileSync(join(root, "wiki/index.md"), indexTemplate);
+  writeFileSync(resolvePathWithinRoot(root, "wiki/index.md"), indexTemplate);
 
   writeFileSync(
-    join(root, "wiki/log.md"),
+    resolvePathWithinRoot(root, "wiki/log.md"),
     "# Brain Log\n\nChronological record of all operations.\n"
   );
 
-  writeFileSync(join(root, "wiki/events.jsonl"), "");
+  writeFileSync(resolvePathWithinRoot(root, "wiki/events.jsonl"), "");
 
   writeFileSync(
-    join(root, ".gitignore"),
+    resolvePathWithinRoot(root, ".gitignore"),
     [
       "# Large raw files (optional: uncomment to exclude from git)",
       "# raw/papers/*.pdf",
@@ -227,4 +227,19 @@ export async function initBrainWithInstaller(
     ...options,
     brainPreset: normalizeBrainPreset(options.brainPreset),
   });
+}
+
+function resolvePathWithinRoot(root: string, relativePath: string): string {
+  if (!relativePath || isAbsolute(relativePath)) {
+    throw new Error("Brain init paths must stay relative to the configured root.");
+  }
+
+  const resolvedRoot = resolve(root);
+  const resolvedPath = resolve(resolvedRoot, relativePath);
+  const relativeToRoot = relative(resolvedRoot, resolvedPath);
+  if (relativeToRoot.startsWith("..") || isAbsolute(relativeToRoot)) {
+    throw new Error("Brain init path escapes the configured root.");
+  }
+
+  return resolvedPath;
 }
