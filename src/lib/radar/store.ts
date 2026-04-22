@@ -113,11 +113,23 @@ export async function radarExists(stateDir: string): Promise<boolean> {
 export async function getActiveRadar(stateDir: string): Promise<Radar | null> {
   try {
     const files = await readdir(radarDir(stateDir))
-    const jsonFiles = files.filter((f) => f.endsWith(".json"))
-    if (jsonFiles.length === 0) return null
-    // MVP: single radar per user — return the first one
-    const id = jsonFiles[0].replace(".json", "")
-    return getRadar(stateDir, id)
+    const jsonFiles = files
+      .filter((f) => f.endsWith(".json"))
+      .filter((f) => f !== "latest-briefing.json")
+      .sort()
+
+    for (const file of jsonFiles) {
+      const radar = await getRadar(stateDir, file.replace(".json", ""))
+      if (
+        radar &&
+        Array.isArray(radar.topics) &&
+        Array.isArray(radar.sources)
+      ) {
+        return radar
+      }
+    }
+
+    return null
   } catch {
     return null
   }

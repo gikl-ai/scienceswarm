@@ -3,12 +3,13 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import {
   createRadar,
   getRadar,
+  getActiveRadar,
   updateRadar,
   deleteRadar,
   radarExists,
 } from "@/lib/radar/store"
 import type { RadarTopic, RadarSource } from "@/lib/radar/types"
-import { mkdtemp, rm } from "fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "fs/promises"
 import { join } from "path"
 import { tmpdir } from "os"
 
@@ -106,5 +107,31 @@ describe("RadarStore", () => {
     })
 
     expect(await radarExists(stateDir)).toBe(true)
+  })
+
+  it("ignores cached briefing JSON when selecting the active radar", async () => {
+    await mkdir(join(stateDir, "radar"), { recursive: true })
+    await writeFile(
+      join(stateDir, "radar", "latest-briefing.json"),
+      JSON.stringify({
+        id: "briefing-1",
+        generatedAt: "2026-04-22T12:00:00Z",
+        matters: [],
+        horizon: [],
+        nothingToday: true,
+      }),
+      "utf-8"
+    )
+
+    const radar = await createRadar(stateDir, {
+      topics: sampleTopics,
+      sources: sampleSources,
+    })
+
+    await expect(getActiveRadar(stateDir)).resolves.toMatchObject({
+      id: radar.id,
+      topics: sampleTopics,
+      sources: sampleSources,
+    })
   })
 })

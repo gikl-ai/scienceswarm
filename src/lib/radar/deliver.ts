@@ -1,4 +1,4 @@
-import type { RadarBriefing, RankedSignal } from "./types"
+import type { FrontierProgramMatch, RadarBriefing, RankedSignal } from "./types"
 
 const TELEGRAM_LIMIT = 4000
 
@@ -8,7 +8,10 @@ export function formatTelegramBriefing(briefing: RadarBriefing): string {
       briefing.stats.sourcesFailed.length > 0
         ? `\n(Could not reach: ${briefing.stats.sourcesFailed.join(", ")})`
         : ""
-    return `Quiet day in your areas. Nothing worth your time.${failNote}`
+    const quietReason = briefing.quietReason
+      ? `\n${briefing.quietReason}`
+      : ""
+    return `Quiet day in your areas. Nothing worth your time.${quietReason}${failNote}`
   }
 
   const lines: string[] = []
@@ -20,6 +23,7 @@ export function formatTelegramBriefing(briefing: RadarBriefing): string {
       lines.push(
         `${i + 1}. ${item.signal.title}`,
         `   ${item.whyItMatters}`,
+        ...formatTelegramProgramMatch(item.programMatches),
         `   ${item.signal.url}`,
         ""
       )
@@ -32,6 +36,7 @@ export function formatTelegramBriefing(briefing: RadarBriefing): string {
       lines.push(
         `- ${item.signal.title}`,
         `  ${item.whyItMatters}`,
+        ...formatTelegramProgramMatch(item.programMatches),
         `  ${item.signal.url}`,
         ""
       )
@@ -57,6 +62,17 @@ export function formatTelegramBriefing(briefing: RadarBriefing): string {
   return text
 }
 
+function formatTelegramProgramMatch(
+  matches: FrontierProgramMatch[] | undefined
+): string[] {
+  const match = matches?.[0]
+  if (!match) return []
+  return [
+    `   Affects: ${match.reference}`,
+    `   Next check: ${match.recommendedAction}`,
+  ]
+}
+
 export interface DashboardBriefingItem {
   signalId: string
   title: string
@@ -68,12 +84,14 @@ export interface DashboardBriefingItem {
   tldr?: string
   source: string
   actions: string[]
+  programMatches: FrontierProgramMatch[]
 }
 
 export interface DashboardBriefing {
   id: string
   generatedAt: string
   nothingToday: boolean
+  quietReason?: string
   matters: DashboardBriefingItem[]
   horizon: DashboardBriefingItem[]
   stats: RadarBriefing["stats"]
@@ -81,7 +99,8 @@ export interface DashboardBriefing {
 
 function toDashboardItem(
   signal: RankedSignal,
-  whyItMatters: string
+  whyItMatters: string,
+  programMatches: FrontierProgramMatch[] | undefined
 ): DashboardBriefingItem {
   return {
     signalId: signal.id,
@@ -94,6 +113,7 @@ function toDashboardItem(
     tldr: signal.metadata.tldr,
     source: signal.sourceId,
     actions: ["save-to-brain", "dismiss", "expand", "more-like-this"],
+    programMatches: programMatches ?? [],
   }
 }
 
@@ -104,11 +124,12 @@ export function formatDashboardBriefing(
     id: briefing.id,
     generatedAt: briefing.generatedAt,
     nothingToday: briefing.nothingToday,
+    quietReason: briefing.quietReason,
     matters: briefing.matters.map((m) =>
-      toDashboardItem(m.signal, m.whyItMatters)
+      toDashboardItem(m.signal, m.whyItMatters, m.programMatches)
     ),
     horizon: briefing.horizon.map((h) =>
-      toDashboardItem(h.signal, h.whyItMatters)
+      toDashboardItem(h.signal, h.whyItMatters, h.programMatches)
     ),
     stats: briefing.stats,
   }
