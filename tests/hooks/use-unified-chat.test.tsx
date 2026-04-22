@@ -1619,7 +1619,7 @@ describe("useUnifiedChat persistence", () => {
       return 1 as unknown as ReturnType<typeof setInterval>;
     }) as unknown as typeof setInterval);
 
-    const previousCursor = "2026-04-15T02:00:00.000Z";
+    const previousCursor = "2000-01-01T00:00:00.000Z";
     window.localStorage.setItem(
       "scienceswarm.chat.alpha-project",
       JSON.stringify({
