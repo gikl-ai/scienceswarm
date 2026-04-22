@@ -268,6 +268,86 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
   });
 
+  it("flushes the live project thread back to local storage on pagehide", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          openclaw: "connected",
+          nanoclaw: "connected",
+          openhands: "disconnected",
+        });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return Response.json({
+          response: "Persisted answer",
+          conversationId: "conv-alpha",
+          messages: [],
+        });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-alpha");
+    });
+    expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
+
+    window.localStorage.removeItem("scienceswarm.chat.alpha-project");
+    expect(window.localStorage.getItem("scienceswarm.chat.alpha-project")).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+
+    const restored = JSON.parse(
+      window.localStorage.getItem("scienceswarm.chat.alpha-project") || "null",
+    ) as {
+      conversationId?: string | null;
+      messages?: Array<{ role?: string; content?: string }>;
+    } | null;
+
+    expect(restored?.conversationId).toBe("conv-alpha");
+    expect(restored?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "user",
+          content: "Hello from the browser",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          content: "Persisted answer",
+        }),
+      ]),
+    );
+  });
+
   it("starts with an empty thread and skips thread persistence when no project is selected", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
