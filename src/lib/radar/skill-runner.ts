@@ -47,6 +47,7 @@
 
 import { dirname as pathDirname, join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
+import matter from "gray-matter";
 
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 import { getScienceSwarmBrainRoot, resolveConfiguredPath } from "@/lib/scienceswarm-paths";
@@ -70,6 +71,10 @@ export interface RadarLastRun {
   errors_count: number;
   /** Schedule interval the runner was launched against, in ms. */
   schedule_interval_ms: number;
+  /** Durable briefing page for the latest run. */
+  briefing_slug?: string;
+  /** Durable overnight journal artifact for the latest run. */
+  journal_slug?: string;
 }
 
 export interface SkillRunnerResult {
@@ -225,6 +230,8 @@ export async function runResearchRadarSkill(
   const errors: string[] = [];
   let conceptsProcessed = 0;
   let radarsProcessed = 0;
+  let briefingSlug: string | undefined;
+  let journalSlug: string | undefined;
 
   try {
     // connect() and initSchema() live inside the try so a failure in
@@ -278,8 +285,11 @@ export async function runResearchRadarSkill(
             engine,
             result.briefing,
             radar,
+            brainRoot,
           );
           conceptsProcessed += writeOutcome.conceptsTouched;
+          briefingSlug = writeOutcome.briefingSlug;
+          journalSlug = writeOutcome.journalSlug;
           errors.push(...writeOutcome.errors);
         }
       } catch (err) {
@@ -293,6 +303,8 @@ export async function runResearchRadarSkill(
       concepts_processed: conceptsProcessed,
       errors_count: errors.length,
       schedule_interval_ms: scheduleIntervalMs,
+      briefing_slug: briefingSlug,
+      journal_slug: journalSlug,
     };
 
     if (!options.dryRun) {
@@ -476,6 +488,8 @@ function resolveScheduleIntervalMs(): number {
 interface WriteBackOutcome {
   conceptsTouched: number;
   errors: string[];
+  briefingSlug?: string;
+  journalSlug?: string;
 }
 
 /**
@@ -497,12 +511,14 @@ async function writeBriefingToGbrain(
   engine: RadarEngineLike,
   briefing: RadarBriefing,
   radar: Radar,
+  brainRoot: string,
 ): Promise<WriteBackOutcome> {
   const errors: string[] = [];
   let conceptsTouched = 0;
 
   const date = briefing.generatedAt.slice(0, 10); // YYYY-MM-DD
   const briefingSlug = `briefings/${date}-${radar.id}`;
+  let journalSlug: string | undefined;
   const briefingTitle = briefing.nothingToday
     ? `Radar — ${date} (quiet)`
     : `Radar — ${date}`;
@@ -541,6 +557,19 @@ async function writeBriefingToGbrain(
     }
   }
 
+  try {
+    journalSlug = await writeRadarJournal(
+      engine,
+      briefing,
+      radar,
+      brainRoot,
+      briefingSlug,
+      Array.from(touchedTopicSlugs),
+    );
+  } catch (err) {
+    errors.push(`putPage(journal) failed: ${errMessage(err)}`);
+  }
+
   for (const conceptSlug of touchedTopicSlugs) {
     try {
       await engine.addTimelineEntry(conceptSlug, {
@@ -558,7 +587,50 @@ async function writeBriefingToGbrain(
     }
   }
 
-  return { conceptsTouched, errors };
+  return { conceptsTouched, errors, briefingSlug, journalSlug };
+}
+
+async function writeRadarJournal(
+  engine: RadarEngineLike,
+  briefing: RadarBriefing,
+  radar: Radar,
+  brainRoot: string,
+  briefingSlug: string,
+  touchedConceptSlugs: string[],
+): Promise<string> {
+  const date = briefing.generatedAt.slice(0, 10);
+  const journalSlug = `journals/${date}-research-radar-${radar.id}`;
+  const title = `Research Radar Journal — ${date}`;
+  const frontmatter = {
+    source: "research-radar",
+    radar_id: radar.id,
+    generated_at: briefing.generatedAt,
+    briefing_slug: briefingSlug,
+    concept_count: touchedConceptSlugs.length,
+    touched_concepts: touchedConceptSlugs,
+    nothing_today: briefing.nothingToday,
+    signals_fetched: briefing.stats.signalsFetched,
+    signals_ranked: briefing.stats.signalsRanked,
+    sources_queried: briefing.stats.sourcesQueried,
+    sources_failed: briefing.stats.sourcesFailed,
+  };
+  const compiledTruth = renderRadarJournalMarkdown(
+    briefing,
+    radar,
+    briefingSlug,
+    touchedConceptSlugs,
+  );
+
+  await engine.putPage(journalSlug, {
+    type: "overnight_journal",
+    title,
+    compiled_truth: compiledTruth,
+    timeline: "",
+    frontmatter,
+  });
+  await engine.addLink(journalSlug, briefingSlug, "briefing_artifact", "supports");
+  await writeRadarJournalDiskMirror(brainRoot, journalSlug, title, frontmatter, compiledTruth);
+  return journalSlug;
 }
 
 /**
@@ -605,6 +677,57 @@ function renderBriefingMarkdown(briefing: RadarBriefing): string {
   }
 
   return lines.join("\n");
+}
+
+function renderRadarJournalMarkdown(
+  briefing: RadarBriefing,
+  radar: Radar,
+  briefingSlug: string,
+  touchedConceptSlugs: string[],
+): string {
+  const lines: string[] = [
+    `# Research Radar Journal — ${briefing.generatedAt.slice(0, 10)}`,
+    "",
+    `Radar: ${radar.id}`,
+    `Generated at: ${briefing.generatedAt}`,
+    `Briefing artifact: ${briefingSlug}`,
+    `Touched concepts: ${touchedConceptSlugs.length}`,
+    "",
+    "## Briefing Snapshot",
+    renderBriefingMarkdown(briefing),
+    "",
+    "## Touched Concepts",
+  ];
+
+  if (touchedConceptSlugs.length === 0) {
+    lines.push("- None");
+  } else {
+    for (const conceptSlug of touchedConceptSlugs) {
+      lines.push(`- ${conceptSlug}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+async function writeRadarJournalDiskMirror(
+  brainRoot: string,
+  journalSlug: string,
+  title: string,
+  frontmatter: Record<string, unknown>,
+  compiledTruth: string,
+): Promise<void> {
+  const absolutePath = join(brainRoot, `${journalSlug}.md`);
+  await mkdir(pathDirname(absolutePath), { recursive: true });
+  await writeFile(
+    absolutePath,
+    matter.stringify(`${compiledTruth.trim()}\n`, {
+      type: "overnight_journal",
+      title,
+      ...frontmatter,
+    }),
+    "utf-8",
+  );
 }
 
 function slugify(input: string): string {

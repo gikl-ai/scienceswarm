@@ -65,6 +65,7 @@ import {
   type MaterializeEngine,
 } from "@/lib/capture/materialize-memory";
 import type { PersistedRawCapture } from "@/lib/capture/persist-raw";
+import { readProjectManifest } from "@/lib/state/project-manifests";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -441,6 +442,75 @@ describe("materializeMemory filing rules (gbrain writer)", () => {
     expect(result.materializedPath).toBeUndefined();
     expect(result.project).toBeNull();
     expect(result.sourceRef).toBeDefined();
+  });
+
+  it("files research-native capture kinds into dedicated homes with preserved gbrain types", async () => {
+    const cases = [
+      { kind: "survey", dir: "wiki/surveys" },
+      { kind: "method", dir: "wiki/methods" },
+      { kind: "original_synthesis", dir: "wiki/originals" },
+      { kind: "research_packet", dir: "wiki/packets" },
+      { kind: "overnight_journal", dir: "wiki/journals" },
+    ] as const;
+
+    for (const { kind, dir } of cases) {
+      const capture = makeCapture({
+        captureId: `cap-${kind}`,
+        kind,
+        content: `${kind} capture body`,
+      });
+      const result = await materializeMemory({
+        brainRoot: tmpRoot,
+        capture,
+        project: "demo",
+        confidence: "medium",
+        engine,
+      });
+
+      expect(result.materializedPath).toMatch(
+        new RegExp(`^${dir}/2026-04-13-.*\\.md$`),
+      );
+
+      const slug = derivePageSlug(result.materializedPath!);
+      const page = await engine.getPage(slug);
+      expect(page).not.toBeNull();
+      expect(page!.type).toBe(kind);
+      expect(page!.frontmatter.type).toBe(kind);
+    }
+  });
+
+  it("adds research packets and overnight journals to project artifact paths", async () => {
+    const packet = await materializeMemory({
+      brainRoot: tmpRoot,
+      capture: makeCapture({
+        captureId: "cap-packet",
+        kind: "research_packet",
+        content: "Retained literature packet",
+      }),
+      project: "demo",
+      confidence: "medium",
+      engine,
+    });
+
+    const journal = await materializeMemory({
+      brainRoot: tmpRoot,
+      capture: makeCapture({
+        captureId: "cap-journal",
+        kind: "overnight_journal",
+        content: "Overnight run journal",
+      }),
+      project: "demo",
+      confidence: "medium",
+      engine,
+    });
+
+    const manifest = await readProjectManifest("demo", path.join(tmpRoot, "state"));
+    expect(manifest?.artifactPaths).toEqual(
+      expect.arrayContaining([
+        packet.materializedPath as string,
+        journal.materializedPath as string,
+      ]),
+    );
   });
 });
 

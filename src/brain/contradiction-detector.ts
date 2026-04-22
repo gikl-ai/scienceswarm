@@ -35,16 +35,19 @@ export async function scanForContradictions(
       query: "hypothesis",
       mode: "grep",
       limit: 20,
+      profile: "synthesis",
     }),
     search(config, {
       query: "observation",
       mode: "grep",
       limit: 20,
+      profile: "synthesis",
     }),
     search(config, {
       query: "paper",
       mode: "grep",
       limit: 15,
+      profile: "synthesis",
     }),
   ]);
 

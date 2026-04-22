@@ -102,6 +102,7 @@ describe("gbrain-init install task", () => {
     expect(mockInitBrain).toHaveBeenCalledWith({
       root: "/tmp/fake-brain",
       name: "test-user",
+      brainPreset: "scientific_research",
     });
     expect(result.at(-1)).toEqual({
       status: "succeeded",

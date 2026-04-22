@@ -66,6 +66,7 @@ export async function buildMorningBrief(
       query: projectFilter ? `task ${projectFilter}` : "status: open task",
       mode: "grep",
       limit: 20,
+      profile: "synthesis",
     }),
     search(config, {
       query: projectFilter
@@ -73,6 +74,7 @@ export async function buildMorningBrief(
         : "status: running experiment",
       mode: "grep",
       limit: 15,
+      profile: "synthesis",
     }),
     search(config, {
       query: projectFilter
@@ -80,6 +82,7 @@ export async function buildMorningBrief(
         : "frontier_item staged promoted",
       mode: "grep",
       limit: 20,
+      profile: "synthesis",
     }),
     search(config, {
       query: projectFilter
@@ -87,6 +90,7 @@ export async function buildMorningBrief(
         : "hypothesis active",
       mode: "grep",
       limit: 15,
+      profile: "synthesis",
     }),
     search(config, {
       query: projectFilter
@@ -94,6 +98,7 @@ export async function buildMorningBrief(
         : "observation",
       mode: "grep",
       limit: 15,
+      profile: "synthesis",
     }),
   ]);
 
@@ -247,16 +252,19 @@ export async function buildProgramBrief(
           query: `task ${project}`,
           mode: "grep",
           limit: 10,
+          profile: "synthesis",
         }),
         search(config, {
           query: `experiment ${project} running`,
           mode: "grep",
           limit: 10,
+          profile: "synthesis",
         }),
         search(config, {
           query: `hypothesis ${project}`,
           mode: "grep",
           limit: 10,
+          profile: "synthesis",
         }),
       ]);
       return { project, tasks, experiments, hypotheses };

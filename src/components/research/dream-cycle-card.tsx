@@ -50,6 +50,7 @@ interface DreamHeadlineSummary {
 interface DreamLastRun {
   timestamp: string;
   mode: string;
+  journal_slug?: string;
   pages_compiled: number;
   contradictions_found: number;
   backlinks_added: number;
@@ -213,15 +214,27 @@ export function DreamCycleCard({
                   : "Scheduled runner is ready."}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={runNow}
-            disabled={running || loading}
-            className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {running ? <Spinner size="h-3.5 w-3.5" /> : <ArrowClockwise size={14} />}
-            {running ? "Running" : "Run now"}
-          </button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {lastRun?.journal_slug && onNavigateBrainPage ? (
+              <button
+                type="button"
+                onClick={() => onNavigateBrainPage(lastRun.journal_slug as string)}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+              >
+                <LinkSimple size={14} />
+                Open journal
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={runNow}
+              disabled={running || loading}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {running ? <Spinner size="h-3.5 w-3.5" /> : <ArrowClockwise size={14} />}
+              {running ? "Running" : "Run now"}
+            </button>
+          </div>
         </div>
 
         {error && (

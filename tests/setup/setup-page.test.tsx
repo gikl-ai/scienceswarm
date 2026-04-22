@@ -61,6 +61,12 @@ describe("BootstrapForm", () => {
     expect(input.value).toBe("");
   });
 
+  it("defaults the brain preset to scientific research", () => {
+    render(<BootstrapForm disabled={false} onSubmit={vi.fn()} />);
+    const select = screen.getByTestId("brain-preset-select") as HTMLSelectElement;
+    expect(select.value).toBe("scientific_research");
+  });
+
   it("rejects handles with spaces and shows an inline error", () => {
     const onSubmit = vi.fn();
     render(<BootstrapForm disabled={false} onSubmit={onSubmit} />);
@@ -81,6 +87,7 @@ describe("BootstrapForm", () => {
       handle: "alice",
       email: "",
       phone: "",
+      brainPreset: "scientific_research",
     });
   });
 
@@ -98,6 +105,7 @@ describe("BootstrapForm", () => {
       handle: "alice",
       email: "s@example.com",
       phone: "+14155551234",
+      brainPreset: "scientific_research",
     });
   });
 
@@ -119,6 +127,7 @@ describe("BootstrapForm", () => {
       handle: "alice",
       email: "",
       phone: "",
+      brainPreset: "scientific_research",
       existingBot: {
         token: TEST_TELEGRAM_BOT_TOKEN,
       },
@@ -152,6 +161,7 @@ describe("BootstrapForm", () => {
     expect(within(telegramSection).getByTestId("phone-input")).toBeInTheDocument();
     expect(within(userSection).getByTestId("handle-input")).toBeInTheDocument();
     expect(within(userSection).getByTestId("email-input")).toBeInTheDocument();
+    expect(within(userSection).getByTestId("brain-preset-select")).toBeInTheDocument();
     expect(within(telegramSection).queryByTestId("handle-input")).not.toBeInTheDocument();
   });
 
@@ -199,6 +209,7 @@ describe("BootstrapForm", () => {
     render(<BootstrapForm disabled={true} onSubmit={vi.fn()} />);
     expect(screen.getByTestId("handle-input")).toBeDisabled();
     expect(screen.getByTestId("email-input")).toBeDisabled();
+    expect(screen.getByTestId("brain-preset-select")).toBeDisabled();
     expect(screen.getByTestId("phone-input")).toBeDisabled();
     expect(screen.getByTestId("bootstrap-submit")).toBeDisabled();
   });

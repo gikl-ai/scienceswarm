@@ -11,7 +11,7 @@ import { join, relative } from "path";
 import type { BrainConfig, SearchResult } from "./types";
 import { isGeneratedArtifactPage } from "./import-registry";
 import { isStructuralWikiPage, search } from "./search";
-import { cachedSearchWithSource, getBrainStore } from "./store";
+import type { BrainPage, BrainStore } from "./store";
 
 // ── Public Types ──────────────────────────────────────
 
@@ -192,6 +192,7 @@ const STOP_WORDS = new Set([
 
 const STORE_PAGE_READ_TIMEOUT_MS = 500;
 const MAX_INVENTORY_RESULTS = 25;
+const INVENTORY_SCAN_LIMIT = 5000;
 
 type ContextSearchResult = Pick<SearchResult, "path" | "title" | "snippet" | "relevance" | "compiledView">;
 
@@ -344,6 +345,99 @@ function shouldIncludeInventory(userMessage: string): boolean {
     && /\b(brain|papers?|pages?|documents?|files?|sources?|imports?|workspace|folders?|directories?)\b/i.test(userMessage);
 }
 
+function inventoryQueryTokens(userMessage: string): string[] {
+  return extractKeywords(userMessage).filter(
+    (token) =>
+      ![
+        "brain",
+        "paper",
+        "papers",
+        "page",
+        "pages",
+        "folder",
+        "folders",
+        "directory",
+        "directories",
+        "path",
+        "paths",
+        "file",
+        "files",
+        "source",
+        "sources",
+        "workspace",
+        "located",
+        "location",
+        "locations",
+        "where",
+        "find",
+        "show",
+        "list",
+        "enumerate",
+        "what",
+        "which",
+      ].includes(token),
+  );
+}
+
+function inventorySnippet(page: BrainPage): string {
+  const sourcePath = page.frontmatter.source_path ?? page.frontmatter.sourcePath;
+  if (typeof sourcePath === "string" && sourcePath.trim().length > 0) {
+    return sourcePath;
+  }
+  return page.content.trim().slice(0, 220);
+}
+
+function scoreInventoryPage(
+  page: BrainPage,
+  queryTokens: string[],
+): number {
+  if (queryTokens.length === 0) {
+    return 0.5;
+  }
+
+  const sourcePath = page.frontmatter.source_path ?? page.frontmatter.sourcePath;
+  const haystacks = [
+    page.title.toLowerCase(),
+    page.path.toLowerCase(),
+    page.content.toLowerCase(),
+    typeof sourcePath === "string" ? sourcePath.toLowerCase() : "",
+  ];
+
+  let score = 0;
+  for (const token of queryTokens) {
+    if (haystacks[0].includes(token)) score += 0.4;
+    if (haystacks[1].includes(token)) score += 0.3;
+    if (haystacks[2].includes(token)) score += 0.2;
+    if (haystacks[3].includes(token)) score += 0.2;
+  }
+  return Math.min(1, score);
+}
+
+async function listInventoryResults(
+  store: BrainStore,
+  userMessage: string,
+): Promise<NonNullable<ChatContext["inventory"]>> {
+  const pages = await store.listPages({ limit: INVENTORY_SCAN_LIMIT });
+  const queryTokens = inventoryQueryTokens(userMessage);
+
+  return pages
+    .map((page) => ({
+      path: page.path,
+      title: page.title,
+      type: page.type,
+      snippet: inventorySnippet(page),
+      relevance: scoreInventoryPage(page, queryTokens),
+    }))
+    .filter((page) => queryTokens.length === 0 || page.relevance > 0)
+    .sort((left, right) => {
+      if (right.relevance !== left.relevance) {
+        return right.relevance - left.relevance;
+      }
+      return left.title.localeCompare(right.title);
+    })
+    .slice(0, MAX_INVENTORY_RESULTS);
+}
+
 // ── Chat Context Builder ──────────────────────────────
 
 /**
@@ -358,9 +452,19 @@ export async function buildChatContext(
 ): Promise<ChatContext> {
   const maxTokens = Math.max(2000, Math.min(8000, options?.maxTokens ?? 4000));
   const serendipityRate = options?.serendipityRate ?? config.serendipityRate;
-  const store = getBrainStore();
+  let store: BrainStore | null = null;
+  let storeModulePromise: Promise<typeof import("./store")> | null = null;
+  const getStoreModule = () => {
+    storeModulePromise ??= import("./store");
+    return storeModulePromise;
+  };
+  const resolveStore = async () => {
+    store ??= (await getStoreModule()).getBrainStore();
+    return store;
+  };
 
   const keywords = extractKeywords(userMessage);
+  const inventoryRequested = shouldIncludeInventory(userMessage);
 
   const matchedPaths = new Set<string>();
   const allResults: ContextSearchResult[] = [];
@@ -368,16 +472,18 @@ export async function buildChatContext(
 
   // Try store search first (PGLite keyword search)
   {
+    const { cachedSearchWithSource } = await getStoreModule();
     const { results, fromStore } = await cachedSearchWithSource({
       query: userMessage,
       mode: "qmd",
       limit: 10,
+      profile: "interactive",
     });
 
     for (const result of results) {
       if (isStructuralWikiPage(result.path)) continue;
       if (!isProjectScopedResult(result.path, options?.projectId)) continue;
-      if (!await shouldIncludeSearchResult(config, store, result.path, options)) continue;
+      if (!await shouldIncludeSearchResult(config, await resolveStore(), result.path, options)) continue;
       if (matchedPaths.has(result.path)) continue;
       matchedPaths.add(result.path);
       allResults.push(result);
@@ -387,13 +493,13 @@ export async function buildChatContext(
   }
 
   // Fall back to grep if the store search returned nothing
-  if (!usedStoreSearch) {
+  if (!usedStoreSearch && !inventoryRequested) {
     for (const keyword of keywords) {
       const results = await search(config, { query: keyword, mode: "grep", limit: 5 });
       for (const result of results) {
         if (isStructuralWikiPage(result.path)) continue;
         if (!isProjectScopedResult(result.path, options?.projectId)) continue;
-        if (!await shouldIncludeSearchResult(config, store, result.path, options)) continue;
+        if (!await shouldIncludeSearchResult(config, await resolveStore(), result.path, options)) continue;
         if (matchedPaths.has(result.path)) continue;
         matchedPaths.add(result.path);
         allResults.push(result);
@@ -404,7 +510,10 @@ export async function buildChatContext(
   const pageContentCache = new Map<string, Promise<string>>();
   const getContent = (path: string) => {
     if (!pageContentCache.has(path)) {
-      pageContentCache.set(path, loadPageContent(config, store, path));
+      pageContentCache.set(
+        path,
+        (async () => loadPageContent(config, await resolveStore(), path))(),
+      );
     }
     return pageContentCache.get(path)!;
   };
@@ -432,23 +541,18 @@ export async function buildChatContext(
   const pages: ChatContext["pages"] = [];
   let inventory: ChatContext["inventory"] = [];
   let totalTokens = 0;
-  const inventoryRequested = shouldIncludeInventory(userMessage);
 
   if (inventoryRequested || allResults.length === 0) {
     try {
       const wantsPapers = /\bpapers?\b/i.test(userMessage);
       const locationRequested = /\b(where|located?|locations?|paths?|folders?|directories?)\b/i.test(userMessage);
-      const listResults = await search(config, {
-        query: userMessage,
-        mode: "list",
-        limit: MAX_INVENTORY_RESULTS,
-      });
+      const listResults = await listInventoryResults(await resolveStore(), userMessage);
       inventory = [];
       for (const result of listResults) {
         if (isStructuralWikiPage(result.path)) continue;
         if (!isProjectScopedResult(result.path, options?.projectId)) continue;
         if (wantsPapers && result.type !== "paper") continue;
-        if (!await shouldIncludeSearchResult(config, store, result.path, options)) continue;
+        if (!await shouldIncludeSearchResult(config, await resolveStore(), result.path, options)) continue;
         inventory.push({
           path: result.path,
           title: result.title,
@@ -459,17 +563,13 @@ export async function buildChatContext(
       }
 
       if (inventory.length === 0 && wantsPapers && locationRequested) {
-        const fallbackResults = await search(config, {
-          query: "",
-          mode: "list",
-          limit: MAX_INVENTORY_RESULTS,
-        });
+        const fallbackResults = await listInventoryResults(await resolveStore(), "");
         inventory = [];
         for (const result of fallbackResults) {
           if (isStructuralWikiPage(result.path)) continue;
           if (!isProjectScopedResult(result.path, options?.projectId)) continue;
           if (result.type !== "paper") continue;
-          if (!await shouldIncludeSearchResult(config, store, result.path, options)) continue;
+          if (!await shouldIncludeSearchResult(config, await resolveStore(), result.path, options)) continue;
           inventory.push({
             path: result.path,
             title: result.title,
@@ -594,7 +694,7 @@ export async function buildChatContext(
 
 async function shouldIncludeSearchResult(
   config: BrainConfig,
-  store: ReturnType<typeof getBrainStore>,
+  store: BrainStore,
   pagePath: string,
   options?: BuildChatContextOptions,
 ): Promise<boolean> {
@@ -705,7 +805,7 @@ function formatCount(count: number, singular: string): string {
 
 async function loadPageContent(
   config: BrainConfig,
-  store: ReturnType<typeof getBrainStore>,
+  store: BrainStore,
   pagePath: string,
 ): Promise<string> {
   try {
@@ -725,9 +825,9 @@ async function loadPageContent(
 
 async function loadPageForFiltering(
   config: BrainConfig,
-  store: ReturnType<typeof getBrainStore>,
+  store: BrainStore,
   pagePath: string,
-) {
+): Promise<BrainPage | null> {
   try {
     const page = await withPageReadTimeout(
       store.getPage(pagePath),

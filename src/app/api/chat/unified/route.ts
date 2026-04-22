@@ -73,6 +73,7 @@ import {
   writeBackOpenClawGeneratedFiles,
 } from "@/lib/openclaw/gbrain-writeback";
 import { listOpenClawSkills } from "@/lib/openclaw/skill-catalog";
+import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
 import {
   buildOpenClawSlashCommands,
   buildOpenClawSlashCommandPrompt,
@@ -432,7 +433,8 @@ function openClawAgentOptions(
     timeoutMs:
       isRevisionWorkflowRequest(message) ||
       isPlanChangeRequest(message) ||
-      isRevisionRunRequest(message)
+      isRevisionRunRequest(message) ||
+      shouldForceOpenClawToolExecution(message)
         ? OPENCLAW_ARTIFACT_TASK_TIMEOUT_MS
         : undefined,
   };
@@ -1891,6 +1893,16 @@ function buildOpenClawWebTaskGuardrails(
     "- Do not auto-read AGENTS.md or other startup-convention files unless the user explicitly asks.",
   ];
 
+  if (projectRoot && shouldForceOpenClawToolExecution(message)) {
+    rules.push(
+      `- The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
+      `- Use absolute paths rooted under ${projectRoot} for every write, exec, and saved artifact. If you need a scratch or artifacts folder, create it under ${projectRoot}.`,
+      `- Never write to the generic OpenClaw workspace, WORK_DIR, home directory, or any path outside ${projectRoot} unless the user explicitly asked for that destination.`,
+      `- For toy or local validation runs, prefer the Python standard library or dependencies already available in the current environment. Do not install new packages unless the user explicitly asked you to modify the environment.`,
+      `- If a tool wrote something outside ${projectRoot}, treat that as a mistake: rewrite or move it into ${projectRoot} before you finish, then report the project-visible path.`,
+    );
+  }
+
   if (isExplanatoryClarificationRequest(message)) {
     rules.push(
       "",
@@ -2324,7 +2336,9 @@ function buildOpenClawTaskPhases(
   const needsRevisionRun = isRevisionRunRequest(message);
   const needsCoverLetter = isCoverLetterRequest(message);
   const needsCoverLetterOnly = isCoverLetterOnlyRequest(message);
+  const needsWorkspaceExecution = shouldForceOpenClawToolExecution(message);
   const needsImport =
+    needsWorkspaceExecution ||
     needsChart ||
     needsAuditPlan ||
     needsPlanChange ||
@@ -6379,27 +6393,15 @@ function streamOpenClawResponse(params: {
               ),
             });
 
-            let importedOutputs =
-              params.enableArtifactRepair === false
-                ? await finalizeOpenClawResponseImports({
-                    response,
-                    projectId: params.projectId,
-                    workingDirectory: params.workingDirectory,
-                    startedAtMs: params.startedAtMs,
-                    files: params.files,
-                    message: params.userMessage,
-                    sessionId: params.conversationId,
-                  })
-                : await importOpenClawOutputsIntoProject({
-                    response,
-                    projectId: params.projectId,
-                    workingDirectory: params.workingDirectory,
-                    files: params.files,
-                    message: params.userMessage,
-                    startedAtMs: params.startedAtMs,
-                    sessionId: params.conversationId,
-                    scanRecentOutputs: true,
-                  });
+            let importedOutputs = await finalizeOpenClawResponseImports({
+              response,
+              projectId: params.projectId,
+              workingDirectory: params.workingDirectory,
+              startedAtMs: params.startedAtMs,
+              files: params.files,
+              message: params.userMessage,
+              sessionId: params.conversationId,
+            });
             if (params.enableArtifactRepair === false) {
               completedIds = new Set(params.taskPhases.map((phase) => phase.id));
               await sendFinalEvent({
@@ -7164,6 +7166,9 @@ export async function handleUnifiedChatPost(
             messages,
             rawMessage ?? "",
           );
+      const forceToolExecution =
+        chatMode === "openclaw-tools" ||
+        shouldForceOpenClawToolExecution(userIntentMessage);
       if (streamPhases === true) {
         return streamOpenClawResponse({
           message: contextualOpenClawMessage,
@@ -7175,7 +7180,7 @@ export async function handleUnifiedChatPost(
           workingDirectory: openClawWorkingDirectory,
           startedAtMs: openClawTurnStartedAtMs,
           taskPhases,
-          forceToolExecution: chatMode === "openclaw-tools",
+          forceToolExecution,
           sendToOpenClaw,
         });
       }
@@ -7228,7 +7233,7 @@ export async function handleUnifiedChatPost(
           validatedProjectId,
           workspaceFileContext,
           userIntentMessage,
-          { forceToolExecution: chatMode === "openclaw-tools" },
+          { forceToolExecution },
         ),
         options: openClawAgentOptions(
           openClawConversationId,
@@ -7278,7 +7283,7 @@ export async function handleUnifiedChatPost(
         );
       }
 
-      let importedOutputs = await importOpenClawOutputsIntoProject({
+      let importedOutputs = await finalizeOpenClawResponseImports({
         response,
         projectId: validatedProjectId,
         workingDirectory: openClawWorkingDirectory,
@@ -7286,7 +7291,6 @@ export async function handleUnifiedChatPost(
         files: mergedFiles,
         message: userIntentMessage,
         sessionId: openClawConversationId,
-        scanRecentOutputs: true,
       });
       importedOutputs = await maybeRetryOpenClawRevisionArtifactCompleteness({
         sendToOpenClaw,

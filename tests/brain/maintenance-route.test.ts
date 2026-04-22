@@ -28,7 +28,9 @@ function makeConfig(): BrainConfig {
   };
 }
 
-function makeReport(): BrainHealthReport {
+function makeReport(
+  overrides: Partial<BrainHealthReport> = {},
+): BrainHealthReport {
   return {
     generatedAt: "2026-04-16T00:00:00.000Z",
     source: "gbrain",
@@ -55,6 +57,7 @@ function makeReport(): BrainHealthReport {
     missingLinks: [],
     embeddingGaps: 5,
     suggestions: [],
+    ...overrides,
   };
 }
 
@@ -225,6 +228,72 @@ describe("GET /api/brain/maintenance", () => {
     await expect(poll.json()).resolves.toMatchObject({
       id: body.job.id,
       status: "completed",
+    });
+  });
+
+  it("surfaces the research-layout bridge recommendation when legacy homes remain", async () => {
+    const config = makeConfig();
+    roots.push(config.root);
+    mkdirSync(join(config.root, "concepts"), { recursive: true });
+    writeFileSync(join(config.root, "concepts", "rlhf.md"), "# RLHF\n", "utf-8");
+    mockLoadBrainConfig.mockReturnValue(config);
+    mockGenerateHealthReportWithGbrain.mockResolvedValue(
+      makeReport({
+        score: 95,
+        brainScore: 95,
+        embedCoverage: 0.99,
+        issueCounts: {
+          stalePages: 0,
+          orphanPages: 0,
+          deadLinks: 0,
+          missingEmbeddings: 0,
+        },
+        embeddingGaps: 0,
+      }),
+    );
+    const { GET } = await import("@/app/api/brain/maintenance/route");
+
+    const response = await GET(makeGetRequest());
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.recommendations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "bridge-research-layout" }),
+      ]),
+    );
+  });
+
+  it("returns a research-layout dry-run preview through the maintenance route", async () => {
+    const config = makeConfig();
+    roots.push(config.root);
+    mkdirSync(join(config.root, "concepts"), { recursive: true });
+    writeFileSync(join(config.root, "concepts", "rlhf.md"), "# RLHF\n", "utf-8");
+    mockLoadBrainConfig.mockReturnValue(config);
+    const { POST } = await import("@/app/api/brain/maintenance/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/brain/maintenance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "bridge-research-layout", mode: "dry-run" }),
+      }),
+    );
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      job: {
+        action: "bridge-research-layout",
+        mode: "dry-run",
+        status: "completed",
+        result: {
+          metrics: {
+            legacyHomesDetected: 1,
+            bridgeableHomes: 1,
+          },
+        },
+      },
     });
   });
 

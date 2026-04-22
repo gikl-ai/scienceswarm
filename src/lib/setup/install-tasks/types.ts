@@ -5,6 +5,8 @@
  * yielded event so callers see a single normalized shape.
  */
 
+import type { BrainPresetId } from "@/brain/presets/types";
+
 export type BootstrapTaskId =
   | "gbrain-init"
   | "openclaw"
@@ -54,6 +56,7 @@ export interface BootstrapInput {
   handle: string;
   email?: string;
   phone?: string;
+  brainPreset?: BrainPresetId;
   telegramMode?: "fresh" | "reuse";
   existingBot?: {
     token: string;
