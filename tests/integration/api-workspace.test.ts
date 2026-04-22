@@ -309,7 +309,7 @@ describe("GET /api/workspace?action=tree", () => {
                 role: "source",
                 fileObjectId: `sha256:${sha}`,
                 sha256: sha,
-                filename: "/Users/clawfarm/tmp/uat-lit-hyp-fixtures/non_transformer_notes.md",
+                filename: "/tmp/project-alpha-fixtures/project_notes.md",
                 mime: "text/markdown",
                 sizeBytes: 444,
               },
@@ -335,7 +335,7 @@ describe("GET /api/workspace?action=tree", () => {
     };
     expect(body.totalFiles).toBe(1);
     expect(body.tree.find((node) => node.name === "docs")?.children).toEqual([
-      expect.objectContaining({ name: "non_transformer_notes.md" }),
+      expect.objectContaining({ name: "project_notes.md" }),
     ]);
   });
 
