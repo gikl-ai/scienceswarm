@@ -34,6 +34,14 @@ export type BrainCaptureToolResponse = {
   [key: string]: unknown;
 };
 
+const CAPTURE_HOME_BY_KIND: Partial<Record<BrainCaptureKind, string>> = {
+  survey: "surveys",
+  method: "methods",
+  original_synthesis: "originals",
+  research_packet: "packets",
+  overnight_journal: "journals",
+};
+
 /** Local slugify — intentionally decoupled from capture/materialize-memory.ts. */
 function slugify(value: string): string {
   const cleaned = value
@@ -62,6 +70,17 @@ function shortHash(): string {
   return randomBytes(3).toString("hex");
 }
 
+function buildCaptureSlug(
+  kind: BrainCaptureKind | undefined,
+  date: string,
+  titleSource: string,
+  hash: string,
+): string {
+  const baseSlug = `${date}-${slugify(titleSource)}-${hash}`;
+  const home = kind ? CAPTURE_HOME_BY_KIND[kind] : undefined;
+  return home ? `${home}/${baseSlug}` : baseSlug;
+}
+
 export interface BuiltCapturePage {
   slug: string;
   markdown: string;
@@ -84,7 +103,7 @@ export function buildCapturePage(
           .replace(/^#+\s*/, "")
           .slice(0, 60);
   const title = titleSource || "Capture";
-  const slug = `${date}-${slugify(titleSource)}-${hash}`;
+  const slug = buildCaptureSlug(params.kind, date, titleSource, hash);
 
   const frontmatter: Record<string, unknown> = {
     title,

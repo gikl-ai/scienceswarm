@@ -82,6 +82,7 @@ describe("buildCapturePage", () => {
     );
 
     const parsed = matter(page.markdown);
+    expect(page.slug).toBe("packets/2026-04-13-clustered-the-retained-candidate-papers-into-four-themes-abc123");
     expect(parsed.data.kind).toBe("research_packet");
     expect(parsed.data.type).toBe("research_packet");
   });
@@ -178,6 +179,38 @@ describe("createBrainCaptureHandler", () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.status).toBe("created_or_updated");
     expect(parsed.slug).toBe("2026-04-13-my-capture-abc123");
+  });
+
+  it("writes research-native captures into canonical home slugs", async () => {
+    const calls: Array<{ slug: string; content: string }> = [];
+    const handler = createBrainCaptureHandler({
+      now: () => FIXED_DATE,
+      hash: () => FIXED_HASH,
+      client: {
+        async putPage(slug, content) {
+          calls.push({ slug, content });
+          return { stdout: "ok\n", stderr: "" };
+        },
+        async linkPages() {
+          return { stdout: "", stderr: "" };
+        },
+      },
+    });
+
+    const result = await handler({
+      content: "Retained papers after deterministic dedupe.",
+      kind: "research_packet",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(calls[0].slug).toBe(
+      "packets/2026-04-13-retained-papers-after-deterministic-dedupe-abc123",
+    );
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.slug).toBe(
+      "packets/2026-04-13-retained-papers-after-deterministic-dedupe-abc123",
+    );
   });
 
   it("rejects empty content before spawning", async () => {
