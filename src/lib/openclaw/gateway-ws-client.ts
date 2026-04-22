@@ -314,11 +314,12 @@ const _pendingRequests = new Map<
     reject: (err: Error) => void;
   }
 >();
-let _eventListeners: Array<{
+interface GatewayEventListenerEntry {
   sessionKey: string;
   handler: (event: GatewayFrame) => void;
   reject: (err: Error) => void;
-}> = [];
+}
+let _eventListeners: GatewayEventListenerEntry[] = [];
 let _requestIdCounter = 0;
 
 function nextRequestId(): string {
@@ -334,6 +335,46 @@ function getGatewayOrigin(): string {
   // Auto-pairing only accepts localhost origins. Use 127.0.0.1 explicitly so
   // we don't rely on /etc/hosts resolution of "localhost".
   return `http://127.0.0.1:${getOpenClawPort()}`;
+}
+
+function dispatchGatewayFrame(
+  frame: GatewayFrame,
+  listeners: GatewayEventListenerEntry[],
+): void {
+  const frameSessionKey = getFrameSessionKey(frame);
+
+  if (!frameSessionKey) {
+    if (listeners.length === 1) {
+      const [listener] = [...listeners];
+      if (!listener) return;
+      try {
+        listener.handler(frame);
+      } catch {
+        // Don't let a bad listener break the connection
+      }
+      return;
+    }
+
+    if (listeners.length > 1) {
+      debugLog(
+        `dropping untagged ${
+          isTurnTerminalFrame(frame) ? "terminal" : "ambiguous"
+        } frame while ${listeners.length} turns are active`,
+        JSON.stringify(frame).slice(0, 150),
+      );
+    }
+    return;
+  }
+
+  for (const entry of [...listeners]) {
+    if (entry.sessionKey !== frameSessionKey) continue;
+
+    try {
+      entry.handler(frame);
+    } catch {
+      // Don't let a bad listener break the connection
+    }
+  }
 }
 
 /**
@@ -558,39 +599,7 @@ async function connectAndAuth(): Promise<void> {
       // Listeners are session-scoped so concurrent turns cannot see each
       // other's events.
       if (frame.type === "event" || frame.type === "push") {
-        const frameSessionKey = getFrameSessionKey(frame);
-
-        if (!frameSessionKey) {
-          if (_eventListeners.length <= 1) {
-            const listener = _eventListeners[0];
-            if (listener) {
-              try {
-                listener.handler(frame);
-              } catch {
-                // Don't let a bad listener break the connection
-              }
-            }
-            return;
-          }
-
-          debugLog(
-            `dropping untagged ${
-              isTurnTerminalFrame(frame) ? "terminal" : "ambiguous"
-            } frame while ${_eventListeners.length} turns are active`,
-            JSON.stringify(frame).slice(0, 150),
-          );
-          return;
-        }
-
-        for (const entry of _eventListeners) {
-          if (entry.sessionKey !== frameSessionKey) continue;
-
-          try {
-            entry.handler(frame);
-          } catch {
-            // Don't let a bad listener break the connection
-          }
-        }
+        dispatchGatewayFrame(frame, _eventListeners);
       }
     });
   });
@@ -606,7 +615,8 @@ async function sendRequest(
 ): Promise<GatewayFrame> {
   await ensureConnected();
 
-  if (!_ws || _ws.readyState !== WebSocket.OPEN) {
+  const ws = _ws;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
     throw new Error("WebSocket not connected after ensureConnected()");
   }
 
@@ -632,7 +642,17 @@ async function sendRequest(
       },
     });
 
-    _ws!.send(JSON.stringify(frame));
+    try {
+      ws.send(JSON.stringify(frame));
+    } catch (error) {
+      clearTimeout(timeout);
+      _pendingRequests.delete(id);
+      reject(
+        error instanceof Error
+          ? error
+          : new Error("WebSocket not connected before request send"),
+      );
+    }
   });
 }
 
@@ -694,8 +714,7 @@ export async function sendMessageViaGateway(
       !msg.includes("already subscribed") &&
       !msg.includes("already_subscribed")
     ) {
-      // Surface but don't fail — the turn may still work
-      debugLog("sessions.messages.subscribe warning:", msg);
+      throw err;
     }
   }
 
@@ -703,11 +722,7 @@ export async function sendMessageViaGateway(
   // Hoist cleanup outside the Promise executor so it can be called if
   // sessions.send fails — prevents leaked listeners and timeouts.
   let turnTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  let listenerEntry: {
-    sessionKey: string;
-    handler: (event: GatewayFrame) => void;
-    reject: (err: Error) => void;
-  } | null = null;
+  let listenerEntry: GatewayEventListenerEntry | null = null;
 
   const cleanupListener = () => {
     if (turnTimeoutId !== null) {
@@ -908,3 +923,7 @@ export function closeGatewayConnection(): void {
   _pendingRequests.clear();
   _eventListeners = [];
 }
+
+export const __testOnly = {
+  dispatchGatewayFrame,
+};
