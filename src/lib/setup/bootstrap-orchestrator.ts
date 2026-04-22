@@ -359,16 +359,18 @@ export async function* runBootstrap(
  *     If it did not, we leave `AGENT_BACKEND` unset so the user can
  *     retry from `/dashboard/settings` (or manually set `nanoclaw`).
  *
- *   - If the user's `.env` already carries a non-empty
- *     `OPENAI_API_KEY` (they pre-seeded it), write
- *     `LLM_PROVIDER=openai` so the explicit value matches what
- *     `config-status.ts` expects.
+ *   - If the ollama-gemma task succeeded, write `LLM_PROVIDER=local`
+ *     and `OLLAMA_MODEL=gemma4:latest` (the model the task actually
+ *     pulls). This is the common fresh-install path — the one-screen
+ *     setup form deliberately does NOT ask the user to choose between
+ *     local and cloud during bootstrap, so a successful local install
+ *     should land in local mode by default even when `.env` already
+ *     contains an optional OpenAI key for later use.
  *
- *   - Otherwise, if the ollama-gemma task succeeded, write
- *     `LLM_PROVIDER=local` and `OLLAMA_MODEL=gemma4:latest` (the model
- *     the task actually pulls). This is the common fresh-install
- *     path — the one-screen setup form deliberately does NOT ask
- *     for an API key, so a brand-new user lands in local mode.
+ *   - Otherwise, if the user's `.env` already carries a non-empty
+ *     `OPENAI_API_KEY` (they pre-seeded it) and Ollama did not succeed,
+ *     write `LLM_PROVIDER=openai` so the install still ends with a
+ *     usable LLM path.
  *
  *   - Otherwise, leave the LLM flags unset. The user will see
  *     "Setup did not complete" on `/setup` and can recover from
@@ -388,8 +390,9 @@ async function finalizeReadyFlags(args: {
   }
   const doc = parseEnvFile(existing);
 
-  // Read the already-saved OPENAI_API_KEY from the parsed doc so we
-  // honor a user who pre-seeded it before running ./install.sh.
+  // Read the already-saved OPENAI_API_KEY from the parsed doc so we can
+  // keep it available for optional cloud fallback without forcing the
+  // bootstrap out of the documented local-first path.
   const currentKey = doc.lines
     .find(
       (line): line is Extract<typeof line, { type: "entry" }> =>
@@ -419,11 +422,11 @@ async function finalizeReadyFlags(args: {
     updates.AGENT_BACKEND = "openclaw";
   }
   if (!hasConfiguredProvider) {
-    if (hasApiKey) {
-      updates.LLM_PROVIDER = "openai";
-    } else if (args.ollamaSucceeded) {
+    if (args.ollamaSucceeded) {
       updates.LLM_PROVIDER = "local";
       updates.OLLAMA_MODEL = "gemma4:latest";
+    } else if (hasApiKey) {
+      updates.LLM_PROVIDER = "openai";
     }
   }
 

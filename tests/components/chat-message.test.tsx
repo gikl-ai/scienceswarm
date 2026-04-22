@@ -203,6 +203,26 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Thinking Trace")).not.toBeInTheDocument();
   });
 
+  it("does not render stored thinking after a completed assistant turn", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        thinking="Internal planning that should stay hidden."
+        activityLog={[
+          "Tool read_file: {\"path\":\"docs/results_table.csv\"}",
+        ]}
+        timestamp={new Date("2026-04-20T10:03:00.000Z")}
+        isStreaming={false}
+      />,
+    );
+
+    expect(screen.getByText("Final answer")).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
+    expect(screen.queryByText("Internal planning that should stay hidden.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Read docs\/results_table\.csv/)).not.toBeInTheDocument();
+  });
+
   it("renders workspace media hints as chat media", () => {
     render(
       <ChatMessage
