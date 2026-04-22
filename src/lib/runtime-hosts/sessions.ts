@@ -199,8 +199,12 @@ export class RuntimeSessionStore {
 
     const record: RuntimeSessionRecord = {
       ...current,
-      projectId: input.projectId ?? current.projectId,
-      conversationId: input.conversationId ?? current.conversationId,
+      projectId: input.projectId === undefined
+        ? current.projectId
+        : input.projectId,
+      conversationId: input.conversationId === undefined
+        ? current.conversationId
+        : input.conversationId,
       mode: input.mode ?? current.mode,
       status: nextStatus,
       updatedAt: nextUpdatedAt,

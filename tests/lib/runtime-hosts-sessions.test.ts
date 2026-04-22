@@ -63,6 +63,27 @@ describe("runtime session store", () => {
     expect(store.getSession("legacy-session")).toEqual(session);
   });
 
+  it("allows project and conversation ids to be cleared explicitly", () => {
+    const store = createRuntimeSessionStore();
+    const session = store.createSession({
+      id: "session-1",
+      hostId: "openclaw",
+      projectId: "project-alpha",
+      conversationId: "conversation-1",
+      mode: "chat",
+    });
+
+    const updated = store.updateSession(session.id, {
+      projectId: null,
+      conversationId: null,
+    });
+
+    expect(updated).toMatchObject({
+      projectId: null,
+      conversationId: null,
+    });
+  });
+
   it("prevents runtime status from moving backward", () => {
     const store = createRuntimeSessionStore();
     const session = store.createSession({
