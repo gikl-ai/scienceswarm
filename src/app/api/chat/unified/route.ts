@@ -289,6 +289,40 @@ function normalizeRequestedBackend(value: unknown): RequestedBackend | null {
     : null;
 }
 
+export function shouldPreMaterializeProjectWorkspaceForTurn(params: {
+  projectId: string | null;
+  message: string;
+  chatMode: ChatMode;
+  files: UploadedFileDescriptor[];
+  activeFile: { path: string; content: string } | null;
+}): boolean {
+  if (!params.projectId) {
+    return false;
+  }
+
+  if (params.chatMode === "openclaw-tools") {
+    return true;
+  }
+
+  if (params.files.length > 0 || params.activeFile !== null) {
+    return true;
+  }
+
+  const trimmedMessage = params.message.trim();
+  if (trimmedMessage.length === 0) {
+    return false;
+  }
+
+  return (
+    extractWorkspaceReferenceCandidates(trimmedMessage).length > 0 ||
+    shouldImplicitlyAttachProjectFiles(trimmedMessage) ||
+    shouldForceOpenClawToolExecution(trimmedMessage) ||
+    isRevisionWorkflowRequest(trimmedMessage) ||
+    isPlanChangeRequest(trimmedMessage) ||
+    isRevisionRunRequest(trimmedMessage)
+  );
+}
+
 async function loadOpenClawSlashCommands() {
   try {
     const skills = await listScienceSwarmOpenClawSlashCommandSkills();
@@ -1847,7 +1881,7 @@ function buildOpenClawMessage(
   const isClarificationRequest = isExplanatoryClarificationRequest(ruleMessage);
   const guidance = options.forceToolExecution && !isClarificationRequest
     ? `Execute all steps using your tools when real work is required. Prefer canonical gbrain tools such as brain_capture for task/note/decision/hypothesis page creation and brain_project_organize or brain_import_registry for read-only project-state summaries. Use exec/read/write only for ordinary workspace files outside .brain. Use ABSOLUTE paths only when a workspace file path is actually required. For Python, use: ${process.env.PYTHON_PATH || detectPythonPath() || "python3"}. Do not describe steps — do them. Continue until fully complete.`
-    : "Answer the user's latest request directly using the visible project context. Do not create, edit, run, or export files unless the user's latest request explicitly asks for a workspace change or generated artifact. Ignore project brief next-move suggestions unless the user explicitly asks you to act on them in this turn.";
+    : "Answer the user's latest request directly using the visible project context. Keep ordinary conversational replies brief; for greetings, acknowledgements, or short status questions, answer in 1-2 sentences and do not volunteer workspace actions unless asked. Do not create, edit, run, or export files unless the user's latest request explicitly asks for a workspace change or generated artifact. Ignore project brief next-move suggestions unless the user explicitly asks you to act on them in this turn.";
 
   return [...contextParts, "", message, "", guidance].join("\n");
 }
@@ -6927,6 +6961,7 @@ const AGENT_RUNTIME_STATUS_CACHE_TTL_MS = 5_000;
 
 type AgentRuntimeStatusCacheEntry = {
   expiresAt: number;
+  hasChannelInventory: boolean;
   status: AgentRuntimeStatus;
 };
 
@@ -6999,6 +7034,21 @@ function configuredAgentRuntimeStatusCacheKey(
   });
 }
 
+function configuredAgentRuntimeStatusInflightKey(
+  agentConfig: ReturnType<typeof resolveAgentConfig>,
+  strictLocalOnly: boolean,
+  options: { preferFastOpenClawGatewayProbe?: boolean } = {},
+): string {
+  return JSON.stringify({
+    cacheKey: configuredAgentRuntimeStatusCacheKey(
+      agentConfig,
+      strictLocalOnly,
+    ),
+    preferFastOpenClawGatewayProbe:
+      options.preferFastOpenClawGatewayProbe === true,
+  });
+}
+
 function pruneExpiredConfiguredAgentRuntimeStatusCache(now: number): void {
   for (const [cacheKey, entry] of configuredAgentRuntimeStatusCache.entries()) {
     if (entry.expiresAt <= now) {
@@ -7010,15 +7060,31 @@ function pruneExpiredConfiguredAgentRuntimeStatusCache(now: number): void {
 async function loadConfiguredAgentRuntimeStatus(
   agentConfig: ReturnType<typeof resolveAgentConfig>,
   strictLocalOnly: boolean,
+  options: { preferFastOpenClawGatewayProbe?: boolean } = {},
 ): Promise<AgentRuntimeStatus> {
   if (agentConfig?.type === "openclaw") {
     try {
-      const { healthCheck } = await import("@/lib/openclaw");
-      const status = await healthCheck();
+      const openClawModule = await import("@/lib/openclaw");
+      const useFastGatewayProbe =
+        options.preferFastOpenClawGatewayProbe === true &&
+        typeof openClawModule.gatewayHealthCheck === "function";
+      const status = useFastGatewayProbe
+        ? await openClawModule.gatewayHealthCheck()
+        : await openClawModule.healthCheck();
+      const statusWithChannels = status as unknown as {
+        channels?: unknown;
+      };
+      const channels =
+        useFastGatewayProbe ||
+          !Array.isArray(statusWithChannels.channels)
+          ? []
+          : statusWithChannels.channels.filter(
+              (channel): channel is string => typeof channel === "string",
+            );
       return {
         type: "openclaw",
         status: status.status,
-        channels: status.channels,
+        channels,
       };
     } catch {
       return {
@@ -7056,6 +7122,7 @@ async function loadConfiguredAgentRuntimeStatus(
 async function getConfiguredAgentRuntimeStatus(
   agentConfig: ReturnType<typeof resolveAgentConfig>,
   strictLocalOnly: boolean,
+  options: { preferFastOpenClawGatewayProbe?: boolean } = {},
 ): Promise<AgentRuntimeStatus> {
   const cacheKey = configuredAgentRuntimeStatusCacheKey(
     agentConfig,
@@ -7064,11 +7131,18 @@ async function getConfiguredAgentRuntimeStatus(
   const now = Date.now();
   pruneExpiredConfiguredAgentRuntimeStatusCache(now);
   const cached = configuredAgentRuntimeStatusCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) {
+  const canReuseCachedStatus = options.preferFastOpenClawGatewayProbe === true
+    || cached?.hasChannelInventory === true;
+  if (cached && cached.expiresAt > now && canReuseCachedStatus) {
     return cached.status;
   }
 
-  const inflight = configuredAgentRuntimeStatusInflight.get(cacheKey);
+  const inflightKey = configuredAgentRuntimeStatusInflightKey(
+    agentConfig,
+    strictLocalOnly,
+    options,
+  );
+  const inflight = configuredAgentRuntimeStatusInflight.get(inflightKey);
   if (inflight) {
     return inflight;
   }
@@ -7076,21 +7150,26 @@ async function getConfiguredAgentRuntimeStatus(
   const nextStatusPromise = loadConfiguredAgentRuntimeStatus(
     agentConfig,
     strictLocalOnly,
+    options,
   )
     .then((status) => {
       const refreshedAt = Date.now();
       pruneExpiredConfiguredAgentRuntimeStatusCache(refreshedAt);
       configuredAgentRuntimeStatusCache.set(cacheKey, {
         status,
+        hasChannelInventory: !(
+          agentConfig?.type === "openclaw"
+          && options.preferFastOpenClawGatewayProbe === true
+        ),
         expiresAt: refreshedAt + AGENT_RUNTIME_STATUS_CACHE_TTL_MS,
       });
       return status;
     })
     .finally(() => {
-      configuredAgentRuntimeStatusInflight.delete(cacheKey);
+      configuredAgentRuntimeStatusInflight.delete(inflightKey);
     });
 
-  configuredAgentRuntimeStatusInflight.set(cacheKey, nextStatusPromise);
+  configuredAgentRuntimeStatusInflight.set(inflightKey, nextStatusPromise);
   return nextStatusPromise;
 }
 
@@ -7744,6 +7823,9 @@ export async function handleUnifiedChatPost(
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  let responseChatMode: ChatMode = "reasoning";
+  let attemptedOpenClawTurn = false;
+
   try {
     const body = await request.json();
     const {
@@ -7758,6 +7840,7 @@ export async function handleUnifiedChatPost(
       activeFile: rawActiveFile,
     } = body;
     const chatMode = normalizeChatMode(rawMode);
+    responseChatMode = chatMode;
     const requestedBackend = normalizeRequestedBackend(rawBackend);
     const commandTransport = options.commandTransport === true;
     const messagesRaw = normalizeMessages(rawMessages, fallbackMessage);
@@ -7864,8 +7947,13 @@ export async function handleUnifiedChatPost(
     }
 
     const shouldPreMaterializeProjectWorkspace =
-      Boolean(validatedProjectId) &&
-      (chatMode === "openclaw-tools" || requestedBackend !== "direct");
+      shouldPreMaterializeProjectWorkspaceForTurn({
+        projectId: validatedProjectId,
+        message: userIntentMessage,
+        chatMode,
+        files,
+        activeFile,
+      });
     if (shouldPreMaterializeProjectWorkspace) {
       await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
     }
@@ -7974,6 +8062,7 @@ export async function handleUnifiedChatPost(
     const selectedAgent = await getConfiguredAgentRuntimeStatus(
       agentConfig,
       strictLocalOnly,
+      { preferFastOpenClawGatewayProbe: true },
     );
 
     if (
@@ -8005,11 +8094,6 @@ export async function handleUnifiedChatPost(
       // Preserve the `selectedAgent.type === "openclaw"` block body without
       // reindenting every line below. The outer precondition above has
       // already enforced type === "openclaw" && status === "connected".
-
-      if (validatedProjectId && !shouldPreMaterializeProjectWorkspace) {
-        await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
-      }
-
       const privacyError = await getPrivacyError();
       if (privacyError) {
         return privacyError;
@@ -8173,6 +8257,7 @@ export async function handleUnifiedChatPost(
         chatMode === "openclaw-tools" ||
         shouldForceOpenClawToolExecution(userIntentMessage);
       if (streamPhases === true) {
+        attemptedOpenClawTurn = true;
         return streamOpenClawResponse({
           message: contextualOpenClawMessage,
           userMessage: userIntentMessage,
@@ -8195,6 +8280,9 @@ export async function handleUnifiedChatPost(
             referenceNotes,
           );
       const sourceFiles = extractSourceWorkspacePaths(mergedFiles);
+      if (isRevisionRunRequest(userIntentMessage)) {
+        attemptedOpenClawTurn = true;
+      }
       const fastRevisionOutputs = await runOpenClawRevisionArtifactOnly({
         sendToOpenClaw,
         userMessage: userIntentMessage,
@@ -8230,6 +8318,7 @@ export async function handleUnifiedChatPost(
           },
         );
       }
+      attemptedOpenClawTurn = true;
       const response = await sendOpenClawMessageWithArtifactRetry({
         sendToOpenClaw,
         message: buildOpenClawMessage(
@@ -8368,6 +8457,25 @@ export async function handleUnifiedChatPost(
       );
     }
   } catch (err) {
+    if (attemptedOpenClawTurn) {
+      const visibleFailure = buildOpenClawVisibleFailureResponse(err);
+      if (visibleFailure) {
+        return Response.json(
+          {
+            error: visibleFailure,
+            backend: "openclaw",
+            mode: responseChatMode,
+          },
+          {
+            status: 502,
+            headers: {
+              "X-Chat-Backend": "openclaw",
+              "X-Chat-Mode": responseChatMode,
+            },
+          },
+        );
+      }
+    }
     console.error(
       "Chat POST handler failed:",
       err instanceof Error ? `${err.name}: ${err.message}` : String(err),
