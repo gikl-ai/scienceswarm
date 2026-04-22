@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  type SetStateAction,
+} from "react";
 import {
   mergeArtifactProvenanceEntries,
   normalizeArtifactProvenanceEntries,
@@ -2050,21 +2057,21 @@ async function persistChatToServer(
 export function useUnifiedChat(
   projectName: string,
 ): UseUnifiedChat {
-  const [messages, setMessages] = useState<Message[]>(() => buildInitialMessages(projectName));
+  const [messages, setMessagesState] = useState<Message[]>(() => buildInitialMessages(projectName));
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [backend, setBackend] = useState<Backend>("openclaw");
-  const [chatMode, setChatMode] = useState<ChatMode>("reasoning");
+  const [backend, setBackendState] = useState<Backend>("openclaw");
+  const [chatMode, setChatModeState] = useState<ChatMode>("reasoning");
   const [crossChannelMessages, setCrossChannelMessages] = useState<Message[]>(
     []
   );
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [workspaceTree, setWorkspaceTree] = useState<WorkspaceTreeNode[]>([]);
   const [generatedArtifacts, setGeneratedArtifacts] = useState<GeneratedArtifact[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [conversationBackend, setConversationBackend] = useState<Backend | null>(null);
+  const [conversationId, setConversationIdState] = useState<string | null>(null);
+  const [conversationBackend, setConversationBackendState] = useState<Backend | null>(null);
   const [openClawConnected, setOpenClawConnected] = useState<boolean | null>(null);
-  const [artifactProvenance, setArtifactProvenance] = useState<ArtifactProvenanceEntry[]>([]);
+  const [artifactProvenance, setArtifactProvenanceState] = useState<ArtifactProvenanceEntry[]>([]);
   // Tracks whether hydration from localStorage/server has committed. The
   // cross-channel poll effect uses this to avoid registering a setInterval
   // whose closure captures a stale `scopedConversationId = null` on the
@@ -2099,13 +2106,79 @@ export function useUnifiedChat(
   const sendQueueProcessingRef = useRef(false);
   const scopedConversationId = getScopedConversationId(conversationId, conversationBackend, backend);
 
+  const setMessages = useCallback((updater: SetStateAction<Message[]>) => {
+    setMessagesState((prev) => {
+      const next =
+        typeof updater === "function"
+          ? (updater as (messages: Message[]) => Message[])(prev)
+          : updater;
+      liveMessagesRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const setBackend = useCallback((updater: SetStateAction<Backend>) => {
+    setBackendState((prev) => {
+      const next =
+        typeof updater === "function"
+          ? (updater as (value: Backend) => Backend)(prev)
+          : updater;
+      liveBackendRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const setChatMode = useCallback((updater: SetStateAction<ChatMode>) => {
+    setChatModeState((prev) => {
+      const next =
+        typeof updater === "function"
+          ? (updater as (value: ChatMode) => ChatMode)(prev)
+          : updater;
+      liveChatModeRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const setConversationId = useCallback((updater: SetStateAction<string | null>) => {
+    setConversationIdState((prev) => {
+      const next =
+        typeof updater === "function"
+          ? (updater as (value: string | null) => string | null)(prev)
+          : updater;
+      liveConversationIdRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const setConversationBackend = useCallback((updater: SetStateAction<Backend | null>) => {
+    setConversationBackendState((prev) => {
+      const next =
+        typeof updater === "function"
+          ? (updater as (value: Backend | null) => Backend | null)(prev)
+          : updater;
+      liveConversationBackendRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const setArtifactProvenance = useCallback((updater: SetStateAction<ArtifactProvenanceEntry[]>) => {
+    setArtifactProvenanceState((prev) => {
+      const next =
+        typeof updater === "function"
+          ? (updater as (value: ArtifactProvenanceEntry[]) => ArtifactProvenanceEntry[])(prev)
+          : updater;
+      liveArtifactProvenanceRef.current = next;
+      return next;
+    });
+  }, []);
+
   const applyMessagesUpdate = useCallback((updater: (messages: Message[]) => Message[]) => {
     const next = updater(liveMessagesRef.current);
     liveMessagesRef.current = next;
-    setMessages(next);
+    setMessagesState(next);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     liveMessagesRef.current = messages;
     liveConversationIdRef.current = conversationId;
     liveConversationBackendRef.current = conversationBackend;
