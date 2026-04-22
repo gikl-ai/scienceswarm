@@ -2,12 +2,18 @@
 
 import { useState, type FormEvent } from "react";
 import { Spinner } from "@/components/spinner";
+import {
+  BRAIN_PRESET_OPTIONS,
+  DEFAULT_BRAIN_PRESET,
+  type BrainPresetId,
+} from "@/brain/presets/types";
 import { isTelegramBotTokenShape } from "@/lib/telegram/bot-token";
 
 export interface BootstrapFormValues {
   handle: string;
   email: string;
   phone: string;
+  brainPreset: BrainPresetId;
   existingBot?: {
     token: string;
   };
@@ -30,6 +36,8 @@ export function BootstrapForm({
   const [handle, setHandle] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [brainPreset, setBrainPreset] =
+    useState<BrainPresetId>(DEFAULT_BRAIN_PRESET);
   const [mode, setMode] = useState<"fresh" | "reuse">("fresh");
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +58,7 @@ export function BootstrapForm({
       handle: handle.trim(),
       email: email.trim(),
       phone: mode === "fresh" ? phone.trim() : "",
+      brainPreset,
     };
     if (mode === "reuse") {
       values.existingBot = { token: trimmedToken };
@@ -123,6 +132,28 @@ export function BootstrapForm({
             />
             <span className="mt-1 block text-xs text-muted">
               Used for git commit author and radar alerts. Never shared.
+            </span>
+          </label>
+
+          <label className="block">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Brain preset
+            </span>
+            <select
+              value={brainPreset}
+              onChange={(e) => setBrainPreset(e.target.value as BrainPresetId)}
+              data-testid="brain-preset-select"
+              className="mt-1 block w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
+              disabled={disabled}
+            >
+              {BRAIN_PRESET_OPTIONS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted">
+              {BRAIN_PRESET_OPTIONS.find((preset) => preset.id === brainPreset)?.description}
             </span>
           </label>
         </fieldset>

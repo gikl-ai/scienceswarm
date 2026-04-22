@@ -172,9 +172,15 @@ export async function buildGuideBriefing(
     query: "status: running",
     mode: "grep",
     limit: 10,
+    profile: "synthesis",
   });
   const suggestionsRaw = focus
-    ? await search(config, { query: focus, mode: "grep", limit: 5 })
+    ? await search(config, {
+        query: focus,
+        mode: "grep",
+        limit: 5,
+        profile: "synthesis",
+      })
     : [];
   const suggestions = suggestionsRaw.filter(
     (result) => !isStructuralWikiPage(result.path),
@@ -842,12 +848,22 @@ function collectEvidence(pages: Array<BriefingPage | null>): string[] {
 }
 
 async function countSourcePages(config: BrainConfig): Promise<number> {
-  const pages = await search(config, { query: "", mode: "list", limit: 1000 });
+  const pages = await search(config, {
+    query: "",
+    mode: "list",
+    limit: 1000,
+    profile: "synthesis",
+  });
   return pages.length;
 }
 
 async function countCrossReferences(config: BrainConfig): Promise<number> {
-  const pages = await search(config, { query: "", mode: "list", limit: 1000 });
+  const pages = await search(config, {
+    query: "",
+    mode: "list",
+    limit: 1000,
+    profile: "synthesis",
+  });
   return pages.reduce((acc, page) => acc + countWikiLinks(page.path, config), 0);
 }
 

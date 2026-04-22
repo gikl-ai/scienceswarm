@@ -9,6 +9,11 @@
 import { createHash } from "crypto";
 import { join } from "path";
 import { getScienceSwarmBrainRoot, resolveConfiguredPath } from "@/lib/scienceswarm-paths";
+import {
+  getSearchProfileSettings,
+  resolveSearchProfile,
+  shouldAllowDegradedSearchResults,
+} from "./search-profiles";
 import type { SearchInput, SearchResult, ContentType, IngestCost } from "./types";
 import { GbrainEngineAdapter } from "./stores/gbrain-engine-adapter";
 
@@ -160,7 +165,14 @@ export class SearchCache {
 }
 
 function cacheKey(input: SearchInput): string {
-  const raw = `${input.query}|${input.mode ?? ""}|${input.limit ?? ""}|${input.detail ?? ""}`;
+  const raw = [
+    input.query,
+    input.mode ?? "",
+    input.limit ?? "",
+    input.detail ?? "",
+    resolveSearchProfile(input),
+    shouldAllowDegradedSearchResults(input),
+  ].join("|");
   return createHash("sha256").update(raw).digest("hex");
 }
 
@@ -254,10 +266,10 @@ export function getBrainStore(): BrainStore {
 /**
  * Cached + timeout-wrapped search.
  *
- * - LRU cache: key = hash(query + mode + limit + detail), TTL = 30s, max 100 entries
- * - Timeout: 500ms for the gbrain backend.
- * - On `BrainSearchTimeoutError` / `BrainBackendUnavailableError`, caches an
- *   empty `fallback` row and returns `{ results: [], fromStore: false }`.
+ * - LRU cache: key = hash(query + mode + limit + detail + profile + degrade mode)
+ * - Profile-aware timeout/cache behavior:
+ *   - `interactive`: short timeout, longer cache, degraded empty-result fallback
+ *   - `synthesis`: longer timeout, shorter cache, throws on backend degradation
  *   The pre-pivot filesystem grep fallback was removed in Phase B Track C
  *   because `src/brain/search.ts` now delegates back into this module; any
  *   disk-level fallback lives there, not here.
@@ -270,7 +282,14 @@ export async function cachedSearch(input: SearchInput): Promise<SearchResult[]> 
 export async function cachedSearchWithSource(
   input: SearchInput,
 ): Promise<{ results: SearchResult[]; fromStore: boolean }> {
-  const key = cacheKey(input);
+  const settings = getSearchProfileSettings(input);
+  const normalizedInput: SearchInput = {
+    ...input,
+    limit: input.limit ?? settings.defaultLimit,
+    profile: resolveSearchProfile(input),
+  };
+  const allowDegradedResults = shouldAllowDegradedSearchResults(input);
+  const key = cacheKey(normalizedInput);
 
   // Check cache
   const cached = _searchCache.get(key);
@@ -283,8 +302,11 @@ export async function cachedSearchWithSource(
 
   try {
     await ensureBrainStoreReady();
-    const results = await withTimeout(getBrainStore().search(input), 500);
-    _searchCache.set(key, results, 30000, "store");
+    const results = await withTimeout(
+      getBrainStore().search(normalizedInput),
+      settings.storeTimeoutMs,
+    );
+    _searchCache.set(key, results, settings.cacheTtlMs, "store");
     return { results, fromStore: true };
   } catch (error) {
     // Phase B Track C: the pre-pivot filesystem grep fallback has been
@@ -301,17 +323,30 @@ export async function cachedSearchWithSource(
       throw error;
     }
 
-    _searchCache.set(key, [], 30000, "fallback");
+    if (!allowDegradedResults) {
+      throw error;
+    }
+
+    _searchCache.set(key, [], settings.cacheTtlMs, "fallback");
     return { results: [], fromStore: false };
   }
 }
 
 export async function searchStoreWithTimeout(
   input: SearchInput,
-  timeoutMs = 500,
+  timeoutMs?: number,
 ): Promise<SearchResult[]> {
+  const settings = getSearchProfileSettings(input);
+  const normalizedInput: SearchInput = {
+    ...input,
+    limit: input.limit ?? settings.defaultLimit,
+    profile: resolveSearchProfile(input),
+  };
   await ensureBrainStoreReady();
-  return withTimeout(getBrainStore().search(input), timeoutMs);
+  return withTimeout(
+    getBrainStore().search(normalizedInput),
+    timeoutMs ?? settings.storeTimeoutMs,
+  );
 }
 
 /**

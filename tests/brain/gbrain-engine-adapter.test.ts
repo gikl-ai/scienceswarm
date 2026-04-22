@@ -156,6 +156,34 @@ describe("GbrainEngineAdapter", () => {
     expect(results[0].chunkIndex).toBe(0);
   });
 
+  it("infers research-first page types from slug paths", async () => {
+    const engine = (adapter as GbrainEngineAdapter).engine;
+    await engine.putPage("topics/mechanistic-interpretability", {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-repo type cast
+      type: "" as any,
+      title: "Mechanistic Interpretability",
+      compiled_truth: "Study of internal model circuits and representations.",
+      timeline: "",
+    });
+
+    const page = await adapter.getPage("topics/mechanistic-interpretability.md");
+    expect(page?.type).toBe("topic");
+  });
+
+  it("preserves an explicit known type before falling back to slug inference", async () => {
+    const engine = (adapter as GbrainEngineAdapter).engine;
+    await engine.putPage("projects/meeting-notes", {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-repo type cast
+      type: "note" as any,
+      title: "Meeting Notes",
+      compiled_truth: "Explicit notes page stored under a project slug.",
+      timeline: "",
+    });
+
+    const page = await adapter.getPage("projects/meeting-notes.md");
+    expect(page?.type).toBe("note");
+  });
+
   it("forwards gbrain detail options to keyword search", async () => {
     const engine = (adapter as GbrainEngineAdapter).engine;
     const searchKeyword = vi.spyOn(engine, "searchKeyword");
