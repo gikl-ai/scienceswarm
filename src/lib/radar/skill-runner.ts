@@ -662,6 +662,10 @@ function renderBriefingMarkdown(briefing: RadarBriefing): string {
     lines.push("## What matters today");
     for (const item of briefing.matters) {
       lines.push(`- **${item.signal.title}** — ${item.whyItMatters}`);
+      if (item.programMatches?.[0]) {
+        lines.push(`  Affects: ${item.programMatches[0].reference}`);
+        lines.push(`  Next check: ${item.programMatches[0].recommendedAction}`);
+      }
       lines.push(`  ${item.signal.url}`);
     }
     lines.push("");
@@ -671,6 +675,10 @@ function renderBriefingMarkdown(briefing: RadarBriefing): string {
     lines.push("## On the horizon");
     for (const item of briefing.horizon) {
       lines.push(`- **${item.signal.title}** — ${item.whyItMatters}`);
+      if (item.programMatches?.[0]) {
+        lines.push(`  Affects: ${item.programMatches[0].reference}`);
+        lines.push(`  Next check: ${item.programMatches[0].recommendedAction}`);
+      }
       lines.push(`  ${item.signal.url}`);
     }
     lines.push("");

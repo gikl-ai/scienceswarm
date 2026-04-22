@@ -104,6 +104,7 @@ interface PolledOpenClawMessage {
   userId?: string;
   userName?: string;
   timestamp?: string;
+  taskPhases?: unknown;
 }
 
 export type Backend = "openclaw";
@@ -389,6 +390,38 @@ function isLikelyDuplicatePolledUserMessage(
   });
 }
 
+function normalizeReplayMessageContent(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function isLikelyDuplicatePolledAssistantMessage(
+  existingMessages: Message[],
+  candidate: Message,
+): boolean {
+  if (candidate.role !== "assistant") {
+    return false;
+  }
+
+  if (candidate.channel && candidate.channel !== "web") {
+    return false;
+  }
+
+  const candidateContent = normalizeReplayMessageContent(candidate.content);
+  if (candidateContent.length === 0) {
+    return false;
+  }
+
+  return existingMessages.some((message) => {
+    if (message.role !== "assistant") {
+      return false;
+    }
+    if (message.channel && message.channel !== "web") {
+      return false;
+    }
+    return normalizeReplayMessageContent(message.content) === candidateContent;
+  });
+}
+
 function isTransientAssistantScratchpad(message: Message): boolean {
   if (message.role !== "assistant") {
     return false;
@@ -433,7 +466,8 @@ function mergePolledMessagesIntoTranscript(
   const uniqueMessages = polledMessages.filter(
     (message) =>
       !existingIds.has(message.id)
-      && !isLikelyDuplicatePolledUserMessage(existingMessages, message),
+      && !isLikelyDuplicatePolledUserMessage(existingMessages, message)
+      && !isLikelyDuplicatePolledAssistantMessage(existingMessages, message),
   );
 
   for (const message of uniqueMessages) {
@@ -454,6 +488,7 @@ function mergePolledMessagesIntoTranscript(
           channel: message.channel,
           userName: message.userName,
           role: message.role,
+          taskPhases: message.taskPhases?.length ? message.taskPhases : undefined,
         };
         continue;
       }
@@ -552,7 +587,7 @@ function inferOpenClawDisplayWorkspacePath(value: string): string | null {
 function normalizeProgressCommandText(value: string, maxChars = 160): string {
   let normalized = collapseProgressWhitespace(value);
   normalized = normalized.replace(
-    /(^|\s)\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3(?=\s|$)/g,
+    /(^|\s)(?:\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3|\/usr\/bin\/python3)(?=\s|$)/g,
     "$1python3",
   );
   normalized = normalized.replace(
@@ -1435,7 +1470,9 @@ function isPersistableMessage(message: Message): boolean {
 }
 
 function sanitizeMessagesForPersistence(messages: Message[]): Message[] {
-  return messages.filter((message) => isPersistableMessage(message));
+  return dedupeAssistantReplayMessages(
+    messages.filter((message) => isPersistableMessage(message)),
+  );
 }
 
 async function fetchWithTimeout(
@@ -1501,6 +1538,37 @@ function demoteRestoredPreviews(messages: Message[]): Message[] {
   );
 }
 
+const ASSISTANT_REPLAY_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
+
+function dedupeAssistantReplayMessages(messages: Message[]): Message[] {
+  const seenAssistantReplies = new Map<string, number>();
+  return messages.filter((message) => {
+    if (message.role !== "assistant" || (message.channel && message.channel !== "web")) {
+      return true;
+    }
+
+    const contentKey = normalizeReplayMessageContent(message.content);
+    if (contentKey.length === 0) {
+      return true;
+    }
+
+    const timestampMs = message.timestamp.getTime();
+    const firstSeenAt = seenAssistantReplies.get(contentKey);
+    if (
+      firstSeenAt !== undefined
+      && !Number.isNaN(timestampMs)
+      && Math.abs(timestampMs - firstSeenAt) <= ASSISTANT_REPLAY_DEDUPE_WINDOW_MS
+    ) {
+      return false;
+    }
+
+    if (!Number.isNaN(timestampMs)) {
+      seenAssistantReplies.set(contentKey, timestampMs);
+    }
+    return true;
+  });
+}
+
 function buildQueuedHistory(messages: Message[], assistantId: string): Message[] {
   const assistantIndex = messages.findIndex((message) => message.id === assistantId);
   return assistantIndex >= 0 ? messages.slice(0, assistantIndex) : messages;
@@ -1530,6 +1598,8 @@ function restoreMessage(value: unknown): Message | null {
     return null;
   }
 
+  const taskPhases = restoreTaskPhases(candidate.taskPhases);
+
   return {
     id: candidate.id,
     role: candidate.role,
@@ -1548,8 +1618,28 @@ function restoreMessage(value: unknown): Message | null {
     channel: typeof candidate.channel === "string" ? candidate.channel : undefined,
     userName: typeof candidate.userName === "string" ? candidate.userName : undefined,
     captureClarification: restoreCaptureClarification(candidate.captureClarification),
-    taskPhases: restoreTaskPhases(candidate.taskPhases),
+    taskPhases: normalizeRestoredAssistantTaskPhases(
+      candidate.role,
+      candidate.content,
+      taskPhases,
+    ),
   };
+}
+
+function normalizeRestoredAssistantTaskPhases(
+  role: Message["role"],
+  content: string,
+  taskPhases: ChatTaskPhase[] | undefined,
+): ChatTaskPhase[] | undefined {
+  if (
+    role === "assistant"
+    && content.trim().length > 0
+    && taskPhases?.some((phase) => phase.status === "active" || phase.status === "pending")
+  ) {
+    return undefined;
+  }
+
+  return taskPhases;
 }
 
 function restoreCaptureClarification(value: unknown): CaptureClarification | undefined {
@@ -2543,6 +2633,7 @@ export function useUnifiedChat(
                 channel: typeof message.channel === "string" ? message.channel : undefined,
                 userName: typeof message.userName === "string" ? message.userName : undefined,
                 timestamp: new Date(message.timestamp as string),
+                taskPhases: restoreTaskPhases(message.taskPhases),
               };
             });
 
@@ -2965,6 +3056,12 @@ export function useUnifiedChat(
       }
       const responseMode = normalizeChatMode(data.mode) ?? modeHeader ?? context.chatMode;
       const responseBackend = mapResponseBackend(backendHeader) ?? context.backend;
+      const completedAt = new Date().toISOString();
+      const previousPollTime = Date.parse(lastPollRef.current);
+      const completedTime = Date.parse(completedAt);
+      if (Number.isNaN(previousPollTime) || completedTime > previousPollTime) {
+        lastPollRef.current = completedAt;
+      }
 
       // Update assistant message with response
       applyMessagesUpdate((prev) =>
@@ -3450,19 +3547,64 @@ export function useUnifiedChat(
               type: entry?.type || file.name.split(".").pop() || "file",
             });
           } else {
+            const uploadError =
+              payload?.errors?.find((err) => err.filename === file.name)
+              ?? payload?.errors?.[0]
+              ?? null;
+            const upstreamError =
+              uploadError?.message
+              ?? payload?.error
+              ?? `upload failed with status ${res.status}`;
+            const upstreamCode = uploadError?.code ?? "upload_failed";
+
+            if (upstreamCode === "unsupported_type" && safeProjectId) {
+              const fallbackFormData = new FormData();
+              fallbackFormData.append("files", file);
+              fallbackFormData.append("projectId", safeProjectId);
+              const fallbackRes = await fetch("/api/workspace", {
+                method: "POST",
+                body: fallbackFormData,
+              });
+              const fallbackPayload = (await fallbackRes.json().catch(() => null)) as
+                | {
+                    uploaded?: Array<{
+                      name?: string;
+                      folder?: string;
+                      workspacePath?: string;
+                    }>;
+                    error?: string;
+                  }
+                | null;
+              if (fallbackRes.ok && fallbackPayload?.uploaded?.length) {
+                workspaceAvailable = true;
+                const entry = fallbackPayload.uploaded[0];
+                const folder = entry?.folder || getFolderLabel(entry?.workspacePath || file.name);
+                organized.push({
+                  name: entry?.name || file.name,
+                  folder,
+                  size: formatFileSize(file.size),
+                  type: file.name.split(".").pop() || "file",
+                });
+                setUploadedFiles((prev) => [
+                  ...prev,
+                  {
+                    name: file.name,
+                    size: formatFileSize(file.size),
+                    type: file.name.split(".").pop() || "file",
+                    folder,
+                    workspacePath: entry?.workspacePath || `${folder}/${file.name}`,
+                    source: "workspace",
+                    displayPath: entry?.workspacePath || `${folder}/${file.name}`,
+                  },
+                ]);
+                continue;
+              }
+            }
+
             // Route returned a failure for this file — either a converter
             // error (200 with `errors[]`) or a request-level 4xx/5xx. Show
             // the upstream message so the user knows WHY the file was
             // rejected instead of seeing a misleading "organized" summary.
-            const upstreamError =
-              payload?.errors?.find((err) => err.filename === file.name)
-                ?.message ??
-              payload?.errors?.[0]?.message ??
-              payload?.error ??
-              `upload failed with status ${res.status}`;
-            const upstreamCode =
-              payload?.errors?.find((err) => err.filename === file.name)
-                ?.code ?? "upload_failed";
             failures.push({
               name: file.name,
               code: upstreamCode,

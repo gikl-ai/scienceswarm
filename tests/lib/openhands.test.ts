@@ -11,6 +11,7 @@ describe("src/lib/openhands.ts", () => {
     // Unstub both so the stubs cannot leak into tests that load
     // later in the suite and would otherwise inherit a vi.fn() as
     // their `fetch`. Identified by cubic on #338.
+    vi.doUnmock("@/lib/runtime-saved-env");
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
@@ -65,6 +66,39 @@ describe("src/lib/openhands.ts", () => {
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://openhands.test/api/v1/app-conversations");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      llm_model: "openai/gemma4:latest",
+    });
+  });
+
+  it("prefers the saved runtime overlay over stale process env when starting background conversations", async () => {
+    vi.stubEnv("OPENHANDS_URL", "http://openhands.test");
+    vi.stubEnv("LLM_PROVIDER", "openai");
+    vi.stubEnv("LLM_MODEL", "gpt-5.4-mini");
+    vi.stubEnv("OLLAMA_MODEL", "");
+    vi.doMock("@/lib/runtime-saved-env", () => ({
+      getCurrentLlmRuntimeEnv: () => ({
+        strictLocalOnly: false,
+        llmProvider: "local",
+        llmModel: null,
+        ollamaModel: "gemma4:latest",
+        openaiApiKey: null,
+        agentBackend: null,
+        agentUrl: null,
+        agentApiKey: null,
+        openclawInternalApiKey: null,
+      }),
+    }));
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      Response.json({ id: "task-saved-runtime" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { startConversation } = await loadModule();
+    await startConversation({ message: "Run a saved-runtime local task" });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toMatchObject({
       llm_model: "openai/gemma4:latest",
     });

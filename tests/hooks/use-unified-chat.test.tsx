@@ -237,7 +237,6 @@ describe("useUnifiedChat persistence", () => {
   it("restores the prior project conversation and conversationId after remount", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      const method = init?.method ?? "GET";
 
       if (url === "/api/chat/thread?project=alpha-project") {
         return Response.json({
@@ -297,16 +296,105 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
   });
 
+  it("drops persisted assistant replay duplicates when restoring a project thread", async () => {
+    const duplicatedMessages = [
+      {
+        id: "user-1",
+        role: "user",
+        content: "Run the first analysis.",
+        timestamp: "2026-04-14T20:00:00.000Z",
+        channel: "web",
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "Replay completion.",
+        timestamp: "2026-04-14T20:00:05.000Z",
+      },
+      {
+        id: "user-2",
+        role: "user",
+        content: "Run the second analysis.",
+        timestamp: "2026-04-14T20:01:00.000Z",
+        channel: "web",
+      },
+      {
+        id: "assistant-replay",
+        role: "assistant",
+        channel: "web",
+        content: "Replay   completion.",
+        timestamp: "2026-04-14T20:01:05.000Z",
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        content: "Second completion.",
+        timestamp: "2026-04-14T20:01:10.000Z",
+      },
+    ];
+
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: "web:alpha-project:session-1",
+        conversationBackend: "openclaw",
+        messages: duplicatedMessages,
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: "web:alpha-project:session-1",
+          conversationBackend: "openclaw",
+          messages: duplicatedMessages,
+        });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+        });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      const messageLog = screen.getByTestId("message-log").textContent ?? "";
+      expect(messageLog.match(/assistant:Replay completion\./g)?.length ?? 0).toBe(1);
+      expect(messageLog).toContain("assistant:Second completion.");
+    });
+  });
+
   it("keeps the remembered thread across a settings round-trip before hydration cleanup commits", async () => {
     window.localStorage.setItem(
       "scienceswarm.chat.alpha-project",
       JSON.stringify({
         version: 1,
-        conversationId: "conv-alpha",
+        conversationId: "web:alpha-project:session-1",
+        conversationBackend: "openclaw",
         messages: [
           {
             id: "user-1",
             role: "user",
+            channel: "web",
             content: "remembered prompt",
             timestamp: "2026-04-11T08:00:00.000Z",
           },
@@ -322,7 +410,12 @@ describe("useUnifiedChat persistence", () => {
 
     const threadResolvers: Array<(response: Response) => void> = [];
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
       const method = init?.method ?? "GET";
 
       if (url === "/api/chat/thread?project=alpha-project") {
@@ -336,11 +429,14 @@ describe("useUnifiedChat persistence", () => {
       }
 
       if (url === "/api/chat/unified?action=health") {
-        return Promise.resolve(Response.json({
-          openclaw: "connected",
-          nanoclaw: "connected",
-          openhands: "disconnected",
-        }));
+        return Promise.resolve(
+          Response.json({
+            agent: { type: "openclaw", status: "connected" },
+            openclaw: "connected",
+            nanoclaw: "disconnected",
+            openhands: "disconnected",
+          }),
+        );
       }
 
       if (url === "/api/workspace?action=tree&projectId=alpha-project") {
@@ -359,7 +455,11 @@ describe("useUnifiedChat persistence", () => {
         <div>
           <button onClick={() => setRoute("settings")}>Go settings</button>
           <button onClick={() => setRoute("project")}>Back project</button>
-          {route === "project" ? <ChatHarness projectName="alpha-project" /> : <div>Settings</div>}
+          {route === "project" ? (
+            <ChatHarness projectName="alpha-project" />
+          ) : (
+            <div>Settings</div>
+          )}
         </div>
       );
     }
@@ -371,10 +471,16 @@ describe("useUnifiedChat persistence", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-alpha");
+      expect(screen.getByTestId("conversation-id").textContent).toBe(
+        "web:alpha-project:session-1",
+      );
     });
-    expect(screen.getByTestId("message-log").textContent).toContain("user:remembered prompt");
-    expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "user:remembered prompt",
+    );
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "assistant:Persisted answer",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Go settings" }));
     await waitFor(() => {
@@ -383,28 +489,42 @@ describe("useUnifiedChat persistence", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Back project" }));
     await waitFor(() => {
-      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-alpha");
+      expect(screen.getByTestId("conversation-id").textContent).toBe(
+        "web:alpha-project:session-1",
+      );
     });
-    expect(screen.getByTestId("message-log").textContent).toContain("user:remembered prompt");
-    expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "user:remembered prompt",
+    );
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "assistant:Persisted answer",
+    );
 
     await act(async () => {
       for (const resolve of threadResolvers.splice(0)) {
-        resolve(Response.json({
-          version: 1,
-          project: "alpha-project",
-          conversationId: null,
-          messages: [],
-        }));
+        resolve(
+          Response.json({
+            version: 1,
+            project: "alpha-project",
+            conversationId: null,
+            messages: [],
+          }),
+        );
       }
       await Promise.resolve();
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-alpha");
+      expect(screen.getByTestId("conversation-id").textContent).toBe(
+        "web:alpha-project:session-1",
+      );
     });
-    expect(screen.getByTestId("message-log").textContent).toContain("user:remembered prompt");
-    expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "user:remembered prompt",
+    );
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "assistant:Persisted answer",
+    );
 
     const persisted = JSON.parse(
       window.localStorage.getItem("scienceswarm.chat.alpha-project") || "null",
@@ -431,12 +551,13 @@ describe("useUnifiedChat persistence", () => {
       "scienceswarm.chat.alpha-project",
       JSON.stringify({
         version: 1,
-        conversationId: "conv-alpha",
+        conversationId: "web:alpha-project:session-1",
         conversationBackend: "openclaw",
         messages: [
           {
             id: "user-1",
             role: "user",
+            channel: "web",
             content: "remembered prompt",
             timestamp: "2026-04-11T08:00:00.000Z",
           },
@@ -451,19 +572,25 @@ describe("useUnifiedChat persistence", () => {
     );
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
       const method = init?.method ?? "GET";
 
       if (url === "/api/chat/thread?project=alpha-project") {
         return Response.json({
           version: 1,
           project: "alpha-project",
-          conversationId: "conv-alpha",
+          conversationId: "web:alpha-project:session-1",
           conversationBackend: "openclaw",
           messages: [
             {
               id: "server-user-1",
               role: "user",
+              channel: "web",
               content: "remembered prompt",
               timestamp: "2026-04-11T08:00:00.000Z",
             },
@@ -479,8 +606,9 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
+          agent: { type: "openclaw", status: "connected" },
           openclaw: "connected",
-          nanoclaw: "connected",
+          nanoclaw: "disconnected",
           openhands: "disconnected",
         });
       }
@@ -500,7 +628,9 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-alpha");
+      expect(screen.getByTestId("conversation-id").textContent).toBe(
+        "web:alpha-project:session-1",
+      );
     });
 
     await act(async () => {
@@ -509,7 +639,8 @@ describe("useUnifiedChat persistence", () => {
 
     expect(
       fetchMock.mock.calls.filter(
-        ([url, init]) => url === "/api/chat/thread" && (init?.method ?? "GET") === "POST",
+        ([url, init]) =>
+          url === "/api/chat/thread" && (init?.method ?? "GET") === "POST",
       ),
     ).toHaveLength(0);
   });
@@ -517,7 +648,12 @@ describe("useUnifiedChat persistence", () => {
   it("flushes the live project thread back to local storage on pagehide", async () => {
     const capturedBodies: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
       const method = init?.method ?? "GET";
 
       if (url === "/api/chat/thread?project=alpha-project") {
@@ -530,13 +666,16 @@ describe("useUnifiedChat persistence", () => {
       }
 
       if (url === "/api/chat/thread" && method === "POST") {
+        const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+        capturedBodies.push(body);
         return Response.json({ ok: true });
       }
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
+          agent: { type: "openclaw", status: "connected" },
           openclaw: "connected",
-          nanoclaw: "connected",
+          nanoclaw: "disconnected",
           openhands: "disconnected",
         });
       }
@@ -548,7 +687,7 @@ describe("useUnifiedChat persistence", () => {
       if (url === "/api/chat/unified" && method === "POST") {
         return Response.json({
           response: "Persisted answer",
-          conversationId: "conv-alpha",
+          conversationId: "web:alpha-project:session-1",
           messages: [],
         });
       }
@@ -562,9 +701,13 @@ describe("useUnifiedChat persistence", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-alpha");
+      expect(screen.getByTestId("conversation-id").textContent).toBe(
+        "web:alpha-project:session-1",
+      );
     });
-    expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "assistant:Persisted answer",
+    );
 
     window.localStorage.removeItem("scienceswarm.chat.alpha-project");
     expect(window.localStorage.getItem("scienceswarm.chat.alpha-project")).toBeNull();
@@ -580,7 +723,7 @@ describe("useUnifiedChat persistence", () => {
       messages?: Array<{ role?: string; content?: string }>;
     } | null;
 
-    expect(restored?.conversationId).toBe("conv-alpha");
+    expect(restored?.conversationId).toBe("web:alpha-project:session-1");
     expect(restored?.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -593,6 +736,7 @@ describe("useUnifiedChat persistence", () => {
         }),
       ]),
     );
+    expect(capturedBodies).not.toHaveLength(0);
   });
 
   it("reuses the restored OpenClaw conversationId for reasoning follow-up turns after remount", async () => {
@@ -817,6 +961,87 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("phase-log").textContent).toContain(
       "assistant:Reading file:completed|Drafting plan:active|Done:pending",
     );
+  });
+
+  it("does not restore stale active task phases on completed assistant answers", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: "web:alpha-project:session-1",
+        conversationBackend: "openclaw",
+        messages: [
+          {
+            id: "user-1",
+            role: "user",
+            content: "Summarize the ablation run.",
+            timestamp: "2026-04-14T20:00:00.000Z",
+            channel: "web",
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "Saved the ablation run summary.",
+            timestamp: "2026-04-14T20:00:02.000Z",
+            chatMode: "openclaw-tools",
+            taskPhases: [
+              { id: "reading-file", label: "Reading file", status: "completed" },
+              { id: "importing-result", label: "Importing result", status: "active" },
+              { id: "done", label: "Done", status: "pending" },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+          llmProvider: "openai",
+          ollamaModels: [],
+          configuredLocalModel: null,
+        });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("web:alpha-project:session-1");
+    });
+
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "assistant:Saved the ablation run summary.",
+    );
+    expect(screen.getByTestId("phase-log").textContent).not.toContain("Importing result:active");
+    expect(screen.getByTestId("phase-log").textContent).not.toContain("Done:pending");
   });
 
   it("requires a non-empty brain slug before adding gbrain chat context", async () => {
@@ -1483,6 +1708,11 @@ describe("useUnifiedChat persistence", () => {
               content: "",
               thinking: "Working through the experiment setup.",
               timestamp: "2026-04-15T07:00:01.000Z",
+              taskPhases: [
+                { id: "reading-file", label: "Reading file", status: "completed" },
+                { id: "running-ablation", label: "Running ablation", status: "active" },
+                { id: "done", label: "Done", status: "pending" },
+              ],
             },
           ],
         });
@@ -1554,6 +1784,8 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain(
         "assistant:Finished the experiment and saved results/summary.md.",
       );
+      expect(screen.getByTestId("phase-log").textContent).not.toContain("Running ablation:active");
+      expect(screen.getByTestId("phase-log").textContent).not.toContain("Done:pending");
       expect(screen.getByTestId("generated-artifact-count").textContent).toBe("1");
       expect(screen.getByTestId("workspace-root-count").textContent).toBe("1");
     });
@@ -1657,6 +1889,104 @@ describe("useUnifiedChat persistence", () => {
     await waitFor(() => {
       const messageLog = screen.getByTestId("message-log").textContent ?? "";
       expect(messageLog.match(/user:Hello from the browser/g)?.length ?? 0).toBe(1);
+      expect(screen.getByTestId("message-count").textContent).toBe("4");
+    });
+  });
+
+  it("suppresses duplicate polled assistant completions that replay the direct web response", async () => {
+    const scheduledIntervals: Array<() => void | Promise<void>> = [];
+    vi.spyOn(globalThis, "setInterval").mockImplementation(((
+      callback: TimerHandler,
+    ) => {
+      if (typeof callback === "function") {
+        scheduledIntervals.push(callback as () => void | Promise<void>);
+      }
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof setInterval);
+
+    const duplicateTimestamp = new Date().toISOString();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+        });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return Response.json(
+          {
+            response: "Initial assistant response.",
+            conversationId: "web:alpha-project:session-1",
+            messages: [],
+          },
+          { headers: { "X-Chat-Backend": "openclaw", "X-Chat-Mode": "reasoning" } },
+        );
+      }
+
+      if (url.startsWith("/api/chat/unified?action=poll")) {
+        return Response.json({
+          backend: "openclaw",
+          messages: [
+            {
+              id: "remote-echo-assistant",
+              role: "assistant",
+              channel: "web",
+              content: "Initial   assistant\nresponse.",
+              timestamp: duplicateTimestamp,
+            },
+          ],
+        });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Initial assistant response.");
+      expect(screen.getByTestId("message-count").textContent).toBe("4");
+    });
+
+    await act(async () => {
+      for (const callback of scheduledIntervals) {
+        await callback?.();
+      }
+    });
+
+    await waitFor(() => {
+      const messageLog = screen.getByTestId("message-log").textContent ?? "";
+      expect(messageLog.match(/assistant:Initial assistant response\./g)?.length ?? 0).toBe(1);
       expect(screen.getByTestId("message-count").textContent).toBe("4");
     });
   });
@@ -3184,7 +3514,7 @@ describe("useUnifiedChat persistence", () => {
                       type: "tool_call",
                       name: "read",
                       input: {
-                        path: "/Users/vajdap/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html",
+                        path: "/Users/example/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html",
                       },
                     },
                   ],
@@ -3348,7 +3678,7 @@ describe("useUnifiedChat persistence", () => {
                       type: "toolCall",
                       name: "write",
                       arguments: {
-                        path: "/Users/vajdap/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
+                        path: "/Users/example/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
                         content: "#!/usr/bin/env python3\nprint('hello')\n",
                       },
                     },
@@ -3429,8 +3759,8 @@ describe("useUnifiedChat persistence", () => {
                       name: "exec",
                       arguments: {
                         cmd:
-                          "/usr/local/Caskroom/miniforge/base/bin/python3 " +
-                          "/Users/vajdap/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
+                          "/usr/bin/python3 " +
+                          "/Users/example/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
                       },
                     },
                   ],
@@ -3461,10 +3791,10 @@ describe("useUnifiedChat persistence", () => {
       "assistant:activity:Run python3 scripts/generate_mouse_chasing_cat_gif.py",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
-      "/usr/local/Caskroom/miniforge/base/bin/python3",
+      "/usr/bin/python3",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
-      "/Users/vajdap/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
+      "/Users/example/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
     );
   });
 

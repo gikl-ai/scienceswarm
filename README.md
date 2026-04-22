@@ -41,7 +41,8 @@ The core system is:
 - Direct chat plus OpenClaw-routed chat when the agent runtime is available
 - OpenHands-backed execution for code and longer-running agent tasks
 - Dream Cycle and Research Radar overnight runs that leave auditable journal
-  artifacts in the brain
+  artifacts in the brain, including project-specific frontier matches that
+  explain what changed and can be saved back into gbrain memory
 - A reasoning workspace for critique, review, and structured audit flows
 - Private local installation of third-party market plugin bundles from pinned
   upstream GitHub refs, with local OpenClaw, Codex, and Claude Code exposure

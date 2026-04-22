@@ -10,6 +10,11 @@ interface QueryableDb {
   query(sql: string, params?: unknown[]): Promise<{ rows: QueryResultRow[] }>;
 }
 
+interface QueryableDbError {
+  code?: unknown;
+  message?: unknown;
+}
+
 const unsupportedWorkspaceFilesTables = new WeakSet<QueryableDb>();
 
 export interface ProjectPageSummary {
@@ -61,16 +66,12 @@ function getQueryableDb(): QueryableDb | null {
   }
 }
 
-function isMissingFilesRelationError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; message?: unknown };
-  if (candidate.code === "42P01") {
-    return true;
-  }
-  return (
-    typeof candidate.message === "string"
-    && /relation "files" does not exist/i.test(candidate.message)
-  );
+function isMissingRelationError(error: unknown, relation: string): boolean {
+  const candidate = error as QueryableDbError | null;
+  const message =
+    typeof candidate?.message === "string" ? candidate.message : "";
+  return candidate?.code === "42P01"
+    || message.includes(`relation "${relation}" does not exist`);
 }
 
 function projectMatchSql(alias: string): string {
@@ -146,7 +147,7 @@ export async function listProjectWorkspaceFileEntriesFast(
       [project, WORKSPACE_FILE_LIMIT],
     ));
   } catch (error) {
-    if (isMissingFilesRelationError(error)) {
+    if (isMissingRelationError(error, "files")) {
       unsupportedWorkspaceFilesTables.add(db);
       return null;
     }

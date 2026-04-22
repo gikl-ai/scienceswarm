@@ -400,7 +400,7 @@ describe("GET /api/chat/unified", () => {
     const sessionSummaryFile = path.join(
       sessionWorkspace,
       "reports",
-      "baseline_vs_adaptation_summary.md",
+      "baseline_vs_variant_summary.md",
     );
     writeFileSync(sessionSummaryFile, "# Summary\n");
     utimesSync(
@@ -433,7 +433,7 @@ describe("GET /api/chat/unified", () => {
         role: "assistant",
         channel: "web",
         content:
-          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_adaptation_summary.md.",
+          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_variant_summary.md.",
         timestamp: "2026-01-01T00:00:04.000Z",
         conversationId: newerSessionId,
       },
@@ -451,17 +451,17 @@ describe("GET /api/chat/unified", () => {
       conversationId: newerSessionId,
       generatedArtifacts: [
         expect.objectContaining({
-          projectPath: "docs/baseline_vs_adaptation_summary.md",
+          projectPath: "docs/baseline_vs_variant_summary.md",
           tool: "OpenClaw CLI",
         }),
       ],
-      generatedFiles: ["docs/baseline_vs_adaptation_summary.md"],
+      generatedFiles: ["docs/baseline_vs_variant_summary.md"],
       messages: [
         expect.objectContaining({
           id: "assistant-finished",
           channel: "web",
           content: expect.stringContaining(
-            "docs/baseline_vs_adaptation_summary.md",
+            "docs/baseline_vs_variant_summary.md",
           ),
         }),
       ],
@@ -472,7 +472,7 @@ describe("GET /api/chat/unified", () => {
     );
     expect(
       existsSync(
-        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary.md"),
+        path.join(projectRoot, "docs", "baseline_vs_variant_summary.md"),
       ),
     ).toBe(true);
   });
@@ -498,7 +498,7 @@ describe("GET /api/chat/unified", () => {
     const sessionSummaryFile = path.join(
       sessionWorkspace,
       "reports",
-      "baseline_vs_adaptation_summary.md",
+      "baseline_vs_variant_summary.md",
     );
     writeFileSync(sessionSummaryFile, "# Summary\n");
     utimesSync(
@@ -520,7 +520,7 @@ describe("GET /api/chat/unified", () => {
         role: "assistant",
         channel: "web",
         content:
-          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_adaptation_summary.md.",
+          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_variant_summary.md.",
         timestamp: "2026-01-01T00:00:04.000Z",
         conversationId: sessionId,
       },
@@ -533,23 +533,23 @@ describe("GET /api/chat/unified", () => {
     const firstResponse = await GET(request);
     expect(firstResponse.status).toBe(200);
     await expect(firstResponse.json()).resolves.toMatchObject({
-      generatedFiles: ["docs/baseline_vs_adaptation_summary.md"],
+      generatedFiles: ["docs/baseline_vs_variant_summary.md"],
     });
 
     const secondResponse = await GET(request);
     expect(secondResponse.status).toBe(200);
     await expect(secondResponse.json()).resolves.toMatchObject({
-      generatedFiles: ["docs/baseline_vs_adaptation_summary.md"],
+      generatedFiles: ["docs/baseline_vs_variant_summary.md"],
     });
 
     expect(
       existsSync(
-        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary.md"),
+        path.join(projectRoot, "docs", "baseline_vs_variant_summary.md"),
       ),
     ).toBe(true);
     expect(
       existsSync(
-        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary-2.md"),
+        path.join(projectRoot, "docs", "baseline_vs_variant_summary-2.md"),
       ),
     ).toBe(false);
   });
@@ -566,6 +566,7 @@ describe("GET /api/chat/unified", () => {
         channel: "web",
         content: [
           "[agents/auth-profiles] synced openai-codex credentials from external cli",
+          "[agent/embedded] auto-compaction succeeded for openai/gpt-5.4; retrying prompt",
           "",
           "Here is your draft summary.",
           "",
@@ -593,6 +594,7 @@ describe("GET /api/chat/unified", () => {
       ]),
     );
     expect(body.messages[0]?.content).not.toContain("[agents/auth-profiles]");
+    expect(body.messages[0]?.content).not.toContain("[agent/embedded]");
   });
 
   it("keeps user-authored bracketed text in cross-channel CLI poll responses", async () => {
@@ -1030,6 +1032,175 @@ describe("POST /api/chat/unified", () => {
     expect(body.response).toContain("What's your name?");
     expect(sendAgentMessage).not.toHaveBeenCalled();
     expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it("answers model-system applicability requests from the visible active file and saves an artifact", async () => {
+    createProjectRoot("alpha-project");
+    readFile.mockRejectedValue(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "model-applicability-active-file",
+      },
+      body: JSON.stringify({
+        message:
+          "Is this organoid model applicable to our patient biomarker question, and what validation ladder should reduce transfer risk?",
+        projectId: "alpha-project",
+        activeFile: {
+          path: "docs/organoid-fit-memo.md",
+          content: [
+            "# Organoid fit memo",
+            "Patient-derived organoid CRC-214 has KRAS G12D and TP53 loss.",
+            "Viability assay at day 7 after EGFR + MEK inhibition, n=4 wells per dose.",
+            "Vehicle controls are included, but there is no immune co-culture or stromal compartment.",
+          ].join("\n"),
+        },
+      }),
+    });
+
+    const response = await POST(request);
+    const body = (await response.json()) as {
+      response?: string;
+      generatedArtifacts?: Array<{ projectPath?: string; tool?: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
+    expect(body.response).toContain("Transfer risks:");
+    expect(body.response).toContain("Validation ladder:");
+    expect(body.response).toContain("immune");
+    expect(body.generatedArtifacts?.[0]?.tool).toBe(
+      "ScienceSwarm model-system applicability",
+    );
+    const artifactPath = body.generatedArtifacts?.[0]?.projectPath;
+    expect(artifactPath).toBeTruthy();
+    expect(
+      readFileSync(
+        path.join(ensureScienceSwarmDir(), "workspace", artifactPath ?? ""),
+        "utf-8",
+      ),
+    ).toContain("## Missing Metadata ScienceSwarm Will Not Assume");
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
+  });
+
+  it("handles missing model metadata honestly instead of routing to a generic agent answer", async () => {
+    createProjectRoot("alpha-project");
+    readFile.mockRejectedValue(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "model-applicability-missing-metadata",
+      },
+      body: JSON.stringify({
+        message:
+          "Is this model system applicable to the target biological question if my source does not specify assay context or patient origin?",
+        projectId: "alpha-project",
+      }),
+    });
+
+    const response = await POST(request);
+    const body = (await response.json()) as { response?: string };
+
+    expect(response.status).toBe(200);
+    expect(body.response).toContain("Missing metadata ScienceSwarm will not assume:");
+    expect(body.response).toContain("model identity");
+    expect(body.response).toContain("assay or readout");
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
+  });
+
+  it("answers target-prioritization requests from the visible active file and saves an artifact", async () => {
+    createProjectRoot("alpha-project");
+    readFile.mockRejectedValue(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "target-prioritization-active-file",
+      },
+      body: JSON.stringify({
+        message:
+          "Rank these target and biomarker candidates for the next validation wave and show the ranking criteria.",
+        projectId: "alpha-project",
+        activeFile: {
+          path: "docs/target-candidates.md",
+          content: [
+            "# Target candidates",
+            "- EGFR + MEK: patient-derived organoid response replicated in n=4 wells with viability assay, KRAS feedback mechanism, existing inhibitors, and western readout.",
+            "- AXL: resistance marker enriched after treatment, but only one RNA-seq observation and no perturbation assay yet.",
+            "- ERBB3: plausible bypass pathway with antibody reagent available, but evidence is weaker and timeline is longer.",
+          ].join("\n"),
+        },
+      }),
+    });
+
+    const response = await POST(request);
+    const body = (await response.json()) as {
+      response?: string;
+      generatedArtifacts?: Array<{ projectPath?: string; tool?: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
+    expect(body.response).toContain("Priority ranking:");
+    expect(body.response).toContain("Ranking criteria:");
+    expect(body.response).toContain("EGFR");
+    expect(body.generatedArtifacts?.[0]?.tool).toBe(
+      "ScienceSwarm target prioritizer",
+    );
+    const artifactPath = body.generatedArtifacts?.[0]?.projectPath;
+    expect(artifactPath).toBeTruthy();
+    expect(
+      readFileSync(
+        path.join(ensureScienceSwarmDir(), "workspace", artifactPath ?? ""),
+        "utf-8",
+      ),
+    ).toContain("## Thin Evidence and Missing Information");
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
+  });
+
+  it("reprioritizes under visible practical constraints and names thin evidence", async () => {
+    createProjectRoot("alpha-project");
+    readFile.mockRejectedValue(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "target-prioritization-constraints",
+      },
+      body: JSON.stringify({
+        message:
+          "Reprioritize AXL, MET, and YAP1 biomarkers for a short two-week lab window with limited assay support and be honest about thin evidence.",
+        projectId: "alpha-project",
+        activeFile: {
+          path: "docs/thin-biomarker-list.txt",
+          content:
+            "AXL, MET, and YAP1 are tempting resistance biomarkers, but no cohort, replication, or perturbation readout is available yet.",
+        },
+      }),
+    });
+
+    const response = await POST(request);
+    const body = (await response.json()) as { response?: string };
+
+    expect(response.status).toBe(200);
+    expect(body.response).toContain("Constraint sensitivity:");
+    expect(body.response).toMatch(/Short-window|Limited assay/i);
+    expect(body.response).toContain("Thin evidence and missing information:");
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
   });
 
   it("returns local slash-command help from the dedicated command route", async () => {
@@ -1645,6 +1816,15 @@ describe("POST /api/chat/unified", () => {
       "Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
     );
     expect(openClawMessage).toContain(
+      "Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to project-visible relative paths",
+    );
+    expect(openClawMessage).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(openClawMessage).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
+    expect(openClawMessage).toContain(
       "Do not run git add, git commit, or git push unless the user explicitly asked",
     );
     expect(openClawMessage).toContain(
@@ -1657,6 +1837,102 @@ describe("POST /api/chat/unified", () => {
     );
     expect(sendAgentMessage).not.toHaveBeenCalled();
     expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it("routes sweep/save prompts with explanatory wording through OpenClaw tools", async () => {
+    const projectRoot = createProjectRoot("alpha-project");
+    resolveAgentConfig.mockReturnValue({ type: "openclaw", url: "http://localhost:19002" });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    isLocalProviderConfigured.mockReturnValue(true);
+    localHealthCheck.mockResolvedValueOnce({
+      running: true,
+      models: [],
+      url: "http://localhost:11434",
+    });
+    sendOpenClawMessage.mockResolvedValue(
+      [
+        "```scienceswarm-artifact path=\"docs/sweep-summary.md\"",
+        "# Sweep Summary",
+        "",
+        "Toy smoke sweep complete.",
+        "```",
+        "",
+        "Saved `docs/sweep-summary.md`.",
+      ].join("\n"),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message:
+          "Using docs/benchmark-suite.md, run a tiny deterministic toy sweep, save docs/sweep-summary.md, and explain which result is most trustworthy and why.",
+        projectId: "alpha-project",
+        mode: "reasoning",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const [[openClawMessage, openClawOptions]] = sendOpenClawMessage.mock.calls;
+    expect(openClawOptions.cwd).toBe(projectRoot);
+    expect(openClawMessage).toContain(
+      "Execute all steps using your tools when real work is required.",
+    );
+    expect(openClawMessage).toContain(
+      `The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
+    );
+    expect(openClawMessage).not.toContain("Clarification request rules:");
+  });
+
+  it("routes hybrid approval-question action prompts through OpenClaw tools", async () => {
+    const projectRoot = createProjectRoot("alpha-project");
+    resolveAgentConfig.mockReturnValue({ type: "openclaw", url: "http://localhost:19002" });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    isLocalProviderConfigured.mockReturnValue(true);
+    localHealthCheck.mockResolvedValueOnce({
+      running: true,
+      models: [],
+      url: "http://localhost:11434",
+    });
+    sendOpenClawMessage.mockResolvedValue("Saved `docs/sweep-summary.md`.");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message:
+          "What will happen? Please run the benchmark sweep and save docs/sweep-summary.md.",
+        projectId: "alpha-project",
+        mode: "reasoning",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const [[openClawMessage, openClawOptions]] = sendOpenClawMessage.mock.calls;
+    expect(openClawOptions.cwd).toBe(projectRoot);
+    expect(openClawMessage).toContain(
+      "Execute all steps using your tools when real work is required.",
+    );
+    expect(openClawMessage).toContain(
+      `The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
+    );
+    expect(openClawMessage).not.toContain("Clarification request rules:");
   });
 
   it("materializes gbrain-backed project inputs before sending OpenClaw executable workspace paths", async () => {
@@ -1956,6 +2232,12 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).toContain(
       "Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
     );
+    expect(openClawMessage).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(openClawMessage).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
   });
 
   it("sanitizes active file fences before sending current-preview context to OpenClaw", async () => {
@@ -2175,7 +2457,7 @@ describe("POST /api/chat/unified", () => {
   });
 
   it("forces tool execution for scaffold requests from the default chat mode and imports the authored artifacts", async () => {
-    const projectRoot = createProjectRoot("adaptive-memory-scaffold");
+    const projectRoot = createProjectRoot("project-alpha-scaffold");
     resolveAgentConfig.mockReturnValue({
       type: "openclaw",
       url: "http://localhost:19002",
@@ -2190,13 +2472,13 @@ describe("POST /api/chat/unified", () => {
     sendOpenClawMessage.mockResolvedValueOnce(
       [
         "```scienceswarm-artifact path=\"README.md\"",
-        "# Adaptive Memory Scaffold",
+        "# Project Alpha Scaffold",
         "",
         "Run `python3 train.py --config configs/experiment.yaml` after installing dependencies.",
         "```",
         "",
         "```scienceswarm-artifact path=\"configs/experiment.yaml\"",
-        "model: adaptive-memory",
+        "model: project-alpha",
         "context_length: 32768",
         "```",
         "",
@@ -2212,8 +2494,8 @@ describe("POST /api/chat/unified", () => {
       },
       body: JSON.stringify({
         message:
-          "Scaffold a runnable experiment for a non-transformer long-context model with adaptive memory. I need starter code, configs, dataset entry points, a training script, an evaluation script, and a README that explains what remains to do.",
-        projectId: "adaptive-memory-scaffold",
+          "Scaffold a runnable experiment for project-alpha with a configurable baseline. I need starter code, configs, dataset entry points, a training script, an evaluation script, and a README that explains what remains to do.",
+        projectId: "project-alpha-scaffold",
         streamPhases: true,
       }),
     });
@@ -2254,7 +2536,7 @@ describe("POST /api/chat/unified", () => {
       true,
     );
     expect(readFileSync(path.join(projectRoot, "README.md"), "utf-8")).toContain(
-      "Adaptive Memory Scaffold",
+      "Project Alpha Scaffold",
     );
   });
 
@@ -2362,8 +2644,8 @@ describe("POST /api/chat/unified", () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeWorkspaceFile(
       projectRoot,
-      "docs/non_transformer_notes.md",
-      "# Non-Transformer Notes\n\nAssociative memory updates help recurrent models adapt at test time.\n",
+      "docs/project_notes.md",
+      "# Project Notes\n\nThe imported notes describe a configurable baseline and evaluation split.\n",
     );
 
     resolveAgentConfig.mockReturnValue({
@@ -2379,11 +2661,11 @@ describe("POST /api/chat/unified", () => {
     });
     readFile.mockResolvedValueOnce(
       Buffer.from(
-        "# Non-Transformer Notes\n\nAssociative memory updates help recurrent models adapt at test time.\n",
+        "# Project Notes\n\nThe imported notes describe a configurable baseline and evaluation split.\n",
       ),
     );
     parseFile.mockResolvedValueOnce({
-      text: "Associative memory updates help recurrent models adapt at test time.",
+      text: "The imported notes describe a configurable baseline and evaluation split.",
       pages: 1,
     });
     sendOpenClawMessage.mockResolvedValueOnce("Grounded answer");
@@ -2393,7 +2675,7 @@ describe("POST /api/chat/unified", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message:
-          "Based on the imported non-transformer note, identify two falsifiable hypotheses.",
+          "Based on the imported project note, identify two falsifiable hypotheses.",
         projectId: "alpha-project",
       }),
     });
@@ -2412,13 +2694,13 @@ describe("POST /api/chat/unified", () => {
       "Resolved project file references for this turn:",
     );
     expect(openClawMessage).toContain(
-      "- visible imported project context -> docs/non_transformer_notes.md",
+      "- visible imported project context -> docs/project_notes.md",
     );
     expect(openClawMessage).toContain(
-      "File: docs/non_transformer_notes.md (1 pages)",
+      "File: docs/project_notes.md (1 pages)",
     );
     expect(openClawMessage).toContain(
-      "Associative memory updates help recurrent models adapt at test time.",
+      "The imported notes describe a configurable baseline and evaluation split.",
     );
   });
 
@@ -4437,6 +4719,12 @@ describe("POST /api/chat/unified", () => {
       "Return exactly one complete machine-readable artifact block",
     );
     expect(blockRepairPrompt).toContain("Do not use workspace tools");
+    expect(blockRepairPrompt).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(blockRepairPrompt).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
     expect(blockRepairPrompt).toContain("Current revised manuscript content");
     expect(sendOpenClawMessage).toHaveBeenCalledTimes(2);
   });
@@ -5513,6 +5801,12 @@ describe("POST /api/chat/unified", () => {
       "Retry this artifact-writing request with compact context",
     );
     expect(retryPrompt).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(retryPrompt).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
+    expect(retryPrompt).toContain(
       path.join(projectRoot, "docs", "hubble-1929-revised-manuscript.md"),
     );
     expect(retryPrompt).toContain(
@@ -5901,21 +6195,21 @@ describe("POST /api/chat/unified", () => {
   });
 
   it("treats markdown-emphasized output paths as satisfying explicit requested artifacts", async () => {
-    const projectRoot = createProjectRoot("adaptive-inference-7747");
+    const projectRoot = createProjectRoot("project-alpha-recovery-7747");
     const stateRoot = ensureScienceSwarmDir();
     const summaryPath = path.join(
       stateRoot,
       "openclaw",
       "workspace",
       "reports",
-      "baseline_vs_adaptation_summary.md",
+      "baseline_vs_variant_summary.md",
     );
     const resultsPath = path.join(
       stateRoot,
       "openclaw",
       "workspace",
       "reports",
-      "baseline_vs_adaptation_results.csv",
+      "baseline_vs_variant_results.csv",
     );
 
     resolveAgentConfig.mockReturnValue({
@@ -5934,9 +6228,9 @@ describe("POST /api/chat/unified", () => {
       writeFileSync(
         summaryPath,
         [
-          "# Baseline vs Adaptation Summary",
+          "# Baseline vs Variant Summary",
           "",
-          "- Improved: adaptation accuracy +4.1 points",
+          "- Improved: variant accuracy +4.1 points",
           "- Regressed: latency +18 ms",
           "- Runtime cost: 1 extra optimization step per batch",
         ].join("\n"),
@@ -5946,12 +6240,12 @@ describe("POST /api/chat/unified", () => {
         [
           "condition,accuracy,latency_ms",
           "baseline,0.71,42",
-          "adaptation,0.751,60",
+          "variant,0.751,60",
         ].join("\n"),
       );
       return [
-        "Summary written to **reports/baseline_vs_adaptation_summary.md**.",
-        "Results written to **reports/baseline_vs_adaptation_results.csv**.",
+        "Summary written to **reports/baseline_vs_variant_summary.md**.",
+        "Results written to **reports/baseline_vs_variant_results.csv**.",
       ].join(" ");
     });
 
@@ -5960,8 +6254,8 @@ describe("POST /api/chat/unified", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message:
-          "Build and run a tiny reproducible baseline-versus-test-time-adaptation experiment for a non-transformer sequence model on a synthetic sequence task. Save the outputs as reports/baseline_vs_adaptation_summary.md and reports/baseline_vs_adaptation_results.csv in this workspace.",
-        projectId: "adaptive-inference-7747",
+          "Build and run a tiny reproducible baseline-versus-variant experiment for a project-alpha sequence task. Save the outputs as reports/baseline_vs_variant_summary.md and reports/baseline_vs_variant_results.csv in this workspace.",
+        projectId: "project-alpha-recovery-7747",
         mode: "openclaw-tools",
       }),
     });
@@ -5971,37 +6265,37 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       backend: "openclaw",
-      response: expect.stringContaining("docs/baseline_vs_adaptation_summary.md"),
+      response: expect.stringContaining("docs/baseline_vs_variant_summary.md"),
       generatedFiles: expect.arrayContaining([
-        "docs/baseline_vs_adaptation_summary.md",
-        "data/baseline_vs_adaptation_results.csv",
+        "docs/baseline_vs_variant_summary.md",
+        "data/baseline_vs_variant_results.csv",
       ]),
       generatedArtifacts: expect.arrayContaining([
         expect.objectContaining({
-          projectPath: "docs/baseline_vs_adaptation_summary.md",
+          projectPath: "docs/baseline_vs_variant_summary.md",
           tool: "OpenClaw CLI",
         }),
         expect.objectContaining({
-          projectPath: "data/baseline_vs_adaptation_results.csv",
+          projectPath: "data/baseline_vs_variant_results.csv",
           tool: "OpenClaw CLI",
         }),
       ]),
     });
     expect(
       readFileSync(
-        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary.md"),
+        path.join(projectRoot, "docs", "baseline_vs_variant_summary.md"),
         "utf-8",
       ),
-    ).toContain("Improved: adaptation accuracy +4.1 points");
+    ).toContain("Improved: variant accuracy +4.1 points");
     expect(
       readFileSync(
-        path.join(projectRoot, "data", "baseline_vs_adaptation_results.csv"),
+        path.join(projectRoot, "data", "baseline_vs_variant_results.csv"),
         "utf-8",
       ),
-    ).toContain("adaptation,0.751,60");
+    ).toContain("variant,0.751,60");
     expect(
       existsSync(
-        path.join(projectRoot, "reports", "baseline_vs_adaptation_summary.md"),
+        path.join(projectRoot, "reports", "baseline_vs_variant_summary.md"),
       ),
     ).toBe(false);
     expect(sendOpenClawMessage).toHaveBeenCalledOnce();
@@ -6221,6 +6515,49 @@ describe("POST /api/chat/unified", () => {
       backend: "openclaw",
       response: "OpenClaw reasoning answer",
     });
+  });
+
+  it("maps OpenClaw context overflow to a recoverable scientist-facing failure", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce(
+      [
+        "[agent/embedded] auto-compaction succeeded for openai/gpt-5.4; retrying prompt",
+        "Context overflow: prompt too large for the model. Try /reset (or /new) to start a fresh session, or use a larger-context model.",
+      ].join("\n"),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "context-overflow-test",
+      },
+      body: JSON.stringify({
+        message: "Record this failure case.",
+        messages: [{ role: "user", content: "Record this failure case." }],
+        backend: "openclaw",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.response).toContain("context became too large");
+    expect(body.response).toContain("preserved in the workspace");
+    expect(body.response).not.toContain("[agent/embedded]");
+    expect(body.response).not.toContain("gpt-5.4");
+    expect(body.generatedFiles).toEqual([]);
   });
 
   it("ignores an explicit `backend: \"direct\"` request and still routes through OpenClaw", async () => {
