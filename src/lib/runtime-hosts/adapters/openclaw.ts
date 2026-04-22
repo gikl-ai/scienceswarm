@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type {
   ArtifactImportRequest,
   ResearchRuntimeHost,
@@ -98,13 +100,14 @@ export class OpenClawRuntimeHostAdapter implements ResearchRuntimeHost {
   async sendTurn(request: RuntimeTurnRequest): Promise<RuntimeTurnResult> {
     const sendAgentMessage = this.sendAgentMessageOverride
       ?? (await import("@/lib/openclaw")).sendAgentMessage;
+    const sessionId = request.conversationId ?? `openclaw-${randomUUID()}`;
     const message = await sendAgentMessage(request.prompt, {
-      session: request.conversationId ?? request.preview.hostId,
+      session: sessionId,
     });
 
     return {
       hostId: this.runtimeProfile.id,
-      sessionId: request.conversationId ?? request.preview.hostId,
+      sessionId,
       message,
     };
   }

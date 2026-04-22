@@ -159,7 +159,7 @@ export class RuntimeHostRouter {
     const prepared = this.prepareTurn(input);
     const adapter = this.adapters.get(prepared.request.hostId);
     if (!adapter) {
-      throw new RuntimeHostError({
+      const error = new RuntimeHostError({
         code: "RUNTIME_HOST_UNKNOWN",
         status: 404,
         message: `No runtime adapter registered for ${prepared.request.hostId}.`,
@@ -167,6 +167,11 @@ export class RuntimeHostRouter {
         recoverable: true,
         context: { hostId: prepared.request.hostId },
       });
+      this.finishTurn(prepared.session.id, {
+        status: "failed",
+        errorCode: error.code,
+      });
+      throw error;
     }
 
     try {

@@ -136,6 +136,7 @@ vi.mock("@/lib/openhands", () => ({
 
 import { POST } from "@/app/api/chat/unified/route";
 import {
+  createRuntimeEventStore,
   createRuntimeHostRouter,
   createRuntimeSessionStore,
   getDefaultRuntimeSessionStore,
@@ -166,6 +167,40 @@ function request(body: Record<string, unknown>): Request {
     },
     body: JSON.stringify(body),
   });
+}
+
+function turnPreviewFor(
+  profile = requireRuntimeHostProfile("openclaw"),
+): RuntimeTurnRequest["preview"] {
+  return {
+    allowed: true,
+    projectPolicy: "local-only",
+    hostId: profile.id,
+    mode: "chat",
+    effectivePrivacyClass: "local-network",
+    destinations: [
+      {
+        hostId: profile.id,
+        label: profile.label,
+        privacyClass: "local-network",
+      },
+    ],
+    dataIncluded: [],
+    proof: {
+      projectGatePassed: true,
+      operationPrivacyClass: "local-network",
+      adapterProof: "declared-local",
+    },
+    blockReason: null,
+    requiresUserApproval: false,
+    accountDisclosure: {
+      authMode: profile.authMode,
+      provider: profile.authProvider,
+      billingClass: "local-compute",
+      accountSource: "local-service",
+      costCopyRequired: false,
+    },
+  };
 }
 
 class FakeOpenClawHost implements ResearchRuntimeHost {
@@ -342,6 +377,52 @@ describe("runtime host router", () => {
     ]);
   });
 
+  it("marks a prepared turn failed when dispatch cannot find an adapter", async () => {
+    const sessionStore = createRuntimeSessionStore({
+      now: () => new Date("2026-04-22T10:00:00.000Z"),
+      idGenerator: () => "runtime-session-missing-adapter",
+    });
+    const eventStore = createRuntimeEventStore({
+      sessions: sessionStore,
+      now: () => new Date("2026-04-22T10:00:01.000Z"),
+    });
+    const router = createRuntimeHostRouter({
+      sessionStore,
+      eventStore,
+      adapters: [],
+    });
+
+    await expect(router.dispatchTurn({
+      hostId: "openclaw",
+      projectPolicy: "local-only",
+      projectId: "project-alpha",
+      conversationId: "web-project-alpha-session-1",
+      mode: "chat",
+      prompt: "Summarize the latest notes",
+      approvalState: "not-required",
+    })).rejects.toMatchObject({
+      code: "RUNTIME_HOST_UNKNOWN",
+    });
+
+    const [session] = sessionStore.listSessions();
+    expect(session).toMatchObject({
+      id: "rt-session-runtime-session-missing-adapter",
+      status: "failed",
+      errorCode: "RUNTIME_HOST_UNKNOWN",
+    });
+    expect(eventStore.listEvents(session.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "error",
+          payload: expect.objectContaining({
+            status: "failed",
+            code: "RUNTIME_HOST_UNKNOWN",
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("exposes OpenClaw as a local-network runtime adapter", async () => {
     const adapter = createOpenClawRuntimeHostAdapter({
       healthCheck: async () => ({ status: "connected" }),
@@ -378,40 +459,44 @@ describe("runtime host router", () => {
       inputFileRefs: [],
       dataIncluded: [],
       approvalState: "not-required",
-      preview: {
-        allowed: true,
-        projectPolicy: "local-only",
-        hostId: "codex",
-        mode: "chat",
-        effectivePrivacyClass: "local-network",
-        destinations: [
-          {
-            hostId: "codex",
-            label: profile.label,
-            privacyClass: "local-network",
-          },
-        ],
-        dataIncluded: [],
-        proof: {
-          projectGatePassed: true,
-          operationPrivacyClass: "local-network",
-          adapterProof: "declared-local",
-        },
-        blockReason: null,
-        requiresUserApproval: false,
-        accountDisclosure: {
-          authMode: profile.authMode,
-          provider: profile.authProvider,
-          billingClass: "local-compute",
-          accountSource: "local-service",
-          costCopyRequired: false,
-        },
-      },
+      preview: turnPreviewFor(profile),
     })).resolves.toMatchObject({
       hostId: "codex",
       sessionId: "conversation-alpha",
       message: "profiled adapter response",
     });
+  });
+
+  it("uses a unique OpenClaw session key when no conversation id is provided", async () => {
+    const usedSessions: string[] = [];
+    const adapter = createOpenClawRuntimeHostAdapter({
+      sendAgentMessage: async (_message, options) => {
+        usedSessions.push(options?.session ?? "");
+        return "adapter response";
+      },
+    });
+    const requestBase: RuntimeTurnRequest = {
+      hostId: "openclaw",
+      projectId: "project-alpha",
+      conversationId: null,
+      mode: "chat",
+      prompt: "Run a one-off turn",
+      inputFileRefs: [],
+      dataIncluded: [],
+      approvalState: "not-required",
+      preview: turnPreviewFor(),
+    };
+
+    const first = await adapter.sendTurn(requestBase);
+    const second = await adapter.sendTurn({
+      ...requestBase,
+      prompt: "Run a second one-off turn",
+    });
+
+    expect(first.sessionId).toMatch(/^openclaw-/);
+    expect(second.sessionId).toMatch(/^openclaw-/);
+    expect(first.sessionId).not.toBe(second.sessionId);
+    expect(usedSessions).toEqual([first.sessionId, second.sessionId]);
   });
 });
 
