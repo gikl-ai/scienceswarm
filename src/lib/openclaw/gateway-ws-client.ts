@@ -122,7 +122,6 @@ const TURN_COMPLETE_SIGNALS = new Set([
 function debugLog(message: string, ...args: unknown[]): void {
   if (process.env.DEBUG_GATEWAY_WS) {
     // Intentionally use console.log here only when explicitly opted in.
-    // eslint-disable-next-line no-console
     console.log(`[gateway-ws] ${message}`, ...args);
   }
 }
