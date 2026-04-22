@@ -73,8 +73,8 @@ import {
   writeBackOpenClawGeneratedFiles,
 } from "@/lib/openclaw/gbrain-writeback";
 import { sanitizeOpenClawUserVisibleResponse } from "@/lib/openclaw/response-sanitizer";
-import { listOpenClawSkills } from "@/lib/openclaw/skill-catalog";
 import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
+import { listScienceSwarmOpenClawSlashCommandSkills } from "@/lib/openclaw/skill-registry";
 import {
   buildOpenClawSlashCommands,
   buildOpenClawSlashCommandPrompt,
@@ -268,7 +268,7 @@ function normalizeRequestedBackend(value: unknown): RequestedBackend | null {
 
 async function loadOpenClawSlashCommands() {
   try {
-    const skills = await listOpenClawSkills();
+    const skills = await listScienceSwarmOpenClawSlashCommandSkills();
     return buildOpenClawSlashCommands(skills);
   } catch {
     return buildOpenClawSlashCommands([]);
