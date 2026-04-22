@@ -6,6 +6,7 @@ import { runRadarPipeline } from "./pipeline"
 import { buildProductionFetchers } from "./fetchers/index"
 import { ensureBrainStoreReady, getBrainStore } from "@/brain/store"
 import { evaluateStrictLocalDestination } from "@/lib/runtime/strict-local-policy"
+import { getRadarStateDir } from "@/lib/radar/state-dir"
 
 // ---------------------------------------------------------------------------
 // Hybrid intent classifier: deterministic rules (fast) + LLM fallback (smart)
@@ -133,15 +134,11 @@ export function isRadarIntent(text: string): boolean {
   return classifyByRules(text) !== null || RADAR_ADJACENT_KEYWORDS.test(text)
 }
 
-function getStateDir(): string {
-  return process.env.RADAR_STATE_DIR || process.env.BRAIN_ROOT || "state"
-}
-
 async function handleSetup(
   ctx: TelegramTextContext,
   text: string
 ): Promise<void> {
-  const stateDir = getStateDir()
+  const stateDir = getRadarStateDir()
 
   // Check if radar already exists
   const existing = await getActiveRadar(stateDir)
@@ -173,7 +170,7 @@ async function handleSetup(
 }
 
 async function handleStatus(ctx: TelegramTextContext): Promise<void> {
-  const stateDir = getStateDir()
+  const stateDir = getRadarStateDir()
   const radar = await getActiveRadar(stateDir)
 
   if (!radar) {
@@ -194,7 +191,7 @@ async function handleStatus(ctx: TelegramTextContext): Promise<void> {
 }
 
 async function handleOnDemand(ctx: TelegramTextContext): Promise<void> {
-  const stateDir = getStateDir()
+  const stateDir = getRadarStateDir()
   const radar = await getActiveRadar(stateDir)
 
   if (!radar) {

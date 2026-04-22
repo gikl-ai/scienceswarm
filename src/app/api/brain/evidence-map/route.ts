@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import matter from "gray-matter";
 
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
@@ -234,14 +235,14 @@ function normalizeSource(entry: unknown, pages: Map<string, BrainPage>): Evidenc
   const record = entry as Record<string, unknown>;
   const slug = readNonEmptyString(record.slug);
   const page = slug ? pages.get(slug) : null;
-  const title = readNonEmptyString(record.title) ?? page?.title ?? slug;
-  if (!slug || !title) return null;
+  if (!slug || !page) return null;
+  const title = readNonEmptyString(record.title) ?? page.title;
 
   return {
     slug,
     title,
-    filename: readNonEmptyString(record.filename) ?? (page ? normalizeSourceFilename(page) : undefined),
-    excerpt: readNonEmptyString(record.excerpt) ?? (page ? excerptPageContent(page.content) : undefined),
+    filename: readNonEmptyString(record.filename) ?? normalizeSourceFilename(page),
+    excerpt: readNonEmptyString(record.excerpt) ?? excerptPageContent(page.content),
   };
 }
 
@@ -598,7 +599,7 @@ export async function POST(request: Request) {
       "analysis",
       "evidence-maps",
       projectId,
-      `${compactTimestampForSlug(timestamp)}-${slugifySegment(payload.focused_question)}`,
+      `${compactTimestampForSlug(timestamp)}-${slugifySegment(payload.focused_question)}-${randomUUID()}`,
     ].join("/");
 
     const markdown = buildEvidenceMapMarkdown({

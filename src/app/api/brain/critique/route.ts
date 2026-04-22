@@ -35,6 +35,10 @@ type PersistedCritiqueSummary = {
 const critiquePersistLocks = new Map<string, Promise<void>>();
 
 export async function GET(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const url = new URL(request.url);
   const limit = parseLimit(url.searchParams.get("limit"));
 
