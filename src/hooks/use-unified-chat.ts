@@ -382,6 +382,56 @@ function isLikelyDuplicatePolledUserMessage(
   });
 }
 
+function isLikelyDuplicatePolledAssistantMessage(
+  existingMessages: Message[],
+  candidate: Message,
+): boolean {
+  if (candidate.role !== "assistant") {
+    return false;
+  }
+
+  if (candidate.channel && candidate.channel !== "web") {
+    return false;
+  }
+
+  const candidateContent = candidate.content.trim();
+  if (candidateContent.length === 0) {
+    return false;
+  }
+
+  const latestSettledWebAssistant = [...existingMessages]
+    .reverse()
+    .find((message) =>
+      message.role === "assistant"
+      && (!message.channel || message.channel === "web")
+      && !isTransientAssistantScratchpad(message),
+    );
+
+  if (!latestSettledWebAssistant) {
+    return false;
+  }
+
+  if (latestSettledWebAssistant.content.trim() !== candidateContent) {
+    return false;
+  }
+
+  const newerWebUserMessageExists = existingMessages.some((message) =>
+    message.role === "user"
+    && (!message.channel || message.channel === "web")
+    && message.timestamp.getTime() > latestSettledWebAssistant.timestamp.getTime(),
+  );
+
+  if (newerWebUserMessageExists) {
+    return false;
+  }
+
+  return (
+    Math.abs(
+      latestSettledWebAssistant.timestamp.getTime() - candidate.timestamp.getTime(),
+    ) <= 30_000
+  );
+}
+
 function isTransientAssistantScratchpad(message: Message): boolean {
   if (message.role !== "assistant") {
     return false;
@@ -426,7 +476,8 @@ function mergePolledMessagesIntoTranscript(
   const uniqueMessages = polledMessages.filter(
     (message) =>
       !existingIds.has(message.id)
-      && !isLikelyDuplicatePolledUserMessage(existingMessages, message),
+      && !isLikelyDuplicatePolledUserMessage(existingMessages, message)
+      && !isLikelyDuplicatePolledAssistantMessage(existingMessages, message),
   );
 
   for (const message of uniqueMessages) {
