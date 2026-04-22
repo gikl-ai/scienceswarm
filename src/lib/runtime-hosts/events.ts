@@ -160,6 +160,10 @@ export class RuntimeEventStore {
       now: this.now(),
     });
     this.eventsBySession.set(event.sessionId, retention.events.map(cloneEvent));
+    this.seenEventIdsBySession.set(
+      event.sessionId,
+      new Set(retention.events.map((retainedEvent) => retainedEvent.id)),
+    );
 
     return {
       event: cloneEvent(event),
