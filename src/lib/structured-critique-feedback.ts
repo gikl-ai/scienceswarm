@@ -90,7 +90,9 @@ async function withLegacyImportLock<T>(
       try {
         return await run();
       } finally {
-        await handle.close();
+        const acquiredHandle = handle;
+        handle = null;
+        await acquiredHandle.close();
         await fs.rm(lockPath, { force: true });
       }
     } catch (err) {

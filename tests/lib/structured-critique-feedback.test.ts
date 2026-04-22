@@ -123,6 +123,18 @@ describe("getStructuredCritiqueFeedbackDir", () => {
     ]);
   });
 
+  it("preserves the original import error when migration fails under lock", async () => {
+    const root = await makeTempScienceSwarmDir();
+    const legacyRecord = makeFeedbackRecord("legacy-job", "finding-a");
+
+    await writeLegacyFeedback(root, [legacyRecord]);
+    await fs.mkdir(getStructuredCritiqueFeedbackPath(), { recursive: true });
+
+    await expect(readStructuredCritiqueFeedback()).rejects.toMatchObject({
+      code: "EISDIR",
+    });
+  });
+
   it("does not import legacy defaults when an explicit feedback directory is configured", async () => {
     const root = await makeTempScienceSwarmDir();
     process.env.STRUCTURED_CRITIQUE_FEEDBACK_DIR = path.join(
