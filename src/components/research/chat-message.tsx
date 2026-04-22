@@ -74,11 +74,50 @@ function sanitizeEmbedHeight(value: string | undefined, fallback: string): strin
   return `${clamped}${unit}`;
 }
 
+function getVideoMimeType(ext: string): string | undefined {
+  switch (ext) {
+    case "mp4":
+    case "m4v":
+      return "video/mp4";
+    case "webm":
+      return "video/webm";
+    case "mov":
+      return "video/quicktime";
+    default:
+      return undefined;
+  }
+}
+
+function getAudioMimeType(ext: string): string | undefined {
+  switch (ext) {
+    case "mp3":
+      return "audio/mpeg";
+    case "wav":
+      return "audio/wav";
+    case "ogg":
+      return "audio/ogg";
+    case "m4a":
+      return "audio/mp4";
+    default:
+      return undefined;
+  }
+}
+
+function findLastSavedHtmlFilename(value: string): string | undefined {
+  const matches = value.matchAll(/[`']([^`']+\.html?)[`']/g);
+  let fileName: string | undefined;
+  for (const match of matches) {
+    fileName = match[1];
+  }
+  return fileName;
+}
+
 // ── Render markdown-lite ───────────────────────────────────────
 
 function renderContent(content: string, projectId: string) {
   // Split on bold markers, MEDIA references, embed tags, and markdown images
-  return content.split(/(\*\*[^*]+\*\*|MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/g).map((part, i) => {
+  const parts = content.split(/(\*\*[^*]+\*\*|MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/g);
+  return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
         <strong key={i} className="font-semibold">
@@ -126,7 +165,7 @@ function renderContent(content: string, projectId: string) {
         return (
           <div key={i} className="my-2">
             <video controls className="max-w-full max-h-[50vh] rounded-lg border border-border bg-black">
-              <source src={src} />
+              <source src={src} type={getVideoMimeType(ext)} />
             </video>
             <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
           </div>
@@ -136,7 +175,7 @@ function renderContent(content: string, projectId: string) {
         return (
           <div key={i} className="my-2">
             <audio controls className="w-full">
-              <source src={src} />
+              <source src={src} type={getAudioMimeType(ext)} />
             </audio>
             <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
           </div>
@@ -152,10 +191,11 @@ function renderContent(content: string, projectId: string) {
         let embedUrl = urlMatch[1];
         // OpenClaw canvas/internal URLs need proxying through workspace API
         if (embedUrl.includes("__openclaw__") || embedUrl.includes("canvas/documents")) {
-          // Try extracting filename from Saved list, or from URL path
-          const savedMatch = content.match(/[`']([^`']+\.html?)[`']/);
+          // Only inspect the current embed's local text context so multiple
+          // embeds in one message do not all resolve to the first saved file.
+          const savedFileName = findLastSavedHtmlFilename(parts[i - 1] ?? "");
           const urlPathMatch = embedUrl.match(/documents\/([^/]+)/);
-          const fileName = savedMatch?.[1] ?? (urlPathMatch ? `${urlPathMatch[1]}.html` : "index.html");
+          const fileName = urlPathMatch ? `${urlPathMatch[1]}.html` : (savedFileName ?? "index.html");
           embedUrl = `/api/workspace?action=raw&file=${encodeURIComponent(fileName)}&projectId=${encodeURIComponent(projectId)}`;
         } else {
           // Strip every leading slash and re-add a single one so protocol-
