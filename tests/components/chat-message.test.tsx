@@ -335,6 +335,21 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("renders AVIF MEDIA references as inline image", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:figures/diagram.avif"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-21T10:00:15.000Z")}
+      />,
+    );
+
+    const image = screen.getByAltText("figures/diagram.avif");
+    expect(image.tagName).toBe("IMG");
+    expect(image.getAttribute("src")).toContain("file=figures%2Fdiagram.avif");
+  });
+
   it("maps absolute OpenClaw media paths to managed raw previews", () => {
     render(
       <ChatMessage
