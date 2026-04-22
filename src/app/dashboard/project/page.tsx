@@ -1210,7 +1210,6 @@ function ProjectPageContent() {
     sendMessage,
     isStreaming,
     error,
-    backend,
     crossChannelMessages,
     uploadedFiles,
     workspaceTree,
@@ -3455,9 +3454,7 @@ function ProjectPageContent() {
                       : "Critiquing..."
                   : isAutoAnalyzing
                     ? "Analyzing..."
-                    : backend === "agent"
-                      ? "Agent working..."
-                      : "Thinking..."}
+                    : "Thinking..."}
               </div>
             )}
             {latestPdfFile ? (

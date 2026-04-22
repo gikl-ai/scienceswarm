@@ -1,6 +1,34 @@
 #!/bin/bash
 set -e
 
+is_wsl() {
+  [ -n "${WSL_INTEROP:-}" ] || [ -n "${WSL_DISTRO_NAME:-}" ] || \
+    grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null
+}
+
+is_mounted_windows_path() {
+  case "${1:-}" in
+    /mnt/[A-Za-z]|/mnt/[A-Za-z]/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+warn_wsl_path() {
+  local label="$1"
+  local path_value="$2"
+  if ! is_wsl || [ -z "$path_value" ] || ! is_mounted_windows_path "$path_value"; then
+    return 0
+  fi
+  echo "WARNING: WSL detected and $label is on a mounted Windows drive:"
+  echo "  $path_value"
+  echo "  ScienceSwarm is faster when the repo and data live in the WSL Linux filesystem"
+  echo "  (for example ~/scienceswarm and ~/.scienceswarm) instead of /mnt/c/..."
+}
+
 pid_is_running() {
   local pid="$1"
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
@@ -169,6 +197,10 @@ RUN_ROOT="$DATA_ROOT/run"
 LAUNCHER_PID_FILE="$RUN_ROOT/launcher.pid"
 OPENHANDS_CONTAINER_FILE="$RUN_ROOT/openhands.cid"
 OPENCLAW_GATEWAY_PID_FILE="$(openclaw_gateway_pid_file)"
+
+warn_wsl_path "repo root" "$PWD"
+warn_wsl_path "SCIENCESWARM_DIR" "$DATA_ROOT"
+warn_wsl_path "BRAIN_ROOT" "${BRAIN_ROOT:-}"
 
 EXISTING_LAUNCHER_PID="$(read_launcher_pid || true)"
 if [ -n "$EXISTING_LAUNCHER_PID" ] && [ "$EXISTING_LAUNCHER_PID" != "$$" ]; then

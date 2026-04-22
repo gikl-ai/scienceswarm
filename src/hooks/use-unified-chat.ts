@@ -90,7 +90,7 @@ interface PolledOpenClawMessage {
   timestamp?: string;
 }
 
-export type Backend = "openclaw" | "agent" | "direct";
+export type Backend = "openclaw";
 export type ChatMode = "reasoning" | "openclaw-tools";
 
 interface StoredMessage {
@@ -273,23 +273,50 @@ function removeEmptyAssistantPlaceholder(messages: Message[], assistantId: strin
   return messages;
 }
 
+// Accepts legacy "agent"/"direct" values from persisted threads so old local
+// storage and server-side thread JSON replay correctly. All non-null legacy
+// values are collapsed to "openclaw" because the chat pipeline now routes
+// every turn through OpenClaw; delegation to OpenHands/Ollama happens inside
+// OpenClaw, not at the hook boundary.
 function normalizeBackend(value: unknown): Backend | null {
-  return value === "openclaw" || value === "agent" || value === "direct" ? value : null;
+  if (value === "openclaw" || value === "agent" || value === "direct") {
+    return "openclaw";
+  }
+  return null;
 }
 
 function normalizeChatMode(value: unknown): ChatMode | null {
   return value === "reasoning" || value === "openclaw-tools" ? value : null;
 }
 
+// Derives the restored ChatMode from the most recent persisted message that
+// recorded one. Necessary because the Backend union collapsed to a single
+// member ("openclaw") and can no longer encode reasoning vs tools mode.
+function deriveChatModeFromMessages(messages: Message[]): ChatMode | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const candidate = normalizeChatMode(messages[i]?.chatMode);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+// The server's X-Chat-Backend header can include diagnostic values
+// ("brain-setup", "slash-commands", "none") alongside "openclaw". Since the
+// hook's Backend union is now "openclaw" only, every server-reported value
+// that indicates a real chat response collapses to "openclaw". Non-chat
+// diagnostics return null so the hook preserves its existing backend.
 function mapResponseBackend(value: string | null): Backend | null {
-  if (value === "openclaw") {
+  if (
+    value === "openclaw"
+    || value === "openhands"
+    || value === "agent"
+    || value === "nanoclaw"
+    || value === "hermes"
+    || value === "direct"
+  ) {
     return "openclaw";
-  }
-  if (value === "openhands" || value === "agent" || value === "nanoclaw" || value === "hermes") {
-    return "agent";
-  }
-  if (value === "direct") {
-    return "direct";
   }
   return null;
 }
@@ -336,7 +363,9 @@ function inferConversationBackend(
   if (!conversationId) {
     return null;
   }
-  return conversationId.startsWith("web:") ? "openclaw" : null;
+  // Any legacy/unknown conversationId that the hook has recorded comes from an
+  // OpenClaw-routed turn (since that is now the only chat path).
+  return "openclaw";
 }
 
 function getScopedConversationId(
@@ -361,8 +390,8 @@ const MAX_KEEPALIVE_MESSAGES = 50;
 const WORKSPACE_TREE_REFRESH_MS = 15000;
 const WORKSPACE_WATCH_POLL_MS = 5000;
 const MAX_GENERATED_ARTIFACTS = 50;
-const LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES = 12;
-const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 12_000;
+const LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES = 8;
+const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 8_000;
 const SLASH_COMMAND_START_TIMEOUT_MS = 15_000;
 const SLASH_COMMAND_TIMEOUT_MESSAGE =
   "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.";
@@ -885,8 +914,10 @@ function shouldAttachActiveFileContext(
   );
 }
 
-function isLocalDirectContext(context: Pick<SendContext, "backend" | "chatMode">): boolean {
-  return context.backend === "direct" && context.chatMode !== "openclaw-tools";
+function isLocalDirectContext(_context: Pick<SendContext, "backend" | "chatMode">): boolean {
+  // The local-direct fallback has been removed. Every chat turn is routed
+  // through OpenClaw, which owns any internal delegation to local models.
+  return false;
 }
 
 function trimLocalChatHistory(
@@ -894,11 +925,23 @@ function trimLocalChatHistory(
 ): Array<{ role: Message["role"]; content: string }> {
   const selected: Array<{ role: Message["role"]; content: string }> = [];
   let totalChars = 0;
+  let retainedAssistantTurns = 0;
 
   for (let index = history.length - 1; index >= 0; index -= 1) {
     const entry = history[index];
     const content = entry?.content ?? "";
     if (!content) {
+      continue;
+    }
+
+    // Keep the most recent assistant turn for short follow-up questions like
+    // "why?" or "compare that to the last answer", while still trimming older
+    // assistant prose that tends to re-impose stale agendas in local mode.
+    if (entry.role === "assistant") {
+      if (retainedAssistantTurns >= 1) {
+        continue;
+      }
+    } else if (entry.role !== "user") {
       continue;
     }
 
@@ -912,6 +955,9 @@ function trimLocalChatHistory(
 
     selected.push(entry);
     totalChars = nextChars;
+    if (entry.role === "assistant") {
+      retainedAssistantTurns += 1;
+    }
   }
 
   return selected.reverse();
@@ -1103,7 +1149,7 @@ export function useUnifiedChat(
   const [messages, setMessages] = useState<Message[]>(() => buildInitialMessages(projectName));
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [backend, setBackend] = useState<Backend>("direct");
+  const [backend, setBackend] = useState<Backend>("openclaw");
   const [chatMode, setChatMode] = useState<ChatMode>("reasoning");
   const [crossChannelMessages, setCrossChannelMessages] = useState<Message[]>(
     []
@@ -1115,6 +1161,14 @@ export function useUnifiedChat(
   const [conversationBackend, setConversationBackend] = useState<Backend | null>(null);
   const [openClawConnected, setOpenClawConnected] = useState<boolean | null>(null);
   const [artifactProvenance, setArtifactProvenance] = useState<ArtifactProvenanceEntry[]>([]);
+  // Tracks whether hydration from localStorage/server has committed. The
+  // cross-channel poll effect uses this to avoid registering a setInterval
+  // whose closure captures a stale `scopedConversationId = null` on the
+  // very first render. Before the Backend-union was narrowed to "openclaw"
+  // the initial backend was "direct", which naturally deferred polling
+  // until the health probe flipped it to "openclaw"; that side-effect is
+  // what we preserve here.
+  const [hasHydratedChat, setHasHydratedChat] = useState(false);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastPollRef = useRef<string>(new Date().toISOString());
@@ -1181,13 +1235,15 @@ export function useUnifiedChat(
 
   useEffect(() => {
     const storageKey = getChatStorageKey(projectName);
+    setHasHydratedChat(false);
     const restored = loadStoredChat(projectName);
     projectVersionRef.current += 1;
     hydratedChatKeyRef.current = null;
     pendingHydrationKeyRef.current = storageKey;
     const hydratedMessages = materializeMessages(projectName, restored);
-    const restoredBackend = restored.conversationBackend === "openclaw" ? "openclaw" : "direct";
-    const restoredChatMode = restored.conversationBackend === "openclaw" ? "openclaw-tools" : "reasoning";
+    const restoredBackend: Backend = "openclaw";
+    const restoredChatMode: ChatMode =
+      deriveChatModeFromMessages(hydratedMessages) ?? "reasoning";
     lastPollRef.current = getPollCursorSeed(hydratedMessages);
     setIsStreaming(false);
     setError(null);
@@ -1203,6 +1259,7 @@ export function useUnifiedChat(
     setCrossChannelMessages(
       hydratedMessages.filter((message) => message.channel && message.channel !== "web"),
     );
+    setHasHydratedChat(true);
 
     if (safeSlugOrNull(projectName)) {
       void (async () => {
@@ -1225,8 +1282,10 @@ export function useUnifiedChat(
         // known conversationBackend. Otherwise we'd clobber a backend that the
         // auto-probe effect seeded in parallel (e.g. connected OpenClaw).
         if (preferredState.conversationBackend !== null) {
-          const preferredBackend = preferredState.conversationBackend === "openclaw" ? "openclaw" : "direct";
-          const preferredChatMode = preferredState.conversationBackend === "openclaw" ? "openclaw-tools" : "reasoning";
+          const preferredBackend: Backend = "openclaw";
+          const preferredChatMode: ChatMode =
+            deriveChatModeFromMessages(preferredMessages)
+            ?? liveChatModeRef.current;
           setBackend(preferredBackend);
           setChatMode(preferredChatMode);
           liveBackendRef.current = preferredBackend;
@@ -1376,6 +1435,21 @@ export function useUnifiedChat(
       return;
     }
 
+    // Previously the initial backend was "direct", so this effect skipped
+    // its first pass until the health probe flipped the backend to
+    // "openclaw". Now that "openclaw" is the only Backend value, the effect
+    // would otherwise fire on the very first render — before the hydration
+    // effect sets conversationId — and register a setInterval whose closure
+    // captures a null scopedConversationId. Gate registration on hydration
+    // having committed so the captured closure sees the restored ids.
+    if (!hasHydratedChat) {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return;
+    }
+
     pollTimerRef.current = setInterval(async () => {
       // Only poll when tab is visible
       if (document.hidden) return;
@@ -1487,7 +1561,7 @@ export function useUnifiedChat(
         pollTimerRef.current = null;
       }
     };
-  }, [backend, projectName, recordGeneratedArtifacts, scopedConversationId, syncWorkspaceTreeAfterChat]);
+  }, [backend, hasHydratedChat, projectName, recordGeneratedArtifacts, scopedConversationId, syncWorkspaceTreeAfterChat]);
 
   const isSendContextCurrent = useCallback(
     (context: SendContext): boolean =>
@@ -1846,25 +1920,16 @@ export function useUnifiedChat(
             : null;
         const agentType = typeof agentRecord?.type === "string" ? agentRecord.type : null;
         const agentOk = agentRecord?.status === "connected";
-        const openClawSelected = agentType === "openclaw";
-        const openhandsOk = data.openhands === "connected";
-        const localSelected = data.llmProvider === "local";
-        localProviderActiveRef.current = localSelected;
-
-        // Also check legacy fields for backward compat with older servers
+        // Legacy-field fallback for older servers that don't return the
+        // `agent` object yet.
         const legacyOpenClawOk = data.openclaw === "connected";
-        const legacyAgentOk = legacyOpenClawOk || data.nanoclaw === "connected";
-        const openClawReady = openClawSelected || legacyOpenClawOk
-          ? agentOk || legacyOpenClawOk
-          : false;
-        const anyAgentConnected = agentOk || legacyAgentOk;
-        const initialBackend: Backend = localSelected
-          ? "direct"
-          : openClawReady || anyAgentConnected
-            ? "openclaw"
-            : openhandsOk
-              ? "agent"
-              : "direct";
+        const openClawReady = (agentType === "openclaw" && agentOk) || legacyOpenClawOk;
+        localProviderActiveRef.current = false;
+
+        // Chat always routes through OpenClaw. OpenClaw itself may delegate
+        // to OpenHands or a local model internally, but that is not the
+        // hook's concern — the hook only cares whether OpenClaw is reachable.
+        const initialBackend: Backend = "openclaw";
 
         // Only seed the active backend on the very first probe. After
         // that we preserve whichever path the current thread last used.
@@ -1961,15 +2026,11 @@ export function useUnifiedChat(
       const requestContent = content.trim();
       if (!requestContent) return Promise.resolve();
 
-      if (chatMode === "openclaw-tools" && openClawConnected === false) {
-        setError(
-          "OpenClaw tools mode is selected but OpenClaw is not ready. Start it in Settings and try again."
-        );
+      if (openClawConnected === false) {
+        setError("OpenClaw is not reachable. Start it in Settings.");
         return Promise.resolve();
       }
-      const requestedBackend: Backend = chatMode === "openclaw-tools"
-        ? "openclaw"
-        : liveBackendRef.current;
+      const requestedBackend: Backend = "openclaw";
 
       const userMsg: Message = {
         id: makeId(),

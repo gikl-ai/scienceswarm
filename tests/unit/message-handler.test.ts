@@ -1,9 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoist the mock function so it's available during module loading
-const { mockCreate, mockInjectBrainContext, mockIsLocalProviderConfigured, mockCompleteLocal, mockStreamLocal } = vi.hoisted(() => ({
+const {
+  mockCreate,
+  mockBuildScienceSwarmPromptContextText,
+  mockBuildScienceSwarmSystemPrompt,
+  mockIsLocalProviderConfigured,
+  mockCompleteLocal,
+  mockStreamLocal,
+} = vi.hoisted(() => ({
   mockCreate: vi.fn(),
-  mockInjectBrainContext: vi.fn(async (prompt: string) => prompt),
+  mockBuildScienceSwarmPromptContextText: vi.fn<() => Promise<string | null>>(async () => null),
+  mockBuildScienceSwarmSystemPrompt: vi.fn(() => "You are ScienceSwarm."),
   mockIsLocalProviderConfigured: vi.fn(() => false),
   mockCompleteLocal: vi.fn(),
   mockStreamLocal: vi.fn(),
@@ -19,8 +27,9 @@ vi.mock("openai", () => ({
   },
 }));
 
-vi.mock("@/brain/chat-inject", () => ({
-  injectBrainContext: mockInjectBrainContext,
+vi.mock("@/lib/scienceswarm-prompt-config", () => ({
+  buildScienceSwarmPromptContextText: mockBuildScienceSwarmPromptContextText,
+  buildScienceSwarmSystemPrompt: mockBuildScienceSwarmSystemPrompt,
 }));
 
 vi.mock("@/lib/local-llm", () => ({
@@ -35,8 +44,10 @@ describe("message-handler", () => {
   beforeEach(() => {
     vi.stubEnv("OPENAI_API_KEY", "test-key");
     mockCreate.mockReset();
-    mockInjectBrainContext.mockReset();
-    mockInjectBrainContext.mockImplementation(async (prompt: string) => prompt);
+    mockBuildScienceSwarmPromptContextText.mockReset();
+    mockBuildScienceSwarmPromptContextText.mockResolvedValue(null);
+    mockBuildScienceSwarmSystemPrompt.mockReset();
+    mockBuildScienceSwarmSystemPrompt.mockReturnValue("You are ScienceSwarm.");
     mockIsLocalProviderConfigured.mockReset();
     mockIsLocalProviderConfigured.mockReturnValue(false);
     mockCompleteLocal.mockReset();
@@ -94,7 +105,6 @@ describe("message-handler", () => {
 
     it("throws before building messages when strict local-only mode is enabled without a local provider", async () => {
       vi.stubEnv("SCIENCESWARM_STRICT_LOCAL_ONLY", "1");
-      mockInjectBrainContext.mockRejectedValueOnce(new Error("should not run"));
 
       await expect(
         completeChat({
@@ -102,7 +112,6 @@ describe("message-handler", () => {
           channel: "web",
         }),
       ).rejects.toThrow("Strict local-only mode is enabled");
-      expect(mockInjectBrainContext).not.toHaveBeenCalled();
       expect(mockCreate).not.toHaveBeenCalled();
     });
   });
@@ -189,17 +198,11 @@ describe("message-handler", () => {
       ).toBeLessThan(fullText.indexOf("I found 12 imported PDFs."));
       expect(fullText).toContain("[DONE]");
       expect(mockCreate).not.toHaveBeenCalled();
-      expect(mockInjectBrainContext).toHaveBeenCalledWith(
-        expect.any(String),
-        "How many PDFs are imported?",
-        undefined,
-        { disableBackgroundEntityDetection: true },
-      );
+      expect(mockBuildScienceSwarmSystemPrompt).toHaveBeenCalled();
     });
 
     it("throws before building messages for streaming callers when strict local-only mode is enabled without a local provider", async () => {
       vi.stubEnv("SCIENCESWARM_STRICT_LOCAL_ONLY", "1");
-      mockInjectBrainContext.mockRejectedValueOnce(new Error("should not run"));
 
       await expect(
         streamChat({
@@ -207,7 +210,6 @@ describe("message-handler", () => {
           channel: "web",
         }),
       ).rejects.toThrow("Strict local-only mode is enabled");
-      expect(mockInjectBrainContext).not.toHaveBeenCalled();
       expect(mockCreate).not.toHaveBeenCalled();
     });
   });
@@ -230,23 +232,31 @@ describe("message-handler", () => {
       expect(call.messages[0].content).toContain("ScienceSwarm");
     });
 
-    it("passes projectId into brain context injection", async () => {
+    it("loads SCIENCESWARM prompt context with the projectId", async () => {
       mockCreate.mockResolvedValueOnce({
         choices: [{ message: { content: "response" } }],
       });
+      mockBuildScienceSwarmPromptContextText.mockResolvedValueOnce(
+        "Project guidance loaded from /tmp/SCIENCESWARM.md.",
+      );
 
       await completeChat({
         messages: [{ role: "user", content: "hi" }],
         channel: "web",
         projectId: "alpha-project",
+        backend: "direct",
       });
 
-      expect(mockInjectBrainContext).toHaveBeenCalledWith(
-        expect.any(String),
-        "hi",
-        "alpha-project",
-        { disableBackgroundEntityDetection: false },
-      );
+      expect(mockBuildScienceSwarmPromptContextText).toHaveBeenCalledWith({
+        projectId: "alpha-project",
+        backend: "direct",
+      });
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.messages[1]).toEqual({
+        role: "user",
+        content: "Project guidance loaded from /tmp/SCIENCESWARM.md.",
+      });
     });
 
     it("preserves caller-provided system messages without role casts", async () => {
@@ -277,7 +287,7 @@ describe("message-handler", () => {
   // ── File context injection ─────────────────────────────────────
 
   describe("file context", () => {
-    it("adds file context system message when files provided", async () => {
+    it("adds file context as a user message when files provided", async () => {
       mockCreate.mockResolvedValueOnce({
         choices: [{ message: { content: "analysis" } }],
       });
@@ -289,12 +299,19 @@ describe("message-handler", () => {
       });
 
       const call = mockCreate.mock.calls[0][0];
-      const systemMessages = call.messages.filter(
-        (m: { role: string }) => m.role === "system",
+      const userMessages = call.messages.filter(
+        (m: { role: string }) => m.role === "user",
       );
-      expect(systemMessages.length).toBe(2);
-      expect(systemMessages[1].content).toContain("paper.pdf");
-      expect(systemMessages[1].content).toContain("2 MB");
+      expect(userMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            content: expect.stringContaining("paper.pdf"),
+          }),
+          expect.objectContaining({
+            content: expect.stringContaining("2 MB"),
+          }),
+        ]),
+      );
     });
 
     it("does not add file context when no files", async () => {

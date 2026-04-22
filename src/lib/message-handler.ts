@@ -1,6 +1,10 @@
-import { injectBrainContext } from "@/brain/chat-inject";
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
 import { getOpenAIClient, getOpenAIModel } from "@/lib/openai-client";
+import {
+  buildScienceSwarmPromptContextText,
+  buildScienceSwarmSystemPrompt,
+  type PromptBackend,
+} from "@/lib/scienceswarm-prompt-config";
 import {
   isLocalProviderConfigured,
   completeLocal,
@@ -8,70 +12,52 @@ import {
 } from "@/lib/local-llm";
 import type OpenAI from "openai";
 
-const SYSTEM_PROMPT = `You are ScienceSwarm, an AI research assistant for scientific projects. You help researchers build, run, and publish their work end to end.
-
-Your research pipeline:
-📄 Literature Review → 🔬 Hypothesis → 🧪 Experiments → 📊 Analysis → ✏️ Writing → 📋 Review → 🚀 Submit
-
-Your capabilities:
-- **Paper analysis**: Read uploaded papers deeply. Quote specific theorems, definitions, equations. Identify gaps, open problems, and connections to the user's work.
-- **Literature review**: Compare papers, find common themes, identify contradictions, suggest missing references.
-- **Experiment design**: Help design experiments, suggest parameters, predict outcomes, analyze results.
-- **Data analysis**: Interpret statistical results, suggest visualizations, identify patterns and anomalies.
-- **Paper writing**: Help draft sections, improve clarity, suggest structure, check mathematical notation.
-- **Code review**: Review research code for correctness, efficiency, reproducibility.
-- **Proof assistance**: Help develop mathematical proofs, check logical steps, suggest proof strategies.
-
-Your personality:
-- You are a sharp research collaborator, not a generic assistant.
-- Be specific: cite page numbers, theorem numbers, equation numbers from uploaded papers.
-- When analyzing results, give concrete statistical interpretations, not vague summaries.
-- Ask ONE question at a time when clarifying.
-- When the user uploads a paper, read it thoroughly and summarize: key contributions, methodology, results, limitations, and relevance to the current project.
-- When reviewing code, focus on scientific correctness (wrong formula, off-by-one in indices, numerical stability) over style.
-- When helping write, match academic tone and be precise with technical language.
-
-Format: Use **bold** for key findings. Use bullet points for structured analysis. Include specific references (Theorem 3.2, Equation 7, Figure 4) when discussing papers.`;
-
 export interface ChatRequest {
   messages: Array<{ role: string; content: string }>;
   files?: Array<{ name: string; size: string }>;
   channel: "web" | "mobile" | "telegram" | "slack";
   maxTokens?: number;
   projectId?: string | null;
+  backend?: PromptBackend;
 }
 
 async function buildMessages(
   req: ChatRequest
 ): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
-  const lastUserMessage =
-    [...req.messages]
-      .reverse()
-      .find((m) => m.role === "user")?.content ?? "";
   const system: OpenAI.Chat.ChatCompletionMessageParam[] = [
     {
       role: "system",
-      content: await injectBrainContext(
-        SYSTEM_PROMPT,
-        lastUserMessage,
-        req.projectId ?? undefined,
-        { disableBackgroundEntityDetection: isLocalProviderConfigured() },
-      ),
+      content: buildScienceSwarmSystemPrompt(),
     },
   ];
+  const leadingUserContext: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+  const projectPromptContext = await buildScienceSwarmPromptContextText({
+    projectId: req.projectId,
+    backend: req.backend ?? "none",
+  });
+
+  if (projectPromptContext) {
+    leadingUserContext.push({
+      role: "user",
+      content: projectPromptContext,
+    });
+  }
 
   if (req.files && req.files.length > 0) {
-    const fileNames = req.files
-      .map((f) => `${f.name} (${f.size})`)
-      .join(", ");
-    system.push({
-      role: "system",
-      content: `The user has uploaded files: ${fileNames}. The full file contents have been provided in the conversation. Analyze them deeply when asked. Quote specific sections, identify gaps, reference page numbers or sections.`,
+    leadingUserContext.push({
+      role: "user",
+      content: [
+        "The user explicitly attached these files for this turn:",
+        ...req.files.map((file) => `- ${file.name} (${file.size})`),
+        "",
+        "Only rely on actual file excerpts or file contents if they are provided elsewhere in the conversation.",
+      ].join("\n"),
     });
   }
 
   return [
     ...system,
+    ...leadingUserContext,
     ...req.messages.map((m): OpenAI.Chat.ChatCompletionMessageParam => {
       switch (m.role) {
         case "system":

@@ -9,6 +9,10 @@ const MUTABLE_RUNTIME_KEYS = [
   "LLM_PROVIDER",
   "LLM_MODEL",
   "OLLAMA_MODEL",
+  "AGENT_BACKEND",
+  "AGENT_URL",
+  "AGENT_API_KEY",
+  "OPENCLAW_INTERNAL_API_KEY",
 ] as const;
 
 type MutableRuntimeKey = (typeof MUTABLE_RUNTIME_KEYS)[number];
@@ -23,6 +27,10 @@ export interface SavedLlmRuntimeEnv {
   llmModel: string | null;
   ollamaModel: string | null;
   openaiApiKey: string | null;
+  agentBackend: string | null;
+  agentUrl: string | null;
+  agentApiKey: string | null;
+  openclawInternalApiKey: string | null;
 }
 
 function parseMutableRuntimeValues(envFileContents: string | null): MutableRuntimeValues {
@@ -72,6 +80,13 @@ export function resolveSavedLlmRuntimeEnv(
     llmModel: coalesceTrimmed(savedValues.LLM_MODEL, processEnv.LLM_MODEL),
     ollamaModel: coalesceTrimmed(savedValues.OLLAMA_MODEL, processEnv.OLLAMA_MODEL),
     openaiApiKey: coalesceTrimmed(savedValues.OPENAI_API_KEY, processEnv.OPENAI_API_KEY),
+    agentBackend: coalesceTrimmed(savedValues.AGENT_BACKEND, processEnv.AGENT_BACKEND),
+    agentUrl: coalesceTrimmed(savedValues.AGENT_URL, processEnv.AGENT_URL),
+    agentApiKey: coalesceTrimmed(savedValues.AGENT_API_KEY, processEnv.AGENT_API_KEY),
+    openclawInternalApiKey: coalesceTrimmed(
+      savedValues.OPENCLAW_INTERNAL_API_KEY,
+      processEnv.OPENCLAW_INTERNAL_API_KEY,
+    ),
   };
 }
 
