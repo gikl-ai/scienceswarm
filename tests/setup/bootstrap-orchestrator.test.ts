@@ -399,7 +399,7 @@ describe("runBootstrap finalize ready flags", () => {
     expect(contents).toMatch(/^OLLAMA_API_KEY=ollama-local$/m);
   });
 
-  it("writes LLM_PROVIDER=openai when a pre-seeded OPENAI_API_KEY is present", async () => {
+  it("still lands in local mode when Ollama succeeds even if OPENAI_API_KEY is already present", async () => {
     await fs.writeFile(
       path.join(repoRoot, ".env"),
       "OPENAI_API_KEY=sk-test-1234567890abcdef\n",
@@ -413,10 +413,10 @@ describe("runBootstrap finalize ready flags", () => {
       void _;
     }
     const contents = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
-    expect(contents).toMatch(/^LLM_PROVIDER=openai$/m);
-    // Must NOT flip to local mode when the user has a key.
-    expect(contents).not.toMatch(/^LLM_PROVIDER=local$/m);
-    expect(contents).not.toMatch(/^OLLAMA_MODEL=gemma4:latest$/m);
+    expect(contents).toMatch(/^OPENAI_API_KEY=sk-test-1234567890abcdef$/m);
+    expect(contents).toMatch(/^LLM_PROVIDER=local$/m);
+    expect(contents).toMatch(/^OLLAMA_MODEL=gemma4:latest$/m);
+    expect(contents).toMatch(/^OLLAMA_API_KEY=ollama-local$/m);
   });
 
   it("preserves a pre-seeded LLM_PROVIDER choice instead of overwriting it", async () => {
@@ -437,6 +437,25 @@ describe("runBootstrap finalize ready flags", () => {
     expect(contents).not.toMatch(/^LLM_PROVIDER=local$/m);
     expect(contents).not.toMatch(/^OLLAMA_MODEL=gemma4:latest$/m);
     expect(contents).not.toMatch(/^OLLAMA_API_KEY=/m);
+  });
+
+  it("falls back to LLM_PROVIDER=openai when Ollama did not succeed but OPENAI_API_KEY is present", async () => {
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      "OPENAI_API_KEY=sk-test-1234567890abcdef\n",
+      "utf8",
+    );
+    const tasks: InstallTask[] = [
+      fakeTask("openclaw", [{ status: "succeeded" }]),
+      fakeTask("ollama-gemma", [{ status: "failed", error: "ollama unavailable" }]),
+    ];
+    for await (const _ of runBootstrap({ handle: "h", repoRoot }, { tasks })) {
+      void _;
+    }
+    const contents = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
+    expect(contents).toMatch(/^LLM_PROVIDER=openai$/m);
+    expect(contents).not.toMatch(/^LLM_PROVIDER=local$/m);
+    expect(contents).not.toMatch(/^OLLAMA_MODEL=gemma4:latest$/m);
   });
 
   it("backfills the OLLAMA_API_KEY sentinel when local provider is already configured", async () => {
