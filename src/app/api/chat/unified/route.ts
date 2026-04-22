@@ -90,6 +90,7 @@ import {
   rewriteProjectRootMentions,
   writeBackOpenClawGeneratedFiles,
 } from "@/lib/openclaw/gbrain-writeback";
+import { formatOpenClawContextOverflowMessage } from "@/lib/openclaw/error-messages";
 import { sanitizeOpenClawUserVisibleResponse } from "@/lib/openclaw/response-sanitizer";
 import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
 import { listScienceSwarmOpenClawSlashCommandSkills } from "@/lib/openclaw/skill-registry";
@@ -2690,11 +2691,7 @@ function buildOpenClawVisibleFailureResponse(value: unknown): string | null {
   }
 
   if (lower.includes("context overflow") || lower.includes("prompt too large")) {
-    return [
-      "ScienceSwarm could not complete this request because the research agent context became too large for the current turn.",
-      "Your uploaded files and existing artifacts are still preserved in the workspace.",
-      "Start a fresh project chat or retry after removing extra attached context.",
-    ].join("\n\n");
+    return formatOpenClawContextOverflowMessage();
   }
 
   if (/empty response/i.test(detail)) {
@@ -7910,35 +7907,6 @@ export async function handleUnifiedChatPost(
       );
     }
 
-    const preparedRuntimeTurn = runtimeRouter.prepareTurn({
-      hostId: "openclaw",
-      projectPolicy: "local-only",
-      projectId: validatedProjectId,
-      conversationId: typeof conversationId === "string" ? conversationId : null,
-      mode: "chat",
-      prompt: userIntentMessage,
-      inputFileRefs: mergedFiles
-        .map((file) => file.workspacePath ?? file.brainSlug ?? file.name ?? "")
-        .filter((value) => value.length > 0),
-      dataIncluded: buildOpenClawRuntimeDataIncluded(
-        userIntentMessage,
-        mergedFiles,
-      ),
-      approvalState: "not-required",
-    });
-    runtimeTurnSessionId = preparedRuntimeTurn.session.id;
-    const completeRuntimeTurn = (response: Response): Response => {
-      markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "completed");
-      return response;
-    };
-    const failRuntimeTurn = (
-      response: Response,
-      errorCode = "RUNTIME_TRANSPORT_ERROR",
-    ): Response => {
-      markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "failed", errorCode);
-      return response;
-    };
-
     {
       // Preserve the `selectedAgent.type === "openclaw"` block body without
       // reindenting every line below. The outer precondition above has
@@ -7952,6 +7920,35 @@ export async function handleUnifiedChatPost(
       if (privacyError) {
         return privacyError;
       }
+
+      const preparedRuntimeTurn = runtimeRouter.prepareTurn({
+        hostId: "openclaw",
+        projectPolicy: "local-only",
+        projectId: validatedProjectId,
+        conversationId: typeof conversationId === "string" ? conversationId : null,
+        mode: "chat",
+        prompt: userIntentMessage,
+        inputFileRefs: mergedFiles
+          .map((file) => file.workspacePath ?? file.brainSlug ?? file.name ?? "")
+          .filter((value) => value.length > 0),
+        dataIncluded: buildOpenClawRuntimeDataIncluded(
+          userIntentMessage,
+          mergedFiles,
+        ),
+        approvalState: "not-required",
+      });
+      runtimeTurnSessionId = preparedRuntimeTurn.session.id;
+      const completeRuntimeTurn = (response: Response): Response => {
+        markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "completed");
+        return response;
+      };
+      const failRuntimeTurn = (
+        response: Response,
+        errorCode = "RUNTIME_TRANSPORT_ERROR",
+      ): Response => {
+        markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "failed", errorCode);
+        return response;
+      };
 
       const { sendAgentMessage: sendToOpenClaw } =
         await import("@/lib/openclaw");

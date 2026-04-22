@@ -423,6 +423,7 @@ export async function POST(request: Request): Promise<Response> {
   let openClawModelSync: Awaited<
     ReturnType<typeof syncOpenClawLocalModelAfterSetup>
   > = null;
+  let nextDocForOpenClawSync: EnvDocument | null = null;
 
   try {
     const doc = await loadEnvDocument(repoRoot);
@@ -430,10 +431,7 @@ export async function POST(request: Request): Promise<Response> {
     const nextDoc = mergeEnvValues(doc, updates);
     const serialized = serializeEnvDocument(nextDoc);
     await writeEnvFileAtomic(filePath, serialized);
-    openClawModelSync = await syncOpenClawLocalModelAfterSetup(
-      parsed.body,
-      nextDoc,
-    );
+    nextDocForOpenClawSync = nextDoc;
   } catch (err) {
     // Log the specific error server-side for operator debugging, but
     // never echo raw exception text back to the client — Node I/O
@@ -448,6 +446,13 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(
       { error: "Failed to write .env" },
       { status: 500 },
+    );
+  }
+
+  if (nextDocForOpenClawSync) {
+    openClawModelSync = await syncOpenClawLocalModelAfterSetup(
+      parsed.body,
+      nextDocForOpenClawSync,
     );
   }
 
