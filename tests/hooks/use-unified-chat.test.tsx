@@ -124,6 +124,35 @@ function ChatHarness({ projectName }: { projectName: string }) {
   );
 }
 
+function NavigateAwayOnAppendHarness({
+  projectName,
+  onNavigateAway,
+}: {
+  projectName: string;
+  onNavigateAway: () => void;
+}) {
+  const { setMessages } = useUnifiedChat(projectName);
+
+  return (
+    <button
+      onClick={() => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: "instant-assistant",
+            role: "assistant",
+            content: "Instant reply before navigation",
+            timestamp: new Date("2026-04-22T10:30:00.000Z"),
+          },
+        ]);
+        queueMicrotask(onNavigateAway);
+      }}
+    >
+      Append and leave
+    </button>
+  );
+}
+
 function createSseResponse(events: unknown[], backend = "openclaw"): Response {
   const encoder = new TextEncoder();
   return new Response(new ReadableStream({
@@ -1683,6 +1712,93 @@ describe("useUnifiedChat persistence", () => {
       url === "/api/chat/thread" && (init as RequestInit | undefined)?.keepalive === true,
     );
     expect(keepaliveCall).toBeTruthy();
+  });
+
+  it("keeps the latest chat message when navigation unmounts the hook in the same interaction", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: "conv-alpha",
+        messages: [
+          {
+            id: "m1",
+            role: "user",
+            content: "remember me",
+            timestamp: "2026-04-11T08:00:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          openclaw: "connected",
+          nanoclaw: "connected",
+          openhands: "disconnected",
+        });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    function Wrapper() {
+      const [mounted, setMounted] = useState(true);
+      return mounted ? (
+        <NavigateAwayOnAppendHarness
+          projectName="alpha-project"
+          onNavigateAway={() => setMounted(false)}
+        />
+      ) : (
+        <div>navigated away</div>
+      );
+    }
+
+    render(<Wrapper />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Append and leave" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("navigated away")).toBeInTheDocument();
+    });
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem("scienceswarm.chat.alpha-project") || "null",
+    ) as {
+      messages?: Array<{ role?: string; content?: string }>;
+    } | null;
+
+    expect(persisted?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "assistant",
+          content: "Instant reply before navigation",
+        }),
+      ]),
+    );
   });
 
   it("keeps conversations isolated per project", async () => {
