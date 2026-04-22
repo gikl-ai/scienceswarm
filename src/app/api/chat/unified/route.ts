@@ -141,8 +141,6 @@ const OPENCLAW_HISTORY_CONTEXT_MAX_MESSAGES = 6;
 const OPENCLAW_HISTORY_CONTEXT_MAX_CHARS = 12_000;
 const OPENCLAW_HISTORY_CONTEXT_MAX_CHARS_PER_MESSAGE = 3_500;
 const OPENCLAW_ARTIFACT_TASK_TIMEOUT_MS = 180_000;
-const INSTANT_COURTESY_RESPONSE_RE =
-  /^(?:hi|hi there|hey|hey there|thanks|thank you)[!.?]*$/i;
 const AUTO_PROJECT_CONTEXT_HINT_RE =
   /\b(imported|uploaded|latest)\b[\s\S]{0,80}\b(paper|note|notes|file|files|material|materials)\b/i;
 const AUTO_PROJECT_CONTEXT_EXTENSIONS = new Set([
@@ -262,33 +260,40 @@ function normalizeChatMode(value: unknown): ChatMode {
   return value === "openclaw-tools" ? "openclaw-tools" : "reasoning";
 }
 
-function buildInstantCourtesyResponse(
-  message: string,
-  projectId: string | null,
-): string | null {
-  const trimmed = message.trim();
-  if (trimmed.length === 0 || !INSTANT_COURTESY_RESPONSE_RE.test(trimmed)) {
-    return null;
-  }
-
-  const normalized = trimmed.toLowerCase().replace(/[!.?]+$/g, "");
-  const isThanks =
-    normalized === "thanks" || normalized === "thank you";
-  if (isThanks) {
-    return projectId
-      ? `You're welcome. What would you like to do next in **${projectId}**?`
-      : "You're welcome. What would you like to do next?";
-  }
-
-  return projectId
-    ? `Hi. What would you like to work on in **${projectId}**?`
-    : "Hi. What would you like to work on?";
-}
-
 function normalizeRequestedBackend(value: unknown): RequestedBackend | null {
   return value === "openclaw" || value === "agent" || value === "direct"
     ? value
     : null;
+}
+
+function shouldPreMaterializeProjectWorkspaceForTurn(params: {
+  projectId: string | null;
+  message: string;
+  chatMode: ChatMode;
+  files: UploadedFileDescriptor[];
+  activeFile: { path: string; content: string } | null;
+}): boolean {
+  if (!params.projectId) {
+    return false;
+  }
+
+  if (params.files.length > 0 || params.activeFile !== null) {
+    return true;
+  }
+
+  const trimmedMessage = params.message.trim();
+  if (trimmedMessage.length === 0) {
+    return false;
+  }
+
+  return (
+    extractWorkspaceReferenceCandidates(trimmedMessage).length > 0 ||
+    shouldImplicitlyAttachProjectFiles(trimmedMessage) ||
+    shouldForceOpenClawToolExecution(trimmedMessage) ||
+    isRevisionWorkflowRequest(trimmedMessage) ||
+    isPlanChangeRequest(trimmedMessage) ||
+    isRevisionRunRequest(trimmedMessage)
+  );
 }
 
 async function loadOpenClawSlashCommands() {
@@ -1849,7 +1854,7 @@ function buildOpenClawMessage(
   const isClarificationRequest = isExplanatoryClarificationRequest(ruleMessage);
   const guidance = options.forceToolExecution && !isClarificationRequest
     ? `Execute all steps using your tools when real work is required. Prefer canonical gbrain tools such as brain_capture for task/note/decision/hypothesis page creation and brain_project_organize or brain_import_registry for read-only project-state summaries. Use exec/read/write only for ordinary workspace files outside .brain. Use ABSOLUTE paths only when a workspace file path is actually required. For Python, use: ${process.env.PYTHON_PATH || detectPythonPath() || "python3"}. Do not describe steps — do them. Continue until fully complete.`
-    : "Answer the user's latest request directly using the visible project context. Do not create, edit, run, or export files unless the user's latest request explicitly asks for a workspace change or generated artifact. Ignore project brief next-move suggestions unless the user explicitly asks you to act on them in this turn.";
+    : "Answer the user's latest request directly using the visible project context. Keep ordinary conversational replies brief; for greetings, acknowledgements, or short status questions, answer in 1-2 sentences and do not volunteer workspace actions unless asked. Do not create, edit, run, or export files unless the user's latest request explicitly asks for a workspace change or generated artifact. Ignore project brief next-move suggestions unless the user explicitly asks you to act on them in this turn.";
 
   return [...contextParts, "", message, "", guidance].join("\n");
 }
@@ -6288,11 +6293,16 @@ async function importOpenClawOutputsFromMessages(params: {
 async function getConfiguredAgentRuntimeStatus(
   agentConfig: ReturnType<typeof resolveAgentConfig>,
   strictLocalOnly: boolean,
+  options: { preferFastOpenClawGatewayProbe?: boolean } = {},
 ): Promise<AgentRuntimeStatus> {
   if (agentConfig?.type === "openclaw") {
     try {
-      const { healthCheck } = await import("@/lib/openclaw");
-      const status = await healthCheck();
+      const { gatewayHealthCheck, healthCheck } = await import(
+        "@/lib/openclaw"
+      );
+      const status = options.preferFastOpenClawGatewayProbe === true
+        ? await gatewayHealthCheck()
+        : await healthCheck();
       return {
         type: "openclaw",
         status: status.status,
@@ -7095,32 +7105,14 @@ export async function handleUnifiedChatPost(
       }
     }
 
-    const instantCourtesyResponse =
-      !commandTransport &&
-      files.length === 0 &&
-      activeFile === null &&
-      typeof rawMessage === "string"
-        ? buildInstantCourtesyResponse(rawMessage, validatedProjectId)
-        : null;
-    if (instantCourtesyResponse) {
-      return Response.json(
-        {
-          response: instantCourtesyResponse,
-          backend: "openclaw",
-          mode: chatMode,
-        },
-        {
-          headers: {
-            "X-Chat-Backend": "openclaw",
-            "X-Chat-Mode": chatMode,
-          },
-        },
-      );
-    }
-
     const shouldPreMaterializeProjectWorkspace =
-      Boolean(validatedProjectId) &&
-      (chatMode === "openclaw-tools" || requestedBackend !== "direct");
+      shouldPreMaterializeProjectWorkspaceForTurn({
+        projectId: validatedProjectId,
+        message: userIntentMessage,
+        chatMode,
+        files,
+        activeFile,
+      });
     if (shouldPreMaterializeProjectWorkspace) {
       await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
     }
@@ -7192,6 +7184,7 @@ export async function handleUnifiedChatPost(
     const selectedAgent = await getConfiguredAgentRuntimeStatus(
       agentConfig,
       strictLocalOnly,
+      { preferFastOpenClawGatewayProbe: true },
     );
 
     if (
@@ -7224,10 +7217,6 @@ export async function handleUnifiedChatPost(
       // reindenting every line below. The outer precondition above has
       // already enforced type === "openclaw" && status === "connected".
       attemptedOpenClawTurn = true;
-
-      if (validatedProjectId && !shouldPreMaterializeProjectWorkspace) {
-        await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
-      }
 
       const privacyError = await getPrivacyError();
       if (privacyError) {

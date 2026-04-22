@@ -58,6 +58,10 @@ function fallbackGatewayUrl(): string {
   return gatewayBaseUrl();
 }
 
+function gatewayHealthUrl(): string {
+  return gatewayBaseUrl().replace(/^ws:/, "http:").replace(/^wss:/, "https:");
+}
+
 function stripAnsi(value: string): string {
   return value
     .replace(/\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)/g, "")
@@ -183,6 +187,33 @@ async function embeddedTurnReady(): Promise<boolean> {
 
   const data = parseCliJsonObject<unknown>(result.stdout);
   return isRecord(data) && modelStatusHasEmbeddedTurnPath(data);
+}
+
+async function probeGatewayHealth(timeoutMs: number): Promise<{
+  reachable: boolean;
+  gateway: string;
+}> {
+  try {
+    const httpUrl = gatewayHealthUrl();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${httpUrl}/health`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        return { reachable: false, gateway: "" };
+      }
+      const body = (await res.json()) as { ok?: boolean };
+      return body.ok === true
+        ? { reachable: true, gateway: httpUrl }
+        : { reachable: false, gateway: "" };
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return { reachable: false, gateway: "" };
+  }
 }
 
 function inferMessageRole(message: OpenClawMessage): "user" | "assistant" | "system" {
@@ -392,27 +423,8 @@ export async function healthCheck(): Promise<OpenClawStatus> {
   // only determines *connectivity* — channel/agent/session data still
   // comes from the CLI probe below so that callers like broadcastMessage
   // and getConfiguredAgentRuntimeStatus see the real channel list.
-  let httpReachable = false;
-  let httpGateway = "";
-  try {
-    const httpUrl = gatewayBaseUrl().replace(/^ws:/, "http:").replace(/^wss:/, "https:");
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
-    try {
-      const res = await fetch(`${httpUrl}/health`, { signal: controller.signal });
-      if (res.ok) {
-        const body = (await res.json()) as { ok?: boolean };
-        if (body.ok) {
-          httpReachable = true;
-          httpGateway = httpUrl;
-        }
-      }
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch {
-    // gateway not reachable via HTTP; fall through to CLI probe
-  }
+  const { reachable: httpReachable, gateway: httpGateway } =
+    await probeGatewayHealth(3000);
 
   const statusResult = await runOpenClaw(["status", "--json"], { timeoutMs: 12000 });
   if (statusResult.ok) {
@@ -509,6 +521,35 @@ export async function healthCheck(): Promise<OpenClawStatus> {
   return {
     status: "disconnected",
     gateway: "",
+    channels: [],
+    agents: 0,
+    sessions: 0,
+  };
+}
+
+/**
+ * Lightweight gateway-only readiness probe for hot chat-turn paths.
+ *
+ * Unlike `healthCheck()`, this avoids the expensive CLI status scan and only
+ * verifies that the web gateway required for session-scoped dashboard chat is
+ * responding. Use this when the caller only needs to know whether a web turn
+ * can be attempted right now.
+ */
+export async function gatewayHealthCheck(): Promise<OpenClawStatus> {
+  const { reachable, gateway } = await probeGatewayHealth(1500);
+  if (!reachable) {
+    return {
+      status: "disconnected",
+      gateway: "",
+      channels: [],
+      agents: 0,
+      sessions: 0,
+    };
+  }
+
+  return {
+    status: "connected",
+    gateway,
     channels: [],
     agents: 0,
     sessions: 0,

@@ -47,7 +47,12 @@ vi.mock("@/lib/openclaw/gateway-ws-client", () => ({
   isGatewayPostAckError: mockIsGatewayPostAckError,
 }));
 
-import { getConversationMessagesSince, healthCheck, sendAgentMessage } from "@/lib/openclaw";
+import {
+  gatewayHealthCheck,
+  getConversationMessagesSince,
+  healthCheck,
+  sendAgentMessage,
+} from "@/lib/openclaw";
 
 function mockExecFile(stdout: unknown, stderr = "") {
   execFileMock.mockImplementationOnce((...args: unknown[]) => {
@@ -267,6 +272,49 @@ describe("OpenClaw healthCheck", () => {
       agents: 0,
       sessions: 0,
     });
+  });
+});
+
+describe("OpenClaw gatewayHealthCheck", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    execFileMock.mockReset();
+    execFileSyncMock.mockReset();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("reports connected from the gateway health endpoint without invoking the CLI", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+
+    await expect(gatewayHealthCheck()).resolves.toMatchObject({
+      status: "connected",
+      gateway: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
+      channels: [],
+      agents: 0,
+      sessions: 0,
+    });
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("reports disconnected when the gateway health endpoint is unavailable", async () => {
+    globalThis.fetch = vi.fn(async () => new Response("nope", { status: 503 }));
+
+    await expect(gatewayHealthCheck()).resolves.toEqual({
+      status: "disconnected",
+      gateway: "",
+      channels: [],
+      agents: 0,
+      sessions: 0,
+    });
+    expect(execFileMock).not.toHaveBeenCalled();
   });
 });
 

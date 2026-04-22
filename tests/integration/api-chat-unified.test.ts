@@ -86,6 +86,7 @@ vi.mock("@/lib/local-guard", () => ({
 
 vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
+  gatewayHealthCheck: openClawHealthCheck,
   sendAgentMessage: sendOpenClawMessage,
   getConversationMessagesSince,
 }));
@@ -1527,7 +1528,20 @@ describe("POST /api/chat/unified", () => {
     expect(body.response).toContain("What institution are you at?");
   });
 
-  it("returns an instant courtesy response for trivial greetings without touching OpenClaw", async () => {
+  it("routes trivial greetings through OpenClaw instead of answering locally", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw says hi");
+
     const request = new Request("http://localhost/api/chat/unified", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1544,10 +1558,14 @@ describe("POST /api/chat/unified", () => {
     await expect(response.json()).resolves.toMatchObject({
       backend: "openclaw",
       mode: "reasoning",
-      response: "Hi. What would you like to work on in **alpha-project**?",
+      response: "OpenClaw says hi",
     });
-    expect(openClawHealthCheck).not.toHaveBeenCalled();
-    expect(sendOpenClawMessage).not.toHaveBeenCalled();
+    expect(openClawHealthCheck).toHaveBeenCalledOnce();
+    expect(sendOpenClawMessage).toHaveBeenCalledOnce();
+    const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
+    expect(openClawMessage).toContain(
+      "Keep ordinary conversational replies brief; for greetings, acknowledgements, or short status questions, answer in 1-2 sentences",
+    );
     expect(streamChat).not.toHaveBeenCalled();
   });
 
