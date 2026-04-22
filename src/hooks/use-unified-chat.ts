@@ -547,7 +547,7 @@ function inferOpenClawDisplayWorkspacePath(value: string): string | null {
 function normalizeProgressCommandText(value: string, maxChars = 160): string {
   let normalized = collapseProgressWhitespace(value);
   normalized = normalized.replace(
-    /(^|\s)\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3(?=\s|$)/g,
+    /(^|\s)(?:\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3|\/usr\/bin\/python3)(?=\s|$)/g,
     "$1python3",
   );
   normalized = normalized.replace(

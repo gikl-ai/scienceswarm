@@ -188,7 +188,7 @@ describe("ChatMessage", () => {
           {
             kind: "activity",
             text:
-              "Use write: {\"path\":\"/Users/vajdap/.scienceswarm/projects/project-alpha/scripts/generate_mouse_chasing_cat_gif.py\",\"content\":\"#!/usr/bin/env python3\"}",
+              "Use write: {\"path\":\"/Users/example/.scienceswarm/projects/project-alpha/scripts/generate_mouse_chasing_cat_gif.py\",\"content\":\"#!/usr/bin/env python3\"}",
           },
           { kind: "activity", text: "Use write complete" },
         ]}
@@ -212,7 +212,7 @@ describe("ChatMessage", () => {
           {
             kind: "activity",
             text:
-              "Use read: {\"path\":\"/Users/vajdap/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html\"}",
+              "Use read: {\"path\":\"/Users/example/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html\"}",
           },
         ]}
         timestamp={new Date("2026-04-21T10:01:10.000Z")}
@@ -234,7 +234,7 @@ describe("ChatMessage", () => {
           {
             kind: "activity",
             text:
-              "Run /usr/local/Caskroom/miniforge/base/bin/python3 /Users/vajdap/.scienceswarm/projects/project-alpha/scripts/generate_mouse_chasing_cat_gif.py",
+              "Run /usr/bin/python3 /Users/example/.scienceswarm/projects/project-alpha/scripts/generate_mouse_chasing_cat_gif.py",
           },
           { kind: "activity", text: "Run command complete" },
         ]}
@@ -245,7 +245,7 @@ describe("ChatMessage", () => {
 
     const progressLog = screen.getByRole("log");
     expect(progressLog).toHaveTextContent("Run python3 scripts/generate_mouse_chasing_cat_gif.py");
-    expect(progressLog).not.toHaveTextContent("/usr/local/Caskroom/miniforge/base/bin/python3");
+    expect(progressLog).not.toHaveTextContent("/usr/bin/python3");
     expect(progressLog).not.toHaveTextContent("Run command complete");
   });
 
@@ -340,7 +340,7 @@ describe("ChatMessage", () => {
       <ChatMessage
         role="assistant"
         content={
-          "MEDIA:/Users/vajdap/.scienceswarm/openclaw/media/tool-image-generation/cat-image---1234.png"
+          "MEDIA:/Users/example/.scienceswarm/openclaw/media/tool-image-generation/cat-image---1234.png"
         }
         projectId="project-alpha"
         timestamp={new Date("2026-04-21T10:00:30.000Z")}
@@ -348,7 +348,7 @@ describe("ChatMessage", () => {
     );
 
     expect(
-      screen.getByAltText("/Users/vajdap/.scienceswarm/openclaw/media/tool-image-generation/cat-image---1234.png"),
+      screen.getByAltText("/Users/example/.scienceswarm/openclaw/media/tool-image-generation/cat-image---1234.png"),
     ).toHaveAttribute(
       "src",
       "/api/workspace?action=raw&file=__openclaw__%2Fmedia%2Ftool-image-generation%2Fcat-image---1234.png&projectId=project-alpha",
