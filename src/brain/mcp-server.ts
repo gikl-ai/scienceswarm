@@ -35,7 +35,7 @@ import {
   getRecentEvents,
 } from "./cost";
 import { createLLMClient } from "./llm";
-import type { BrainConfig, SearchDetail } from "./types";
+import { CAPTURE_KINDS, type BrainConfig, type SearchDetail } from "./types";
 import type { LLMClient } from "./llm";
 import { readBrainFile } from "./source";
 import { buildGuideBriefing } from "./briefing";
@@ -658,11 +658,11 @@ export function createBrainMcpServer(): McpServer {
 
   server.tool(
     "brain_capture",
-    "Capture a note/observation/decision/hypothesis/task via gbrain's put_page",
+    "Capture a note, observation, decision, hypothesis, task, survey, method, original_synthesis, research_packet, or overnight_journal via gbrain's put_page",
     {
       content: z.string().describe("The capture body in markdown"),
       kind: z
-        .enum(["note", "observation", "decision", "hypothesis", "task"])
+        .enum(CAPTURE_KINDS)
         .optional()
         .describe("Capture kind — controls default tags and page type"),
       title: z

@@ -62,7 +62,24 @@ export type FrontierStatus = "staged" | "promoted" | "dismissed";
 
 export type CaptureChannel = "telegram" | "web" | "openclaw";
 
-export type CaptureKind = "note" | "observation" | "decision" | "hypothesis" | "task";
+export const CAPTURE_KINDS = [
+  "note",
+  "observation",
+  "decision",
+  "hypothesis",
+  "task",
+  "survey",
+  "method",
+  "original_synthesis",
+  "research_packet",
+  "overnight_journal",
+] as const;
+
+export type CaptureKind = (typeof CAPTURE_KINDS)[number];
+
+export function isCaptureKind(value: unknown): value is CaptureKind {
+  return typeof value === "string" && CAPTURE_KINDS.includes(value as CaptureKind);
+}
 
 export interface SourceRef {
   kind: "import" | "capture" | "external" | "artifact" | "conversation";

@@ -61,12 +61,29 @@ describe("buildCapturePage", () => {
     expect(parsed.data.title).toBe("Sequence the alpha cohort");
     expect(parsed.data.date).toBe("2026-04-13");
     expect(parsed.data.kind).toBe("observation");
+    expect(parsed.data.type).toBe("observation");
     expect(parsed.data.project).toBe("alpha-cohort");
     expect(parsed.data.channel).toBe("openclaw");
     expect(parsed.data.userId).toBe("alice");
     expect(parsed.data.tags).toEqual(["lab", "sequencing"]);
     expect(parsed.content).toContain("[Source: @alice via openclaw:alice, 2026-04-13]");
     expect(parsed.content).toContain("Cohort looks stable at passage 7.");
+  });
+
+  it("preserves research-native capture kinds as gbrain page types", () => {
+    const page = buildCapturePage(
+      {
+        content: "Clustered the retained candidate papers into four themes.",
+        kind: "research_packet",
+      },
+      FIXED_DATE,
+      FIXED_HASH,
+      "@alice",
+    );
+
+    const parsed = matter(page.markdown);
+    expect(parsed.data.kind).toBe("research_packet");
+    expect(parsed.data.type).toBe("research_packet");
   });
 
   it("defaults channel/userId to mcp/unknown in the inline source line", () => {

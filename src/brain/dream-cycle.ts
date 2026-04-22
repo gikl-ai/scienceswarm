@@ -36,6 +36,7 @@ import {
   buildDreamHeadlineSummary,
   type DreamHeadlineSummary,
 } from "./dream-headline";
+import { persistDreamCycleJournal } from "./dream-journal";
 
 // ── Types ─────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ export interface DreamCycleResult {
   cost: IngestCost;
   durationMs: number;
   report: string; // Human-readable summary
+  journalSlug?: string;
 }
 
 export type DreamCycleMode = "full" | "sweep-only" | "enrich-only";
@@ -199,17 +201,32 @@ export async function runDreamCycle(
   result.cost = aggregateCosts(costs);
   result.durationMs = Date.now() - startTime;
   result.report = buildReport(result);
+  const finishedAt = new Date();
 
   // Update state
-  state.lastFullRun = new Date().toISOString();
+  state.lastFullRun = finishedAt.toISOString();
   writeDreamState(config, state);
 
   // Write report to disk
-  saveDreamReport(config, result.report);
+  const reportPath = saveDreamReport(config, result.report, finishedAt);
+
+  try {
+    const journal = await persistDreamCycleJournal({
+      config,
+      mode,
+      result,
+      reportPath,
+      now: finishedAt,
+    });
+    result.journalSlug = journal.slug;
+  } catch {
+    // Journal persistence is best-effort; the disk report remains the
+    // fallback audit artifact when gbrain write-back is unavailable.
+  }
 
   // Log event
   logEvent(config, {
-    ts: new Date().toISOString(),
+    ts: finishedAt.toISOString(),
     type: "compile",
     cost: result.cost,
     durationMs: result.durationMs,
@@ -774,11 +791,16 @@ function buildReport(result: DreamCycleResult): string {
     .join("\n");
 }
 
-function saveDreamReport(config: BrainConfig, report: string): void {
+function saveDreamReport(
+  config: BrainConfig,
+  report: string,
+  now: Date = new Date(),
+): string {
   const reportDir = join(config.root, "state", "dream-reports");
   mkdirSync(reportDir, { recursive: true });
 
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = now.toISOString().slice(0, 10);
   const reportPath = join(reportDir, `${dateStr}.md`);
   writeFileSync(reportPath, report + "\n");
+  return reportPath;
 }

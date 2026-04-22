@@ -13,14 +13,10 @@
 import { randomBytes } from "crypto";
 import matter from "gray-matter";
 import type { GbrainClient, GbrainPutError } from "./gbrain-client";
+import type { CaptureKind } from "./types";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 
-export type BrainCaptureKind =
-  | "note"
-  | "observation"
-  | "decision"
-  | "hypothesis"
-  | "task";
+export type BrainCaptureKind = CaptureKind;
 
 export interface BrainCaptureParams {
   content: string;
@@ -94,7 +90,10 @@ export function buildCapturePage(
     title,
     date,
   };
-  if (params.kind) frontmatter.kind = params.kind;
+  if (params.kind) {
+    frontmatter.kind = params.kind;
+    frontmatter.type = params.kind;
+  }
   if (params.project) frontmatter.project = params.project;
   if (params.tags && params.tags.length > 0) frontmatter.tags = params.tags;
   if (params.channel) frontmatter.channel = params.channel;

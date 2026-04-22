@@ -265,6 +265,31 @@ describe("POST /api/brain/capture", () => {
     expect(data.materializedPath).toMatch(/^wiki\/decisions\//);
   });
 
+  it("accepts research-native capture kinds", async () => {
+    await writeProjectManifest(makeManifest("alpha"), join(TEST_ROOT, "state"));
+    const { POST } = await import("@/app/api/brain/capture/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/brain/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Landscape review of candidate assays and failure modes.",
+          userId: "web-user-2",
+          project: "alpha",
+          channel: "web",
+          kind: "survey",
+        }),
+      }),
+    );
+
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.status).toBe("saved");
+    expect(data.kind).toBe("survey");
+    expect(data.materializedPath).toMatch(/^wiki\/surveys\//);
+  });
+
   it("preserves materialized path context for compilation source slugs", async () => {
     const { sourceSlugFromMaterializedPath } = await import("@/lib/brain-capture-paths");
 
@@ -1264,6 +1289,8 @@ describe("GET /api/brain/status", () => {
         concepts_processed: 3,
         errors_count: 0,
         schedule_interval_ms: 30 * 60_000,
+        briefing_slug: "briefings/2026-04-22-radar-1",
+        journal_slug: "journals/2026-04-22-research-radar-radar-1",
       }),
     );
 
@@ -1279,6 +1306,8 @@ describe("GET /api/brain/status", () => {
     expect(data.radar.age_ms).toBeGreaterThan(-1);
     expect(data.radar.age_ms).toBeLessThan(60 * 60_000);
     expect(data.radar.schedule_interval_ms).toBe(30 * 60_000);
+    expect(data.radar.briefing_slug).toBe("briefings/2026-04-22-radar-1");
+    expect(data.radar.journal_slug).toBe("journals/2026-04-22-research-radar-radar-1");
   });
 
   it("reports stale: true when the last run is older than 2x the interval", async () => {
@@ -1342,6 +1371,7 @@ describe("GET /api/brain/dream", () => {
       JSON.stringify({
         timestamp: "2026-04-18T08:30:00.000Z",
         mode: "full",
+        journal_slug: "journals/2026-04-18-dream-cycle",
         pages_compiled: 1,
         contradictions_found: 1,
         backlinks_added: 2,
@@ -1384,6 +1414,7 @@ describe("GET /api/brain/dream", () => {
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(data.lastRun).toMatchObject({
+      journal_slug: "journals/2026-04-18-dream-cycle",
       pages_compiled: 1,
       contradictions_found: 1,
       backlinks_added: 2,
