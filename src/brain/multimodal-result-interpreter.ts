@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -59,8 +58,8 @@ export async function interpretMultimodalResultPacket(input: {
   prompt: string;
   files?: MultimodalInterpreterFileHint[];
 }): Promise<MultimodalInterpretationResult> {
-  assertSafeProjectSlug(input.project);
-  const workspaceRoot = getScienceSwarmProjectRoot(input.project);
+  const project = assertSafeProjectSlug(input.project);
+  const workspaceRoot = getScienceSwarmProjectRoot(project);
   const evidence = await collectPacketEvidence(workspaceRoot, input.files ?? []);
   if (evidence.length === 0) {
     throw new Error("No project files were available to interpret.");
@@ -111,7 +110,7 @@ export async function interpretMultimodalResultPacket(input: {
   ].join("\n");
 
   const saved = await saveProjectArtifact({
-    project: input.project,
+    project,
     artifactType: "memo",
     title,
     content: artifactBody,
@@ -141,7 +140,8 @@ async function collectPacketEvidence(
       hints
         .flatMap((hint) => [hint.workspacePath, hint.displayPath])
         .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-        .map((value) => value.trim().replace(/^\/+/, "")),
+        .map(toSafeWorkspaceRelativePath)
+        .filter((value): value is string => value !== null),
     ),
   );
 
@@ -163,43 +163,58 @@ async function collectPacketEvidence(
 }
 
 async function discoverWorkspaceFiles(workspaceRoot: string): Promise<string[]> {
-  if (!existsSync(workspaceRoot)) {
-    return [];
-  }
-
   const discovered: string[] = [];
-  const walk = async (currentDir: string) => {
+  const walk = async (relativeDir = "") => {
     if (discovered.length >= MAX_DISCOVERED_FILES) return;
+    const currentDir = relativeDir
+      ? resolveWithinRoot(workspaceRoot, relativeDir)
+      : path.resolve(workspaceRoot);
+    if (!currentDir) return;
+
     const entries = await readdir(currentDir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
       if (discovered.length >= MAX_DISCOVERED_FILES) return;
       if (entry.isDirectory()) {
         if (IGNORED_DIRECTORIES.has(entry.name)) continue;
-        await walk(path.join(currentDir, entry.name));
+        const childDir = toSafeWorkspaceRelativePath(path.join(relativeDir, entry.name));
+        if (childDir) {
+          await walk(childDir);
+        }
         continue;
       }
-      const absolutePath = path.join(currentDir, entry.name);
-      const relativePath = path.relative(workspaceRoot, absolutePath);
-      if (shouldSkipWorkspacePath(absolutePath)) {
+      const relativePath = toSafeWorkspaceRelativePath(path.join(relativeDir, entry.name));
+      if (!relativePath) continue;
+      const absolutePath = resolveWithinRoot(workspaceRoot, relativePath);
+      if (!absolutePath) continue;
+      if (await shouldSkipWorkspacePath(workspaceRoot, relativePath)) {
         continue;
       }
       discovered.push(relativePath);
     }
   };
 
-  await walk(workspaceRoot);
+  await walk();
   return discovered;
 }
 
-function shouldSkipWorkspacePath(absolutePath: string): boolean {
-  const baseName = path.basename(absolutePath);
+async function shouldSkipWorkspacePath(
+  workspaceRoot: string,
+  relativePath: string,
+): Promise<boolean> {
+  const baseName = path.basename(relativePath);
   if (baseName === ".references.json" || baseName === "project.json") {
     return true;
   }
-  const extension = path.extname(absolutePath).toLowerCase();
+  const extension = path.extname(relativePath).toLowerCase();
   if (extension === ".md") {
-    const withoutMd = absolutePath.slice(0, -3);
-    if (existsSync(withoutMd)) {
+    const sourceRelativePath = toSafeWorkspaceRelativePath(relativePath.slice(0, -3));
+    const sourcePath = sourceRelativePath
+      ? resolveWithinRoot(workspaceRoot, sourceRelativePath)
+      : null;
+    const sourceStat = sourcePath
+      ? await stat(sourcePath).catch(() => null)
+      : null;
+    if (sourceStat?.isFile()) {
       return true;
     }
   }
@@ -286,8 +301,11 @@ async function summarizeBinaryArtifact(
   prefix: string,
 ): Promise<string> {
   const metadata = await stat(absolutePath);
-  const companionPath = `${absolutePath}.md`;
-  const companion = existsSync(companionPath)
+  const companionRelativePath = toSafeWorkspaceRelativePath(`${relativePath}.md`);
+  const companionPath = companionRelativePath
+    ? resolveWithinRoot(workspaceRoot, companionRelativePath)
+    : null;
+  const companion = companionPath
     ? await readFile(companionPath, "utf-8").catch(() => "")
     : "";
   const companionExcerpt = companion
@@ -298,7 +316,7 @@ async function summarizeBinaryArtifact(
     prefix,
     `File size: ${metadata.size} bytes.`,
     companionExcerpt.length > 0
-      ? `Companion metadata for \`${path.relative(workspaceRoot, companionPath)}\`:\n\`\`\`\n${companionExcerpt}\n\`\`\``
+      ? `Companion metadata for \`${companionRelativePath}\`:\n\`\`\`\n${companionExcerpt}\n\`\`\``
       : `No companion metadata was available for \`${relativePath}\`.`,
   ].join("\n");
 }
@@ -353,15 +371,8 @@ async function renderInterpretationMarkdown(input: {
 }
 
 function resolveWithinRoot(root: string, relativePath: string): string | null {
-  if (relativePath.includes("\0")) return null;
-  const normalized = path.normalize(relativePath.replace(/^[/\\]+/, ""));
-  if (
-    normalized === "." ||
-    normalized.startsWith("..") ||
-    path.isAbsolute(normalized)
-  ) {
-    return null;
-  }
+  const normalized = toSafeWorkspaceRelativePath(relativePath);
+  if (!normalized) return null;
   const resolvedRoot = path.resolve(root);
   const resolvedPath = path.resolve(resolvedRoot, normalized);
   const relative = path.relative(resolvedRoot, resolvedPath);
@@ -369,6 +380,25 @@ function resolveWithinRoot(root: string, relativePath: string): string | null {
     return null;
   }
   return resolvedPath;
+}
+
+function toSafeWorkspaceRelativePath(candidate: string): string | null {
+  if (candidate.includes("\0")) return null;
+  let trimmed = candidate.trim();
+  trimmed = trimmed.split("\\").join("/");
+  while (trimmed.startsWith("/") || trimmed.startsWith("\\")) {
+    trimmed = trimmed.slice(1);
+  }
+  const normalized = path.normalize(trimmed);
+  if (
+    !normalized ||
+    normalized === "." ||
+    normalized.startsWith("..") ||
+    path.isAbsolute(normalized)
+  ) {
+    return null;
+  }
+  return normalized;
 }
 
 function buildInterpretationTitle(prompt: string, files: string[]): string {

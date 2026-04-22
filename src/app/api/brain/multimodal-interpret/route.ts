@@ -64,13 +64,9 @@ export async function POST(request: Request): Promise<Response> {
     });
     return Response.json(result);
   } catch (error) {
+    console.error("Multimodal interpretation failed", error);
     return Response.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Multimodal interpretation failed",
-      },
+      { error: "Multimodal interpretation failed" },
       { status: 500 },
     );
   }

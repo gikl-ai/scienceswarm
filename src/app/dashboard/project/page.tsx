@@ -3463,6 +3463,7 @@ function ProjectPageContent() {
         }
         await refreshWorkspace();
       } catch (error) {
+        setInput((current) => current || trimmed);
         setMessages((prev) =>
           prev.map((message) =>
             message.id === replyMessageId
