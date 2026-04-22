@@ -87,7 +87,7 @@ describe("OpenHands runtime host adapter", () => {
     });
 
     expect(calls).toEqual([
-      "start:Create a results summary",
+      "start:",
       "queue:fe6bdb1c701c4123a77552803603c522:Create a results summary",
     ]);
     expect(session).toMatchObject({
@@ -153,6 +153,30 @@ describe("OpenHands runtime host adapter", () => {
         },
       }),
     ]);
+  });
+
+  it("does not treat incidental path fields as artifacts", async () => {
+    const adapter = createOpenHandsRuntimeHostAdapter({
+      now: () => new Date("2026-04-22T10:00:00.000Z"),
+      client: {
+        async getEvents() {
+          return [
+            {
+              id: "navigation-1",
+              kind: "NavigationEvent",
+              path: "/workspace/project-alpha/results/summary.md",
+            },
+          ];
+        },
+      },
+    });
+
+    const events = [];
+    for await (const event of adapter.streamEvents("conversation-1")) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([]);
   });
 
   it("resolves runtime session ids to OpenHands conversation ids for control APIs", async () => {

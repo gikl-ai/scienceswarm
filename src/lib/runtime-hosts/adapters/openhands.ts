@@ -154,7 +154,6 @@ function normalizeOpenHandsEvent(input: {
     && (
       kind.toLowerCase().includes("file")
       || kind.toLowerCase().includes("artifact")
-      || typeof record.path === "string"
     )
   ) {
     return {
@@ -306,9 +305,9 @@ export class OpenHandsRuntimeHostAdapter implements ResearchRuntimeHost {
       });
     }
 
-    const startResult = await startConversation({
-      message: request.prompt,
-    });
+    // The OpenHands boundary starts the conversation with no initial message;
+    // the prompt is delivered exactly once through the pending-message queue.
+    const startResult = await startConversation({ message: "" });
     const conversationId = extractConversationId(startResult);
     await queuePendingMessage(conversationId, request.prompt);
 
