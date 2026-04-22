@@ -1032,6 +1032,85 @@ describe("POST /api/chat/unified", () => {
     expect(streamChat).not.toHaveBeenCalled();
   });
 
+  it("answers model-system applicability requests from the visible active file and saves an artifact", async () => {
+    createProjectRoot("alpha-project");
+    readFile.mockRejectedValue(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "model-applicability-active-file",
+      },
+      body: JSON.stringify({
+        message:
+          "Is this organoid model applicable to our patient biomarker question, and what validation ladder should reduce transfer risk?",
+        projectId: "alpha-project",
+        activeFile: {
+          path: "docs/organoid-fit-memo.md",
+          content: [
+            "# Organoid fit memo",
+            "Patient-derived organoid CRC-214 has KRAS G12D and TP53 loss.",
+            "Viability assay at day 7 after EGFR + MEK inhibition, n=4 wells per dose.",
+            "Vehicle controls are included, but there is no immune co-culture or stromal compartment.",
+          ].join("\n"),
+        },
+      }),
+    });
+
+    const response = await POST(request);
+    const body = (await response.json()) as {
+      response?: string;
+      generatedArtifacts?: Array<{ projectPath?: string; tool?: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
+    expect(body.response).toContain("Transfer risks:");
+    expect(body.response).toContain("Validation ladder:");
+    expect(body.response).toContain("immune");
+    expect(body.generatedArtifacts?.[0]?.tool).toBe(
+      "ScienceSwarm model-system applicability",
+    );
+    const artifactPath = body.generatedArtifacts?.[0]?.projectPath;
+    expect(artifactPath).toBeTruthy();
+    expect(
+      readFileSync(path.join(ensureScienceSwarmDir(), "workspace", artifactPath ?? ""), "utf-8"),
+    ).toContain("## Missing Metadata ScienceSwarm Will Not Assume");
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
+  });
+
+  it("handles missing model metadata honestly instead of routing to a generic agent answer", async () => {
+    createProjectRoot("alpha-project");
+    readFile.mockRejectedValue(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "model-applicability-missing-metadata",
+      },
+      body: JSON.stringify({
+        message:
+          "Is this model system applicable to the target biological question if my source does not specify assay context or patient origin?",
+        projectId: "alpha-project",
+      }),
+    });
+
+    const response = await POST(request);
+    const body = (await response.json()) as { response?: string };
+
+    expect(response.status).toBe(200);
+    expect(body.response).toContain("Missing metadata ScienceSwarm will not assume:");
+    expect(body.response).toContain("model identity");
+    expect(body.response).toContain("assay or readout");
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
+  });
+
   it("returns local slash-command help from the dedicated command route", async () => {
     listOpenClawSkills.mockResolvedValueOnce([
       {
