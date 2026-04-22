@@ -152,12 +152,31 @@ type ProgressTranscriptBlock =
   | {
       type: "narrative";
       entry: MessageProgressEntry;
+      section: "thinking" | "activity";
     }
   | {
       type: "explored";
       lines: string[];
+      section: "activity";
     };
 
+const PROGRESS_SECTION_META: Record<
+  "thinking" | "activity",
+  { title: string; icon: string; className: string; rowClassName: string }
+> = {
+  thinking: {
+    title: "Thinking Trace",
+    icon: "🧠",
+    className: "border-sky-200 bg-sky-50 text-sky-700",
+    rowClassName: "text-slate-900/90",
+  },
+  activity: {
+    title: "OpenClaw Activity",
+    icon: "⚙️",
+    className: "border-border bg-slate-50 text-muted",
+    rowClassName: "text-slate-700",
+  },
+};
 const EXPLORE_COMMAND_PREFIXES = [
   "Read ",
   "Write ",
@@ -434,7 +453,11 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
 
   const flushExploredLines = () => {
     if (exploredLines.length === 0) return;
-    blocks.push({ type: "explored", lines: exploredLines });
+    blocks.push({
+      type: "explored",
+      lines: exploredLines,
+      section: "activity",
+    });
     exploredLines = [];
   };
 
@@ -451,6 +474,7 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
     blocks.push({
       type: "narrative",
       entry: { ...entry, text },
+      section: entry.kind,
     });
   }
 
@@ -458,6 +482,80 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
   return blocks;
 }
 
+function buildProgressSectionChanges(blocks: ProgressTranscriptBlock[]): ReactNode[] {
+  const elements: ReactNode[] = [];
+  let lastSection: "thinking" | "activity" | null = null;
+
+  blocks.forEach((block, index) => {
+    const nextSection = block.section;
+    // Repeat labels on section switches so interleaved thinking/activity reads
+    // like the live OpenClaw transcript order instead of two detached panels.
+    if (nextSection !== lastSection) {
+      const sectionMeta = PROGRESS_SECTION_META[nextSection];
+      elements.push(
+        <div
+          key={`section-${nextSection}-${index}`}
+          className={`mb-2 inline-flex w-fit items-center gap-2 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.1em] ${sectionMeta.className}`}
+        >
+          <span aria-hidden="true">{sectionMeta.icon}</span>
+          <span>{sectionMeta.title}</span>
+        </div>,
+      );
+      lastSection = nextSection;
+    }
+
+    if (block.type === "explored") {
+      elements.push(
+        <div
+          key={`${index}-explored`}
+          className="space-y-1"
+        >
+          <div className={`flex items-start gap-2 ${PROGRESS_SECTION_META.activity.rowClassName}`}>
+            <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
+            <span className="font-medium text-slate-700">Explored</span>
+          </div>
+          <div className="space-y-1 pl-5 text-slate-600">
+            {block.lines.map((line, lineIndex) => (
+              <div
+                key={`${index}-${lineIndex}-${line}`}
+                className="flex items-start gap-2 whitespace-pre-wrap"
+              >
+                <span aria-hidden="true" className="text-slate-400">
+                  {lineIndex === 0 ? "└ " : "· "}
+                </span>
+                <span className="min-w-0 flex-1">
+                  {renderInlineMarkdownLite(
+                    line,
+                    `progress-explored-${index}-${lineIndex}`,
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>,
+      );
+      return;
+    }
+
+    const rowClassName =
+      block.entry.kind === "thinking"
+        ? PROGRESS_SECTION_META.thinking.rowClassName
+        : PROGRESS_SECTION_META.activity.rowClassName;
+    elements.push(
+      <div
+        key={`${index}-${block.entry.kind}-${block.entry.text}`}
+        className={`flex items-start gap-2 whitespace-pre-wrap ${rowClassName}`}
+      >
+        <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
+        <span className="min-w-0 flex-1">
+          {renderInlineMarkdownLite(block.entry.text, `progress-${index}`)}
+        </span>
+      </div>,
+    );
+  });
+
+  return elements;
+}
 function formatElapsedCompact(elapsedMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
   const seconds = totalSeconds % 60;
@@ -614,29 +712,136 @@ function parseEmbedDirective(part: string): {
   };
 }
 
+type InlineMarkdownToken =
+  | {
+      type: "code" | "bold" | "italic" | "boldItalic";
+      start: number;
+      end: number;
+      value: string;
+    };
+
+function isInlineWhitespace(value: string | undefined): boolean {
+  return typeof value === "string" && /\s/.test(value);
+}
+
+function findNextInlineMarkdownToken(value: string, fromIndex: number): InlineMarkdownToken | null {
+  const emphasisMarkers = [
+    { marker: "***", type: "boldItalic" as const },
+    { marker: "**", type: "bold" as const },
+    { marker: "*", type: "italic" as const },
+  ];
+
+  for (let index = fromIndex; index < value.length; index += 1) {
+    if (value[index] === "`") {
+      const closingIndex = value.indexOf("`", index + 1);
+      if (closingIndex > index + 1) {
+        return {
+          type: "code",
+          start: index,
+          end: closingIndex + 1,
+          value: value.slice(index + 1, closingIndex),
+        };
+      }
+    }
+
+    if (value[index] !== "*") {
+      continue;
+    }
+
+    for (const { marker, type } of emphasisMarkers) {
+      if (!value.startsWith(marker, index)) {
+        continue;
+      }
+
+      const contentStart = index + marker.length;
+      let closingIndex = value.indexOf(marker, contentStart);
+      while (closingIndex !== -1) {
+        const innerValue = value.slice(contentStart, closingIndex);
+        if (
+          innerValue.length > 0
+          && !isInlineWhitespace(innerValue[0])
+          && !isInlineWhitespace(innerValue[innerValue.length - 1])
+        ) {
+          return {
+            type,
+            start: index,
+            end: closingIndex + marker.length,
+            value: innerValue,
+          };
+        }
+        closingIndex = value.indexOf(marker, closingIndex + marker.length);
+      }
+    }
+  }
+
+  return null;
+}
+
 function renderInlineMarkdownLite(value: string, keyPrefix: string) {
-  return value.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={`${keyPrefix}-bold-${index}`} className="font-semibold">
-          {part.slice(2, -2)}
+  const elements: ReactNode[] = [];
+  let cursor = 0;
+  let plainTextIndex = 0;
+  let formattedIndex = 0;
+
+  while (cursor < value.length) {
+    const token = findNextInlineMarkdownToken(value, cursor);
+    if (!token) {
+      const remainingText = value.slice(cursor);
+      if (remainingText) {
+        elements.push(
+          <span key={`${keyPrefix}-text-${plainTextIndex}`}>{remainingText}</span>,
+        );
+      }
+      break;
+    }
+
+    if (token.start > cursor) {
+      const plainText = value.slice(cursor, token.start);
+      if (plainText) {
+        elements.push(
+          <span key={`${keyPrefix}-text-${plainTextIndex}`}>{plainText}</span>,
+        );
+        plainTextIndex += 1;
+      }
+    }
+
+    const tokenKey = `${keyPrefix}-${token.type}-${formattedIndex}`;
+    if (token.type === "code") {
+      elements.push(
+        <code
+          key={tokenKey}
+          className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.92em] text-slate-800"
+        >
+          {token.value}
+        </code>,
+      );
+    } else if (token.type === "bold") {
+      elements.push(
+        <strong key={tokenKey} className="font-semibold">
+          {renderInlineMarkdownLite(token.value, `${tokenKey}-inner`)}
+        </strong>,
+      );
+    } else if (token.type === "boldItalic") {
+      elements.push(
+        <strong key={tokenKey} className="font-semibold">
+          <em className="italic">
+            {renderInlineMarkdownLite(token.value, `${tokenKey}-inner`)}
+          </em>
         </strong>
       );
-    }
-
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return (
-        <code
-          key={`${keyPrefix}-code-${index}`}
-          className="rounded bg-slate-100 px-1 py-0.5 text-[0.95em] text-slate-800"
-        >
-          {part.slice(1, -1)}
-        </code>
+    } else {
+      elements.push(
+        <em key={tokenKey} className="italic">
+          {renderInlineMarkdownLite(token.value, `${tokenKey}-inner`)}
+        </em>,
       );
     }
 
-    return <span key={`${keyPrefix}-text-${index}`}>{part}</span>;
-  });
+    cursor = token.end;
+    formattedIndex += 1;
+  }
+
+  return elements;
 }
 
 function getCopyableMessageText(root: HTMLDivElement | null, fallback: string): string {
@@ -1022,46 +1227,15 @@ export function ChatMessage({
         {visibleProgressLog.length > 0 && (
           <div
             aria-live="polite"
-            className="mb-3 space-y-3 font-mono text-[13px] leading-6 text-foreground/95"
+            className="mb-3 space-y-3 text-[13px] leading-6 text-foreground/95"
             role="log"
           >
-            {progressTranscript.map((block, index) =>
-              block.type === "explored" ? (
-                <div key={`${index}-explored`} className="space-y-0.5">
-                  <div className="whitespace-pre-wrap text-foreground">
-                    • Explored
-                  </div>
-                  <div className="space-y-0.5 pl-6 text-muted">
-                    {block.lines.map((line, lineIndex) => (
-                      <div
-                        key={`${index}-${lineIndex}-${line}`}
-                        className="whitespace-pre-wrap"
-                      >
-                        {lineIndex === 0 ? "└ " : "  "}
-                        {renderInlineMarkdownLite(
-                          line,
-                          `progress-explored-${index}-${lineIndex}`,
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div
-                  key={`${index}-${block.entry.kind}-${block.entry.text}`}
-                  className={`whitespace-pre-wrap ${
-                    block.entry.kind === "thinking" ? "text-foreground" : "text-muted"
-                  }`}
-                >
-                  <span aria-hidden="true">• </span>
-                  {renderInlineMarkdownLite(block.entry.text, `progress-${index}`)}
-                </div>
-              ),
-            )}
+            {buildProgressSectionChanges(progressTranscript)}
 
             {workingElapsed && (
-              <div className="whitespace-pre-wrap text-muted">
-                {`• Working (${workingElapsed} • esc to interrupt)`}
+              <div className="flex items-start gap-2 whitespace-pre-wrap text-slate-500">
+                <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
+                <span>{`Working (${workingElapsed} • esc to interrupt)`}</span>
               </div>
             )}
           </div>
