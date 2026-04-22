@@ -423,6 +423,42 @@ describe("runtime host router", () => {
     );
   });
 
+  it("uses unique terminal event ids when a turn is finished more than once", () => {
+    const sessionStore = createRuntimeSessionStore({
+      now: () => new Date("2026-04-22T10:00:00.000Z"),
+      idGenerator: () => "runtime-session-double-finish",
+    });
+    const eventStore = createRuntimeEventStore({
+      sessions: sessionStore,
+      now: () => new Date("2026-04-22T10:00:01.000Z"),
+    });
+    const router = createRuntimeHostRouter({
+      sessionStore,
+      eventStore,
+    });
+
+    const prepared = router.prepareTurn({
+      hostId: "openclaw",
+      projectPolicy: "local-only",
+      projectId: "project-alpha",
+      conversationId: "web-project-alpha-session-1",
+      mode: "chat",
+      prompt: "Summarize the latest notes",
+      approvalState: "not-required",
+    });
+
+    router.finishTurn(prepared.session.id, { status: "completed" });
+    router.finishTurn(prepared.session.id, { status: "completed" });
+
+    const terminalEvents = eventStore
+      .listEvents(prepared.session.id)
+      .filter((event) => event.type === "done");
+    expect(terminalEvents.map((event) => event.id)).toEqual([
+      `${prepared.session.id}:runtime-completed-1`,
+      `${prepared.session.id}:runtime-completed-2`,
+    ]);
+  });
+
   it("exposes OpenClaw as a local-network runtime adapter", async () => {
     const adapter = createOpenClawRuntimeHostAdapter({
       healthCheck: async () => ({ status: "connected" }),
@@ -572,6 +608,38 @@ describe("/api/chat/unified runtime router facade", () => {
     });
     expect(sendOpenClawMessage).not.toHaveBeenCalled();
     expect(getDefaultRuntimeSessionStore().listSessions()).toEqual([]);
+  });
+
+  it("records unexpected OpenClaw handler exceptions as handler failures", async () => {
+    sendOpenClawMessage.mockRejectedValueOnce(
+      new Error("workspace materialization failed"),
+    );
+
+    const response = await POST(request({
+      backend: "openclaw",
+      message: "Trigger a handler failure",
+      conversationId: "web:alpha-project:session-2",
+      messages: [
+        {
+          role: "user",
+          content: "Trigger a handler failure",
+        },
+      ],
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({
+      error: "Failed to process chat request. Please try again.",
+    });
+    expect(getDefaultRuntimeSessionStore().listSessions()).toEqual([
+      expect.objectContaining({
+        hostId: "openclaw",
+        conversationId: "web:alpha-project:session-2",
+        status: "failed",
+        errorCode: "RUNTIME_HANDLER_ERROR",
+      }),
+    ]);
   });
 
   it("preserves SSE behavior while completing the runtime session", async () => {

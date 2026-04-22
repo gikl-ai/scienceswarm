@@ -88,6 +88,7 @@ export class RuntimeHostRouter {
   private readonly sessionStore: RuntimeSessionStore;
   private readonly eventStore: RuntimeEventStore;
   private readonly adapters: Map<string, ResearchRuntimeHost>;
+  private terminalEventSequence = 0;
 
   constructor(options: RuntimeHostRouterOptions = {}) {
     this.registry = options.registry ?? null;
@@ -202,7 +203,7 @@ export class RuntimeHostRouter {
       errorCode: input.errorCode,
     });
     this.eventStore.appendEvent({
-      id: `${sessionId}:runtime-${input.status}`,
+      id: `${sessionId}:runtime-${input.status}-${++this.terminalEventSequence}`,
       sessionId,
       hostId: this.sessionStore.getSession(sessionId)?.hostId ?? "unknown",
       type: input.status === "completed" ? "done" : "error",

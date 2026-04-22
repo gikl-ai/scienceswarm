@@ -198,6 +198,8 @@ interface AgentRuntimeStatus {
 type ChatMode = "reasoning" | "openclaw-tools";
 type RequestedBackend = "openclaw" | "agent" | "direct";
 
+const RUNTIME_HANDLER_ERROR_CODE = "RUNTIME_HANDLER_ERROR";
+
 function runtimeTurnModeForChatMode(chatMode: ChatMode): RuntimeTurnMode {
   return chatMode === "openclaw-tools" ? "mcp-tool" : "chat";
 }
@@ -8335,7 +8337,7 @@ export async function handleUnifiedChatPost(
       runtimeRouter,
       runtimeTurnSessionId,
       "failed",
-      "RUNTIME_TRANSPORT_ERROR",
+      RUNTIME_HANDLER_ERROR_CODE,
     );
     console.error(
       "Chat POST handler failed:",
