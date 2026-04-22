@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type {
   ChatTaskPhase,
   MessageProgressEntry,
@@ -166,8 +167,32 @@ function isExploredCommand(text: string): boolean {
   return EXPLORE_COMMAND_PREFIXES.some((prefix) => text.startsWith(prefix));
 }
 
+function inferOpenClawDisplayWorkspacePath(value: string): string | null {
+  const normalized = value.trim().replaceAll("\\", "/");
+  const canvasMatch = normalized.match(
+    /\/(?:\.scienceswarm\/openclaw|\.openclaw)\/canvas\/documents\/(.+)$/,
+  );
+  if (canvasMatch?.[1]) {
+    return `figures/${canvasMatch[1]}`;
+  }
+
+  const mediaMatch = normalized.match(
+    /\/(?:\.scienceswarm\/openclaw|\.openclaw)\/media\/[^/]+\/([^/]+)$/,
+  );
+  if (mediaMatch?.[1]) {
+    return `figures/${mediaMatch[1]}`;
+  }
+
+  return null;
+}
+
 function formatProgressDisplayPath(value: string): string {
   const normalized = value.trim().replaceAll("\\", "/");
+  const openClawDisplayPath = inferOpenClawDisplayWorkspacePath(normalized);
+  if (openClawDisplayPath) {
+    return openClawDisplayPath;
+  }
+
   const projectMatch = normalized.match(/\/\.scienceswarm\/projects\/[^/]+\/(.+)$/);
   if (projectMatch?.[1]) {
     return projectMatch[1];
@@ -200,7 +225,7 @@ function normalizeProgressDisplayCommand(value: string, maxChars = 160): string 
     (match) => formatProgressDisplayPath(match),
   );
   normalized = normalized.replace(
-    /\/(?:Users|home)\/[^/\s]+\/\.scienceswarm\/openclaw\/media\/[^\s"'`]+/g,
+    /\/(?:Users|home)\/[^/\s]+\/(?:\.scienceswarm\/openclaw|\.openclaw)\/(?:media|canvas\/documents)\/[^\s"'`]+/g,
     (match) => formatProgressDisplayPath(match),
   );
 
@@ -226,6 +251,56 @@ function formatLegacyImageGenerateText(text: string): string | null {
   return label;
 }
 
+function formatLegacyUseToolText(text: string): string | null {
+  const trimmed = text.trim();
+
+  const readPathMatch = trimmed.match(/^Use (?:read|read_file|open_file):\s*[\s\S]*"path":"([^"]+)"/i);
+  if (readPathMatch?.[1]) {
+    return `Read ${formatProgressDisplayPath(readPathMatch[1])}`;
+  }
+
+  const writePathMatch = trimmed.match(/^Use (?:write|write_file|create_file):\s*[\s\S]*"path":"([^"]+)"/i);
+  if (writePathMatch?.[1]) {
+    return `Write ${formatProgressDisplayPath(writePathMatch[1])}`;
+  }
+
+  const editPathMatch = trimmed.match(/^Use (?:edit|apply_patch|replace_in_file):\s*[\s\S]*"path":"([^"]+)"/i);
+  if (editPathMatch?.[1]) {
+    return `Edit ${formatProgressDisplayPath(editPathMatch[1])}`;
+  }
+
+  const searchPathMatch = trimmed.match(
+    /^Use (?:search|grep|rg|search_code):\s*[\s\S]*"pattern":"([^"]+)"[\s\S]*"path":"([^"]+)"/i,
+  );
+  if (searchPathMatch?.[1] && searchPathMatch?.[2]) {
+    return `Search ${searchPathMatch[1]} in ${formatProgressDisplayPath(searchPathMatch[2])}`;
+  }
+
+  const searchPatternMatch = trimmed.match(/^Use (?:search|grep|rg|search_code):\s*[\s\S]*"pattern":"([^"]+)"/i);
+  if (searchPatternMatch?.[1]) {
+    return `Search ${searchPatternMatch[1]}`;
+  }
+
+  const execCommandMatch = trimmed.match(/^Use (?:exec|exec_command|process):\s*[\s\S]*"cmd":"([^"]+)"/i);
+  if (execCommandMatch?.[1]) {
+    return `Run ${normalizeProgressDisplayCommand(execCommandMatch[1].replace(/\\"/g, "\""))}`;
+  }
+
+  const imageMatch = /^Use (?:image_generate|generate_image|image_generation|tool-image-generation): /i.test(trimmed);
+  if (imageMatch) {
+    return formatLegacyImageGenerateText(trimmed);
+  }
+
+  const planSteps = Array.from(trimmed.matchAll(/"step":"([^"]+)"/g))
+    .map((match) => match[1])
+    .filter(Boolean);
+  if (/^Use update_plan:/i.test(trimmed) && planSteps.length > 0) {
+    return `Plan: ${planSteps.join(" -> ")}`;
+  }
+
+  return trimmed;
+}
+
 function formatLegacyToolText(text: string): string | null {
   const trimmed = text.trim();
 
@@ -244,7 +319,7 @@ function formatLegacyToolText(text: string): string | null {
     return null;
   }
 
-  const readPathMatch = trimmed.match(/^Tool (?:read_file|open_file):\s*[\s\S]*"path":"([^"]+)"/i);
+  const readPathMatch = trimmed.match(/^Tool (?:read|read_file|open_file):\s*[\s\S]*"path":"([^"]+)"/i);
   if (readPathMatch?.[1]) {
     return `Read ${formatProgressDisplayPath(readPathMatch[1])}`;
   }
@@ -304,7 +379,7 @@ function formatLegacyToolText(text: string): string | null {
 
 function normalizeMediaWorkspacePath(filePath: string): string {
   const normalized = filePath.trim().replaceAll("\\", "/");
-  const openClawMediaMatch = normalized.match(/\/\.scienceswarm\/openclaw\/media\/(.+)$/);
+  const openClawMediaMatch = normalized.match(/\/(?:\.scienceswarm\/openclaw|\.openclaw)\/media\/(.+)$/);
   if (openClawMediaMatch?.[1]) {
     return `__openclaw__/media/${openClawMediaMatch[1]}`;
   }
@@ -322,6 +397,7 @@ function normalizeProgressTextForDisplay(text: string): string | null {
     trimmed === "Turn finished" ||
     trimmed === "Run command" ||
     trimmed === "Run command complete" ||
+    trimmed === "Use read complete" ||
     trimmed === "Use write complete" ||
     trimmed === "Use edit complete"
   ) {
@@ -332,18 +408,8 @@ function normalizeProgressTextForDisplay(text: string): string | null {
     return formatLegacyToolText(trimmed);
   }
 
-  const writePathMatch = trimmed.match(/^Use write:\s*[\s\S]*"path":"([^"]+)"/);
-  if (writePathMatch?.[1]) {
-    return `Write ${formatProgressDisplayPath(writePathMatch[1])}`;
-  }
-
-  const editPathMatch = trimmed.match(/^Use (?:edit|apply_patch|replace_in_file):\s*[\s\S]*"path":"([^"]+)"/);
-  if (editPathMatch?.[1]) {
-    return `Edit ${formatProgressDisplayPath(editPathMatch[1])}`;
-  }
-
-  if (/^Use (?:image_generate|generate_image|image_generation|tool-image-generation): /i.test(trimmed)) {
-    return formatLegacyImageGenerateText(trimmed);
+  if (/^Use /i.test(trimmed)) {
+    return formatLegacyUseToolText(trimmed);
   }
 
   if (trimmed.startsWith("Run ")) {
@@ -583,10 +649,15 @@ function renderContent(content: string, projectId: string) {
           const fileName = resolveEmbeddedRawPath(embedUrl, savedFileName);
           embedUrl = `/api/workspace?action=raw&file=${encodeURIComponent(fileName)}&projectId=${encodeURIComponent(projectId)}`;
         } else {
-          // Strip every leading slash and re-add a single one so protocol-
-          // relative URLs ("//external.host/...") collapse to a same-origin
-          // path instead of loading third-party content into the iframe.
-          embedUrl = `/${embedUrl.replace(/^\/+/, "")}`;
+          const workspaceHtmlPath = normalizeWorkspaceRelativePath(embedUrl);
+          if (workspaceHtmlPath && /\.html?$/i.test(workspaceHtmlPath)) {
+            embedUrl = `/api/workspace?action=raw&file=${encodeURIComponent(workspaceHtmlPath)}&projectId=${encodeURIComponent(projectId)}`;
+          } else {
+            // Strip every leading slash and re-add a single one so protocol-
+            // relative URLs ("//external.host/...") collapse to a same-origin
+            // path instead of loading third-party content into the iframe.
+            embedUrl = `/${embedUrl.replace(/^\/+/, "")}`;
+          }
         }
         const embedTitle = embedDirective.title ?? "Embedded content";
         const embedHeight = sanitizeEmbedHeight(embedDirective.height, "60vh");
@@ -645,6 +716,30 @@ export function ChatMessage({
   steps,
   projectId = "",
 }: ChatMessageProps) {
+  const [liveElapsedMs, setLiveElapsedMs] = useState<number | null>(() =>
+    getProgressElapsedMs(timestamp, isStreaming),
+  );
+
+  useEffect(() => {
+    if (!isStreaming) {
+      setLiveElapsedMs(null);
+      return undefined;
+    }
+
+    const updateElapsed = () => {
+      setLiveElapsedMs(getProgressElapsedMs(timestamp, true));
+    };
+
+    updateElapsed();
+    const timerId = window.setInterval(() => {
+      updateElapsed();
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [isStreaming, timestamp]);
+
   const badge = channel ? CHANNEL_BADGES[channel] : undefined;
   const isCrossChannel = channel && channel !== "web";
   const visibleTaskPhases =
@@ -659,12 +754,11 @@ export function ChatMessage({
     role === "assistant"
       ? Array.isArray(progressLog) && progressLog.length > 0
         ? progressLog
-        : buildFallbackProgressLog(thinking, visibleActivityLog)
+      : buildFallbackProgressLog(thinking, visibleActivityLog)
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
-  const progressElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
   const workingElapsed =
-    progressElapsedMs === null ? null : formatElapsedCompact(progressElapsedMs);
+    liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
   const isOpenClawToolsTurn = chatMode === "openclaw-tools" && role !== "system";
 
   return (

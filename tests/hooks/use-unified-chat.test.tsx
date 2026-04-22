@@ -2308,6 +2308,85 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
+  it("maps structured read tool calls from the OpenClaw canvas runtime to project-facing paths", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "session.message",
+              payload: {
+                message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      type: "tool_call",
+                      name: "read",
+                      input: {
+                        path: "/Users/vajdap/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html",
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          { text: "Preview opened" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Preview opened");
+    });
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:activity:Read figures/cat-svg-preview/index.html",
+    );
+    expect(screen.getByTestId("activity-log").textContent).toContain(
+      "Tool read: figures/cat-svg-preview/index.html",
+    );
+  });
+
   it("formats structured image generation tool calls without dumping raw JSON into progress", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;

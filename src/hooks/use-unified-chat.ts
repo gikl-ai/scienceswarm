@@ -416,6 +416,25 @@ function summarizeProgressText(value: string, maxChars = 96): string {
   return `${normalized.slice(0, maxChars - 1)}…`;
 }
 
+function inferOpenClawDisplayWorkspacePath(value: string): string | null {
+  const normalized = collapseProgressWhitespace(value.replaceAll("\\", "/"));
+  const canvasMatch = normalized.match(
+    /\/(?:\.scienceswarm\/openclaw|\.openclaw)\/canvas\/documents\/(.+)$/,
+  );
+  if (canvasMatch?.[1]) {
+    return `figures/${canvasMatch[1]}`;
+  }
+
+  const mediaMatch = normalized.match(
+    /\/(?:\.scienceswarm\/openclaw|\.openclaw)\/media\/[^/]+\/([^/]+)$/,
+  );
+  if (mediaMatch?.[1]) {
+    return `figures/${mediaMatch[1]}`;
+  }
+
+  return null;
+}
+
 function normalizeProgressCommandText(value: string, maxChars = 160): string {
   let normalized = collapseProgressWhitespace(value);
   normalized = normalized.replace(
@@ -427,7 +446,7 @@ function normalizeProgressCommandText(value: string, maxChars = 160): string {
     (match) => formatProgressPath(match),
   );
   normalized = normalized.replace(
-    /\/(?:Users|home)\/[^/\s]+\/\.scienceswarm\/openclaw\/media\/[^\s"'`]+/g,
+    /\/(?:Users|home)\/[^/\s]+\/(?:\.scienceswarm\/openclaw|\.openclaw)\/(?:media|canvas\/documents)\/[^\s"'`]+/g,
     (match) => formatProgressPath(match),
   );
   return summarizeProgressText(normalized, maxChars);
@@ -435,6 +454,11 @@ function normalizeProgressCommandText(value: string, maxChars = 160): string {
 
 function formatProgressPath(value: string): string {
   const normalized = collapseProgressWhitespace(value.replaceAll("\\", "/"));
+  const openClawDisplayPath = inferOpenClawDisplayWorkspacePath(normalized);
+  if (openClawDisplayPath) {
+    return openClawDisplayPath;
+  }
+
   const projectMatch = normalized.match(/\/\.scienceswarm\/projects\/[^/]+\/(.+)$/);
   if (projectMatch?.[1]) {
     return projectMatch[1];
@@ -573,7 +597,19 @@ function formatToolActivitySummary(
   detail: unknown,
 ): string | null {
   const normalizedToolName = name?.trim().toLowerCase();
+  const summary = summarizeProgressValue(detail);
+  const detailRecord = asRecord(detail);
+  const path = firstNonEmptyString(
+    detailRecord?.path,
+    detailRecord?.file,
+    detailRecord?.filepath,
+    detailRecord?.target,
+  );
   switch (normalizedToolName) {
+    case "read":
+    case "read_file":
+    case "open_file":
+      return path ? formatProgressPath(path) : summary || "file";
     case "write":
     case "write_file":
     case "create_file":
@@ -895,6 +931,7 @@ function formatToolProgressEntry(
 
   let action: string;
   switch (normalizedToolName) {
+    case "read":
     case "read_file":
     case "open_file":
       action = path ? `Read ${formatProgressPath(path)}` : "Read file";

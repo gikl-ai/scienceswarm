@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatMessage } from "@/components/research/chat-message";
 
 describe("ChatMessage", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("renders assistant task phases inside the message bubble", () => {
     render(
       <ChatMessage
@@ -29,6 +33,9 @@ describe("ChatMessage", () => {
   });
 
   it("renders assistant progress as a single inline transcript", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
+
     render(
       <ChatMessage
         role="assistant"
@@ -52,6 +59,31 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Thinking Trace")).not.toBeInTheDocument();
     expect(screen.queryByText("OpenClaw Activity")).not.toBeInTheDocument();
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
+  });
+
+  it("ticks the working timer every second while the message is streaming", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "thinking", text: "Checking the imported files..." },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByRole("log")).toHaveTextContent("• Working (5s • esc to interrupt)");
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(screen.getByRole("log")).toHaveTextContent("• Working (6s • esc to interrupt)");
   });
 
   it("renders markdown bold inside progress transcript rows", () => {
@@ -97,6 +129,28 @@ describe("ChatMessage", () => {
     expect(progressLog).toHaveTextContent("Write scripts/generate_mouse_chasing_cat_gif.py");
     expect(progressLog).not.toHaveTextContent("\"content\":\"#!/usr/bin/env python3\"");
     expect(progressLog).not.toHaveTextContent("Use write complete");
+  });
+
+  it("maps legacy read rows in the visible transcript to project-facing canvas paths", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text:
+              "Use read: {\"path\":\"/Users/vajdap/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html\"}",
+          },
+        ]}
+        timestamp={new Date("2026-04-21T10:01:10.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent("Read figures/cat-svg-preview/index.html");
+    expect(progressLog).not.toHaveTextContent(".scienceswarm/openclaw/canvas/documents");
   });
 
   it("normalizes legacy command rows in the visible transcript", () => {
@@ -239,6 +293,22 @@ describe("ChatMessage", () => {
       "/api/workspace?action=raw&file=__openclaw__%2Fcanvas%2Fdocuments%2Fcat-svg-preview%2Findex.html&projectId=project-alpha",
     );
     expect(screen.queryByText(/\[embed url=.*Cat SVG.*\]/)).not.toBeInTheDocument();
+  });
+
+  it("routes project-local html embeds through the raw workspace preview", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"[embed url=\"figures/snake-game/index.html\" title=\"Snake\" height=\"420\" /]"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:12:30.000Z")}
+      />,
+    );
+
+    expect(screen.getByTitle("Snake")).toHaveAttribute(
+      "src",
+      "/api/workspace?action=raw&file=figures%2Fsnake-game%2Findex.html&projectId=project-alpha",
+    );
   });
 
   it("reuses the latest saved html filename across intervening text", () => {
