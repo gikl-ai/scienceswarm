@@ -2,7 +2,7 @@
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, useState } from "react";
+import { StrictMode, act, useState } from "react";
 import { useUnifiedChat } from "@/hooks/use-unified-chat";
 
 function ChatHarness({ projectName }: { projectName: string }) {
@@ -295,6 +295,135 @@ describe("useUnifiedChat persistence", () => {
     });
     expect(screen.getByTestId("message-log").textContent).toContain("user:Hello from the browser");
     expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
+  });
+
+  it("keeps the remembered thread across a settings round-trip before hydration cleanup commits", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: "conv-alpha",
+        messages: [
+          {
+            id: "user-1",
+            role: "user",
+            content: "remembered prompt",
+            timestamp: "2026-04-11T08:00:00.000Z",
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "Persisted answer",
+            timestamp: "2026-04-11T08:00:01.000Z",
+          },
+        ],
+      }),
+    );
+
+    const threadResolvers: Array<(response: Response) => void> = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return new Promise<Response>((resolve) => {
+          threadResolvers.push(resolve);
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Promise.resolve(Response.json({ ok: true }));
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Promise.resolve(Response.json({
+          openclaw: "connected",
+          nanoclaw: "connected",
+          openhands: "disconnected",
+        }));
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Promise.resolve(Response.json({ tree: [] }));
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    function SettingsRoundTripHarness() {
+      const [route, setRoute] = useState<"project" | "settings">("project");
+
+      return (
+        <div>
+          <button onClick={() => setRoute("settings")}>Go settings</button>
+          <button onClick={() => setRoute("project")}>Back project</button>
+          {route === "project" ? <ChatHarness projectName="alpha-project" /> : <div>Settings</div>}
+        </div>
+      );
+    }
+
+    render(
+      <StrictMode>
+        <SettingsRoundTripHarness />
+      </StrictMode>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-alpha");
+    });
+    expect(screen.getByTestId("message-log").textContent).toContain("user:remembered prompt");
+    expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
+
+    fireEvent.click(screen.getByRole("button", { name: "Go settings" }));
+    await waitFor(() => {
+      expect(screen.getByText("Settings")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Back project" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-alpha");
+    });
+    expect(screen.getByTestId("message-log").textContent).toContain("user:remembered prompt");
+    expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
+
+    await act(async () => {
+      for (const resolve of threadResolvers.splice(0)) {
+        resolve(Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        }));
+      }
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-alpha");
+    });
+    expect(screen.getByTestId("message-log").textContent).toContain("user:remembered prompt");
+    expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem("scienceswarm.chat.alpha-project") || "null",
+    ) as {
+      messages?: Array<{ role?: string; content?: string }>;
+    } | null;
+
+    expect(persisted?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "user",
+          content: "remembered prompt",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          content: "Persisted answer",
+        }),
+      ]),
+    );
   });
 
   it("flushes the live project thread back to local storage on pagehide", async () => {

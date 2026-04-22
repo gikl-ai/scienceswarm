@@ -2198,6 +2198,25 @@ export function useUnifiedChat(
     uploadedFiles,
   ]);
 
+  useLayoutEffect(() => {
+    const storageKey = getChatStorageKey(projectName);
+    if (pendingHydrationKeyRef.current !== storageKey) {
+      return;
+    }
+
+    // The hydration effect only seeds the restored thread into state. Do not
+    // allow persistence or unmount cleanup to treat that thread as durable
+    // until this render has actually committed for the current project.
+    pendingHydrationKeyRef.current = null;
+    hydratedChatKeyRef.current = storageKey;
+  }, [
+    artifactProvenance,
+    conversationBackend,
+    conversationId,
+    messages,
+    projectName,
+  ]);
+
   useEffect(() => {
     workspaceTreeSignatureRef.current = workspaceTreeSignature(workspaceTree);
   }, [workspaceTree]);
@@ -2286,11 +2305,6 @@ export function useUnifiedChat(
 
   useEffect(() => {
     const storageKey = getChatStorageKey(projectName);
-    if (pendingHydrationKeyRef.current === storageKey) {
-      pendingHydrationKeyRef.current = null;
-      hydratedChatKeyRef.current = storageKey;
-      return;
-    }
     if (hydratedChatKeyRef.current !== storageKey) {
       return;
     }
