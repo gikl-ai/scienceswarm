@@ -198,6 +198,31 @@ describe("isLocalRequest", () => {
     ).resolves.toBe(false);
   });
 
+  it("allows direct loopback requests when no frontend host is configured", async () => {
+    vi.stubEnv("FRONTEND_HOST", "");
+    vi.stubEnv("FRONTEND_PUBLIC_HOST", "");
+
+    await expect(
+      isLocalRequest(new Request("http://127.0.0.1:3001/api/setup")),
+    ).resolves.toBe(true);
+  });
+
+  it("allows same-origin loopback browser requests when no frontend host is configured", async () => {
+    vi.stubEnv("FRONTEND_HOST", "");
+    vi.stubEnv("FRONTEND_PUBLIC_HOST", "");
+
+    await expect(
+      isLocalRequest(
+        new Request("http://127.0.0.1:3001/api/setup", {
+          headers: {
+            origin: "http://127.0.0.1:3001",
+            "sec-fetch-site": "same-origin",
+          },
+        }),
+      ),
+    ).resolves.toBe(true);
+  });
+
   it("rejects IPv4-mapped IPv6 non-loopback forwarded clients", async () => {
     vi.stubEnv("FRONTEND_HOST", "127.0.0.1");
 
