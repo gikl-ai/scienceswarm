@@ -21,6 +21,7 @@ export interface LLMCall {
   user: string;
   model?: string;
   maxTokens?: number;
+  responseFormat?: "json_object";
 }
 
 export interface LLMResponse {
@@ -53,13 +54,14 @@ function createLocalLLMClient(): LLMClient {
         feature: "brain LLM completion",
         privacy: "local-network",
       });
-      const content = await completeLocal(
-        [
-          { role: "system", content: call.system },
-          { role: "user", content: call.user },
-        ],
-        model,
-      );
+      const messages = [
+        { role: "system" as const, content: call.system },
+        { role: "user" as const, content: call.user },
+      ];
+      const content =
+        call.responseFormat === "json_object"
+          ? await completeLocal(messages, model, { format: "json" })
+          : await completeLocal(messages, model);
 
       return {
         content,
@@ -91,6 +93,9 @@ function createOpenAILLMClient(config: BrainConfig): LLMClient {
           { role: "user", content: call.user },
         ],
         max_tokens: call.maxTokens,
+        ...(call.responseFormat === "json_object"
+          ? { response_format: { type: "json_object" as const } }
+          : {}),
       });
 
       const usage = response.usage;
