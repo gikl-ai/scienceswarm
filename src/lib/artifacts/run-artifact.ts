@@ -6,7 +6,6 @@ import {
   sendPendingMessage,
   startConversation,
 } from "@/lib/openhands";
-import { DEFAULT_OPENAI_MODEL } from "@/lib/openai-models";
 import { slugifyWorkspaceSegment } from "@/lib/workspace-manager";
 import type { ArtifactContextBundle } from "./context-bundle";
 
@@ -48,7 +47,6 @@ async function startArtifactConversation(
 ): Promise<string> {
   const task = await startConversation({
     message: prompt,
-    model: process.env.LLM_MODEL || DEFAULT_OPENAI_MODEL,
   });
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_ARTIFACT_POLL_INTERVAL_MS;
 

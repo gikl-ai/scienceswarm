@@ -53,6 +53,8 @@ bench-stdout.log
 .gstack/
 .uat/
 .scienceswarm/
+.codex/skills/
+.claude/skills/
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 .playwright-mcp/

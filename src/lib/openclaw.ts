@@ -7,7 +7,10 @@
  * For health checks, uses `openclaw status` parsed output.
  */
 
+import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { getOpenClawGatewayUrl } from "@/lib/config/ports";
+import { getScienceSwarmOpenClawStateDir } from "@/lib/scienceswarm-paths";
 import { runOpenClaw, runOpenClawSync } from "@/lib/openclaw/runner";
 
 /**
@@ -105,6 +108,34 @@ function sanitizeAgentOutput(value: string): string {
     .trim();
 }
 
+function isSessionLockFailureOutput(value: string): boolean {
+  return /\bsession file locked\b/i.test(stripAnsi(value));
+}
+
+function openClawFailureDetail(result: {
+  stdout?: string;
+  stderr?: string;
+  code?: number | null;
+}): string {
+  const detail = [result.stderr, result.stdout]
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .join("\n")
+    .trim();
+  return detail || `openclaw agent failed with code ${result.code ?? "unknown"}`;
+}
+
+function sessionLockRetryDelayMs(attempt: number): number {
+  const configuredDelay = Number(process.env.OPENCLAW_SESSION_LOCK_RETRY_DELAY_MS);
+  const baseDelay = Number.isFinite(configuredDelay) && configuredDelay >= 0
+    ? configuredDelay
+    : 750;
+  return Math.min(baseDelay * attempt, 3_000);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function enabledChannels(data: Record<string, unknown>): string[] {
   if (Array.isArray(data.channelSummary)) {
     return data.channelSummary
@@ -193,6 +224,120 @@ function inferMessageRole(message: OpenClawMessage): "user" | "assistant" | "sys
     return "system";
   }
   return "user";
+}
+
+function extractSessionTextPart(part: unknown): string | null {
+  if (typeof part === "string") {
+    return part.trim().length > 0 ? part : null;
+  }
+  if (!isRecord(part)) {
+    return null;
+  }
+
+  const type = part.type;
+  if (
+    (type === "text" || type === "input_text" || type === "output_text")
+    && typeof part.text === "string"
+    && part.text.trim().length > 0
+  ) {
+    return part.text;
+  }
+
+  return null;
+}
+
+function extractSessionMessageText(content: unknown): string {
+  if (typeof content === "string") {
+    return content.trim();
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .map((part) => extractSessionTextPart(part))
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n")
+    .trim();
+}
+
+async function readConversationHistoryFromSessionFile(
+  conversationId: string,
+  limit: number,
+): Promise<OpenClawMessage[]> {
+  const sessionFile = path.join(
+    getScienceSwarmOpenClawStateDir(),
+    "agents",
+    "main",
+    "sessions",
+    `${conversationId}.jsonl`,
+  );
+
+  let raw: string;
+  try {
+    raw = await readFile(sessionFile, "utf8");
+  } catch {
+    return [];
+  }
+
+  const messages: OpenClawMessage[] = [];
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+
+    if (!isRecord(parsed) || parsed.type !== "message" || !isRecord(parsed.message)) {
+      continue;
+    }
+
+    const role = parsed.message.role;
+    if (role !== "user" && role !== "assistant" && role !== "system") {
+      continue;
+    }
+
+    const content = extractSessionMessageText(parsed.message.content);
+    if (!content) {
+      continue;
+    }
+
+    const timestampCandidate =
+      typeof parsed.timestamp === "string"
+        ? parsed.timestamp
+        : typeof parsed.message.timestamp === "string"
+          ? parsed.message.timestamp
+          : null;
+    if (!timestampCandidate || Number.isNaN(Date.parse(timestampCandidate))) {
+      continue;
+    }
+
+    messages.push({
+      id:
+        typeof parsed.id === "string"
+          ? parsed.id
+          : `${conversationId}:${messages.length + 1}`,
+      userId:
+        role === "assistant"
+          ? "assistant"
+          : role === "system"
+            ? "system"
+            : "web-user",
+      role,
+      channel: "web",
+      content,
+      timestamp: timestampCandidate,
+      conversationId,
+    });
+  }
+
+  return messages.slice(-limit);
 }
 
 /** Check if OpenClaw is running and reachable */
@@ -396,15 +541,31 @@ export async function sendAgentMessage(
   if (options?.session) args.push("--session-id", options.session);
   if (options?.channel) args.push("--channel", options.channel);
   if (options?.deliver) args.push("--deliver");
-  const result = await runOpenClaw(args, {
+  const maxAttempts = 4;
+  let result = await runOpenClaw(args, {
     cwd: options?.cwd,
     timeoutMs: options?.timeoutMs ?? 600000,
   });
 
+  for (let attempt = 1; attempt < maxAttempts && !result.ok; attempt += 1) {
+    const detail = openClawFailureDetail(result);
+    if (!isSessionLockFailureOutput(detail)) {
+      break;
+    }
+
+    // A session lock means another OpenClaw turn is still committing the
+    // session log. The CLI did not accept this message, so retrying the same
+    // send after the lock clears avoids a silent failed/empty web turn without
+    // double-delivering user work.
+    await sleep(sessionLockRetryDelayMs(attempt));
+    result = await runOpenClaw(args, {
+      cwd: options?.cwd,
+      timeoutMs: options?.timeoutMs ?? 600000,
+    });
+  }
+
   if (!result.ok) {
-    throw new Error(
-      result.stderr?.trim() || `openclaw agent failed with code ${result.code ?? "unknown"}`,
-    );
+    throw new Error(openClawFailureDetail(result));
   }
 
   return sanitizeAgentOutput(result.stdout);
@@ -415,6 +576,14 @@ export async function getConversationHistory(
   conversationId: string,
   limit = 20,
 ): Promise<OpenClawMessage[]> {
+  const sessionMessages = await readConversationHistoryFromSessionFile(
+    conversationId,
+    limit,
+  );
+  if (sessionMessages.length > 0) {
+    return sessionMessages;
+  }
+
   const historyResult = await runOpenClaw(
     ["history", "--conversation", conversationId, "--limit", String(limit), "--json"],
     { timeoutMs: 10000 },

@@ -97,6 +97,7 @@ interface PolledOpenClawMessage {
   userId?: string;
   userName?: string;
   timestamp?: string;
+  taskPhases?: unknown;
 }
 
 export type Backend = "openclaw";
@@ -382,6 +383,83 @@ function isLikelyDuplicatePolledUserMessage(
   });
 }
 
+function isTransientAssistantScratchpad(message: Message): boolean {
+  if (message.role !== "assistant") {
+    return false;
+  }
+
+  if (message.channel && message.channel !== "web") {
+    return false;
+  }
+
+  if (message.content === QUEUED_ASSISTANT_CONTENT) {
+    return true;
+  }
+
+  const hasTransientState =
+    Boolean(message.thinking?.trim().length)
+    || Boolean(message.activityLog?.length)
+    || Boolean(message.progressLog?.length)
+    || Boolean(message.taskPhases?.length);
+  if (!hasTransientState) {
+    return false;
+  }
+
+  if (message.content.trim().length === 0) {
+    return true;
+  }
+
+  return (
+    message.taskPhases?.some((phase) => phase.status !== "completed") ?? false
+  );
+}
+
+function mergePolledMessagesIntoTranscript(
+  existingMessages: Message[],
+  polledMessages: Message[],
+): Message[] {
+  if (polledMessages.length === 0) {
+    return existingMessages;
+  }
+
+  const nextMessages = [...existingMessages];
+  const existingIds = new Set(existingMessages.map((message) => message.id));
+  const uniqueMessages = polledMessages.filter(
+    (message) =>
+      !existingIds.has(message.id)
+      && !isLikelyDuplicatePolledUserMessage(existingMessages, message),
+  );
+
+  for (const message of uniqueMessages) {
+    const isWebAssistantCompletion =
+      message.role === "assistant"
+      && (!message.channel || message.channel === "web");
+    if (isWebAssistantCompletion) {
+      const pendingIndex = nextMessages.findLastIndex((existingMessage) =>
+        isTransientAssistantScratchpad(existingMessage),
+      );
+      if (pendingIndex >= 0) {
+        const pendingMessage = nextMessages[pendingIndex];
+        nextMessages[pendingIndex] = {
+          ...pendingMessage,
+          id: message.id,
+          content: message.content,
+          timestamp: message.timestamp,
+          channel: message.channel,
+          userName: message.userName,
+          role: message.role,
+          taskPhases: message.taskPhases?.length ? message.taskPhases : undefined,
+        };
+        continue;
+      }
+    }
+
+    nextMessages.push(message);
+  }
+
+  return nextMessages;
+}
+
 function latestTimestampCursor(seed: string, messages: PolledOpenClawMessage[]): string {
   return messages.reduce((latest, message) => {
     if (typeof message.timestamp !== "string") {
@@ -469,7 +547,7 @@ function inferOpenClawDisplayWorkspacePath(value: string): string | null {
 function normalizeProgressCommandText(value: string, maxChars = 160): string {
   let normalized = collapseProgressWhitespace(value);
   normalized = normalized.replace(
-    /(^|\s)\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3(?=\s|$)/g,
+    /(^|\s)(?:\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3|\/usr\/bin\/python3)(?=\s|$)/g,
     "$1python3",
   );
   normalized = normalized.replace(
@@ -1447,6 +1525,8 @@ function restoreMessage(value: unknown): Message | null {
     return null;
   }
 
+  const taskPhases = restoreTaskPhases(candidate.taskPhases);
+
   return {
     id: candidate.id,
     role: candidate.role,
@@ -1465,8 +1545,28 @@ function restoreMessage(value: unknown): Message | null {
     channel: typeof candidate.channel === "string" ? candidate.channel : undefined,
     userName: typeof candidate.userName === "string" ? candidate.userName : undefined,
     captureClarification: restoreCaptureClarification(candidate.captureClarification),
-    taskPhases: restoreTaskPhases(candidate.taskPhases),
+    taskPhases: normalizeRestoredAssistantTaskPhases(
+      candidate.role,
+      candidate.content,
+      taskPhases,
+    ),
   };
+}
+
+function normalizeRestoredAssistantTaskPhases(
+  role: Message["role"],
+  content: string,
+  taskPhases: ChatTaskPhase[] | undefined,
+): ChatTaskPhase[] | undefined {
+  if (
+    role === "assistant"
+    && content.trim().length > 0
+    && taskPhases?.some((phase) => phase.status === "active" || phase.status === "pending")
+  ) {
+    return undefined;
+  }
+
+  return taskPhases;
 }
 
 function restoreCaptureClarification(value: unknown): CaptureClarification | undefined {
@@ -2372,6 +2472,16 @@ export function useUnifiedChat(
         const data = await res.json();
         let polledMessages: Message[] = [];
 
+        if (
+          typeof data.conversationId === "string"
+          && data.conversationId.trim().length > 0
+        ) {
+          liveConversationIdRef.current = data.conversationId;
+          liveConversationBackendRef.current = "openclaw";
+          setConversationId(data.conversationId);
+          setConversationBackend("openclaw");
+        }
+
         if (Array.isArray(data.messages) && data.messages.length > 0) {
           polledMessages = data.messages
             .filter((message: PolledOpenClawMessage) =>
@@ -2394,6 +2504,7 @@ export function useUnifiedChat(
                 channel: typeof message.channel === "string" ? message.channel : undefined,
                 userName: typeof message.userName === "string" ? message.userName : undefined,
                 timestamp: new Date(message.timestamp as string),
+                taskPhases: restoreTaskPhases(message.taskPhases),
               };
             });
 
@@ -2412,13 +2523,14 @@ export function useUnifiedChat(
           }
 
           setMessages((prev) => {
-            const existingIds = new Set(prev.map((m) => m.id));
-            const unique = polledMessages.filter(
-              (message: Message) =>
-                !existingIds.has(message.id)
-                && !isLikelyDuplicatePolledUserMessage(prev, message),
+            const nextMessages = mergePolledMessagesIntoTranscript(
+              prev,
+              polledMessages,
             );
-            return unique.length > 0 ? [...prev, ...unique] : prev;
+            return nextMessages.length > prev.length
+              || nextMessages.some((message, index) => message !== prev[index])
+              ? nextMessages
+              : prev;
           });
 
           // Advance cursor to the latest returned message timestamp
@@ -2991,6 +3103,7 @@ export function useUnifiedChat(
 
         try {
           const shouldReuseOpenClawConversation =
+            hasProjectScope(queued.context.projectName) ||
             queued.context.chatMode === "openclaw-tools" ||
             shouldForceOpenClawToolExecution(queued.content);
           const activeConversationId = shouldReuseOpenClawConversation
@@ -3349,12 +3462,6 @@ export function useUnifiedChat(
                     displayPath: entry?.workspacePath || `${folder}/${file.name}`,
                   },
                 ]);
-                failures.push({
-                  name: file.name,
-                  code: upstreamCode,
-                  message:
-                    `${upstreamError} Preserved in the workspace as a raw research artifact instead of a typed gbrain page.`,
-                });
                 continue;
               }
             }

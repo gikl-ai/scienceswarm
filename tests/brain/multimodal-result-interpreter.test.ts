@@ -136,4 +136,42 @@ describe("interpretMultimodalResultPacket", () => {
       "docs/oncology_note.txt",
     ]);
   });
+
+  it("ignores unsafe explicit file hints outside the project root", async () => {
+    const scienceswarmDir = await mkdtemp(
+      path.join(os.tmpdir(), "scienceswarm-multimodal-"),
+    );
+    process.env.SCIENCESWARM_DIR = scienceswarmDir;
+
+    const projectRoot = path.join(scienceswarmDir, "projects", "packet-gamma");
+    await mkdir(path.join(projectRoot, "docs"), { recursive: true });
+    await writeFile(
+      path.join(projectRoot, "docs", "safe-note.txt"),
+      "Safe packet note.\n",
+      "utf-8",
+    );
+    await writeFile(
+      path.join(scienceswarmDir, "secret.txt"),
+      "outside-project\n",
+      "utf-8",
+    );
+
+    const result = await interpretMultimodalResultPacket({
+      llm: {
+        complete: vi.fn(async () => {
+          throw new Error("fallback");
+        }),
+      },
+      project: "packet-gamma",
+      prompt: "Interpret the mixed packet.",
+      files: [
+        { workspacePath: "../secret.txt" },
+        { displayPath: "/../../secret.txt" },
+        { workspacePath: "docs/safe-note.txt" },
+      ],
+    });
+
+    expect(result.filesConsidered).toEqual(["docs/safe-note.txt"]);
+    expect(result.response).not.toContain("outside-project");
+  });
 });

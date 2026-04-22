@@ -7,6 +7,7 @@ import {
   saveProjectArtifact,
 } from "@/lib/workspace-manager";
 import { getScienceSwarmProjectRoot } from "@/lib/scienceswarm-paths";
+import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
 const TABLE_EXTENSIONS = new Set([".csv", ".tsv"]);
 const TEXT_EXTENSIONS = new Set([
@@ -58,6 +59,7 @@ export async function interpretMultimodalResultPacket(input: {
   prompt: string;
   files?: MultimodalInterpreterFileHint[];
 }): Promise<MultimodalInterpretationResult> {
+  assertSafeProjectSlug(input.project);
   const workspaceRoot = getScienceSwarmProjectRoot(input.project);
   const evidence = await collectPacketEvidence(workspaceRoot, input.files ?? []);
   if (evidence.length === 0) {
@@ -351,7 +353,15 @@ async function renderInterpretationMarkdown(input: {
 }
 
 function resolveWithinRoot(root: string, relativePath: string): string | null {
-  const normalized = relativePath.replace(/^\/+/, "");
+  if (relativePath.includes("\0")) return null;
+  const normalized = path.normalize(relativePath.replace(/^[/\\]+/, ""));
+  if (
+    normalized === "." ||
+    normalized.startsWith("..") ||
+    path.isAbsolute(normalized)
+  ) {
+    return null;
+  }
   const resolvedRoot = path.resolve(root);
   const resolvedPath = path.resolve(resolvedRoot, normalized);
   const relative = path.relative(resolvedRoot, resolvedPath);
