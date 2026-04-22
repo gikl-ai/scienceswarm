@@ -26,19 +26,147 @@ export interface ChatMessageProps {
   isStreaming?: boolean;
   taskPhases?: ChatTaskPhase[];
   steps?: Step[];
+  /** Project ID for workspace media URLs — avoids SSR window.location access. */
+  projectId?: string;
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+
+/** Only allow same-origin or workspace-relative image URLs. */
+function isSafeImageUrl(url: string): boolean {
+  // Relative paths (starts with / or ./) are safe — served from our own origin
+  if (url.startsWith("/") || url.startsWith("./") || url.startsWith("../")) {
+    return true;
+  }
+  // Block anything that looks like an absolute external URL
+  try {
+    const parsed = new URL(url, "http://self");
+    return parsed.hostname === "self";
+  } catch {
+    return false;
+  }
 }
 
 // ── Render markdown-lite ───────────────────────────────────────
 
-function renderContent(content: string) {
-  // Split on bold markers and render
-  return content.split(/(\*\*[^*]+\*\*)/g).map((part, i) => {
+function renderContent(content: string, projectId: string) {
+  // Split on bold markers, MEDIA references, embed tags, and markdown images
+  return content.split(/(\*\*[^*]+\*\*|MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/g).map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
         <strong key={i} className="font-semibold">
           {part.slice(2, -2)}
         </strong>
       );
+    }
+    if (part.startsWith("MEDIA:")) {
+      const filePath = part.slice(6).trim();
+      const ext = filePath.split(".").pop()?.toLowerCase() || "";
+      const src = `/api/workspace?action=raw&file=${encodeURIComponent(filePath)}&projectId=${encodeURIComponent(projectId)}`;
+      if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) {
+        return (
+          <div key={i} className="my-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt={filePath} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
+            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+          </div>
+        );
+      }
+      if (ext === "html" || ext === "htm") {
+        return (
+          <div key={i} className="my-2">
+            <iframe
+              src={src}
+              title={filePath}
+              className="w-full min-w-[800px] h-[80vh] min-h-[700px] rounded-lg border border-border bg-white"
+              sandbox="allow-scripts"
+            />
+            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+          </div>
+        );
+      }
+      if (ext === "svg") {
+        // SVG rendered as <img> to prevent script execution
+        return (
+          <div key={i} className="my-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt={filePath} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
+            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+          </div>
+        );
+      }
+      if (["mp4", "webm", "mov", "m4v"].includes(ext)) {
+        return (
+          <div key={i} className="my-2">
+            <video controls className="max-w-full max-h-[50vh] rounded-lg border border-border bg-black">
+              <source src={src} />
+            </video>
+            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+          </div>
+        );
+      }
+      if (["mp3", "wav", "ogg", "m4a"].includes(ext)) {
+        return (
+          <div key={i} className="my-2">
+            <audio controls className="w-full">
+              <source src={src} />
+            </audio>
+            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+          </div>
+        );
+      }
+      return <span key={i} className="font-mono text-xs text-accent underline">{filePath}</span>;
+    }
+    if (part.startsWith("[embed")) {
+      const urlMatch = part.match(/url="([^"]+)"/);
+      const titleMatch = part.match(/title="([^"]+)"/);
+      const heightMatch = part.match(/height="([^"]+)"/);
+      if (urlMatch) {
+        let embedUrl = urlMatch[1];
+        // OpenClaw canvas/internal URLs need proxying through workspace API
+        if (embedUrl.includes("__openclaw__") || embedUrl.includes("canvas/documents")) {
+          // Try extracting filename from Saved list, or from URL path
+          const savedMatch = content.match(/[`']([^`']+\.html?)[`']/);
+          const urlPathMatch = embedUrl.match(/documents\/([^/]+)/);
+          const fileName = savedMatch?.[1] ?? (urlPathMatch ? `${urlPathMatch[1]}.html` : "index.html");
+          embedUrl = `/api/workspace?action=raw&file=${encodeURIComponent(fileName)}&projectId=${encodeURIComponent(projectId)}`;
+        } else {
+          embedUrl = embedUrl.startsWith("/") ? embedUrl : `/${embedUrl}`;
+        }
+        const embedTitle = titleMatch?.[1] ?? "Embedded content";
+        const embedHeight = heightMatch?.[1] ?? "60vh";
+        return (
+          <div key={i} className="my-2">
+            <iframe
+              src={embedUrl}
+              title={embedTitle}
+              className="w-full min-w-[800px] min-h-[700px] rounded-lg border border-border bg-white"
+              style={{ height: embedHeight }}
+              sandbox="allow-scripts"
+            />
+            <span className="block text-[10px] text-muted mt-1 font-mono">{embedTitle}</span>
+          </div>
+        );
+      }
+    }
+    if (part.startsWith("![")) {
+      const match = part.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+      if (match && isSafeImageUrl(match[2])) {
+        return (
+          <div key={i} className="my-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={match[2]} alt={match[1]} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
+          </div>
+        );
+      }
+      if (match) {
+        // Unsafe external URL — render as text link instead
+        return (
+          <div key={i} className="my-2">
+            <span className="font-mono text-xs text-muted">[image: {match[1] || match[2]}]</span>
+          </div>
+        );
+      }
     }
     return <span key={i}>{part}</span>;
   });
@@ -57,6 +185,7 @@ export function ChatMessage({
   isStreaming,
   taskPhases,
   steps,
+  projectId = "",
 }: ChatMessageProps) {
   const badge = channel ? CHANNEL_BADGES[channel] : undefined;
   const isCrossChannel = channel && channel !== "web";
@@ -141,7 +270,7 @@ export function ChatMessage({
         )}
 
         {/* Message content */}
-        <div className="whitespace-pre-wrap select-text">{renderContent(content)}</div>
+        <div className="whitespace-pre-wrap select-text">{renderContent(content, projectId)}</div>
 
         {/* Timestamp for cross-channel messages */}
         {isCrossChannel && (

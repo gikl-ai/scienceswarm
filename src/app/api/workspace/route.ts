@@ -1133,7 +1133,10 @@ async function handleGetMeta(filePath: string, projectId: string | null) {
 const MAX_READ_BYTES = 1_000_000;
 const MAX_RAW_BYTES = 50 * 1024 * 1024;
 const PARSEABLE_EXTENSIONS = new Set(["pdf", "xlsx", "xlsm", "ipynb"]);
-const RAW_RENDERABLE_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp"]);
+const RAW_RENDERABLE_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp", "mp4", "webm", "mov", "mp3", "wav", "ogg"]);
+/** Extensions that can be previewed in a sandboxed iframe but must NOT be served
+ *  inline without script-blocking headers (stored XSS risk). */
+const SANDBOXED_PREVIEW_EXTENSIONS = new Set(["html", "htm", "svg"]);
 
 const RAW_CONTENT_TYPES: Record<string, string> = {
   pdf: "application/pdf",
@@ -1142,7 +1145,31 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
+  svg: "image/svg+xml",
+  html: "text/html",
+  htm: "text/html",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
 };
+
+/** Build security headers for sandboxed HTML/SVG preview responses. */
+function buildSandboxedPreviewHeaders(ext: string, base: Record<string, string>): Record<string, string> {
+  if (SANDBOXED_PREVIEW_EXTENSIONS.has(ext)) {
+    return {
+      ...base,
+      // Block all scripts, plugins, and cross-origin access when viewed directly.
+      // The iframe sandbox="allow-scripts" (without allow-same-origin) already
+      // isolates iframed previews, but this protects against direct navigation.
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:",
+      "X-Content-Type-Options": "nosniff",
+    };
+  }
+  return base;
+}
 
 function buildInlineContentDisposition(filename: string): string {
   const encodedName = encodeURIComponent(filename);
@@ -1316,7 +1343,7 @@ async function handleRead(filePath: string, projectId: string | null) {
         file: filePath,
         binary: true,
         size: opened.size,
-        rawAvailable: RAW_RENDERABLE_EXTENSIONS.has(ext),
+        rawAvailable: RAW_RENDERABLE_EXTENSIONS.has(ext) || SANDBOXED_PREVIEW_EXTENSIONS.has(ext),
         source: "gbrain",
       });
     }
@@ -1386,7 +1413,7 @@ async function handleRead(filePath: string, projectId: string | null) {
       file: filePath,
       binary: true,
       size: stat.size,
-      rawAvailable: RAW_RENDERABLE_EXTENSIONS.has(ext),
+      rawAvailable: RAW_RENDERABLE_EXTENSIONS.has(ext) || SANDBOXED_PREVIEW_EXTENSIONS.has(ext),
     });
   }
 
@@ -1401,7 +1428,7 @@ async function handleRaw(filePath: string, projectId: string | null) {
   const gbrainEntry = await findGbrainWorkspaceEntry(filePath, projectId);
   if (gbrainEntry) {
     const ext = path.extname(gbrainEntry.workspacePath).slice(1).toLowerCase();
-    if (!RAW_RENDERABLE_EXTENSIONS.has(ext)) {
+    if (!RAW_RENDERABLE_EXTENSIONS.has(ext) && !SANDBOXED_PREVIEW_EXTENSIONS.has(ext)) {
       return new Response("File type not allowed for raw preview", { status: 415 });
     }
 
@@ -1418,12 +1445,12 @@ async function handleRaw(filePath: string, projectId: string | null) {
     const contentType = RAW_CONTENT_TYPES[ext] || opened.mime || "application/octet-stream";
     return new Response(opened.stream, {
       status: 200,
-      headers: {
+      headers: buildSandboxedPreviewHeaders(ext, {
         "Content-Type": contentType,
         "Content-Length": String(opened.size),
         "Cache-Control": "private, max-age=60",
         "Content-Disposition": buildInlineContentDisposition(path.posix.basename(gbrainEntry.ref.filename)),
-      },
+      }),
     });
   }
 
@@ -1434,7 +1461,7 @@ async function handleRaw(filePath: string, projectId: string | null) {
   const { realFile, stat } = resolved;
 
   const ext = path.extname(realFile).slice(1).toLowerCase();
-  if (!RAW_RENDERABLE_EXTENSIONS.has(ext)) {
+  if (!RAW_RENDERABLE_EXTENSIONS.has(ext) && !SANDBOXED_PREVIEW_EXTENSIONS.has(ext)) {
     return new Response("File type not allowed for raw preview", { status: 415 });
   }
 
@@ -1447,12 +1474,12 @@ async function handleRaw(filePath: string, projectId: string | null) {
 
   return new Response(new Uint8Array(buf), {
     status: 200,
-    headers: {
+    headers: buildSandboxedPreviewHeaders(ext, {
       "Content-Type": contentType,
       "Content-Length": String(stat.size),
       "Cache-Control": "private, max-age=60",
       "Content-Disposition": buildInlineContentDisposition(path.basename(realFile)),
-    },
+    }),
   });
 }
 
