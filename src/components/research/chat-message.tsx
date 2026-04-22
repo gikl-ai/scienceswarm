@@ -107,6 +107,12 @@ function getAudioMimeType(ext: string): string | undefined {
       return "audio/ogg";
     case "m4a":
       return "audio/mp4";
+    case "flac":
+      return "audio/flac";
+    case "opus":
+      return "audio/ogg; codecs=opus";
+    case "aac":
+      return "audio/aac";
     default:
       return undefined;
   }
@@ -682,7 +688,7 @@ function renderContent(content: string, projectId: string) {
           </div>
         );
       }
-      if (["mp3", "wav", "ogg", "m4a"].includes(ext)) {
+      if (["mp3", "wav", "ogg", "m4a", "flac", "opus", "aac"].includes(ext)) {
         return (
           <div key={i} className="my-2">
             <audio controls className="w-full">

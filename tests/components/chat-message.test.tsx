@@ -400,6 +400,25 @@ describe("ChatMessage", () => {
     expect(iframe?.getAttribute("sandbox")).toBe("allow-same-origin allow-downloads");
   });
 
+  it("renders FLAC/OPUS/AAC MEDIA references as inline audio", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:audio/song.flac\nMEDIA:audio/clip.opus\nMEDIA:audio/voice.aac"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:07:00.000Z")}
+      />,
+    );
+
+    const audioElements = container.querySelectorAll("audio");
+    expect(audioElements).toHaveLength(3);
+
+    const sources = container.querySelectorAll("audio source");
+    expect(sources[0]).toHaveAttribute("type", "audio/flac");
+    expect(sources[1]).toHaveAttribute("type", "audio/ogg; codecs=opus");
+    expect(sources[2]).toHaveAttribute("type", "audio/aac");
+  });
+
   it("keeps saved html filename hints scoped to each embed", () => {
     render(
       <ChatMessage
