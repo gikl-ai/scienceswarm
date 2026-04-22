@@ -276,14 +276,12 @@ describe("install-gbrain happy path", () => {
     const resolverSeed = handle.fileAt(
       path.join("/home/test", ".scienceswarm", "brain", "RESOLVER.md"),
     );
-    expect(resolverSeed).toContain("ScienceSwarm scientist-defaults brain");
+    expect(resolverSeed).toContain("ScienceSwarm scientific-research brain");
     expect(resolverSeed).toContain(
       "OpenClaw communicates; OpenHands executes; gbrain stores.",
     );
-    expect(resolverSeed).toContain("gbrain v0.10 search detail");
-    expect(resolverSeed).toContain("detail=low");
-    expect(resolverSeed).toContain("detail=medium");
-    expect(resolverSeed).toContain("detail=high");
+    expect(resolverSeed).toContain("gather candidate papers in bulk");
+    expect(resolverSeed).toContain("write durable journal artifacts");
     expect(resolverSeed).toContain(
       "Do not run upstream gbrain autopilot daemon",
     );
@@ -293,6 +291,7 @@ describe("install-gbrain happy path", () => {
     expect(envContents).toContain(
       `BRAIN_ROOT=${path.join("/home/test", ".scienceswarm", "brain")}`,
     );
+    expect(envContents).toContain("BRAIN_PRESET=scientific_research");
     expect(handle.calls.envWrites).toHaveLength(1);
   });
 
@@ -327,6 +326,26 @@ describe("install-gbrain happy path", () => {
     if (summary.type === "summary") {
       expect(summary.brainRoot).toBe(customRoot);
     }
+  });
+
+  it("supports the generic scientist preset override", async () => {
+    const handle = makeFakeEnv();
+    const { ok } = await runInstallerToCompletion(
+      {
+        repoRoot: "/repo",
+        brainPreset: "generic_scientist",
+      },
+      handle.env,
+    );
+
+    expect(ok).toBe(true);
+    const resolverSeed = handle.fileAt(
+      path.join("/home/test", ".scienceswarm", "brain", "RESOLVER.md"),
+    );
+    expect(resolverSeed).toContain("ScienceSwarm scientist-defaults brain");
+    expect(handle.envFileContents("/repo")).toContain(
+      "BRAIN_PRESET=generic_scientist",
+    );
   });
 
   it("cleans up the writability sentinel files after probing", async () => {

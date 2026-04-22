@@ -543,10 +543,17 @@ export function inferTypeFromPath(path: string): ContentType {
   if (matchesPathSegment(path, "resources/data") || matchesPathSegment(path, "datasets")) return "data";
   if (matchesPathSegment(path, "experiments")) return "experiment";
   if (matchesPathSegment(path, "hypotheses")) return "hypothesis";
+  if (matchesPathSegment(path, "topics")) return "topic";
   if (matchesPathSegment(path, "concepts")) return "concept";
+  if (matchesPathSegment(path, "surveys")) return "survey";
+  if (matchesPathSegment(path, "methods")) return "method";
+  if (matchesPathSegment(path, "originals")) return "original_synthesis";
   if (matchesPathSegment(path, "projects")) return "project";
   if (matchesPathSegment(path, "decisions")) return "decision";
   if (matchesPathSegment(path, "tasks")) return "task";
+  if (matchesPathSegment(path, "packets")) return "research_packet";
+  if (matchesPathSegment(path, "journals")) return "overnight_journal";
+  if (matchesPathSegment(path, "jobs")) return "job_run";
   if (matchesPathSegment(path, "entities/artifacts") || matchesPathSegment(path, "artifacts")) return "artifact";
   if (matchesPathSegment(path, "entities/frontier") || matchesPathSegment(path, "frontier")) return "frontier_item";
   if (matchesPathSegment(path, "observations")) return "observation";

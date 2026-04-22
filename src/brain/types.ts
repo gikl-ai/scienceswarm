@@ -19,12 +19,32 @@ export type ContentType =
   | "web"
   | "voice"
   | "concept"
+  | "topic"
+  | "survey"
+  | "method"
   | "project"
   | "decision"
   | "task"
   | "artifact"
+  | "original_synthesis"
+  | "research_packet"
+  | "overnight_journal"
+  | "job_run"
   | "frontier_item"
   | "person";
+
+export type ResearchContentType =
+  | "concept"
+  | "topic"
+  | "survey"
+  | "method"
+  | "hypothesis"
+  | "original_synthesis"
+  | "research_packet"
+  | "overnight_journal"
+  | "job_run"
+  | "paper"
+  | "project";
 
 export type PARACategory = "projects" | "areas" | "resources" | "archives";
 

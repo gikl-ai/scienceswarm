@@ -64,6 +64,19 @@ describe("POST /api/setup/bootstrap", () => {
     expect(body.error).toContain("email");
   });
 
+  it("returns 400 on an unknown brain preset", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/setup/bootstrap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handle: "alice", brainPreset: "unknown-preset" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toContain("brainPreset");
+  });
+
   it("returns 400 when phone and existingBot token are both sent", async () => {
     const res = await POST(
       new Request("http://localhost/api/setup/bootstrap", {

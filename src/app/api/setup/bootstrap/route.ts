@@ -16,6 +16,10 @@ import { runBootstrap } from "@/lib/setup/bootstrap-orchestrator";
 import type { BootstrapInput } from "@/lib/setup/install-tasks/types";
 import { isLocalRequest } from "@/lib/local-guard";
 import { isTelegramBotTokenShape } from "@/lib/telegram/bot-token";
+import {
+  isBrainPresetId,
+  normalizeBrainPreset,
+} from "@/brain/presets/types";
 
 function isValidHandle(value: unknown): value is string {
   return (
@@ -75,6 +79,7 @@ export async function POST(request: Request): Promise<Response> {
     body.existingBot && typeof body.existingBot.token === "string"
       ? body.existingBot.token.trim()
       : "";
+  const rawBrainPreset = body.brainPreset;
   if (rawPhone && rawExistingToken) {
     return Response.json(
       {
@@ -96,10 +101,17 @@ export async function POST(request: Request): Promise<Response> {
       { status: 400 },
     );
   }
+  if (rawBrainPreset !== undefined && !isBrainPresetId(rawBrainPreset)) {
+    return Response.json(
+      { error: "brainPreset must be a valid ScienceSwarm brain preset" },
+      { status: 400 },
+    );
+  }
   const input: BootstrapInput = {
     handle: body.handle.trim(),
     email: rawEmail || undefined,
     phone: rawPhone || undefined,
+    brainPreset: normalizeBrainPreset(rawBrainPreset),
     telegramMode: rawExistingToken ? "reuse" : rawPhone ? "fresh" : undefined,
     existingBot: rawExistingToken ? { token: rawExistingToken } : undefined,
     repoRoot: process.cwd(),

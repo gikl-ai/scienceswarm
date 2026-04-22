@@ -29,6 +29,8 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { loadBrainPreset } from "./presets";
+import { type BrainPresetId, normalizeBrainPreset } from "./presets/types";
 import { resolveBrainFile } from "./template-paths";
 import {
   defaultInstallerEnvironment,
@@ -90,6 +92,8 @@ export interface InitOptions {
   field?: string;
   /** Institution (for BRAIN.md) */
   institution?: string;
+  /** Named preset that controls BRAIN.md and resolver-compatible directories. */
+  brainPreset?: BrainPresetId;
 }
 
 export interface InitResult {
@@ -112,6 +116,7 @@ interface InstallerCompatOptions extends InitOptions {
  */
 export function initBrain(options: InitOptions): InitResult {
   const { root } = options;
+  const preset = loadBrainPreset(normalizeBrainPreset(options.brainPreset));
 
   if (existsSync(join(root, "BRAIN.md"))) {
     return {
@@ -135,14 +140,13 @@ export function initBrain(options: InitOptions): InitResult {
   for (const dir of BRAIN_DIRS) {
     mkdirSync(join(root, dir), { recursive: true });
   }
+  for (const dir of preset.directories) {
+    mkdirSync(join(root, dir), { recursive: true });
+  }
   mkdirSync(join(root, "wiki"), { recursive: true });
 
   // Legacy filesystem scaffolding — read templates exactly as before.
-  const brainTemplate = readFileSync(
-    join(TEMPLATE_DIR, "BRAIN.md"),
-    "utf-8"
-  );
-  const brainContent = brainTemplate
+  const brainContent = preset.brainTemplate
     .replace("{researcher name}", options.name ?? "{your name}")
     .replace("{e.g., Computational Biology}", options.field ?? "{your field}")
     .replace("{e.g., MIT CSAIL}", options.institution ?? "{your institution}")
@@ -201,6 +205,7 @@ export async function initBrainWithInstaller(
     {
       repoRoot: options.repoRoot ?? process.cwd(),
       brainRoot: options.root,
+      brainPreset: normalizeBrainPreset(options.brainPreset),
       // The compatibility surfaces (`/api/brain/init`, MCP `brain_init`)
       // should still complete in offline dev/test environments. The
       // dedicated /setup installer path retains the explicit network probe.
@@ -218,5 +223,8 @@ export async function initBrainWithInstaller(
     throw new Error(message);
   }
 
-  return initBrain(options);
+  return initBrain({
+    ...options,
+    brainPreset: normalizeBrainPreset(options.brainPreset),
+  });
 }

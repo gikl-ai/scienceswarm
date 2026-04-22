@@ -332,6 +332,13 @@ describe("inferTypeFromPath", () => {
     expect(inferTypeFromPath("decisions/multi-projects-review")).toBe("decision");
   });
 
+  it("infers research-first topic and packet paths", () => {
+    expect(inferTypeFromPath("topics/mechanistic-interpretability")).toBe("topic");
+    expect(inferTypeFromPath("packets/2026-04-22-interpretability-scan")).toBe(
+      "research_packet",
+    );
+  });
+
   it("falls back to note for unknown prefixes", () => {
     expect(inferTypeFromPath("unclassified/thing")).toBe("note");
   });
