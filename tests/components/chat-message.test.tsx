@@ -80,4 +80,24 @@ describe("ChatMessage", () => {
       "/api/workspace?action=raw&file=beta.html&projectId=project-alpha",
     );
   });
+
+  it("reuses the latest saved html filename across intervening text", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "Saved `alpha.html`\n[embed url=\"__openclaw__/canvas\" title=\"Alpha\"]\n" +
+          "Use the chart above as context before opening the follow-up embed.\n" +
+          "[embed url=\"__openclaw__/canvas\" title=\"Alpha Again\"]"
+        }
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:15:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByTitle("Alpha Again")).toHaveAttribute(
+      "src",
+      "/api/workspace?action=raw&file=alpha.html&projectId=project-alpha",
+    );
+  });
 });

@@ -191,9 +191,9 @@ function renderContent(content: string, projectId: string) {
         let embedUrl = urlMatch[1];
         // OpenClaw canvas/internal URLs need proxying through workspace API
         if (embedUrl.includes("__openclaw__") || embedUrl.includes("canvas/documents")) {
-          // Only inspect the current embed's local text context so multiple
-          // embeds in one message do not all resolve to the first saved file.
-          const savedFileName = findLastSavedHtmlFilename(parts[i - 1] ?? "");
+          // Find the most recent saved HTML filename anywhere earlier in the
+          // message so later embeds can still inherit it after intervening text.
+          const savedFileName = findLastSavedHtmlFilename(parts.slice(0, i).join(""));
           const urlPathMatch = embedUrl.match(/documents\/([^/]+)/);
           const fileName = urlPathMatch ? `${urlPathMatch[1]}.html` : (savedFileName ?? "index.html");
           embedUrl = `/api/workspace?action=raw&file=${encodeURIComponent(fileName)}&projectId=${encodeURIComponent(projectId)}`;
