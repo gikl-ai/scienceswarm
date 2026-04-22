@@ -30,6 +30,7 @@ export type ContentType =
   | "research_packet"
   | "overnight_journal"
   | "job_run"
+  | "critique"
   | "frontier_item"
   | "person";
 

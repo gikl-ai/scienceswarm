@@ -260,7 +260,7 @@ export async function isLocalRequest(request?: Request): Promise<boolean> {
     return isLoopbackHost(publicHost) && isTrustedBrowserRequest(h, request);
   }
 
-  if (!request) {
+  if (!request || process.env.NODE_ENV === "production") {
     return false;
   }
 

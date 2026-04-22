@@ -198,15 +198,24 @@ describe("isLocalRequest", () => {
     ).resolves.toBe(false);
   });
 
-  it("allows direct loopback requests when no frontend host env is configured", async () => {
+  it("allows direct loopback requests when no frontend host is configured", async () => {
+    vi.stubEnv("FRONTEND_HOST", "");
+    vi.stubEnv("FRONTEND_PUBLIC_HOST", "");
+
+    await expect(
+      isLocalRequest(new Request("http://127.0.0.1:3001/api/setup")),
+    ).resolves.toBe(true);
+  });
+
+  it("allows same-origin loopback browser requests when no frontend host is configured", async () => {
     vi.stubEnv("FRONTEND_HOST", "");
     vi.stubEnv("FRONTEND_PUBLIC_HOST", "");
 
     await expect(
       isLocalRequest(
-        new Request("http://127.0.0.1:3161/api/setup/bootstrap", {
+        new Request("http://127.0.0.1:3001/api/setup", {
           headers: {
-            origin: "http://127.0.0.1:3161",
+            origin: "http://127.0.0.1:3001",
             "sec-fetch-site": "same-origin",
           },
         }),
@@ -225,6 +234,23 @@ describe("isLocalRequest", () => {
             origin: "http://127.0.0.1:3161",
             "sec-fetch-site": "same-origin",
             "x-forwarded-for": "127.0.0.1",
+          },
+        }),
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it("rejects unconfigured loopback fallback in production", async () => {
+    vi.stubEnv("FRONTEND_HOST", "");
+    vi.stubEnv("FRONTEND_PUBLIC_HOST", "");
+    vi.stubEnv("NODE_ENV", "production");
+
+    await expect(
+      isLocalRequest(
+        new Request("http://127.0.0.1:3161/api/setup/bootstrap", {
+          headers: {
+            origin: "http://127.0.0.1:3161",
+            "sec-fetch-site": "same-origin",
           },
         }),
       ),
