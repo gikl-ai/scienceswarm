@@ -329,7 +329,14 @@ export async function sendAgentMessage(
 ): Promise<string> {
   // WS gateway is only used for in-process chat turns. Channel delivery
   // and unsessioned calls keep the CLI path so we don't change semantics.
-  if (options?.session && !options?.channel && !options?.deliver) {
+  // Calls that pass `cwd` also keep the CLI transport because the gateway
+  // fast-path has no working-directory parameter today.
+  if (
+    options?.session &&
+    !options?.channel &&
+    !options?.deliver &&
+    !options?.cwd
+  ) {
     try {
       const { sendMessageViaGateway } = await import(
         "@/lib/openclaw/gateway-ws-client"

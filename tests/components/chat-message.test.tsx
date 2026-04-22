@@ -311,6 +311,34 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("blocks markdown image urls that walk upward from the page path", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"![img](../../api/chat/unified)"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:12:40.000Z")}
+      />,
+    );
+
+    expect(screen.queryByAltText("img")).not.toBeInTheDocument();
+    expect(screen.getByText("[image: img]")).toBeInTheDocument();
+  });
+
+  it("blocks invalid embed traversal paths instead of proxying them through the workspace api", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"[embed url=\"/__openclaw__/canvas/documents/snake-game/..\" title=\"Snake\" /]"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:12:45.000Z")}
+      />,
+    );
+
+    expect(screen.queryByTitle("Snake")).not.toBeInTheDocument();
+    expect(screen.getByText("[embed blocked: invalid path]")).toBeInTheDocument();
+  });
+
   it("reuses the latest saved html filename across intervening text", () => {
     render(
       <ChatMessage

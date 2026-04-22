@@ -260,6 +260,11 @@ let _eventListeners: Array<{
 }> = [];
 let _requestIdCounter = 0;
 
+interface GatewayEventListenerEntry {
+  sessionKey: string;
+  handler: (event: GatewayFrame) => void;
+}
+
 function nextRequestId(): string {
   _requestIdCounter += 1;
   return `sw-${_requestIdCounter}-${Date.now().toString(36)}`;
@@ -273,6 +278,38 @@ function getGatewayOrigin(): string {
   // Auto-pairing only accepts localhost origins. Use 127.0.0.1 explicitly so
   // we don't rely on /etc/hosts resolution of "localhost".
   return `http://127.0.0.1:${getOpenClawPort()}`;
+}
+
+function getFrameSessionKey(frame: GatewayFrame): string | null {
+  const sessionKey =
+    (frame.params?.key as string | undefined) ??
+    (frame.payload?.key as string | undefined) ??
+    (frame.payload?.session_key as string | undefined);
+  return typeof sessionKey === "string" && sessionKey.length > 0
+    ? sessionKey
+    : null;
+}
+
+function dispatchGatewayFrame(
+  frame: GatewayFrame,
+  listeners: GatewayEventListenerEntry[],
+): void {
+  const frameSessionKey = getFrameSessionKey(frame);
+  if (!frameSessionKey) {
+    debugLog("dropping untagged gateway event", frame.event ?? frame.method ?? frame.type);
+    return;
+  }
+
+  for (const entry of [...listeners]) {
+    if (entry.sessionKey !== frameSessionKey) {
+      continue;
+    }
+    try {
+      entry.handler(frame);
+    } catch {
+      // Don't let a bad listener break the connection
+    }
+  }
 }
 
 /**
@@ -492,22 +529,7 @@ async function connectAndAuth(): Promise<void> {
       // Listeners are session-scoped so concurrent turns cannot see each
       // other's events.
       if (frame.type === "event" || frame.type === "push") {
-        const frameSessionKey =
-          (frame.params?.key as string | undefined) ??
-          (frame.payload?.key as string | undefined) ??
-          (frame.payload?.session_key as string | undefined) ??
-          "";
-        for (const entry of _eventListeners) {
-          // Deliver to the matching session listener, or to all if the
-          // gateway didn't tag the frame with a session key.
-          if (!frameSessionKey || entry.sessionKey === frameSessionKey) {
-            try {
-              entry.handler(frame);
-            } catch {
-              // Don't let a bad listener break the connection
-            }
-          }
-        }
+        dispatchGatewayFrame(frame, _eventListeners);
       }
     });
   });
@@ -523,7 +545,8 @@ async function sendRequest(
 ): Promise<GatewayFrame> {
   await ensureConnected();
 
-  if (!_ws || _ws.readyState !== WebSocket.OPEN) {
+  const ws = _ws;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
     throw new Error("WebSocket not connected after ensureConnected()");
   }
 
@@ -549,7 +572,17 @@ async function sendRequest(
       },
     });
 
-    _ws!.send(JSON.stringify(frame));
+    try {
+      ws.send(JSON.stringify(frame));
+    } catch (error) {
+      clearTimeout(timeout);
+      _pendingRequests.delete(id);
+      reject(
+        error instanceof Error
+          ? error
+          : new Error("WebSocket not connected before request send"),
+      );
+    }
   });
 }
 
@@ -611,8 +644,7 @@ export async function sendMessageViaGateway(
       !msg.includes("already subscribed") &&
       !msg.includes("already_subscribed")
     ) {
-      // Surface but don't fail — the turn may still work
-      debugLog("sessions.messages.subscribe warning:", msg);
+      throw err;
     }
   }
 
@@ -620,10 +652,7 @@ export async function sendMessageViaGateway(
   // Hoist cleanup outside the Promise executor so it can be called if
   // sessions.send fails — prevents leaked listeners and timeouts.
   let turnTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  let listenerEntry: {
-    sessionKey: string;
-    handler: (event: GatewayFrame) => void;
-  } | null = null;
+  let listenerEntry: GatewayEventListenerEntry | null = null;
 
   const cleanupListener = () => {
     if (turnTimeoutId !== null) {
@@ -796,3 +825,7 @@ export function closeGatewayConnection(): void {
   _pendingRequests.clear();
   _eventListeners = [];
 }
+
+export const __testOnly = {
+  dispatchGatewayFrame,
+};

@@ -45,14 +45,16 @@ function isSafeImageUrl(url: string): boolean {
   if (url.startsWith("//")) {
     return false;
   }
-  // Relative paths (starts with /, ./ or ../) are safe — served from our own origin
-  if (url.startsWith("/") || url.startsWith("./") || url.startsWith("../")) {
+  // Only accept explicit same-origin root paths and ./-relative paths.
+  // Reject ../ and bare relative paths so assistant content cannot walk
+  // the current page URL into unintended same-origin API requests.
+  if (url.startsWith("/") || url.startsWith("./")) {
     return true;
   }
-  // Block anything that looks like an absolute external URL
+  // Block bare relative paths and absolute external URLs.
   try {
-    const parsed = new URL(url, "http://self");
-    return parsed.hostname === "self";
+    void new URL(url);
+    return false;
   } catch {
     return false;
   }
@@ -492,19 +494,32 @@ function normalizeWorkspaceRelativePath(value: string): string | null {
     .replace(/^\/+/, "")
     .replace(/\/+$/, "")
     .replace(/\\/g, "/");
-  if (!normalized || normalized === "." || normalized === "..") {
+  if (!normalized) {
     return null;
   }
-  if (normalized.startsWith("../") || normalized.includes("/../")) {
+
+  const segments: string[] = [];
+  for (const segment of normalized.split("/")) {
+    if (!segment || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      return null;
+    }
+    segments.push(segment);
+  }
+
+  const collapsed = segments.join("/");
+  if (!collapsed || collapsed === "." || collapsed === "..") {
     return null;
   }
-  return normalized;
+  return collapsed;
 }
 
 function resolveEmbeddedRawPath(
   embedUrl: string,
   savedFileName: string | undefined,
-): string {
+): string | null {
   const documentPathMatch = embedUrl.match(/(?:^|\/)canvas\/documents\/([^?#]+)/);
   const rawDocumentPath = documentPathMatch?.[1];
   const normalizedDocumentPath =
@@ -512,7 +527,10 @@ function resolveEmbeddedRawPath(
       ? normalizeWorkspaceRelativePath(rawDocumentPath)
       : null;
 
-  if (normalizedDocumentPath) {
+  if (typeof rawDocumentPath === "string") {
+    if (!normalizedDocumentPath) {
+      return null;
+    }
     const basename = normalizedDocumentPath.split("/").pop() || normalizedDocumentPath;
     if (/\.[a-z0-9]+$/i.test(basename)) {
       return `__openclaw__/canvas/documents/${normalizedDocumentPath}`;
@@ -647,11 +665,24 @@ function renderContent(content: string, projectId: string) {
           // message so later embeds can still inherit it after intervening text.
           const savedFileName = findLastSavedHtmlFilename(parts.slice(0, i).join(""));
           const fileName = resolveEmbeddedRawPath(embedUrl, savedFileName);
+          if (!fileName) {
+            return (
+              <div key={i} className="my-2">
+                <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
+              </div>
+            );
+          }
           embedUrl = `/api/workspace?action=raw&file=${encodeURIComponent(fileName)}&projectId=${encodeURIComponent(projectId)}`;
         } else {
           const workspaceHtmlPath = normalizeWorkspaceRelativePath(embedUrl);
           if (workspaceHtmlPath && /\.html?$/i.test(workspaceHtmlPath)) {
             embedUrl = `/api/workspace?action=raw&file=${encodeURIComponent(workspaceHtmlPath)}&projectId=${encodeURIComponent(projectId)}`;
+          } else if (/\.html?$/i.test(embedUrl)) {
+            return (
+              <div key={i} className="my-2">
+                <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
+              </div>
+            );
           } else {
             // Strip every leading slash and re-add a single one so protocol-
             // relative URLs ("//external.host/...") collapse to a same-origin
