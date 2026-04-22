@@ -1043,7 +1043,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
-    expect(await screen.findByText("Thinking…")).toBeInTheDocument();
+    expect(await screen.findByText("Drafting plan")).toBeInTheDocument();
     expect(await screen.findByLabelText("Open generated file research_plan.md")).toBeInTheDocument();
   });
 

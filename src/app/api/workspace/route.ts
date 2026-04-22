@@ -24,6 +24,7 @@ import {
   LARGE_FILE_FINGERPRINT_THRESHOLD_BYTES,
 } from "@/lib/import/file-fingerprint";
 import {
+  getScienceSwarmOpenClawStateDir,
   getScienceSwarmProjectsRoot,
   getScienceSwarmWorkspaceRoot,
 } from "@/lib/scienceswarm-paths";
@@ -1140,7 +1141,26 @@ async function handleGetMeta(filePath: string, projectId: string | null) {
 const MAX_READ_BYTES = 1_000_000;
 const MAX_RAW_BYTES = 50 * 1024 * 1024;
 const PARSEABLE_EXTENSIONS = new Set(["pdf", "xlsx", "xlsm", "ipynb"]);
-const RAW_RENDERABLE_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp"]);
+const RAW_RENDERABLE_EXTENSIONS = new Set([
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "svg",
+  "html",
+  "htm",
+  "mp4",
+  "webm",
+  "mov",
+  "m4v",
+  "mp3",
+  "wav",
+  "ogg",
+  "m4a",
+]);
+const SANDBOXED_PREVIEW_EXTENSIONS = new Set(["html", "htm", "svg"]);
 
 const RAW_CONTENT_TYPES: Record<string, string> = {
   pdf: "application/pdf",
@@ -1149,7 +1169,90 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
+  svg: "image/svg+xml",
+  html: "text/html; charset=utf-8",
+  htm: "text/html; charset=utf-8",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  m4v: "video/mp4",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  m4a: "audio/mp4",
 };
+
+const HTML_PREVIEW_SHIM_MARKER = "data-scienceswarm-html-preview-shim";
+const HTML_PREVIEW_STORAGE_SHIM = `<script ${HTML_PREVIEW_SHIM_MARKER}>
+(() => {
+  const createMemoryStorage = () => {
+    const store = new Map();
+    return {
+      getItem(key) {
+        const normalizedKey = String(key);
+        return store.has(normalizedKey) ? store.get(normalizedKey) : null;
+      },
+      setItem(key, value) {
+        store.set(String(key), String(value));
+      },
+      removeItem(key) {
+        store.delete(String(key));
+      },
+      clear() {
+        store.clear();
+      },
+      key(index) {
+        return Array.from(store.keys())[index] ?? null;
+      },
+      get length() {
+        return store.size;
+      },
+    };
+  };
+
+  const ensureStorage = (name) => {
+    try {
+      const storage = window[name];
+      const probeKey = "__scienceswarm_preview_probe__";
+      storage.setItem(probeKey, "1");
+      storage.removeItem(probeKey);
+    } catch {
+      Object.defineProperty(window, name, {
+        configurable: true,
+        value: createMemoryStorage(),
+      });
+    }
+  };
+
+  ensureStorage("localStorage");
+  ensureStorage("sessionStorage");
+})();
+</script>`;
+
+function buildSandboxedPreviewHeaders(
+  ext: string,
+  base: Record<string, string>,
+): Record<string, string> {
+  if (ext === "html" || ext === "htm") {
+    return {
+      ...base,
+      "Content-Security-Policy":
+        "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+      "X-Content-Type-Options": "nosniff",
+    };
+  }
+
+  if (ext === "svg") {
+    return {
+      ...base,
+      "Content-Security-Policy":
+        "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+      "X-Content-Type-Options": "nosniff",
+    };
+  }
+
+  return base;
+}
 
 function buildInlineContentDisposition(filename: string): string {
   const encodedName = encodeURIComponent(filename);
@@ -1157,6 +1260,54 @@ function buildInlineContentDisposition(filename: string): string {
     .replace(/[^\x20-\x7E]/g, "_")
     .replace(/["\\]/g, "_") || "download";
   return `inline; filename="${asciiFallback}"; filename*=UTF-8''${encodedName}`;
+}
+
+function isHtmlRawExtension(ext: string): boolean {
+  return ext === "html" || ext === "htm";
+}
+
+function injectHtmlPreviewShim(html: string): string {
+  if (html.includes(HTML_PREVIEW_SHIM_MARKER)) {
+    return html;
+  }
+
+  if (/<head(?:\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<head(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
+  }
+
+  if (/<body(?:\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<body(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
+  }
+
+  if (/<!doctype html[^>]*>/i.test(html)) {
+    return html.replace(/<!doctype html[^>]*>/i, (match) => `${match}\n${HTML_PREVIEW_STORAGE_SHIM}`);
+  }
+
+  return `${HTML_PREVIEW_STORAGE_SHIM}${html}`;
+}
+
+function buildBufferedRawPreviewResponse(params: {
+  ext: string;
+  fileName: string;
+  buffer: Buffer;
+  contentType: string;
+}): Response {
+  const body = isHtmlRawExtension(params.ext)
+    ? injectHtmlPreviewShim(params.buffer.toString("utf-8"))
+    : new Uint8Array(params.buffer);
+  const contentLength = typeof body === "string"
+    ? Buffer.byteLength(body)
+    : params.buffer.byteLength;
+
+  return new Response(body, {
+    status: 200,
+    headers: buildSandboxedPreviewHeaders(params.ext, {
+      "Content-Type": params.contentType,
+      "Content-Length": String(contentLength),
+      "Cache-Control": "private, max-age=60",
+      "Content-Disposition": buildInlineContentDisposition(params.fileName),
+    }),
+  });
 }
 
 async function findGbrainWorkspaceEntry(
@@ -1234,6 +1385,13 @@ function safeResolveInsideRoot(
   projectId: string | null,
 ): { realFile: string; stat: fs.Stats } | { error: string; status: number } {
   const root = resolveWorkspaceRoot(projectId);
+  return safeResolveInsideDirectory(root, filePath);
+}
+
+function safeResolveInsideDirectory(
+  root: string,
+  filePath: string,
+): { realFile: string; stat: fs.Stats } | { error: string; status: number } {
   if (!fs.existsSync(root)) {
     return { error: "Workspace root not found", status: 404 };
   }
@@ -1261,6 +1419,34 @@ function safeResolveInsideRoot(
   }
 
   return { realFile, stat };
+}
+
+function safeResolveOpenClawCanvasPath(
+  filePath: string,
+): { realFile: string; stat: fs.Stats } | { error: string; status: number } | null {
+  const normalized = filePath.replaceAll("\\", "/");
+  const prefix = "__openclaw__/canvas/";
+  if (!normalized.startsWith(prefix)) {
+    return null;
+  }
+
+  const canvasRoot = path.join(getScienceSwarmOpenClawStateDir(), "canvas");
+  const relativeCanvasPath = normalized.slice(prefix.length);
+  return safeResolveInsideDirectory(canvasRoot, relativeCanvasPath);
+}
+
+function safeResolveOpenClawMediaPath(
+  filePath: string,
+): { realFile: string; stat: fs.Stats } | { error: string; status: number } | null {
+  const normalized = filePath.replaceAll("\\", "/");
+  const prefix = "__openclaw__/media/";
+  if (!normalized.startsWith(prefix)) {
+    return null;
+  }
+
+  const mediaRoot = path.join(getScienceSwarmOpenClawStateDir(), "media");
+  const relativeMediaPath = normalized.slice(prefix.length);
+  return safeResolveInsideDirectory(mediaRoot, relativeMediaPath);
 }
 
 async function handleRead(filePath: string, projectId: string | null) {
@@ -1323,7 +1509,9 @@ async function handleRead(filePath: string, projectId: string | null) {
         file: filePath,
         binary: true,
         size: opened.size,
-        rawAvailable: RAW_RENDERABLE_EXTENSIONS.has(ext),
+        rawAvailable:
+          RAW_RENDERABLE_EXTENSIONS.has(ext) ||
+          SANDBOXED_PREVIEW_EXTENSIONS.has(ext),
         source: "gbrain",
       });
     }
@@ -1393,7 +1581,9 @@ async function handleRead(filePath: string, projectId: string | null) {
       file: filePath,
       binary: true,
       size: stat.size,
-      rawAvailable: RAW_RENDERABLE_EXTENSIONS.has(ext),
+      rawAvailable:
+        RAW_RENDERABLE_EXTENSIONS.has(ext) ||
+        SANDBOXED_PREVIEW_EXTENSIONS.has(ext),
     });
   }
 
@@ -1405,10 +1595,71 @@ async function handleRead(filePath: string, projectId: string | null) {
 }
 
 async function handleRaw(filePath: string, projectId: string | null) {
+  const openClawCanvasResolved = safeResolveOpenClawCanvasPath(filePath);
+  if (openClawCanvasResolved) {
+    if ("error" in openClawCanvasResolved) {
+      return new Response(openClawCanvasResolved.error, { status: openClawCanvasResolved.status });
+    }
+
+    const { realFile, stat } = openClawCanvasResolved;
+    const ext = path.extname(realFile).slice(1).toLowerCase();
+    if (
+      !RAW_RENDERABLE_EXTENSIONS.has(ext) &&
+      !SANDBOXED_PREVIEW_EXTENSIONS.has(ext)
+    ) {
+      return new Response("File type not allowed for raw preview", { status: 415 });
+    }
+
+    if (stat.size > MAX_RAW_BYTES) {
+      return new Response("File too large for raw preview", { status: 413 });
+    }
+
+    const buf = await fs.promises.readFile(realFile);
+    const contentType = RAW_CONTENT_TYPES[ext] || "application/octet-stream";
+    return buildBufferedRawPreviewResponse({
+      ext,
+      fileName: path.basename(realFile),
+      buffer: buf,
+      contentType,
+    });
+  }
+
+  const openClawMediaResolved = safeResolveOpenClawMediaPath(filePath);
+  if (openClawMediaResolved) {
+    if ("error" in openClawMediaResolved) {
+      return new Response(openClawMediaResolved.error, { status: openClawMediaResolved.status });
+    }
+
+    const { realFile, stat } = openClawMediaResolved;
+    const ext = path.extname(realFile).slice(1).toLowerCase();
+    if (
+      !RAW_RENDERABLE_EXTENSIONS.has(ext) &&
+      !SANDBOXED_PREVIEW_EXTENSIONS.has(ext)
+    ) {
+      return new Response("File type not allowed for raw preview", { status: 415 });
+    }
+
+    if (stat.size > MAX_RAW_BYTES) {
+      return new Response("File too large for raw preview", { status: 413 });
+    }
+
+    const buf = await fs.promises.readFile(realFile);
+    const contentType = RAW_CONTENT_TYPES[ext] || "application/octet-stream";
+    return buildBufferedRawPreviewResponse({
+      ext,
+      fileName: path.basename(realFile),
+      buffer: buf,
+      contentType,
+    });
+  }
+
   const gbrainEntry = await findGbrainWorkspaceEntry(filePath, projectId);
   if (gbrainEntry) {
     const ext = path.extname(gbrainEntry.workspacePath).slice(1).toLowerCase();
-    if (!RAW_RENDERABLE_EXTENSIONS.has(ext)) {
+    if (
+      !RAW_RENDERABLE_EXTENSIONS.has(ext) &&
+      !SANDBOXED_PREVIEW_EXTENSIONS.has(ext)
+    ) {
       return new Response("File type not allowed for raw preview", { status: 415 });
     }
 
@@ -1423,14 +1674,24 @@ async function handleRaw(filePath: string, projectId: string | null) {
     }
 
     const contentType = RAW_CONTENT_TYPES[ext] || opened.mime || "application/octet-stream";
+    if (isHtmlRawExtension(ext)) {
+      const buf = await readStreamToBufferCapped(opened.stream, MAX_RAW_BYTES);
+      return buildBufferedRawPreviewResponse({
+        ext,
+        fileName: path.posix.basename(gbrainEntry.ref.filename),
+        buffer: buf,
+        contentType,
+      });
+    }
+
     return new Response(opened.stream, {
       status: 200,
-      headers: {
+      headers: buildSandboxedPreviewHeaders(ext, {
         "Content-Type": contentType,
         "Content-Length": String(opened.size),
         "Cache-Control": "private, max-age=60",
         "Content-Disposition": buildInlineContentDisposition(path.posix.basename(gbrainEntry.ref.filename)),
-      },
+      }),
     });
   }
 
@@ -1441,7 +1702,10 @@ async function handleRaw(filePath: string, projectId: string | null) {
   const { realFile, stat } = resolved;
 
   const ext = path.extname(realFile).slice(1).toLowerCase();
-  if (!RAW_RENDERABLE_EXTENSIONS.has(ext)) {
+  if (
+    !RAW_RENDERABLE_EXTENSIONS.has(ext) &&
+    !SANDBOXED_PREVIEW_EXTENSIONS.has(ext)
+  ) {
     return new Response("File type not allowed for raw preview", { status: 415 });
   }
 
@@ -1451,15 +1715,11 @@ async function handleRaw(filePath: string, projectId: string | null) {
 
   const buf = await fs.promises.readFile(realFile);
   const contentType = RAW_CONTENT_TYPES[ext] || "application/octet-stream";
-
-  return new Response(new Uint8Array(buf), {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Content-Length": String(stat.size),
-      "Cache-Control": "private, max-age=60",
-      "Content-Disposition": buildInlineContentDisposition(path.basename(realFile)),
-    },
+  return buildBufferedRawPreviewResponse({
+    ext,
+    fileName: path.basename(realFile),
+    buffer: buf,
+    contentType,
   });
 }
 
