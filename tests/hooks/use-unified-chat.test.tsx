@@ -2767,7 +2767,7 @@ describe("useUnifiedChat persistence", () => {
                       type: "tool_call",
                       name: "read",
                       input: {
-                        path: "/Users/vajdap/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html",
+                        path: "/Users/example/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html",
                       },
                     },
                   ],
@@ -2931,7 +2931,7 @@ describe("useUnifiedChat persistence", () => {
                       type: "toolCall",
                       name: "write",
                       arguments: {
-                        path: "/Users/vajdap/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
+                        path: "/Users/example/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
                         content: "#!/usr/bin/env python3\nprint('hello')\n",
                       },
                     },
@@ -3013,7 +3013,7 @@ describe("useUnifiedChat persistence", () => {
                       arguments: {
                         cmd:
                           "/usr/local/Caskroom/miniforge/base/bin/python3 " +
-                          "/Users/vajdap/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
+                          "/Users/example/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
                       },
                     },
                   ],
@@ -3047,7 +3047,7 @@ describe("useUnifiedChat persistence", () => {
       "/usr/local/Caskroom/miniforge/base/bin/python3",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
-      "/Users/vajdap/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
+      "/Users/example/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
     );
   });
 
