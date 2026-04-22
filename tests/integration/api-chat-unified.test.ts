@@ -2596,6 +2596,9 @@ describe("POST /api/chat/unified", () => {
   });
 
   it("streams actionable recovery guidance when the local model connection fails", async () => {
+    const projectId = "alpha-project-model-outage";
+    createProjectRoot(projectId);
+
     resolveAgentConfig.mockReturnValue({
       type: "openclaw",
       url: "http://localhost:19002",
@@ -2629,7 +2632,7 @@ describe("POST /api/chat/unified", () => {
             workspacePath: "gbrain:hubble-1929",
           },
         ],
-        projectId: "alpha-project",
+        projectId,
         streamPhases: true,
       }),
     });
@@ -2644,7 +2647,7 @@ describe("POST /api/chat/unified", () => {
       text: expect.stringContaining("local AI model connection is unavailable"),
       generatedFiles: [],
       taskPhases: [
-        { id: "reading-file", label: "Reading files", status: "completed" },
+        { id: "reading-file", label: "Reading file", status: "completed" },
         { id: "importing-result", label: "Importing result", status: "failed" },
         { id: "done", label: "Done", status: "pending" },
       ],
