@@ -3012,7 +3012,7 @@ describe("useUnifiedChat persistence", () => {
                       name: "exec",
                       arguments: {
                         cmd:
-                          "/usr/local/Caskroom/miniforge/base/bin/python3 " +
+                          "/usr/bin/python3 " +
                           "/Users/example/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
                       },
                     },
@@ -3044,7 +3044,7 @@ describe("useUnifiedChat persistence", () => {
       "assistant:activity:Run python3 scripts/generate_mouse_chasing_cat_gif.py",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
-      "/usr/local/Caskroom/miniforge/base/bin/python3",
+      "/usr/bin/python3",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
       "/Users/example/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",

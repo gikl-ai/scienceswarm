@@ -234,7 +234,7 @@ describe("ChatMessage", () => {
           {
             kind: "activity",
             text:
-              "Run /usr/local/Caskroom/miniforge/base/bin/python3 /Users/example/.scienceswarm/projects/project-alpha/scripts/generate_mouse_chasing_cat_gif.py",
+              "Run /usr/bin/python3 /Users/example/.scienceswarm/projects/project-alpha/scripts/generate_mouse_chasing_cat_gif.py",
           },
           { kind: "activity", text: "Run command complete" },
         ]}
@@ -245,7 +245,7 @@ describe("ChatMessage", () => {
 
     const progressLog = screen.getByRole("log");
     expect(progressLog).toHaveTextContent("Run python3 scripts/generate_mouse_chasing_cat_gif.py");
-    expect(progressLog).not.toHaveTextContent("/usr/local/Caskroom/miniforge/base/bin/python3");
+    expect(progressLog).not.toHaveTextContent("/usr/bin/python3");
     expect(progressLog).not.toHaveTextContent("Run command complete");
   });
 
