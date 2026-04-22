@@ -1,6 +1,9 @@
 import { promises as fs } from "fs";
 import { join } from "path";
-import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
+import {
+  getScienceSwarmBrainRoot,
+  getScienceSwarmDataRoot,
+} from "@/lib/scienceswarm-paths";
 
 export interface StructuredCritiqueFeedbackRecord {
   job_id: string;
@@ -33,6 +36,42 @@ export function getStructuredCritiqueFeedbackPath(): string {
   return join(getStructuredCritiqueFeedbackDir(), "critique-feedback.jsonl");
 }
 
+function getLegacyStructuredCritiqueFeedbackPath(): string | null {
+  if (process.env.STRUCTURED_CRITIQUE_FEEDBACK_DIR) {
+    return null;
+  }
+  return join(getScienceSwarmDataRoot(), "feedback", "critique-feedback.jsonl");
+}
+
+async function migrateLegacyStructuredCritiqueFeedbackIfNeeded(): Promise<void> {
+  const legacyPath = getLegacyStructuredCritiqueFeedbackPath();
+  if (!legacyPath) return;
+
+  const feedbackPath = getStructuredCritiqueFeedbackPath();
+  if (legacyPath === feedbackPath) return;
+
+  try {
+    await fs.access(feedbackPath);
+    return;
+  } catch (err) {
+    if (!(typeof err === "object" && err && "code" in err && err.code === "ENOENT")) {
+      throw err;
+    }
+  }
+
+  try {
+    await fs.access(legacyPath);
+  } catch (err) {
+    if (typeof err === "object" && err && "code" in err && err.code === "ENOENT") {
+      return;
+    }
+    throw err;
+  }
+
+  await fs.mkdir(getStructuredCritiqueFeedbackDir(), { recursive: true });
+  await fs.copyFile(legacyPath, feedbackPath);
+}
+
 export function summarizeStructuredCritiqueFeedback(
   records: StructuredCritiqueFeedbackRecord[],
 ): StructuredCritiqueFeedbackSummary {
@@ -56,6 +95,7 @@ export function summarizeStructuredCritiqueFeedback(
 export async function appendStructuredCritiqueFeedback(
   record: StructuredCritiqueFeedbackRecord,
 ): Promise<void> {
+  await migrateLegacyStructuredCritiqueFeedbackIfNeeded();
   const feedbackDir = getStructuredCritiqueFeedbackDir();
   const feedbackPath = getStructuredCritiqueFeedbackPath();
   await fs.mkdir(feedbackDir, { recursive: true });
@@ -68,6 +108,7 @@ export async function readStructuredCritiqueFeedback(
     findingId?: string | null;
   } = {},
 ): Promise<StructuredCritiqueFeedbackRecord[]> {
+  await migrateLegacyStructuredCritiqueFeedbackIfNeeded();
   let raw: string;
   try {
     raw = await fs.readFile(getStructuredCritiqueFeedbackPath(), "utf-8");
