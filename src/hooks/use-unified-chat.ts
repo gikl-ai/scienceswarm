@@ -3412,19 +3412,64 @@ export function useUnifiedChat(
               type: entry?.type || file.name.split(".").pop() || "file",
             });
           } else {
+            const uploadError =
+              payload?.errors?.find((err) => err.filename === file.name)
+              ?? payload?.errors?.[0]
+              ?? null;
+            const upstreamError =
+              uploadError?.message
+              ?? payload?.error
+              ?? `upload failed with status ${res.status}`;
+            const upstreamCode = uploadError?.code ?? "upload_failed";
+
+            if (upstreamCode === "unsupported_type" && safeProjectId) {
+              const fallbackFormData = new FormData();
+              fallbackFormData.append("files", file);
+              fallbackFormData.append("projectId", safeProjectId);
+              const fallbackRes = await fetch("/api/workspace", {
+                method: "POST",
+                body: fallbackFormData,
+              });
+              const fallbackPayload = (await fallbackRes.json().catch(() => null)) as
+                | {
+                    uploaded?: Array<{
+                      name?: string;
+                      folder?: string;
+                      workspacePath?: string;
+                    }>;
+                    error?: string;
+                  }
+                | null;
+              if (fallbackRes.ok && fallbackPayload?.uploaded?.length) {
+                workspaceAvailable = true;
+                const entry = fallbackPayload.uploaded[0];
+                const folder = entry?.folder || getFolderLabel(entry?.workspacePath || file.name);
+                organized.push({
+                  name: entry?.name || file.name,
+                  folder,
+                  size: formatFileSize(file.size),
+                  type: file.name.split(".").pop() || "file",
+                });
+                setUploadedFiles((prev) => [
+                  ...prev,
+                  {
+                    name: file.name,
+                    size: formatFileSize(file.size),
+                    type: file.name.split(".").pop() || "file",
+                    folder,
+                    workspacePath: entry?.workspacePath || `${folder}/${file.name}`,
+                    source: "workspace",
+                    displayPath: entry?.workspacePath || `${folder}/${file.name}`,
+                  },
+                ]);
+                continue;
+              }
+            }
+
             // Route returned a failure for this file — either a converter
             // error (200 with `errors[]`) or a request-level 4xx/5xx. Show
             // the upstream message so the user knows WHY the file was
             // rejected instead of seeing a misleading "organized" summary.
-            const upstreamError =
-              payload?.errors?.find((err) => err.filename === file.name)
-                ?.message ??
-              payload?.errors?.[0]?.message ??
-              payload?.error ??
-              `upload failed with status ${res.status}`;
-            const upstreamCode =
-              payload?.errors?.find((err) => err.filename === file.name)
-                ?.code ?? "upload_failed";
             failures.push({
               name: file.name,
               code: upstreamCode,
