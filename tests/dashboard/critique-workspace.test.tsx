@@ -624,7 +624,9 @@ describe("Critique workspace", () => {
       would_revise: true,
     });
 
-    expect(await screen.findByText("Thanks!")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Feedback recorded and added to this output's evaluation history/i),
+    ).toBeInTheDocument();
   });
 
   it("shows a warning and available findings on partial failure", async () => {
