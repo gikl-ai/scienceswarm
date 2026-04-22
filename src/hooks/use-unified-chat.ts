@@ -97,6 +97,7 @@ interface PolledOpenClawMessage {
   userId?: string;
   userName?: string;
   timestamp?: string;
+  taskPhases?: unknown;
 }
 
 export type Backend = "openclaw";
@@ -447,6 +448,7 @@ function mergePolledMessagesIntoTranscript(
           channel: message.channel,
           userName: message.userName,
           role: message.role,
+          taskPhases: message.taskPhases?.length ? message.taskPhases : undefined,
         };
         continue;
       }
@@ -1523,6 +1525,8 @@ function restoreMessage(value: unknown): Message | null {
     return null;
   }
 
+  const taskPhases = restoreTaskPhases(candidate.taskPhases);
+
   return {
     id: candidate.id,
     role: candidate.role,
@@ -1541,8 +1545,28 @@ function restoreMessage(value: unknown): Message | null {
     channel: typeof candidate.channel === "string" ? candidate.channel : undefined,
     userName: typeof candidate.userName === "string" ? candidate.userName : undefined,
     captureClarification: restoreCaptureClarification(candidate.captureClarification),
-    taskPhases: restoreTaskPhases(candidate.taskPhases),
+    taskPhases: normalizeRestoredAssistantTaskPhases(
+      candidate.role,
+      candidate.content,
+      taskPhases,
+    ),
   };
+}
+
+function normalizeRestoredAssistantTaskPhases(
+  role: Message["role"],
+  content: string,
+  taskPhases: ChatTaskPhase[] | undefined,
+): ChatTaskPhase[] | undefined {
+  if (
+    role === "assistant"
+    && content.trim().length > 0
+    && taskPhases?.some((phase) => phase.status === "active" || phase.status === "pending")
+  ) {
+    return undefined;
+  }
+
+  return taskPhases;
 }
 
 function restoreCaptureClarification(value: unknown): CaptureClarification | undefined {
@@ -2480,6 +2504,7 @@ export function useUnifiedChat(
                 channel: typeof message.channel === "string" ? message.channel : undefined,
                 userName: typeof message.userName === "string" ? message.userName : undefined,
                 timestamp: new Date(message.timestamp as string),
+                taskPhases: restoreTaskPhases(message.taskPhases),
               };
             });
 
