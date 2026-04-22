@@ -72,6 +72,7 @@ import {
   rewriteProjectRootMentions,
   writeBackOpenClawGeneratedFiles,
 } from "@/lib/openclaw/gbrain-writeback";
+import { sanitizeOpenClawUserVisibleResponse } from "@/lib/openclaw/response-sanitizer";
 import { listOpenClawSkills } from "@/lib/openclaw/skill-catalog";
 import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
 import {
@@ -1408,20 +1409,6 @@ async function buildWorkspaceFileContext(
   };
 }
 
-function withWorkspaceFileContext(
-  messages: UnifiedChatMessage[],
-  workspaceFileContext?: WorkspaceFileContext | null,
-): UnifiedChatMessage[] {
-  if (!workspaceFileContext?.contextMessage) {
-    return messages;
-  }
-
-  return [
-    { role: "user", content: workspaceFileContext.contextMessage },
-    ...messages,
-  ];
-}
-
 /**
  * Inject the "currently selected file" context into the message list.
  *
@@ -1472,21 +1459,6 @@ async function prependScienceSwarmProjectPrompt(params: {
     return params.message;
   }
   return `${promptContext}\n\nCurrent user request:\n${params.message}`;
-}
-
-function appendWorkspaceContextToUserMessage(
-  message: string,
-  workspaceFileContext?: WorkspaceFileContext | null,
-): string {
-  if (!workspaceFileContext?.contextMessage) {
-    return message;
-  }
-
-  return [
-    workspaceFileContext.contextMessage,
-    "User request:",
-    message,
-  ].join("\n\n");
 }
 
 function buildOpenClawSessionId(
@@ -1631,11 +1603,16 @@ async function readOpenClawThinkingTraceFromFile(
           }
         }
       }
-      latestThinking =
+      const latestThinkingRaw =
         thinkingParts.length > 0 ? thinkingParts.join("\n\n") : null;
+      latestThinking = latestThinkingRaw
+        ? sanitizeOpenClawUserVisibleResponse(latestThinkingRaw, {
+            trimEnd: false,
+          })
+        : null;
     }
 
-    return latestThinking;
+    return latestThinking && latestThinking.length > 0 ? latestThinking : null;
   } catch {
     return null;
   }
@@ -2572,32 +2549,6 @@ function buildOpenClawVisibleFailureResponse(value: unknown): string | null {
     "Retry the same prompt after checking Settings for OpenClaw and local model status.",
     `Technical detail: ${detail}`,
   ].join("\n\n");
-}
-
-function sanitizeOpenClawUserVisibleResponse(response: string): string {
-  return response
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        return true;
-      }
-      if (
-        /^\[(?:agents\/[^\]]+|auth(?:-profiles)?|gateway|session|model|subagent|tool(?:s)?)[^\]]*\].*$/i.test(
-          trimmed,
-        )
-      ) {
-        return false;
-      }
-      if (/\bsynced\b.*\bcredentials\b.*\bexternal cli\b/i.test(trimmed)) {
-        return false;
-      }
-      return true;
-    })
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 }
 
 async function resolveOpenClawWorkingDirectory(
@@ -6089,9 +6040,11 @@ async function importOpenClawOutputsFromMessages(params: {
         });
       }
 
-      return imported.response === message.content
+      const sanitizedResponse =
+        sanitizeOpenClawUserVisibleResponse(imported.response);
+      return sanitizedResponse === message.content
         ? message
-        : { ...message, content: imported.response };
+        : { ...message, content: sanitizedResponse };
     }),
   );
 
@@ -6205,7 +6158,18 @@ function streamOpenClawResponse(params: {
           });
           const sendFinalEvent = async (payload: Record<string, unknown>) => {
             await thinkingTraceStreamer.flush();
-            sendEvent(payload);
+            const sanitizedPayload = { ...payload };
+            if (typeof sanitizedPayload.text === "string") {
+              sanitizedPayload.text = sanitizeOpenClawUserVisibleResponse(
+                sanitizedPayload.text,
+              );
+            }
+            if (typeof sanitizedPayload.thinking === "string") {
+              sanitizedPayload.thinking = sanitizeOpenClawUserVisibleResponse(
+                sanitizedPayload.thinking,
+              );
+            }
+            sendEvent(sanitizedPayload);
           };
           // Wrap the caller-provided sendToOpenClaw so any per-turn WS event
           // (tool start/result, text/lifecycle deltas) is forwarded to the
@@ -6745,7 +6709,7 @@ async function handleExplicitOpenClawSlashCommand(params: {
   });
   return Response.json(
     {
-      response: importedOutputs.response,
+      response: sanitizeOpenClawUserVisibleResponse(importedOutputs.response),
       conversationId: openClawConversationId,
       backend: "openclaw",
       mode: params.chatMode,
@@ -7203,7 +7167,9 @@ export async function handleUnifiedChatPost(
       if (fastRevisionOutputs) {
         return Response.json(
           {
-            response: fastRevisionOutputs.response,
+            response: sanitizeOpenClawUserVisibleResponse(
+              fastRevisionOutputs.response,
+            ),
             conversationId: openClawConversationId,
             backend: "openclaw",
             mode: chatMode,
@@ -7338,7 +7304,7 @@ export async function handleUnifiedChatPost(
 
       return Response.json(
         {
-          response: importedOutputs.response,
+          response: sanitizeOpenClawUserVisibleResponse(importedOutputs.response),
           thinking:
             (await readOpenClawThinkingTrace(openClawConversationId)) ?? undefined,
           conversationId: openClawConversationId,
@@ -7550,7 +7516,17 @@ export async function GET(request: Request) {
           m.channel !== "web" &&
           m.timestamp &&
           m.timestamp > since,
-      );
+      ).map((message: Record<string, unknown>) => {
+        const isUserMessage =
+          message.role === "user" || message.userId === "user";
+        return {
+          ...message,
+          content:
+            typeof message.content === "string" && !isUserMessage
+              ? sanitizeOpenClawUserVisibleResponse(message.content)
+              : message.content,
+        };
+      });
 
       return Response.json({ messages: crossChannel, backend: "openclaw" });
     } catch {
