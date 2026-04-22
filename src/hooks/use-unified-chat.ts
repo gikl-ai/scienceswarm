@@ -2653,11 +2653,15 @@ export function useUnifiedChat(
           ) {
             const finalText =
               typeof parsed.text === "string" && parsed.text.length > 0
-                ? sanitizeOpenClawUserVisibleResponse(parsed.text)
+                ? sanitizeOpenClawUserVisibleResponse(parsed.text, {
+                    trimEnd: false,
+                  })
                 : null;
             const nextThinking =
               typeof parsed.thinking === "string" && parsed.thinking.length > 0
-                ? sanitizeOpenClawUserVisibleResponse(parsed.thinking)
+                ? sanitizeOpenClawUserVisibleResponse(parsed.thinking, {
+                    trimEnd: false,
+                  })
                 : null;
             const replaceThinking = parsed.replaceThinking === true;
             applyMessagesUpdate((prev) =>

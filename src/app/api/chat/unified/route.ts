@@ -1606,7 +1606,9 @@ async function readOpenClawThinkingTraceFromFile(
       const latestThinkingRaw =
         thinkingParts.length > 0 ? thinkingParts.join("\n\n") : null;
       latestThinking = latestThinkingRaw
-        ? sanitizeOpenClawUserVisibleResponse(latestThinkingRaw)
+        ? sanitizeOpenClawUserVisibleResponse(latestThinkingRaw, {
+            trimEnd: false,
+          })
         : null;
     }
 
@@ -7514,13 +7516,17 @@ export async function GET(request: Request) {
           m.channel !== "web" &&
           m.timestamp &&
           m.timestamp > since,
-      ).map((message: Record<string, unknown>) => ({
-        ...message,
-        content:
-          typeof message.content === "string"
-            ? sanitizeOpenClawUserVisibleResponse(message.content)
-            : message.content,
-      }));
+      ).map((message: Record<string, unknown>) => {
+        const isUserMessage =
+          message.role === "user" || message.userId === "user";
+        return {
+          ...message,
+          content:
+            typeof message.content === "string" && !isUserMessage
+              ? sanitizeOpenClawUserVisibleResponse(message.content)
+              : message.content,
+        };
+      });
 
       return Response.json({ messages: crossChannel, backend: "openclaw" });
     } catch {

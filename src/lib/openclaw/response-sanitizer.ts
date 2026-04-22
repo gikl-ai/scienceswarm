@@ -1,5 +1,8 @@
-export function sanitizeOpenClawUserVisibleResponse(response: string): string {
-  return response
+export function sanitizeOpenClawUserVisibleResponse(
+  response: string,
+  options?: { trimEnd?: boolean },
+): string {
+  const sanitized = response
     .replace(/\r\n/g, "\n")
     .split("\n")
     .filter((line) => {
@@ -22,4 +25,6 @@ export function sanitizeOpenClawUserVisibleResponse(response: string): string {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/^\s*\n+/, "");
+
+  return options?.trimEnd === false ? sanitized : sanitized.trimEnd();
 }

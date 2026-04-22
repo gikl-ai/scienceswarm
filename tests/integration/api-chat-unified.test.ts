@@ -22,6 +22,7 @@ const {
   openClawHealthCheck,
   sendOpenClawMessage,
   getConversationMessagesSince,
+  runOpenClaw,
   streamChat,
   localHealthCheck,
   hasLocalModel,
@@ -50,6 +51,7 @@ const {
   openClawHealthCheck: vi.fn(),
   sendOpenClawMessage: vi.fn(),
   getConversationMessagesSince: vi.fn(),
+  runOpenClaw: vi.fn(),
   streamChat: vi.fn(),
   localHealthCheck: vi.fn(),
   hasLocalModel: vi.fn(),
@@ -86,6 +88,10 @@ vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
   sendAgentMessage: sendOpenClawMessage,
   getConversationMessagesSince,
+}));
+
+vi.mock("@/lib/openclaw/runner", () => ({
+  runOpenClaw,
 }));
 
 vi.mock("@/lib/openclaw-bridge", () => ({
@@ -234,6 +240,7 @@ beforeEach(() => {
   sendAgentMessage.mockReset();
   openClawHealthCheck.mockReset();
   sendOpenClawMessage.mockReset();
+  runOpenClaw.mockReset();
   sendMessageViaGateway.mockReset();
   // Default behaviour: route gateway WS calls through the existing
   // sendOpenClawMessage mock so each test only has to stub one function.
@@ -386,6 +393,8 @@ describe("GET /api/chat/unified", () => {
           "[agents/auth-profiles] synced openai-codex credentials from external cli",
           "",
           "Here is your draft summary.",
+          "",
+          "",
         ].join("\n"),
         timestamp: "2026-01-01T00:00:05.000Z",
         conversationId: "web:alpha-project:session-1",
@@ -409,6 +418,64 @@ describe("GET /api/chat/unified", () => {
       ]),
     );
     expect(body.messages[0]?.content).not.toContain("[agents/auth-profiles]");
+  });
+
+  it("keeps user-authored bracketed text in cross-channel CLI poll responses", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    runOpenClaw.mockResolvedValueOnce({
+      ok: true,
+      stdout: JSON.stringify([
+        {
+          id: "user-cross-channel",
+          userId: "user",
+          channel: "telegram",
+          content: "[agents/auth-profiles] keep this user-authored line",
+          timestamp: "2026-01-01T00:00:01.000Z",
+        },
+        {
+          id: "assistant-cross-channel",
+          userId: "assistant",
+          channel: "telegram",
+          content: [
+            "[agents/auth-profiles] synced openai-codex credentials from external cli",
+            "",
+            "Delivered update.",
+            "",
+            "",
+          ].join("\n"),
+          timestamp: "2026-01-01T00:00:02.000Z",
+        },
+      ]),
+    });
+
+    const request = new Request(
+      "http://localhost/api/chat/unified?action=poll&since=2026-01-01T00:00:00.000Z&projectId=alpha-project",
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      backend: "openclaw",
+      messages: [
+        expect.objectContaining({
+          id: "user-cross-channel",
+          content: "[agents/auth-profiles] keep this user-authored line",
+        }),
+        expect.objectContaining({
+          id: "assistant-cross-channel",
+          content: "Delivered update.",
+        }),
+      ],
+    });
+    expect(runOpenClaw).toHaveBeenCalledWith(
+      ["sessions", "messages", "--json", "--limit", "20"],
+      { timeoutMs: 5000 },
+    );
   });
 
   it("imports generated OpenClaw outputs referenced by assistant web completions", async () => {
