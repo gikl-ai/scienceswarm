@@ -219,18 +219,20 @@ export function resolveBrainStoreRoot(): string {
   return resolveConfiguredPath(process.env.BRAIN_ROOT) ?? getScienceSwarmBrainRoot();
 }
 
-export function resolveBrainStorePglitePath(): string {
+export function resolveBrainStorePglitePath(root = resolveBrainStoreRoot()): string {
   return (
     resolveConfiguredPath(process.env.BRAIN_PGLITE_PATH) ??
-    join(resolveBrainStoreRoot(), "brain.pglite")
+    join(root, "brain.pglite")
   );
 }
 
-function initializeBrainStore(adapter: GbrainEngineAdapter): Promise<void> {
-  const brainRoot = resolveBrainStoreRoot();
+function initializeBrainStore(
+  adapter: GbrainEngineAdapter,
+  brainRoot = resolveBrainStoreRoot(),
+): Promise<void> {
   const initPromise = adapter.initialize({
     engine: "pglite",
-    database_path: resolveBrainStorePglitePath(),
+    database_path: resolveBrainStorePglitePath(brainRoot),
   }).catch((error) => {
     if (brainStoreState.instance === adapter) {
       brainStoreState.instance = null;
@@ -254,11 +256,26 @@ function initializeBrainStore(adapter: GbrainEngineAdapter): Promise<void> {
   return trackedPromise;
 }
 
-export function getBrainStore(): BrainStore {
+export function getBrainStore(options: { root?: string } = {}): BrainStore {
+  const brainRoot =
+    resolveConfiguredPath(options.root) ??
+    brainStoreState.activeBrainRoot ??
+    resolveBrainStoreRoot();
+  if (
+    brainStoreState.instance
+    && brainStoreState.activeBrainRoot
+    && brainStoreState.activeBrainRoot !== brainRoot
+  ) {
+    void brainStoreState.instance.dispose().catch(() => {});
+    brainStoreState.instance = null;
+    brainStoreState.adapterInitPromise = null;
+    brainStoreState.activeBrainRoot = null;
+  }
+
   if (!brainStoreState.instance) {
     const adapter = new GbrainEngineAdapter();
     brainStoreState.instance = adapter;
-    void initializeBrainStore(adapter).catch(() => {});
+    void initializeBrainStore(adapter, brainRoot).catch(() => {});
   }
   return brainStoreState.instance;
 }
@@ -335,6 +352,7 @@ export async function cachedSearchWithSource(
 export async function searchStoreWithTimeout(
   input: SearchInput,
   timeoutMs?: number,
+  options: { root?: string } = {},
 ): Promise<SearchResult[]> {
   const settings = getSearchProfileSettings(input);
   const normalizedInput: SearchInput = {
@@ -342,9 +360,9 @@ export async function searchStoreWithTimeout(
     limit: input.limit ?? settings.defaultLimit,
     profile: resolveSearchProfile(input),
   };
-  await ensureBrainStoreReady();
+  await ensureBrainStoreReady(options);
   return withTimeout(
-    getBrainStore().search(normalizedInput),
+    getBrainStore(options).search(normalizedInput),
     timeoutMs ?? settings.storeTimeoutMs,
   );
 }
@@ -353,8 +371,8 @@ export async function searchStoreWithTimeout(
  * Await PGLite adapter initialization (if still pending).
  * Call before using getBrainStore() methods directly (outside cachedSearch).
  */
-export async function ensureBrainStoreReady(): Promise<void> {
-  getBrainStore(); // ensure singleton created
+export async function ensureBrainStoreReady(options: { root?: string } = {}): Promise<void> {
+  getBrainStore(options); // ensure singleton created
   if (brainStoreState.adapterInitPromise) {
     await brainStoreState.adapterInitPromise;
   }

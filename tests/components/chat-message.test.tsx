@@ -47,7 +47,7 @@ describe("ChatMessage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy message" }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     const copiedText = writeText.mock.calls[0]?.[0] ?? "";
@@ -55,7 +55,7 @@ describe("ChatMessage", () => {
     expect(copiedText).toContain("docs/results_chart.png");
     expect(copiedText).not.toContain("**");
     expect(copiedText).not.toContain("MEDIA:");
-    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Copied message" })).toBeInTheDocument();
   });
 
   it("surfaces copy failures inline when the clipboard write rejects", async () => {
@@ -75,7 +75,7 @@ describe("ChatMessage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy message" }));
 
     expect(await screen.findByRole("button", { name: "Copy failed" })).toBeInTheDocument();
   });
@@ -123,7 +123,7 @@ describe("ChatMessage", () => {
 
     const progressLog = screen.getByRole("log");
     expect(screen.getByText("• Explored")).toBeInTheDocument();
-    expect(progressLog).toHaveTextContent("• Checking the imported files...");
+    expect(progressLog).not.toHaveTextContent("Checking the imported files...");
     expect(screen.getByText(/└ Read docs\/results_table\.csv/)).toBeInTheDocument();
     expect(screen.getByText(/Search activityLog in use-unified-chat\.ts/)).toBeInTheDocument();
     expect(progressLog).toHaveTextContent(/• Working \(\d+s • esc to interrupt\)/);
@@ -132,7 +132,7 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
   });
 
-  it("ticks the working timer every second while the message is streaming", () => {
+  it("shows the streaming spinner while only hidden thinking updates are available", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
 
@@ -148,16 +148,18 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByRole("log")).toHaveTextContent("• Working (5s • esc to interrupt)");
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(1000);
     });
 
-    expect(screen.getByRole("log")).toHaveTextContent("• Working (6s • esc to interrupt)");
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
   });
 
-  it("renders markdown bold inside progress transcript rows", () => {
+  it("keeps raw thinking rows out of the visible assistant progress transcript", () => {
     render(
       <ChatMessage
         role="assistant"
@@ -171,11 +173,10 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Moving forward with embedding", { selector: "strong" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/\*\*Moving forward with embedding\*\*/)).not.toBeInTheDocument();
-    expect(screen.getByText(/I think I'll finalize by saying "Made it"\./)).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.queryByText(/Moving forward with embedding/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/I think I'll finalize by saying "Made it"\./)).not.toBeInTheDocument();
   });
 
   it("normalizes legacy raw tool JSON lines in the visible transcript", () => {
@@ -187,7 +188,7 @@ describe("ChatMessage", () => {
           {
             kind: "activity",
             text:
-              "Use write: {\"path\":\"/Users/vajdap/.scienceswarm/projects/project-alpha/scripts/generate_mouse_chasing_cat_gif.py\",\"content\":\"#!/usr/bin/env python3\"}",
+              "Use write: {\"path\":\"/Users/example/.scienceswarm/projects/project-alpha/scripts/generate_mouse_chasing_cat_gif.py\",\"content\":\"#!/usr/bin/env python3\"}",
           },
           { kind: "activity", text: "Use write complete" },
         ]}
@@ -211,7 +212,7 @@ describe("ChatMessage", () => {
           {
             kind: "activity",
             text:
-              "Use read: {\"path\":\"/Users/vajdap/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html\"}",
+              "Use read: {\"path\":\"/Users/example/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html\"}",
           },
         ]}
         timestamp={new Date("2026-04-21T10:01:10.000Z")}
@@ -233,7 +234,7 @@ describe("ChatMessage", () => {
           {
             kind: "activity",
             text:
-              "Run /usr/local/Caskroom/miniforge/base/bin/python3 /Users/vajdap/.scienceswarm/projects/project-alpha/scripts/generate_mouse_chasing_cat_gif.py",
+              "Run /usr/bin/python3 /Users/example/.scienceswarm/projects/project-alpha/scripts/generate_mouse_chasing_cat_gif.py",
           },
           { kind: "activity", text: "Run command complete" },
         ]}
@@ -244,7 +245,7 @@ describe("ChatMessage", () => {
 
     const progressLog = screen.getByRole("log");
     expect(progressLog).toHaveTextContent("Run python3 scripts/generate_mouse_chasing_cat_gif.py");
-    expect(progressLog).not.toHaveTextContent("/usr/local/Caskroom/miniforge/base/bin/python3");
+    expect(progressLog).not.toHaveTextContent("/usr/bin/python3");
     expect(progressLog).not.toHaveTextContent("Run command complete");
   });
 
@@ -265,7 +266,7 @@ describe("ChatMessage", () => {
     );
 
     const progressLog = screen.getByRole("log");
-    expect(progressLog).toHaveTextContent("• Planning how to inspect the chart files.");
+    expect(progressLog).not.toHaveTextContent("Planning how to inspect the chart files.");
     expect(progressLog).toHaveTextContent("Read docs/results_table.csv");
     expect(progressLog).not.toHaveTextContent("Turn started");
     expect(progressLog).not.toHaveTextContent("Tool read_file:");
@@ -282,6 +283,10 @@ describe("ChatMessage", () => {
         thinking="Internal planning that should stay hidden."
         activityLog={[
           "Tool read_file: {\"path\":\"docs/results_table.csv\"}",
+        ]}
+        progressLog={[
+          { kind: "thinking", text: "Hidden turn plan" },
+          { kind: "activity", text: "Read docs/results_table.csv" },
         ]}
         timestamp={new Date("2026-04-20T10:03:00.000Z")}
         isStreaming={false}
@@ -336,7 +341,7 @@ describe("ChatMessage", () => {
       <ChatMessage
         role="assistant"
         content={
-          "MEDIA:/Users/vajdap/.scienceswarm/openclaw/media/tool-image-generation/cat-image---1234.png"
+          "MEDIA:/Users/example/.scienceswarm/openclaw/media/tool-image-generation/cat-image---1234.png"
         }
         projectId="project-alpha"
         timestamp={new Date("2026-04-21T10:00:30.000Z")}
@@ -344,7 +349,7 @@ describe("ChatMessage", () => {
     );
 
     expect(
-      screen.getByAltText("/Users/vajdap/.scienceswarm/openclaw/media/tool-image-generation/cat-image---1234.png"),
+      screen.getByAltText("/Users/example/.scienceswarm/openclaw/media/tool-image-generation/cat-image---1234.png"),
     ).toHaveAttribute(
       "src",
       "/api/workspace?action=raw&file=__openclaw__%2Fmedia%2Ftool-image-generation%2Fcat-image---1234.png&projectId=project-alpha",

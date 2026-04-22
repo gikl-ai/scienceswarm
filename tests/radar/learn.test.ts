@@ -1,9 +1,13 @@
 // tests/radar/learn.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
-import { recordFeedback, applyFeedbackToRadar } from "@/lib/radar/learn"
+import {
+  recordFeedback,
+  applyFeedbackToRadar,
+  saveRadarMatchToBrain,
+} from "@/lib/radar/learn"
 import { createRadar } from "@/lib/radar/store"
 import type { RadarFeedback } from "@/lib/radar/types"
-import { mkdtemp, rm } from "fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises"
 import { join } from "path"
 import { tmpdir } from "os"
 
@@ -96,5 +100,57 @@ describe("feedback loop", () => {
 
     expect(updated.topics[0].weight).toBeLessThan(0.6)
     expect(updated.topics[0].weight).toBeGreaterThanOrEqual(0)
+  })
+
+  it("saves a radar match with its program context into brain memory", async () => {
+    await mkdir(join(stateDir, "radar"), { recursive: true })
+    await writeFile(
+      join(stateDir, "radar", "latest-briefing.json"),
+      JSON.stringify({
+        id: "b1",
+        generatedAt: "2026-04-10T08:00:00Z",
+        nothingToday: false,
+        matters: [
+          {
+            signalId: "s1",
+            title: "MEK combination reverses EGFR resistance",
+            url: "https://example.test/mek",
+            whyItMatters: "Challenges the current single-agent EGFR plan.",
+            relevanceScore: 0.92,
+            matchedTopics: ["EGFR resistance program"],
+            source: "semantic-scholar",
+            actions: ["save-to-brain"],
+            programMatches: [
+              {
+                area: "experiment",
+                reference:
+                  "EGFR resistance program: Choosing whether to add a MEK arm",
+                whyThisMatters:
+                  "Affects EGFR resistance because the source reports a rescue combination.",
+                recommendedAction:
+                  "Compare the next planned experiment against this signal.",
+                evidence: ["matched topic: EGFR resistance program"],
+                confidence: "high",
+              },
+            ],
+          },
+        ],
+        horizon: [],
+        stats: { signalsFetched: 1, signalsRanked: 1, sourcesQueried: 1, sourcesFailed: [] },
+      }),
+      "utf-8"
+    )
+
+    const saved = await saveRadarMatchToBrain(stateDir, {
+      briefingId: "b1",
+      signalId: "s1",
+      savedAt: "2026-04-10T08:30:00Z",
+    })
+
+    expect(saved.savedPath).toMatch(/^wiki\/entities\/frontier\//)
+    const content = await readFile(join(stateDir, saved.savedPath), "utf-8")
+    expect(content).toContain("## Program Match")
+    expect(content).toContain("EGFR resistance program")
+    expect(content).toContain("Compare the next planned experiment")
   })
 })

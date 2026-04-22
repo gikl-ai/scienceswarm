@@ -10,11 +10,11 @@ import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
 import { isLocalRequest } from "@/lib/local-guard";
 import { OLLAMA_RECOMMENDED_MODEL } from "@/lib/ollama-constants";
 import { getOpenClawPort } from "@/lib/config/ports";
-import {
-  buildOpenClawOllamaProviderConfig,
-  OPENCLAW_OLLAMA_PROVIDER_KEY,
-} from "@/lib/openclaw/ollama-provider";
 import { resolveOpenAIModel } from "@/lib/openai-models";
+import {
+  configureOpenClawModel,
+  normalizeOpenClawModel,
+} from "@/lib/openclaw/model-config";
 import {
   isLocalOpenClawGatewayUrl,
   isOpenClawGatewayReachable,
@@ -137,48 +137,6 @@ async function getSavedSetupState(): Promise<{
       env.OLLAMA_MODEL?.trim()
       || OLLAMA_RECOMMENDED_MODEL,
   };
-}
-
-function normalizeOpenClawModel(
-  model: string,
-  llmProvider: SavedLlmProvider,
-): string {
-  if (llmProvider === "local") {
-    if (model.startsWith("ollama/")) return model;
-    return `ollama/${model.replace(/^openai\//, "").trim()}`;
-  }
-  if (model.startsWith("openai/")) return model;
-  return `openai/${model.replace(/^ollama\//, "").trim()}`;
-}
-
-async function configureOpenClawModel(
-  model: string,
-  llmProvider: SavedLlmProvider,
-): Promise<boolean> {
-  if (llmProvider === "local") {
-    const providerConfigResult = await runOpenClaw(
-      [
-        "config",
-        "set",
-        "models.providers.ollama",
-        JSON.stringify(buildOpenClawOllamaProviderConfig(model)),
-        "--strict-json",
-      ],
-      { timeoutMs: 5000 },
-    );
-    if (!providerConfigResult.ok) {
-      return false;
-    }
-  }
-
-  const modelResult = await runOpenClaw(["models", "set", model], {
-    timeoutMs: 5000,
-    extraEnv:
-      llmProvider === "local"
-        ? { OLLAMA_API_KEY: OPENCLAW_OLLAMA_PROVIDER_KEY }
-        : undefined,
-  });
-  return modelResult.ok;
 }
 
 async function isOpenClawRunning(): Promise<boolean> {

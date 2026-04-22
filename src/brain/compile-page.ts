@@ -150,7 +150,7 @@ export async function compilePage(
   const date = now.toISOString().slice(0, 10);
   const updatedAt = now.toISOString();
   const compiledBy = deps.getUserHandle?.() ?? getCurrentUserHandle();
-  const engine = deps.engine ?? (await defaultCompileEngine());
+  const engine = deps.engine ?? (await defaultCompileEngine(config.root));
   const costs: IngestCost[] = [];
 
   const current = await engine.getPage(targetSlug);
@@ -280,9 +280,9 @@ export async function compilePage(
   };
 }
 
-async function defaultCompileEngine(): Promise<CompileEngine> {
-  await ensureBrainStoreReady();
-  const store = getBrainStore() as GbrainEngineAdapter;
+async function defaultCompileEngine(root?: string): Promise<CompileEngine> {
+  await ensureBrainStoreReady({ root });
+  const store = getBrainStore({ root }) as GbrainEngineAdapter;
   return store.engine as unknown as CompileEngine;
 }
 

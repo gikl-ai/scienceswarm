@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GET as listSlashCommands } from "@/app/api/openclaw/slash-commands/route";
-import * as skillCatalog from "@/lib/openclaw/skill-catalog";
+import * as skillRegistry from "@/lib/openclaw/skill-registry";
 
 describe("openclaw slash commands route", () => {
   afterEach(() => {
@@ -62,7 +62,7 @@ runtime: separate-node-process
   });
 
   it("returns a generic error when slash-command loading fails", async () => {
-    vi.spyOn(skillCatalog, "listOpenClawSkills").mockRejectedValueOnce(
+    vi.spyOn(skillRegistry, "listScienceSwarmOpenClawSlashCommandSkills").mockRejectedValueOnce(
       new Error("private/path"),
     );
 

@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       try {
         const llm = getLLMClient(config);
         const uploadedBy = getCurrentUserHandle();
-        const gbrain = createInProcessGbrainClient();
+        const gbrain = createInProcessGbrainClient({ root: config.root });
         const previewCast = preview as ImportPreview;
 
         // Compute the total up front so UI consumers can render a
