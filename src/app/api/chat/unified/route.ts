@@ -141,6 +141,8 @@ const OPENCLAW_HISTORY_CONTEXT_MAX_MESSAGES = 6;
 const OPENCLAW_HISTORY_CONTEXT_MAX_CHARS = 12_000;
 const OPENCLAW_HISTORY_CONTEXT_MAX_CHARS_PER_MESSAGE = 3_500;
 const OPENCLAW_ARTIFACT_TASK_TIMEOUT_MS = 180_000;
+const INSTANT_COURTESY_RESPONSE_RE =
+  /^(?:hi|hi there|hey|hey there|thanks|thank you)[!.?]*$/i;
 const AUTO_PROJECT_CONTEXT_HINT_RE =
   /\b(imported|uploaded|latest)\b[\s\S]{0,80}\b(paper|note|notes|file|files|material|materials)\b/i;
 const AUTO_PROJECT_CONTEXT_EXTENSIONS = new Set([
@@ -258,6 +260,29 @@ function matchesLocalModel(
 
 function normalizeChatMode(value: unknown): ChatMode {
   return value === "openclaw-tools" ? "openclaw-tools" : "reasoning";
+}
+
+function buildInstantCourtesyResponse(
+  message: string,
+  projectId: string | null,
+): string | null {
+  const trimmed = message.trim();
+  if (trimmed.length === 0 || !INSTANT_COURTESY_RESPONSE_RE.test(trimmed)) {
+    return null;
+  }
+
+  const normalized = trimmed.toLowerCase().replace(/[!.?]+$/g, "");
+  const isThanks =
+    normalized === "thanks" || normalized === "thank you";
+  if (isThanks) {
+    return projectId
+      ? `You're welcome. What would you like to do next in **${projectId}**?`
+      : "You're welcome. What would you like to do next?";
+  }
+
+  return projectId
+    ? `Hi. What would you like to work on in **${projectId}**?`
+    : "Hi. What would you like to work on?";
 }
 
 function normalizeRequestedBackend(value: unknown): RequestedBackend | null {
@@ -7068,6 +7093,29 @@ export async function handleUnifiedChatPost(
           { status: 400 },
         );
       }
+    }
+
+    const instantCourtesyResponse =
+      !commandTransport &&
+      files.length === 0 &&
+      activeFile === null &&
+      typeof rawMessage === "string"
+        ? buildInstantCourtesyResponse(rawMessage, validatedProjectId)
+        : null;
+    if (instantCourtesyResponse) {
+      return Response.json(
+        {
+          response: instantCourtesyResponse,
+          backend: "openclaw",
+          mode: chatMode,
+        },
+        {
+          headers: {
+            "X-Chat-Backend": "openclaw",
+            "X-Chat-Mode": chatMode,
+          },
+        },
+      );
     }
 
     const shouldPreMaterializeProjectWorkspace =

@@ -1527,6 +1527,30 @@ describe("POST /api/chat/unified", () => {
     expect(body.response).toContain("What institution are you at?");
   });
 
+  it("returns an instant courtesy response for trivial greetings without touching OpenClaw", async () => {
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Hi",
+        projectId: "alpha-project",
+        mode: "reasoning",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      backend: "openclaw",
+      mode: "reasoning",
+      response: "Hi. What would you like to work on in **alpha-project**?",
+    });
+    expect(openClawHealthCheck).not.toHaveBeenCalled();
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
+    expect(streamChat).not.toHaveBeenCalled();
+  });
+
   it("returns 503 when OpenClaw is not the configured agent", async () => {
     // Previously this returned 503 only after walking three fallback paths
     // (local direct, OpenHands, final streamDirectResponse). The new
