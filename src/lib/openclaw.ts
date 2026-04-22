@@ -48,6 +48,13 @@ export interface OpenClawStatus {
   sessions: number;
 }
 
+export interface OpenClawGatewayStatus {
+  status: "connected" | "disconnected";
+  gateway: string;
+}
+
+const OPENCLAW_SESSION_FILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
+const MAX_PERSISTED_WEB_SESSION_METADATA = 4096;
 const persistedWebSessionMetadata = new Set<string>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -56,6 +63,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function fallbackGatewayUrl(): string {
   return gatewayBaseUrl();
+}
+
+function normalizeOpenClawSessionFileId(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || !OPENCLAW_SESSION_FILE_ID_PATTERN.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
 }
 
 function gatewayHealthUrl(): string {
@@ -271,6 +286,9 @@ async function readConversationHistoryFromSessionFile(
   limit: number,
 ): Promise<OpenClawMessage[]> {
   const sessionFile = openClawSessionFilePath(conversationId);
+  if (!sessionFile) {
+    return [];
+  }
 
   let raw: string;
   try {
@@ -339,13 +357,18 @@ async function readConversationHistoryFromSessionFile(
   return messages.slice(-limit);
 }
 
-function openClawSessionFilePath(conversationId: string): string {
+function openClawSessionFilePath(conversationId: string): string | null {
+  const sessionFileId = normalizeOpenClawSessionFileId(conversationId);
+  if (!sessionFileId) {
+    return null;
+  }
+
   return path.join(
     getScienceSwarmOpenClawStateDir(),
     "agents",
     "main",
     "sessions",
-    `${conversationId}.jsonl`,
+    `${sessionFileId}.jsonl`,
   );
 }
 
@@ -402,6 +425,15 @@ async function persistWebSessionMetadata(
   }
 
   const sessionFile = openClawSessionFilePath(session);
+  if (!sessionFile) {
+    return;
+  }
+
+  if (persistedWebSessionMetadata.size >= MAX_PERSISTED_WEB_SESSION_METADATA) {
+    persistedWebSessionMetadata.clear();
+  }
+
+  persistedWebSessionMetadata.add(cacheKey);
   try {
     await mkdir(path.dirname(sessionFile), { recursive: true });
     await writeFile(
@@ -409,8 +441,8 @@ async function persistWebSessionMetadata(
       `${JSON.stringify({ type: "session", id: session, cwd })}\n`,
       { flag: "a" },
     );
-    persistedWebSessionMetadata.add(cacheKey);
   } catch {
+    persistedWebSessionMetadata.delete(cacheKey);
     // Best-effort only. The gateway may still maintain the canonical session
     // file; skipping this metadata should not break the turn itself.
   }
@@ -533,26 +565,21 @@ export async function healthCheck(): Promise<OpenClawStatus> {
  * Unlike `healthCheck()`, this avoids the expensive CLI status scan and only
  * verifies that the web gateway required for session-scoped dashboard chat is
  * responding. Use this when the caller only needs to know whether a web turn
- * can be attempted right now.
+ * can be attempted right now; inventory fields like `channels` still require
+ * the full `healthCheck()` path.
  */
-export async function gatewayHealthCheck(): Promise<OpenClawStatus> {
+export async function gatewayHealthCheck(): Promise<OpenClawGatewayStatus> {
   const { reachable, gateway } = await probeGatewayHealth(1500);
   if (!reachable) {
     return {
       status: "disconnected",
       gateway: "",
-      channels: [],
-      agents: 0,
-      sessions: 0,
     };
   }
 
   return {
     status: "connected",
     gateway,
-    channels: [],
-    agents: 0,
-    sessions: 0,
   };
 }
 

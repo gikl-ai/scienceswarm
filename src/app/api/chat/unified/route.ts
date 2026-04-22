@@ -266,7 +266,7 @@ function normalizeRequestedBackend(value: unknown): RequestedBackend | null {
     : null;
 }
 
-function shouldPreMaterializeProjectWorkspaceForTurn(params: {
+export function shouldPreMaterializeProjectWorkspaceForTurn(params: {
   projectId: string | null;
   message: string;
   chatMode: ChatMode;
@@ -275,6 +275,10 @@ function shouldPreMaterializeProjectWorkspaceForTurn(params: {
 }): boolean {
   if (!params.projectId) {
     return false;
+  }
+
+  if (params.chatMode === "openclaw-tools") {
+    return true;
   }
 
   if (params.files.length > 0 || params.activeFile !== null) {
@@ -6297,16 +6301,27 @@ async function getConfiguredAgentRuntimeStatus(
 ): Promise<AgentRuntimeStatus> {
   if (agentConfig?.type === "openclaw") {
     try {
-      const { gatewayHealthCheck, healthCheck } = await import(
-        "@/lib/openclaw"
-      );
-      const status = options.preferFastOpenClawGatewayProbe === true
-        ? await gatewayHealthCheck()
-        : await healthCheck();
+      const openClawModule = await import("@/lib/openclaw");
+      const useFastGatewayProbe =
+        options.preferFastOpenClawGatewayProbe === true &&
+        typeof openClawModule.gatewayHealthCheck === "function";
+      const status = useFastGatewayProbe
+        ? await openClawModule.gatewayHealthCheck()
+        : await openClawModule.healthCheck();
+      const statusWithChannels = status as unknown as {
+        channels?: unknown;
+      };
+      const channels =
+        useFastGatewayProbe ||
+          !Array.isArray(statusWithChannels.channels)
+          ? []
+          : statusWithChannels.channels.filter(
+              (channel): channel is string => typeof channel === "string",
+            );
       return {
         type: "openclaw",
         status: status.status,
-        channels: status.channels,
+        channels,
       };
     } catch {
       return {
@@ -7216,8 +7231,6 @@ export async function handleUnifiedChatPost(
       // Preserve the `selectedAgent.type === "openclaw"` block body without
       // reindenting every line below. The outer precondition above has
       // already enforced type === "openclaw" && status === "connected".
-      attemptedOpenClawTurn = true;
-
       const privacyError = await getPrivacyError();
       if (privacyError) {
         return privacyError;
@@ -7381,6 +7394,7 @@ export async function handleUnifiedChatPost(
         chatMode === "openclaw-tools" ||
         shouldForceOpenClawToolExecution(userIntentMessage);
       if (streamPhases === true) {
+        attemptedOpenClawTurn = true;
         return streamOpenClawResponse({
           message: contextualOpenClawMessage,
           userMessage: userIntentMessage,
@@ -7403,6 +7417,9 @@ export async function handleUnifiedChatPost(
             referenceNotes,
           );
       const sourceFiles = extractSourceWorkspacePaths(mergedFiles);
+      if (isRevisionRunRequest(userIntentMessage)) {
+        attemptedOpenClawTurn = true;
+      }
       const fastRevisionOutputs = await runOpenClawRevisionArtifactOnly({
         sendToOpenClaw,
         userMessage: userIntentMessage,
@@ -7438,6 +7455,7 @@ export async function handleUnifiedChatPost(
           },
         );
       }
+      attemptedOpenClawTurn = true;
       const response = await sendOpenClawMessageWithArtifactRetry({
         sendToOpenClaw,
         message: buildOpenClawMessage(

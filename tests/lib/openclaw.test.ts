@@ -1,5 +1,12 @@
 import path from "node:path";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -294,12 +301,9 @@ describe("OpenClaw gatewayHealthCheck", () => {
         headers: { "Content-Type": "application/json" },
       }));
 
-    await expect(gatewayHealthCheck()).resolves.toMatchObject({
+    await expect(gatewayHealthCheck()).resolves.toEqual({
       status: "connected",
       gateway: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
-      channels: [],
-      agents: 0,
-      sessions: 0,
     });
     expect(execFileMock).not.toHaveBeenCalled();
   });
@@ -310,9 +314,6 @@ describe("OpenClaw gatewayHealthCheck", () => {
     await expect(gatewayHealthCheck()).resolves.toEqual({
       status: "disconnected",
       gateway: "",
-      channels: [],
-      agents: 0,
-      sessions: 0,
     });
     expect(execFileMock).not.toHaveBeenCalled();
   });
@@ -535,6 +536,72 @@ describe("sendAgentMessage output sanitization", () => {
         cwd: path.join(root, "projects", "project-alpha"),
       }),
     );
+  });
+
+  it("deduplicates concurrent web session metadata writes for the same session", async () => {
+    const root = mkdtempSync(
+      path.join(tmpdir(), "scienceswarm-openclaw-web-dedupe-"),
+    );
+    vi.stubEnv("SCIENCESWARM_DIR", root);
+    sendMessageViaGatewayMock.mockReset();
+    sendMessageViaGatewayMock.mockImplementation(async () => ({
+      text: "ws web ok",
+      events: [],
+    }));
+
+    await Promise.all([
+      sendAgentMessage("Explain", {
+        session: "web:test:dedupe",
+        channel: "web",
+        cwd: path.join(root, "projects", "project-alpha"),
+      }),
+      sendAgentMessage("Explain again", {
+        session: "web:test:dedupe",
+        channel: "web",
+        cwd: path.join(root, "projects", "project-alpha"),
+      }),
+    ]);
+
+    const sessionFile = path.join(
+      root,
+      "openclaw",
+      "agents",
+      "main",
+      "sessions",
+      "web:test:dedupe.jsonl",
+    );
+    const sessionLines = readFileSync(sessionFile, "utf8")
+      .trim()
+      .split("\n")
+      .filter((line) => JSON.parse(line).type === "session");
+
+    expect(sessionLines).toHaveLength(1);
+  });
+
+  it("skips local session-log writes for invalid session ids", async () => {
+    const root = mkdtempSync(
+      path.join(tmpdir(), "scienceswarm-openclaw-invalid-session-"),
+    );
+    vi.stubEnv("SCIENCESWARM_DIR", root);
+    sendMessageViaGatewayMock.mockReset();
+    sendMessageViaGatewayMock.mockResolvedValueOnce({
+      text: "ws web ok",
+      events: [],
+    });
+
+    await expect(
+      sendAgentMessage("Explain", {
+        session: "../escape",
+        channel: "web",
+        cwd: path.join(root, "projects", "project-alpha"),
+      }),
+    ).resolves.toBe("ws web ok");
+
+    expect(
+      existsSync(
+        path.join(root, "openclaw", "agents", "main", "sessions"),
+      ),
+    ).toBe(false);
   });
 
   it("falls back to pre-marker text when a trailing marker has no content", async () => {

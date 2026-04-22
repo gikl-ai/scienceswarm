@@ -158,7 +158,11 @@ vi.mock("@/lib/openhands", () => ({
 }));
 
 import { POST as commandPOST } from "@/app/api/chat/command/route";
-import { GET, POST } from "@/app/api/chat/unified/route";
+import {
+  GET,
+  POST,
+  shouldPreMaterializeProjectWorkspaceForTurn,
+} from "@/app/api/chat/unified/route";
 
 let scienceswarmDir: string | null = null;
 
@@ -1567,6 +1571,18 @@ describe("POST /api/chat/unified", () => {
       "Keep ordinary conversational replies brief; for greetings, acknowledgements, or short status questions, answer in 1-2 sentences",
     );
     expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it("pre-materializes openclaw-tools turns even without content hints", () => {
+    expect(
+      shouldPreMaterializeProjectWorkspaceForTurn({
+        projectId: "tools-project",
+        message: "run the tests",
+        chatMode: "openclaw-tools",
+        files: [],
+        activeFile: null,
+      }),
+    ).toBe(true);
   });
 
   it("returns 503 when OpenClaw is not the configured agent", async () => {
