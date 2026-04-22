@@ -128,6 +128,10 @@ export interface InProcessGbrainClient extends GbrainClient {
   ): Promise<PersistTransactionResult>;
 }
 
+export interface InProcessGbrainClientOptions {
+  root?: string;
+}
+
 function parseMarkdownForPut(slug: string, content: string): {
   type: string;
   title: string;
@@ -280,9 +284,11 @@ function fromRuntimePage(
  * subprocess lock conflict when the same process is also reading via
  * `BrainStore.getPage`.
  */
-export function createInProcessGbrainClient(): InProcessGbrainClient {
+export function createInProcessGbrainClient(
+  options: InProcessGbrainClientOptions = {},
+): InProcessGbrainClient {
   async function getEngine(): Promise<InProcessEngine> {
-    const store = getBrainStore() as GbrainEngineAdapter;
+    const store = getBrainStore({ root: options.root }) as GbrainEngineAdapter;
     // Trigger lazy init by running a cheap no-op that awaits ready().
     // `health()` is the simplest public call that ensures initialize()
     // completed before we go grab `.engine`.

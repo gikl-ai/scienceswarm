@@ -68,6 +68,7 @@ function internalOutputMarker(): RegExp {
 }
 const INTERNAL_OUTPUT_LINE_PATTERNS = [
   /^<(?:channel|planner|lane|assistant|final)(?:-[a-z0-9]+)?\|>\s*$/i,
+  /^\[(?:agent|agents)\/[^\]]+\]/i,
   /^\[diagnostic\]/i,
   /^Gateway agent failed; falling back to embedded:/i,
   /^FailoverError:/i,

@@ -139,6 +139,47 @@ describe("GET /api/setup/status", () => {
     );
   });
 
+  it("uses BRAIN_ROOT from .env and treats RESOLVER-based installs as ready", async () => {
+    const brainRoot = path.join(tmpHome, "resolver-brain");
+    await fs.mkdir(path.join(brainRoot, "brain.pglite"), { recursive: true });
+    await fs.writeFile(path.join(brainRoot, "RESOLVER.md"), "# Resolver\n", "utf8");
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      [
+        "AGENT_BACKEND=nanoclaw",
+        "LLM_PROVIDER=local",
+        "OLLAMA_MODEL=gemma4",
+        `BRAIN_ROOT=${brainRoot}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const { GET } = await import("@/app/api/setup/status/route");
+    const res = await GET(new Request("http://localhost/api/setup/status"));
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      rawValues: Record<string, string>;
+      runtimeContract: {
+        capabilities: Array<{ capabilityId: string; status: string }>;
+      };
+    };
+    expect(body.rawValues.BRAIN_ROOT).toBe(brainRoot);
+    expect(body.runtimeContract.capabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          capabilityId: "brain.read",
+          status: "ready",
+        }),
+        expect.objectContaining({
+          capabilityId: "brain.write",
+          status: "ready",
+        }),
+      ]),
+    );
+  });
+
   it("uses the default local model in the runtime contract when OLLAMA_MODEL is blank", async () => {
     await fs.writeFile(
       path.join(repoRoot, ".env"),

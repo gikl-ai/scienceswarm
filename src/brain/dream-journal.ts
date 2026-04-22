@@ -20,9 +20,9 @@ export async function persistDreamCycleJournal(input: {
   const now = input.now ?? new Date();
   const date = now.toISOString().slice(0, 10);
   const slug = buildDreamJournalSlug(date, input.mode);
-  const client = createInProcessGbrainClient();
+  const client = createInProcessGbrainClient({ root: input.config.root });
 
-  await ensureBrainStoreReady();
+  await ensureBrainStoreReady({ root: input.config.root });
 
   return persistResearchArtifactPage({
     slug,

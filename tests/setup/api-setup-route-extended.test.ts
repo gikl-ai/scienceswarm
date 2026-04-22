@@ -19,6 +19,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseEnvFile } from "@/lib/setup/env-writer";
 import { ENV_FILE_NAME } from "../helpers/env-file";
 
+const configureOpenClawModelMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/openclaw/model-config", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/openclaw/model-config")>();
+  return {
+    ...actual,
+    configureOpenClawModel: configureOpenClawModelMock,
+  };
+});
+
 async function readEnv(repoRoot: string): Promise<string> {
   return fs.readFile(path.join(repoRoot, ENV_FILE_NAME), "utf8");
 }
@@ -51,6 +62,8 @@ describe("POST /api/setup — extended schema (PR B stage B1)", () => {
   let cwdSpy: ReturnType<typeof vi.spyOn> | null = null;
 
   beforeEach(async () => {
+    configureOpenClawModelMock.mockReset();
+    configureOpenClawModelMock.mockResolvedValue(true);
     repoRoot = await fs.mkdtemp(
       path.join(os.tmpdir(), "api-setup-extended-"),
     );
@@ -246,6 +259,56 @@ describe("POST /api/setup — extended schema (PR B stage B1)", () => {
     expect(map.get("LLM_PROVIDER")).toBe("openai");
     expect(map.get("AGENT_BACKEND")).toBe("openclaw");
     expect(map.get("OLLAMA_MODEL")).toBe("llama3.2");
+  });
+
+  it("syncs OpenClaw to the saved local Ollama model when setup selects local OpenClaw", async () => {
+    const { POST } = await import("@/app/api/setup/route");
+    const res = await POST(
+      jsonRequest("http://localhost/api/setup", {
+        llmProvider: "local",
+        agentBackend: "openclaw",
+        ollamaModel: "gemma4:latest",
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      openClawModelSync?: { ok: boolean; model?: string };
+    };
+
+    expect(configureOpenClawModelMock).toHaveBeenCalledWith(
+      "ollama/gemma4:latest",
+      "local",
+      { timeoutMs: 10_000 },
+    );
+    expect(body.openClawModelSync).toEqual({
+      ok: true,
+      model: "ollama/gemma4:latest",
+    });
+  });
+
+  it("keeps setup save successful when OpenClaw model sync fails", async () => {
+    configureOpenClawModelMock.mockRejectedValueOnce(new Error("openclaw unavailable"));
+
+    const { POST } = await import("@/app/api/setup/route");
+    const res = await POST(
+      jsonRequest("http://localhost/api/setup", {
+        llmProvider: "local",
+        agentBackend: "openclaw",
+        ollamaModel: "gemma4:latest",
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      openClawModelSync?: { ok: boolean; model?: string };
+    };
+    expect(body.openClawModelSync).toEqual({ ok: false });
+
+    const env = await readEnv(repoRoot);
+    const map = entriesMap(env);
+    expect(map.get("LLM_PROVIDER")).toBe("local");
+    expect(map.get("AGENT_BACKEND")).toBe("openclaw");
+    expect(map.get("OLLAMA_MODEL")).toBe("gemma4:latest");
   });
 
   it("empty string on an enum / non-clearable field is a no-op (preserves the existing value)", async () => {

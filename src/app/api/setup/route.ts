@@ -26,6 +26,11 @@ import * as path from "node:path";
 
 import { isLocalRequest } from "@/lib/local-guard";
 import { isBrainPresetId } from "@/brain/presets/types";
+import { OLLAMA_RECOMMENDED_MODEL } from "@/lib/ollama-constants";
+import {
+  configureOpenClawModel,
+  normalizeOpenClawModel,
+} from "@/lib/openclaw/model-config";
 import { resolveConfiguredPath } from "@/lib/scienceswarm-paths";
 import {
   validateOpenAiKey,
@@ -293,6 +298,8 @@ const EMPTY_MEANS_REMOVE: ReadonlySet<SetupFieldName> = new Set<SetupFieldName>(
   ],
 );
 
+type EnvEntry = Extract<EnvDocument["lines"][number], { type: "entry" }>;
+
 /**
  * Build the `mergeEnvValues` updates map. Fields listed in
  * `EMPTY_MEANS_REMOVE` treat the empty string as an explicit "drop
@@ -335,6 +342,51 @@ function buildUpdates(
   return updates;
 }
 
+function envMapFromDocument(doc: EnvDocument): Map<string, string> {
+  return new Map(
+    doc.lines
+      .filter((line): line is EnvEntry => line.type === "entry")
+      .map((entry) => [entry.key, entry.value]),
+  );
+}
+
+function shouldSyncOpenClawForSetupSave(body: SetupRequestBody): boolean {
+  return (
+    body.llmProvider !== undefined ||
+    body.ollamaModel !== undefined ||
+    body.agentBackend !== undefined
+  );
+}
+
+async function syncOpenClawLocalModelAfterSetup(
+  body: SetupRequestBody,
+  nextDoc: EnvDocument,
+): Promise<{ ok: true; model: string } | { ok: false } | null> {
+  if (!shouldSyncOpenClawForSetupSave(body)) {
+    return null;
+  }
+
+  const values = envMapFromDocument(nextDoc);
+  const llmProvider = values.get("LLM_PROVIDER")?.trim().toLowerCase();
+  const agentBackend = values.get("AGENT_BACKEND")?.trim().toLowerCase();
+  if (llmProvider !== "local" || agentBackend !== "openclaw") {
+    return null;
+  }
+
+  const model = normalizeOpenClawModel(
+    values.get("OLLAMA_MODEL")?.trim() || OLLAMA_RECOMMENDED_MODEL,
+    "local",
+  );
+  try {
+    const ok = await configureOpenClawModel(model, "local", {
+      timeoutMs: 10_000,
+    });
+    return ok ? { ok: true, model } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function POST(request: Request): Promise<Response> {
   if (!(await isLocalRequest(request))) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -368,6 +420,9 @@ export async function POST(request: Request): Promise<Response> {
 
   const repoRoot = process.cwd();
   const filePath = path.join(repoRoot, ".env");
+  let openClawModelSync: Awaited<
+    ReturnType<typeof syncOpenClawLocalModelAfterSetup>
+  > = null;
 
   try {
     const doc = await loadEnvDocument(repoRoot);
@@ -375,6 +430,10 @@ export async function POST(request: Request): Promise<Response> {
     const nextDoc = mergeEnvValues(doc, updates);
     const serialized = serializeEnvDocument(nextDoc);
     await writeEnvFileAtomic(filePath, serialized);
+    openClawModelSync = await syncOpenClawLocalModelAfterSetup(
+      parsed.body,
+      nextDoc,
+    );
   } catch (err) {
     // Log the specific error server-side for operator debugging, but
     // never echo raw exception text back to the client — Node I/O
@@ -405,5 +464,6 @@ export async function POST(request: Request): Promise<Response> {
     ok: true,
     restartRequired: true,
     redirect: "/dashboard/settings",
+    openClawModelSync,
   });
 }
