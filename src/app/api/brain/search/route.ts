@@ -2,7 +2,9 @@
  * GET /api/brain/search
  *
  * Search the brain wiki.
- * Query params: ?query=...&mode=grep|index|list|qmd&limit=10&detail=low|medium|high
+ * Query params:
+ *   ?query=...&mode=grep|index|list|qmd&limit=10&detail=low|medium|high
+ *   &profile=interactive|synthesis
  */
 
 import { search } from "@/brain/search";
@@ -10,12 +12,13 @@ import {
   BrainSearchTimeoutError,
   isBrainBackendUnavailableError,
 } from "@/brain/store";
-import type { SearchDetail, SearchMode } from "@/brain/types";
+import type { SearchDetail, SearchMode, SearchProfile } from "@/brain/types";
 import { toPublicBrainSlug } from "@/brain/public-slug";
 import { apiError, getBrainConfig, isErrorResponse } from "../_shared";
 
 const VALID_MODES = new Set(["grep", "index", "list", "qmd"]);
 const VALID_DETAILS = new Set(["low", "medium", "high"]);
+const VALID_PROFILES = new Set(["interactive", "synthesis"]);
 
 export async function GET(request: Request) {
   const configOrError = getBrainConfig();
@@ -27,6 +30,7 @@ export async function GET(request: Request) {
   const modeParam = url.searchParams.get("mode") ?? "grep";
   const limitParam = url.searchParams.get("limit") ?? "10";
   const detailParam = url.searchParams.get("detail");
+  const profileParam = url.searchParams.get("profile");
 
   if (!query && modeParam !== "list") {
     return Response.json(
@@ -49,6 +53,13 @@ export async function GET(request: Request) {
     );
   }
 
+  if (profileParam !== null && !VALID_PROFILES.has(profileParam)) {
+    return Response.json(
+      { error: `Invalid profile: ${profileParam}. Must be one of: interactive, synthesis` },
+      { status: 400 },
+    );
+  }
+
   const limit = Math.max(1, Math.min(100, parseInt(limitParam, 10) || 10));
 
   try {
@@ -57,6 +68,7 @@ export async function GET(request: Request) {
       mode: modeParam as SearchMode,
       limit,
       detail: detailParam as SearchDetail | undefined,
+      profile: profileParam as SearchProfile | undefined,
     });
     return Response.json(results.map(toPublicSearchResult));
   } catch (err) {

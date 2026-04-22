@@ -58,6 +58,7 @@ export async function POST(request: Request) {
       writeDreamLastRun(config.root, {
         timestamp: new Date().toISOString(),
         mode,
+        journal_slug: result.journalSlug ?? undefined,
         pages_compiled: result.pagesCompiled,
         contradictions_found: result.contradictionsFound,
         backlinks_added: result.backlinksAdded,

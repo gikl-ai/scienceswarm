@@ -29,7 +29,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import * as path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as brainPresets from "@/brain/presets";
 
 import {
   getCurrentUserHandle,
@@ -278,14 +279,12 @@ describe("install-gbrain happy path", () => {
     const resolverSeed = handle.fileAt(
       path.join("/home/test", ".scienceswarm", "brain", "RESOLVER.md"),
     );
-    expect(resolverSeed).toContain("ScienceSwarm scientist-defaults brain");
+    expect(resolverSeed).toContain("ScienceSwarm scientific-research brain");
     expect(resolverSeed).toContain(
       "OpenClaw communicates; OpenHands executes; gbrain stores.",
     );
-    expect(resolverSeed).toContain("gbrain v0.10 search detail");
-    expect(resolverSeed).toContain("detail=low");
-    expect(resolverSeed).toContain("detail=medium");
-    expect(resolverSeed).toContain("detail=high");
+    expect(resolverSeed).toContain("gather candidate papers in bulk");
+    expect(resolverSeed).toContain("write durable journal artifacts");
     expect(resolverSeed).toContain(
       "Do not run upstream gbrain autopilot daemon",
     );
@@ -295,6 +294,7 @@ describe("install-gbrain happy path", () => {
     expect(envContents).toContain(
       `BRAIN_ROOT=${path.join("/home/test", ".scienceswarm", "brain")}`,
     );
+    expect(envContents).toContain("BRAIN_PRESET=scientific_research");
     expect(handle.calls.envWrites).toHaveLength(1);
   });
 
@@ -329,6 +329,26 @@ describe("install-gbrain happy path", () => {
     if (summary.type === "summary") {
       expect(summary.brainRoot).toBe(customRoot);
     }
+  });
+
+  it("supports the generic scientist preset override", async () => {
+    const handle = makeFakeEnv();
+    const { ok } = await runInstallerToCompletion(
+      {
+        repoRoot: "/repo",
+        brainPreset: "generic_scientist",
+      },
+      handle.env,
+    );
+
+    expect(ok).toBe(true);
+    const resolverSeed = handle.fileAt(
+      path.join("/home/test", ".scienceswarm", "brain", "RESOLVER.md"),
+    );
+    expect(resolverSeed).toContain("ScienceSwarm scientist-defaults brain");
+    expect(handle.envFileContents("/repo")).toContain(
+      "BRAIN_PRESET=generic_scientist",
+    );
   });
 
   it("cleans up the writability sentinel files after probing", async () => {
@@ -496,6 +516,40 @@ describe("install-gbrain error taxonomy", () => {
       expect(summary.error?.cause).toContain("PGLite WASM failed to load");
     }
     expect(handle.calls.envWrites).toHaveLength(0);
+  });
+
+  it("preset asset read failure surfaces as an internal installer error", async () => {
+    const handle = makeFakeEnv();
+    const presetSpy = vi
+      .spyOn(brainPresets, "loadBrainPreset")
+      .mockImplementation(() => {
+        throw new Error("missing preset asset");
+      });
+
+    try {
+      const { events, ok } = await runInstallerToCompletion(
+        { repoRoot: "/repo" },
+        handle.env,
+      );
+
+      expect(ok).toBe(false);
+      const summary = lastEvent(events);
+      if (summary.type === "summary") {
+        expect(summary.status).toBe("failed");
+        expect(summary.error?.code).toBe("internal");
+        expect(summary.error?.cause).toContain("missing preset asset");
+      }
+
+      const seedResolverEvents = eventsByStep(events, "seed-resolver");
+      expect(seedResolverEvents.at(-1)).toMatchObject({
+        type: "step",
+        step: "seed-resolver",
+        status: "failed",
+      });
+      expect(handle.calls.envWrites).toHaveLength(0);
+    } finally {
+      presetSpy.mockRestore();
+    }
   });
 });
 

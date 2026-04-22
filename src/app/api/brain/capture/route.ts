@@ -1,8 +1,10 @@
 import type {
-  CaptureKind,
   CaptureRequest,
   PrivacyMode,
   SourceRef,
+} from "@/brain/types";
+import {
+  isCaptureKind,
 } from "@/brain/types";
 import { isCaptureChannel, processCapture } from "@/lib/capture";
 import { isLocalRequest } from "@/lib/local-guard";
@@ -11,14 +13,6 @@ import { getBrainConfig, isErrorResponse } from "../_shared";
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isCaptureKind(value: unknown): value is CaptureKind {
-  return value === "note"
-    || value === "observation"
-    || value === "decision"
-    || value === "hypothesis"
-    || value === "task";
 }
 
 function isPrivacyMode(value: unknown): value is PrivacyMode {

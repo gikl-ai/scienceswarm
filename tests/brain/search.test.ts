@@ -9,7 +9,12 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { search, countPages, isStructuralWikiPage, inferTypeFromPath } from "@/brain/search";
-import { cachedSearchWithSource, ensureBrainStoreReady, getBrainStore } from "@/brain/store";
+import {
+  cachedSearchWithSource,
+  ensureBrainStoreReady,
+  getBrainStore,
+  searchCache,
+} from "@/brain/store";
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import type { GbrainEngineAdapter } from "@/brain/stores/gbrain-engine-adapter";
 import { createTestBrain, destroyTestBrain, type TestBrainContext } from "../helpers/test-brain";
@@ -272,6 +277,26 @@ describe("search (gbrain-backed)", () => {
     expect(low.results.every((result) => result.chunkIndex === 0)).toBe(true);
     expect(high.results.some((result) => result.chunkIndex === 1)).toBe(true);
   });
+
+  it("separates cached results by search profile", async () => {
+    searchCache.clear();
+
+    await cachedSearchWithSource({
+      query: "CRISPR",
+      mode: "qmd",
+      limit: 10,
+      profile: "interactive",
+    });
+    expect(searchCache.size).toBe(1);
+
+    await cachedSearchWithSource({
+      query: "CRISPR",
+      mode: "qmd",
+      limit: 10,
+      profile: "synthesis",
+    });
+    expect(searchCache.size).toBe(2);
+  });
 });
 
 describe("countPages", () => {
@@ -330,6 +355,13 @@ describe("inferTypeFromPath", () => {
 
   it("infers decision type even when path contains other keywords", () => {
     expect(inferTypeFromPath("decisions/multi-projects-review")).toBe("decision");
+  });
+
+  it("infers research-first topic and packet paths", () => {
+    expect(inferTypeFromPath("topics/mechanistic-interpretability")).toBe("topic");
+    expect(inferTypeFromPath("packets/2026-04-22-interpretability-scan")).toBe(
+      "research_packet",
+    );
   });
 
   it("falls back to note for unknown prefixes", () => {

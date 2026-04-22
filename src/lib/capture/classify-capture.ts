@@ -1,3 +1,4 @@
+import { isCaptureKind } from "@/brain/types";
 import type { CaptureClassification } from "./types";
 
 const TASK_PATTERNS = [
@@ -31,7 +32,7 @@ const OBSERVATION_PATTERNS = [
 ];
 
 export function classifyCapture(content: string, explicitKind?: string): CaptureClassification {
-  if (explicitKind === "note" || explicitKind === "observation" || explicitKind === "decision" || explicitKind === "hypothesis" || explicitKind === "task") {
+  if (isCaptureKind(explicitKind)) {
     return {
       kind: explicitKind,
       confidence: "high",

@@ -6,6 +6,7 @@ import type { DreamHeadlineSummary } from "./dream-headline";
 export interface DreamLastRun {
   timestamp: string;
   mode: string;
+  journal_slug?: string;
   pages_compiled: number;
   contradictions_found: number;
   backlinks_added: number;
@@ -43,8 +44,9 @@ function parseDreamLastRun(value: unknown): DreamLastRun | null {
   const durationByStage = parseNumericRecord(raw.duration_ms_per_stage);
   const skipped = parseOptionalBoolean(raw.skipped);
   const reason = parseOptionalString(raw.reason);
+  const journalSlug = parseOptionalString(raw.journal_slug);
   const headline = parseOptionalHeadline(raw.headline);
-  if (skipped === null || reason === null) return null;
+  if (skipped === null || reason === null || journalSlug === null) return null;
   if (
     typeof raw.timestamp !== "string" ||
     typeof raw.mode !== "string" ||
@@ -61,6 +63,7 @@ function parseDreamLastRun(value: unknown): DreamLastRun | null {
   return {
     timestamp: raw.timestamp,
     mode: raw.mode,
+    journal_slug: journalSlug,
     pages_compiled: raw.pages_compiled,
     contradictions_found: raw.contradictions_found,
     backlinks_added: raw.backlinks_added,

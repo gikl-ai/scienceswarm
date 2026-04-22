@@ -13,14 +13,10 @@
 import { randomBytes } from "crypto";
 import matter from "gray-matter";
 import type { GbrainClient, GbrainPutError } from "./gbrain-client";
+import type { CaptureKind } from "./types";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 
-export type BrainCaptureKind =
-  | "note"
-  | "observation"
-  | "decision"
-  | "hypothesis"
-  | "task";
+export type BrainCaptureKind = CaptureKind;
 
 export interface BrainCaptureParams {
   content: string;
@@ -36,6 +32,14 @@ export type BrainCaptureToolResponse = {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
   [key: string]: unknown;
+};
+
+const CAPTURE_HOME_BY_KIND: Partial<Record<BrainCaptureKind, string>> = {
+  survey: "surveys",
+  method: "methods",
+  original_synthesis: "originals",
+  research_packet: "packets",
+  overnight_journal: "journals",
 };
 
 /** Local slugify — intentionally decoupled from capture/materialize-memory.ts. */
@@ -66,6 +70,17 @@ function shortHash(): string {
   return randomBytes(3).toString("hex");
 }
 
+function buildCaptureSlug(
+  kind: BrainCaptureKind | undefined,
+  date: string,
+  titleSource: string,
+  hash: string,
+): string {
+  const baseSlug = `${date}-${slugify(titleSource)}-${hash}`;
+  const home = kind ? CAPTURE_HOME_BY_KIND[kind] : undefined;
+  return home ? `${home}/${baseSlug}` : baseSlug;
+}
+
 export interface BuiltCapturePage {
   slug: string;
   markdown: string;
@@ -88,13 +103,16 @@ export function buildCapturePage(
           .replace(/^#+\s*/, "")
           .slice(0, 60);
   const title = titleSource || "Capture";
-  const slug = `${date}-${slugify(titleSource)}-${hash}`;
+  const slug = buildCaptureSlug(params.kind, date, titleSource, hash);
 
   const frontmatter: Record<string, unknown> = {
     title,
     date,
   };
-  if (params.kind) frontmatter.kind = params.kind;
+  if (params.kind) {
+    frontmatter.kind = params.kind;
+    frontmatter.type = params.kind;
+  }
   if (params.project) frontmatter.project = params.project;
   if (params.tags && params.tags.length > 0) frontmatter.tags = params.tags;
   if (params.channel) frontmatter.channel = params.channel;
