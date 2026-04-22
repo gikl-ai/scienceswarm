@@ -72,7 +72,7 @@ describe("interpretMultimodalResultPacket", () => {
     ]);
     expect(result.unsupportedInputs).toEqual(["figures/residual_cells.png"]);
 
-    const savedPath = path.join(scienceswarmDir, "workspace", result.savePath);
+    const savedPath = path.join(scienceswarmDir, "projects", "packet-alpha", result.savePath);
     const saved = await readFile(savedPath, "utf-8");
     expect(saved).toContain("docs/oncology_note.txt");
     expect(saved).toContain("figures/residual_cells.png");

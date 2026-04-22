@@ -64,10 +64,10 @@ export async function buildAndPersistNextExperimentPlan(input: {
   const projectPages = filterProjectPages(allPages, input.project);
   const previousPlan =
     (input.previousPlanSlug
-      ? await store.getPage(input.previousPlanSlug).catch(() => null)
+      ? findProjectScopedPage(projectPages, input.previousPlanSlug)
       : null) ?? findLatestSavedPlan(projectPages);
   const focusPage = input.focusBrainSlug
-    ? await store.getPage(input.focusBrainSlug).catch(() => null)
+    ? findProjectScopedPage(projectPages, input.focusBrainSlug)
     : null;
 
   const plan = await synthesizePlan({
@@ -125,6 +125,22 @@ export async function buildAndPersistNextExperimentPlan(input: {
     responseMarkdown: `${responseMarkdown}\n\nSaved to \`${persisted.savePath}\` and Brain Artifacts.`,
     provenance: persisted.provenance,
   };
+}
+
+export function findProjectScopedPage(
+  projectPages: BrainPage[],
+  pageSlugOrPath: string | null | undefined,
+): BrainPage | null {
+  const normalized = normalizeBrainPageReference(pageSlugOrPath);
+  if (!normalized) return null;
+
+  return projectPages.find((page) => normalizeBrainPageReference(page.path) === normalized) ?? null;
+}
+
+function normalizeBrainPageReference(value: string | null | undefined): string | null {
+  const trimmed = value?.trim().replace(/^gbrain:/i, "");
+  if (!trimmed) return null;
+  return trimmed.replace(/\.md$/i, "");
 }
 
 async function synthesizePlan(input: {
