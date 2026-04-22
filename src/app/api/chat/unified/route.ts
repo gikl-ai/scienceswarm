@@ -73,6 +73,7 @@ import {
   writeBackOpenClawGeneratedFiles,
 } from "@/lib/openclaw/gbrain-writeback";
 import { listOpenClawSkills } from "@/lib/openclaw/skill-catalog";
+import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
 import {
   buildOpenClawSlashCommands,
   buildOpenClawSlashCommandPrompt,
@@ -417,31 +418,6 @@ function shouldUseCompactOpenClawArtifactContext(
   return (
     isRevisionRunRequest(message) ||
     shouldUseCompactOpenClawPlanChangeContext(message, files)
-  );
-}
-
-function shouldForceOpenClawToolExecution(message: string): boolean {
-  if (isExplanatoryClarificationRequest(message)) {
-    return false;
-  }
-
-  const asksToCreateConcreteWorkspaceOutputs =
-    /\b(?:scaffold|build|create|generate|write|draft|produce|implement|save|export|set\s+up|setup)\b/i.test(
-      message,
-    ) &&
-    /\b(?:visible\s+)?(?:artifact|artifacts|file|files|workspace|project|experiment|starter code|codebase|code|config(?:uration)?s?|dataset(?:\s+entry\s+points?)?|entry\s+points?|training script|evaluation script|readme|notebook|chart|plot|graph|figure|report|plan|critique|cover letter|manuscript|package|benchmark|sweep|ablation)\b/i.test(
-      message,
-    );
-  const asksToExecuteResearchWorkflow =
-    /\b(?:run|rerun|re-run|execute|perform|start|train|evaluate|benchmark|sweep)\b/i.test(
-      message,
-    ) &&
-    /\b(?:experiment|training|evaluation|benchmark|sweep|ablation|test[- ]time|analysis|script|job|pipeline|workflow)\b/i.test(
-      message,
-    );
-
-  return (
-    asksToCreateConcreteWorkspaceOutputs || asksToExecuteResearchWorkflow
   );
 }
 
@@ -1916,6 +1892,16 @@ function buildOpenClawWebTaskGuardrails(
     "- Treat provided gbrain/file excerpts as enough evidence when they answer the request.",
     "- Do not auto-read AGENTS.md or other startup-convention files unless the user explicitly asks.",
   ];
+
+  if (projectRoot && shouldForceOpenClawToolExecution(message)) {
+    rules.push(
+      `- The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
+      `- Use absolute paths rooted under ${projectRoot} for every write, exec, and saved artifact. If you need a scratch or artifacts folder, create it under ${projectRoot}.`,
+      `- Never write to the generic OpenClaw workspace, WORK_DIR, home directory, or any path outside ${projectRoot} unless the user explicitly asked for that destination.`,
+      `- For toy or local validation runs, prefer the Python standard library or dependencies already available in the current environment. Do not install new packages unless the user explicitly asked you to modify the environment.`,
+      `- If a tool wrote something outside ${projectRoot}, treat that as a mistake: rewrite or move it into ${projectRoot} before you finish, then report the project-visible path.`,
+    );
+  }
 
   if (isExplanatoryClarificationRequest(message)) {
     rules.push(

@@ -6,6 +6,7 @@ import {
   normalizeArtifactProvenanceEntries,
   type ArtifactProvenanceEntry,
 } from "@/lib/artifact-provenance";
+import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
 import { looksLikeSlashCommandInput } from "@/lib/openclaw/slash-commands";
 
 import type { Step } from "@/components/research/step-cards";
@@ -2963,7 +2964,10 @@ export function useUnifiedChat(
         );
 
         try {
-          const activeConversationId = queued.context.chatMode === "openclaw-tools"
+          const shouldReuseOpenClawConversation =
+            queued.context.chatMode === "openclaw-tools" ||
+            shouldForceOpenClawToolExecution(queued.content);
+          const activeConversationId = shouldReuseOpenClawConversation
             ? getScopedConversationId(
               liveConversationIdRef.current,
               liveConversationBackendRef.current,
