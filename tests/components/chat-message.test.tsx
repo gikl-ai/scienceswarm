@@ -1,12 +1,54 @@
 // @vitest-environment jsdom
 
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatMessage } from "@/components/research/chat-message";
 
 describe("ChatMessage", () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("renders a full date and time footer for message bubbles", () => {
+    const timestamp = new Date(2026, 3, 22, 16, 45, 0);
+    const expectedFooter = `${timestamp.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })} · ${timestamp.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        timestamp={timestamp}
+      />,
+    );
+
+    expect(screen.getByText(expectedFooter)).toBeInTheDocument();
+  });
+
+  it("copies the full message body from the footer copy button", () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"Line one\nLine two"}
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(writeText).toHaveBeenCalledWith("Line one\nLine two");
   });
 
   it("renders assistant task phases inside the message bubble", () => {

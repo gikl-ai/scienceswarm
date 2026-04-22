@@ -935,7 +935,6 @@ export function ChatMessage({
           )}
           <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
         </div>
-          </div>
       </div>
     </div>
   );
