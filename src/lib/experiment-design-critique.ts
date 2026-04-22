@@ -24,8 +24,11 @@ export interface ExperimentDesignCritiqueSource {
   text: string;
 }
 
-const DESIGN_CRITIQUE_INTENT_RE =
-  /\b(critique|review|audit|red[- ]?team|stress[- ]?test|weak(?:ness|nesses)?|confound(?:er|ers)?|controls?|comparators?|study design|experimental design|experiment plan|protocol)\b/i;
+const DESIGN_CRITIQUE_ACTION_RE =
+  /\b(critique|review|audit|red[- ]?team|stress[- ]?test|weak(?:ness|nesses)?|flaws?|issues?|missing)\b/i;
+
+const DESIGN_DOMAIN_RE =
+  /\b(confound(?:er|ers)?|controls?|comparators?|study design|experimental design|experiment plan|protocol|assays?|replicates?|randomi[sz]ation|sample size|power)\b/i;
 
 const DESIGN_ARTIFACT_HINT_RE =
   /\b(plan|protocol|design|study|experiment|assay|memo)\b/i;
@@ -395,7 +398,7 @@ export function summarizeExperimentDesignIteration(
 }
 
 export function isExperimentDesignCritiqueRequest(message: string): boolean {
-  return DESIGN_CRITIQUE_INTENT_RE.test(message);
+  return DESIGN_CRITIQUE_ACTION_RE.test(message) && DESIGN_DOMAIN_RE.test(message);
 }
 
 export function looksLikeExperimentDesignArtifact(pathOrName: string): boolean {

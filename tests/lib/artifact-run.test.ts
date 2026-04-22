@@ -88,6 +88,36 @@ beforeEach(() => {
 });
 
 describe("runArtifact", () => {
+  it("lets startConversation resolve the runtime model for new artifact runs", async () => {
+    startConversation.mockResolvedValue({
+      id: "task-1",
+      status: "READY",
+      app_conversation_id: "conv-started",
+    });
+    getEvents.mockResolvedValue([
+      {
+        id: 1,
+        source: "agent",
+        message: [
+          "```json",
+          JSON.stringify({
+            title: "Started Memo",
+            fileName: "started-memo.md",
+            content: "# Started\n\nArtifact body.",
+          }),
+          "```",
+        ].join("\n"),
+      },
+    ]);
+    getConversation.mockResolvedValue({ execution_status: "finished" });
+
+    await runArtifactWithoutPollingDelay(bundle);
+
+    expect(startConversation).toHaveBeenCalledWith({
+      message: "Generate the artifact.",
+    });
+  });
+
   it("fails clearly when OpenHands returns an empty task status list", async () => {
     startConversation.mockResolvedValue({
       id: "task-1",

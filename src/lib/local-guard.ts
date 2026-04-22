@@ -103,6 +103,16 @@ function forwardedFor(headersReader: HeaderReader): string | null {
   return null;
 }
 
+function hasForwardingHeaders(headersReader: HeaderReader): boolean {
+  return Boolean(
+    headersReader.get("x-real-ip")
+    || headersReader.get("x-forwarded-for")
+    || headersReader.get("forwarded")
+    || headersReader.get("x-forwarded-host")
+    || headersReader.get("x-forwarded-proto"),
+  );
+}
+
 function requestHost(headersReader: HeaderReader, request?: Request): string | null {
   const forwardedHost = headersReader.get("x-forwarded-host");
   if (forwardedHost) {
@@ -250,28 +260,29 @@ export async function isLocalRequest(request?: Request): Promise<boolean> {
     return isLoopbackHost(publicHost) && isTrustedBrowserRequest(h, request);
   }
 
-  if (request) {
-    // Runtime startup scripts normally set a frontend host. When they do not
-    // (for example, a plain `next dev` in local development), still allow
-    // direct loopback requests, but never trust proxy client-IP headers in
-    // this path because they are spoofable unless the operator explicitly
-    // configured the public frontend host.
-    const host = requestHost(h, request);
-    if (!host || !isLoopbackHost(host)) {
-      return false;
-    }
-    if (forwardedFor(h) !== null) {
-      return false;
-    }
-    try {
-      return (
-        isLoopbackHost(new URL(request.url).hostname) &&
-        isTrustedBrowserRequest(h, request)
-      );
-    } catch {
-      return false;
-    }
+  if (!request || process.env.NODE_ENV === "production") {
+    return false;
   }
 
-  return false;
+  // Some local dev lanes launch `next dev -H 127.0.0.1` directly instead of
+  // going through the wrapper script that exports FRONTEND_HOST. Keep local
+  // write routes working for those direct loopback binds, but only when the
+  // request is clearly unproxied. If any forwarding headers are present, the
+  // public bind host is ambiguous and we must refuse the request.
+  if (hasForwardingHeaders(h)) {
+    return false;
+  }
+
+  try {
+    const host = requestHost(h, request);
+    const urlHost = new URL(request.url).hostname;
+    return Boolean(
+      host &&
+      isLoopbackHost(host) &&
+      isLoopbackHost(urlHost) &&
+      isTrustedBrowserRequest(h, request),
+    );
+  } catch {
+    return false;
+  }
 }

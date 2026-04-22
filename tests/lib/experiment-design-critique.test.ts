@@ -22,6 +22,11 @@ describe("experiment design critique", () => {
         "Critique this experimental design and tell me what controls are missing.",
       ),
     ).toBe(true);
+    expect(
+      isExperimentDesignCritiqueRequest(
+        "Run a full revise-and-resubmit audit of this manuscript package.",
+      ),
+    ).toBe(false);
     expect(isExperimentDesignCritiqueRequest("Summarize this figure caption.")).toBe(false);
   });
 

@@ -7,7 +7,10 @@
  * For health checks, uses `openclaw status` parsed output.
  */
 
+import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { getOpenClawGatewayUrl } from "@/lib/config/ports";
+import { getScienceSwarmOpenClawStateDir } from "@/lib/scienceswarm-paths";
 import { runOpenClaw, runOpenClawSync } from "@/lib/openclaw/runner";
 
 /**
@@ -193,6 +196,120 @@ function inferMessageRole(message: OpenClawMessage): "user" | "assistant" | "sys
     return "system";
   }
   return "user";
+}
+
+function extractSessionTextPart(part: unknown): string | null {
+  if (typeof part === "string") {
+    return part.trim().length > 0 ? part : null;
+  }
+  if (!isRecord(part)) {
+    return null;
+  }
+
+  const type = part.type;
+  if (
+    (type === "text" || type === "input_text" || type === "output_text")
+    && typeof part.text === "string"
+    && part.text.trim().length > 0
+  ) {
+    return part.text;
+  }
+
+  return null;
+}
+
+function extractSessionMessageText(content: unknown): string {
+  if (typeof content === "string") {
+    return content.trim();
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .map((part) => extractSessionTextPart(part))
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n")
+    .trim();
+}
+
+async function readConversationHistoryFromSessionFile(
+  conversationId: string,
+  limit: number,
+): Promise<OpenClawMessage[]> {
+  const sessionFile = path.join(
+    getScienceSwarmOpenClawStateDir(),
+    "agents",
+    "main",
+    "sessions",
+    `${conversationId}.jsonl`,
+  );
+
+  let raw: string;
+  try {
+    raw = await readFile(sessionFile, "utf8");
+  } catch {
+    return [];
+  }
+
+  const messages: OpenClawMessage[] = [];
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+
+    if (!isRecord(parsed) || parsed.type !== "message" || !isRecord(parsed.message)) {
+      continue;
+    }
+
+    const role = parsed.message.role;
+    if (role !== "user" && role !== "assistant" && role !== "system") {
+      continue;
+    }
+
+    const content = extractSessionMessageText(parsed.message.content);
+    if (!content) {
+      continue;
+    }
+
+    const timestampCandidate =
+      typeof parsed.timestamp === "string"
+        ? parsed.timestamp
+        : typeof parsed.message.timestamp === "string"
+          ? parsed.message.timestamp
+          : null;
+    if (!timestampCandidate || Number.isNaN(Date.parse(timestampCandidate))) {
+      continue;
+    }
+
+    messages.push({
+      id:
+        typeof parsed.id === "string"
+          ? parsed.id
+          : `${conversationId}:${messages.length + 1}`,
+      userId:
+        role === "assistant"
+          ? "assistant"
+          : role === "system"
+            ? "system"
+            : "web-user",
+      role,
+      channel: "web",
+      content,
+      timestamp: timestampCandidate,
+      conversationId,
+    });
+  }
+
+  return messages.slice(-limit);
 }
 
 /** Check if OpenClaw is running and reachable */
@@ -415,6 +532,14 @@ export async function getConversationHistory(
   conversationId: string,
   limit = 20,
 ): Promise<OpenClawMessage[]> {
+  const sessionMessages = await readConversationHistoryFromSessionFile(
+    conversationId,
+    limit,
+  );
+  if (sessionMessages.length > 0) {
+    return sessionMessages;
+  }
+
   const historyResult = await runOpenClaw(
     ["history", "--conversation", conversationId, "--limit", String(limit), "--json"],
     { timeoutMs: 10000 },

@@ -182,13 +182,14 @@ async function withWorkspaceMutationLock<T>(
   const current = new Promise<void>((resolve) => {
     release = resolve;
   });
-  workspaceMutationLocks.set(key, previous.then(() => current));
+  const queued = previous.then(() => current);
+  workspaceMutationLocks.set(key, queued);
   await previous;
   try {
     return await task();
   } finally {
     release();
-    if (workspaceMutationLocks.get(key) === current) {
+    if (workspaceMutationLocks.get(key) === queued) {
       workspaceMutationLocks.delete(key);
     }
   }
@@ -418,6 +419,23 @@ async function buildGbrainWorkspaceView(
     },
     entries,
   };
+}
+
+function resolveImportedWorkspacePath(
+  projectId: string,
+  relativePath: string,
+  root: string,
+): string {
+  const targetPath = getImportedWorkspacePath(projectId, relativePath);
+  const relativeToRoot = path.relative(root, targetPath);
+  if (
+    relativeToRoot === ""
+    || relativeToRoot.startsWith("..")
+    || path.isAbsolute(relativeToRoot)
+  ) {
+    throw new Error("Imported workspace path must stay inside the project workspace.");
+  }
+  return targetPath;
 }
 
 async function listGbrainWorkspaceFileEntries(
@@ -672,7 +690,8 @@ async function syncProjectWorkspaceFromImportSource(
       detectedBytes += fileStat.size;
 
       const relativePath = path.relative(sourceRoot, fullPath);
-      const workspacePath = path.relative(root, getImportedWorkspacePath(projectId, relativePath));
+      const targetPath = resolveImportedWorkspacePath(projectId, relativePath, root);
+      const workspacePath = path.relative(root, targetPath);
       const sourceHash = computeImportFingerprint(fullPath, fileStat.size);
       const duplicateBucket = duplicatePathsByHash.get(sourceHash);
       if (duplicateBucket) {
@@ -682,7 +701,6 @@ async function syncProjectWorkspaceFromImportSource(
       }
       duplicatePathsByHash.set(sourceHash, [relativePath]);
 
-      const targetPath = getImportedWorkspacePath(projectId, relativePath);
       const existingRef = nextRefs.get(workspacePath);
       const preserveLocalEdit = typeof existingRef?.localEditedAt === "string"
         && existingRef.localEditedAt.trim().length > 0;

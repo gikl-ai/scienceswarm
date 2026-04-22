@@ -28,6 +28,7 @@ const RAW_DIRECTORY_BY_TYPE: Record<ContentType, string> = {
   research_packet: "packets",
   overnight_journal: "journals",
   job_run: "jobs",
+  critique: "critiques",
   frontier_item: "frontier",
   person: "people",
 };

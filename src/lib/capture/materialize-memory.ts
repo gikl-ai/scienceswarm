@@ -94,6 +94,7 @@ import type {
   SourceRef,
 } from "@/brain/types";
 import { enqueueGbrainWrite } from "@/lib/gbrain/write-queue";
+import { buildSourceRefCitationLines } from "@/lib/capture/source-ref-lines";
 import { assertSafeProjectSlug, updateProjectManifest } from "@/lib/state/project-manifests";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 import type { PersistedRawCapture } from "./persist-raw";
@@ -306,14 +307,16 @@ function buildCitations(capture: PersistedRawCapture): string[] {
   );
 
   // Any external source refs (papers, URLs, datasets) get their own
-  // citation line so each fact can be traced back to its origin
-  // independent of the user attribution above.
-  for (const ref of capture.sourceRefs) {
-    if (ref.kind === "external") {
-      const external = ref.hash ? `${ref.ref} (${ref.hash})` : ref.ref;
-      citations.push(`[Source: ${external}]`);
-    }
-  }
+  // citation line so each fact can be traced back to its origin. Artifact
+  // refs are also useful for workspace provenance; conversation/capture ids
+  // stay in frontmatter to avoid noisy permanent body citations.
+  citations.push(
+    ...buildSourceRefCitationLines(
+      capture.sourceRefs.filter(
+        (ref) => ref.kind === "external" || ref.kind === "artifact",
+      ),
+    ),
+  );
 
   // Synthesis fallback: always emit a compiled-from line keyed to the
   // capture id so even notes with no external refs are grep-able back to
