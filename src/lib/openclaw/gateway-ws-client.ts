@@ -42,6 +42,34 @@ import { resolveOpenClawMode } from "@/lib/openclaw/runner";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/**
+ * Thrown when a turn fails AFTER the gateway has already accepted the message
+ * (`sessions.send` ACKed). Examples: turn timeout, WebSocket drop while the
+ * agent is still processing, listener reject after-the-fact.
+ *
+ * The defining property: the gateway has the message and may already be
+ * dispatching it to the agent. Callers MUST NOT retry the same message on the
+ * same session via a different transport, or the agent will see the user
+ * message twice (with potential duplicate tool executions).
+ */
+export class GatewayPostAckError extends Error {
+  readonly code = "GATEWAY_POST_ACK_FAILURE" as const;
+  readonly sessionKey: string;
+  constructor(sessionKey: string, message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "GatewayPostAckError";
+    this.sessionKey = sessionKey;
+  }
+}
+
+/**
+ * Returns true if `err` is a post-ACK failure where the gateway already
+ * received the message. See {@link GatewayPostAckError} for why this matters.
+ */
+export function isGatewayPostAckError(err: unknown): err is GatewayPostAckError {
+  return err instanceof GatewayPostAckError;
+}
+
 export interface SendMessageResult {
   /** Final assistant response text (empty string if no text response received). */
   text: string;
@@ -745,18 +773,39 @@ export async function sendMessageViaGateway(
   });
 
   // 4. Send the message and wait for turn to complete.
-  // If sessions.send fails, clean up the listener and timeout to prevent leaks.
+  //
+  // Two failure regimes are intentionally distinguished here:
+  //
+  //   (a) sessions.send itself fails → the gateway never accepted the
+  //       message. Safe for the caller to retry on the same session via a
+  //       different transport. Surface the raw error.
+  //
+  //   (b) sessions.send succeeds, then turnPromise fails (timeout, WS drop,
+  //       listener reject) → the gateway has the message and may already be
+  //       dispatching it. Wrap in GatewayPostAckError so the caller knows
+  //       NOT to retry on the same session (would cause duplicate delivery).
+  let sendAcked = false;
   try {
     await sendRequest(
       "sessions.send",
       { key: sessionKey, message, timeoutMs },
       30_000,
     );
+    sendAcked = true;
 
     // 5. Wait for turn to complete
     await turnPromise;
   } catch (err) {
     cleanupListener();
+    if (sendAcked) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new GatewayPostAckError(
+        sessionKey,
+        `OpenClaw gateway accepted the message for session "${sessionKey}" but ` +
+          `the turn failed before completion: ${detail}`,
+        { cause: err },
+      );
+    }
     throw err;
   }
 
