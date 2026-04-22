@@ -44,6 +44,22 @@ describe("ChatMessage", () => {
     expect(screen.getByText("Thinking Trace").closest("details")).toHaveAttribute("open");
   });
 
+  it("renders workspace media hints as chat media", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"Done.\n\nMEDIA:docs/results_chart.png"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByAltText("docs/results_chart.png")).toHaveAttribute(
+      "src",
+      "/api/workspace?action=raw&file=docs%2Fresults_chart.png&projectId=project-alpha",
+    );
+  });
+
   it("adds explicit MIME hints for rendered media sources", () => {
     const { container } = render(
       <ChatMessage
