@@ -1470,6 +1470,12 @@ describe("POST /api/chat/unified", () => {
       "Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
     );
     expect(openClawMessage).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(openClawMessage).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
+    expect(openClawMessage).toContain(
       "Do not run git add, git commit, or git push unless the user explicitly asked",
     );
     expect(openClawMessage).toContain(
@@ -1780,6 +1786,12 @@ describe("POST /api/chat/unified", () => {
     );
     expect(openClawMessage).toContain(
       "Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
+    );
+    expect(openClawMessage).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(openClawMessage).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     );
   });
 
