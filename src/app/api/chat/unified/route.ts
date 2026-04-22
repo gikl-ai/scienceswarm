@@ -6270,14 +6270,78 @@ type AgentRuntimeStatusCacheEntry = {
 const configuredAgentRuntimeStatusCache = new Map<string, AgentRuntimeStatusCacheEntry>();
 const configuredAgentRuntimeStatusInflight = new Map<string, Promise<AgentRuntimeStatus>>();
 
+function normalizeConfiguredAgentRuntimeStatusCacheValue(
+  value: unknown,
+  seen = new WeakSet<object>(),
+): unknown {
+  if (
+    value == null
+    || typeof value === "string"
+    || typeof value === "number"
+    || typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      const normalized = normalizeConfiguredAgentRuntimeStatusCacheValue(
+        item,
+        seen,
+      );
+      return normalized === undefined ? null : normalized;
+    });
+  }
+
+  if (typeof value === "object") {
+    if (seen.has(value)) {
+      return "[Circular]";
+    }
+
+    seen.add(value);
+    const normalized = Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .flatMap(([key, nestedValue]) => {
+          const normalizedValue =
+            normalizeConfiguredAgentRuntimeStatusCacheValue(
+              nestedValue,
+              seen,
+            );
+          return normalizedValue === undefined
+            ? []
+            : [[key, normalizedValue]];
+        }),
+    );
+    seen.delete(value);
+    return normalized;
+  }
+
+  return undefined;
+}
+
 function configuredAgentRuntimeStatusCacheKey(
   agentConfig: ReturnType<typeof resolveAgentConfig>,
   strictLocalOnly: boolean,
 ): string {
   return JSON.stringify({
     strictLocalOnly,
-    agentConfig: agentConfig ?? null,
+    agentConfig: normalizeConfiguredAgentRuntimeStatusCacheValue(
+      agentConfig ?? null,
+    ),
   });
+}
+
+function pruneExpiredConfiguredAgentRuntimeStatusCache(now: number): void {
+  for (const [cacheKey, entry] of configuredAgentRuntimeStatusCache.entries()) {
+    if (entry.expiresAt <= now) {
+      configuredAgentRuntimeStatusCache.delete(cacheKey);
+    }
+  }
 }
 
 async function loadConfiguredAgentRuntimeStatus(
@@ -6335,6 +6399,7 @@ async function getConfiguredAgentRuntimeStatus(
     strictLocalOnly,
   );
   const now = Date.now();
+  pruneExpiredConfiguredAgentRuntimeStatusCache(now);
   const cached = configuredAgentRuntimeStatusCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
     return cached.status;
@@ -6350,9 +6415,11 @@ async function getConfiguredAgentRuntimeStatus(
     strictLocalOnly,
   )
     .then((status) => {
+      const refreshedAt = Date.now();
+      pruneExpiredConfiguredAgentRuntimeStatusCache(refreshedAt);
       configuredAgentRuntimeStatusCache.set(cacheKey, {
         status,
-        expiresAt: Date.now() + AGENT_RUNTIME_STATUS_CACHE_TTL_MS,
+        expiresAt: refreshedAt + AGENT_RUNTIME_STATUS_CACHE_TTL_MS,
       });
       return status;
     })
@@ -6367,6 +6434,10 @@ async function getConfiguredAgentRuntimeStatus(
 export function __resetConfiguredAgentRuntimeStatusCacheForTests() {
   configuredAgentRuntimeStatusCache.clear();
   configuredAgentRuntimeStatusInflight.clear();
+}
+
+export function __getConfiguredAgentRuntimeStatusCacheSizeForTests(): number {
+  return configuredAgentRuntimeStatusCache.size;
 }
 
 function streamOpenClawResponse(params: {

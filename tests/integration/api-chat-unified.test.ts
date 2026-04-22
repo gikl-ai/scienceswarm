@@ -158,6 +158,7 @@ vi.mock("@/lib/openhands", () => ({
 
 import { POST as commandPOST } from "@/app/api/chat/command/route";
 import {
+  __getConfiguredAgentRuntimeStatusCacheSizeForTests,
   __resetConfiguredAgentRuntimeStatusCacheForTests,
   GET,
   POST,
@@ -883,11 +884,16 @@ describe("GET /api/chat/unified", () => {
     expect(body.channels).toEqual(["telegram"]);
   });
 
-  it("reuses a fresh OpenClaw runtime status between the health probe and the next POST", async () => {
-    resolveAgentConfig.mockReturnValue({
-      type: "openclaw",
-      url: "http://localhost:19002",
-    });
+  it("reuses a fresh OpenClaw runtime status between the health probe and the next POST even when config key order differs", async () => {
+    resolveAgentConfig
+      .mockReturnValueOnce({
+        url: "http://localhost:19002",
+        type: "openclaw",
+      })
+      .mockReturnValueOnce({
+        type: "openclaw",
+        url: "http://localhost:19002",
+      });
     openClawHealthCheck.mockResolvedValue({
       status: "connected",
       gateway: "ws://127.0.0.1:19002",
@@ -921,6 +927,45 @@ describe("GET /api/chat/unified", () => {
     expect(postResponse.status).toBe(200);
     expect(openClawHealthCheck).toHaveBeenCalledTimes(1);
     expect(sendOpenClawMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("prunes expired runtime-status cache entries before caching a new config", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-04-22T00:00:00Z"));
+      resolveAgentConfig.mockReturnValueOnce({
+        type: "openclaw",
+        url: "http://localhost:19002",
+      });
+      openClawHealthCheck.mockResolvedValue({
+        status: "connected",
+        gateway: "ws://127.0.0.1:19002",
+        channels: ["telegram"],
+        agents: 1,
+        sessions: 2,
+      });
+
+      const firstResponse = await GET(
+        new Request("http://localhost/api/chat/unified?action=health"),
+      );
+      expect(firstResponse.status).toBe(200);
+      expect(__getConfiguredAgentRuntimeStatusCacheSizeForTests()).toBe(1);
+
+      vi.setSystemTime(new Date("2026-04-22T00:00:06Z"));
+      resolveAgentConfig.mockReturnValueOnce({
+        type: "openclaw",
+        url: "http://localhost:19003",
+      });
+
+      const secondResponse = await GET(
+        new Request("http://localhost/api/chat/unified?action=health"),
+      );
+      expect(secondResponse.status).toBe(200);
+      expect(openClawHealthCheck).toHaveBeenCalledTimes(2);
+      expect(__getConfiguredAgentRuntimeStatusCacheSizeForTests()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reports ready from direct OpenAI availability when no local provider is selected", async () => {

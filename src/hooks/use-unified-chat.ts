@@ -426,6 +426,9 @@ function isLikelyDuplicatePolledAssistantMessage(
   }
 
   return (
+    // POST responses stamp web completions on the client while polled
+    // completions carry server-side timestamps. Match the user-message
+    // dedupe window and assume clocks stay roughly NTP-aligned within 30 s.
     Math.abs(
       latestSettledWebAssistant.timestamp.getTime() - candidate.timestamp.getTime(),
     ) <= 30_000
