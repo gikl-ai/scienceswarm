@@ -636,7 +636,7 @@ describe("OpenClaw conversation polling", () => {
             content: [
               {
                 type: "text",
-                text: "Finished. Saved reports/baseline_vs_adaptation_summary.md.",
+                text: "Finished. Saved reports/baseline_vs_variant_summary.md.",
               },
             ],
           },
@@ -650,7 +650,7 @@ describe("OpenClaw conversation polling", () => {
       expect.objectContaining({
         id: "assistant-final",
         channel: "web",
-        content: "Finished. Saved reports/baseline_vs_adaptation_summary.md.",
+        content: "Finished. Saved reports/baseline_vs_variant_summary.md.",
       }),
     ]);
 

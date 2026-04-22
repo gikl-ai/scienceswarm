@@ -400,7 +400,7 @@ describe("GET /api/chat/unified", () => {
     const sessionSummaryFile = path.join(
       sessionWorkspace,
       "reports",
-      "baseline_vs_adaptation_summary.md",
+      "baseline_vs_variant_summary.md",
     );
     writeFileSync(sessionSummaryFile, "# Summary\n");
     utimesSync(
@@ -433,7 +433,7 @@ describe("GET /api/chat/unified", () => {
         role: "assistant",
         channel: "web",
         content:
-          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_adaptation_summary.md.",
+          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_variant_summary.md.",
         timestamp: "2026-01-01T00:00:04.000Z",
         conversationId: newerSessionId,
       },
@@ -451,17 +451,17 @@ describe("GET /api/chat/unified", () => {
       conversationId: newerSessionId,
       generatedArtifacts: [
         expect.objectContaining({
-          projectPath: "docs/baseline_vs_adaptation_summary.md",
+          projectPath: "docs/baseline_vs_variant_summary.md",
           tool: "OpenClaw CLI",
         }),
       ],
-      generatedFiles: ["docs/baseline_vs_adaptation_summary.md"],
+      generatedFiles: ["docs/baseline_vs_variant_summary.md"],
       messages: [
         expect.objectContaining({
           id: "assistant-finished",
           channel: "web",
           content: expect.stringContaining(
-            "docs/baseline_vs_adaptation_summary.md",
+            "docs/baseline_vs_variant_summary.md",
           ),
         }),
       ],
@@ -472,7 +472,7 @@ describe("GET /api/chat/unified", () => {
     );
     expect(
       existsSync(
-        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary.md"),
+        path.join(projectRoot, "docs", "baseline_vs_variant_summary.md"),
       ),
     ).toBe(true);
   });
@@ -498,7 +498,7 @@ describe("GET /api/chat/unified", () => {
     const sessionSummaryFile = path.join(
       sessionWorkspace,
       "reports",
-      "baseline_vs_adaptation_summary.md",
+      "baseline_vs_variant_summary.md",
     );
     writeFileSync(sessionSummaryFile, "# Summary\n");
     utimesSync(
@@ -520,7 +520,7 @@ describe("GET /api/chat/unified", () => {
         role: "assistant",
         channel: "web",
         content:
-          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_adaptation_summary.md.",
+          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_variant_summary.md.",
         timestamp: "2026-01-01T00:00:04.000Z",
         conversationId: sessionId,
       },
@@ -533,23 +533,23 @@ describe("GET /api/chat/unified", () => {
     const firstResponse = await GET(request);
     expect(firstResponse.status).toBe(200);
     await expect(firstResponse.json()).resolves.toMatchObject({
-      generatedFiles: ["docs/baseline_vs_adaptation_summary.md"],
+      generatedFiles: ["docs/baseline_vs_variant_summary.md"],
     });
 
     const secondResponse = await GET(request);
     expect(secondResponse.status).toBe(200);
     await expect(secondResponse.json()).resolves.toMatchObject({
-      generatedFiles: ["docs/baseline_vs_adaptation_summary.md"],
+      generatedFiles: ["docs/baseline_vs_variant_summary.md"],
     });
 
     expect(
       existsSync(
-        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary.md"),
+        path.join(projectRoot, "docs", "baseline_vs_variant_summary.md"),
       ),
     ).toBe(true);
     expect(
       existsSync(
-        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary-2.md"),
+        path.join(projectRoot, "docs", "baseline_vs_variant_summary-2.md"),
       ),
     ).toBe(false);
   });
@@ -2266,7 +2266,7 @@ describe("POST /api/chat/unified", () => {
   });
 
   it("forces tool execution for scaffold requests from the default chat mode and imports the authored artifacts", async () => {
-    const projectRoot = createProjectRoot("adaptive-memory-scaffold");
+    const projectRoot = createProjectRoot("project-alpha-scaffold");
     resolveAgentConfig.mockReturnValue({
       type: "openclaw",
       url: "http://localhost:19002",
@@ -2281,13 +2281,13 @@ describe("POST /api/chat/unified", () => {
     sendOpenClawMessage.mockResolvedValueOnce(
       [
         "```scienceswarm-artifact path=\"README.md\"",
-        "# Adaptive Memory Scaffold",
+        "# Project Alpha Scaffold",
         "",
         "Run `python3 train.py --config configs/experiment.yaml` after installing dependencies.",
         "```",
         "",
         "```scienceswarm-artifact path=\"configs/experiment.yaml\"",
-        "model: adaptive-memory",
+        "model: project-alpha",
         "context_length: 32768",
         "```",
         "",
@@ -2303,8 +2303,8 @@ describe("POST /api/chat/unified", () => {
       },
       body: JSON.stringify({
         message:
-          "Scaffold a runnable experiment for a non-transformer long-context model with adaptive memory. I need starter code, configs, dataset entry points, a training script, an evaluation script, and a README that explains what remains to do.",
-        projectId: "adaptive-memory-scaffold",
+          "Scaffold a runnable experiment for project-alpha with a configurable baseline. I need starter code, configs, dataset entry points, a training script, an evaluation script, and a README that explains what remains to do.",
+        projectId: "project-alpha-scaffold",
         streamPhases: true,
       }),
     });
@@ -2345,7 +2345,7 @@ describe("POST /api/chat/unified", () => {
       true,
     );
     expect(readFileSync(path.join(projectRoot, "README.md"), "utf-8")).toContain(
-      "Adaptive Memory Scaffold",
+      "Project Alpha Scaffold",
     );
   });
 
@@ -2453,8 +2453,8 @@ describe("POST /api/chat/unified", () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeWorkspaceFile(
       projectRoot,
-      "docs/non_transformer_notes.md",
-      "# Non-Transformer Notes\n\nAssociative memory updates help recurrent models adapt at test time.\n",
+      "docs/project_notes.md",
+      "# Project Notes\n\nThe imported notes describe a configurable baseline and evaluation split.\n",
     );
 
     resolveAgentConfig.mockReturnValue({
@@ -2470,11 +2470,11 @@ describe("POST /api/chat/unified", () => {
     });
     readFile.mockResolvedValueOnce(
       Buffer.from(
-        "# Non-Transformer Notes\n\nAssociative memory updates help recurrent models adapt at test time.\n",
+        "# Project Notes\n\nThe imported notes describe a configurable baseline and evaluation split.\n",
       ),
     );
     parseFile.mockResolvedValueOnce({
-      text: "Associative memory updates help recurrent models adapt at test time.",
+      text: "The imported notes describe a configurable baseline and evaluation split.",
       pages: 1,
     });
     sendOpenClawMessage.mockResolvedValueOnce("Grounded answer");
@@ -2484,7 +2484,7 @@ describe("POST /api/chat/unified", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message:
-          "Based on the imported non-transformer note, identify two falsifiable hypotheses.",
+          "Based on the imported project note, identify two falsifiable hypotheses.",
         projectId: "alpha-project",
       }),
     });
@@ -2503,13 +2503,13 @@ describe("POST /api/chat/unified", () => {
       "Resolved project file references for this turn:",
     );
     expect(openClawMessage).toContain(
-      "- visible imported project context -> docs/non_transformer_notes.md",
+      "- visible imported project context -> docs/project_notes.md",
     );
     expect(openClawMessage).toContain(
-      "File: docs/non_transformer_notes.md (1 pages)",
+      "File: docs/project_notes.md (1 pages)",
     );
     expect(openClawMessage).toContain(
-      "Associative memory updates help recurrent models adapt at test time.",
+      "The imported notes describe a configurable baseline and evaluation split.",
     );
   });
 
@@ -6004,21 +6004,21 @@ describe("POST /api/chat/unified", () => {
   });
 
   it("treats markdown-emphasized output paths as satisfying explicit requested artifacts", async () => {
-    const projectRoot = createProjectRoot("adaptive-inference-7747");
+    const projectRoot = createProjectRoot("project-alpha-recovery-7747");
     const stateRoot = ensureScienceSwarmDir();
     const summaryPath = path.join(
       stateRoot,
       "openclaw",
       "workspace",
       "reports",
-      "baseline_vs_adaptation_summary.md",
+      "baseline_vs_variant_summary.md",
     );
     const resultsPath = path.join(
       stateRoot,
       "openclaw",
       "workspace",
       "reports",
-      "baseline_vs_adaptation_results.csv",
+      "baseline_vs_variant_results.csv",
     );
 
     resolveAgentConfig.mockReturnValue({
@@ -6037,9 +6037,9 @@ describe("POST /api/chat/unified", () => {
       writeFileSync(
         summaryPath,
         [
-          "# Baseline vs Adaptation Summary",
+          "# Baseline vs Variant Summary",
           "",
-          "- Improved: adaptation accuracy +4.1 points",
+          "- Improved: variant accuracy +4.1 points",
           "- Regressed: latency +18 ms",
           "- Runtime cost: 1 extra optimization step per batch",
         ].join("\n"),
@@ -6049,12 +6049,12 @@ describe("POST /api/chat/unified", () => {
         [
           "condition,accuracy,latency_ms",
           "baseline,0.71,42",
-          "adaptation,0.751,60",
+          "variant,0.751,60",
         ].join("\n"),
       );
       return [
-        "Summary written to **reports/baseline_vs_adaptation_summary.md**.",
-        "Results written to **reports/baseline_vs_adaptation_results.csv**.",
+        "Summary written to **reports/baseline_vs_variant_summary.md**.",
+        "Results written to **reports/baseline_vs_variant_results.csv**.",
       ].join(" ");
     });
 
@@ -6063,8 +6063,8 @@ describe("POST /api/chat/unified", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message:
-          "Build and run a tiny reproducible baseline-versus-test-time-adaptation experiment for a non-transformer sequence model on a synthetic sequence task. Save the outputs as reports/baseline_vs_adaptation_summary.md and reports/baseline_vs_adaptation_results.csv in this workspace.",
-        projectId: "adaptive-inference-7747",
+          "Build and run a tiny reproducible baseline-versus-variant experiment for a project-alpha sequence task. Save the outputs as reports/baseline_vs_variant_summary.md and reports/baseline_vs_variant_results.csv in this workspace.",
+        projectId: "project-alpha-recovery-7747",
         mode: "openclaw-tools",
       }),
     });
@@ -6074,37 +6074,37 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       backend: "openclaw",
-      response: expect.stringContaining("docs/baseline_vs_adaptation_summary.md"),
+      response: expect.stringContaining("docs/baseline_vs_variant_summary.md"),
       generatedFiles: expect.arrayContaining([
-        "docs/baseline_vs_adaptation_summary.md",
-        "data/baseline_vs_adaptation_results.csv",
+        "docs/baseline_vs_variant_summary.md",
+        "data/baseline_vs_variant_results.csv",
       ]),
       generatedArtifacts: expect.arrayContaining([
         expect.objectContaining({
-          projectPath: "docs/baseline_vs_adaptation_summary.md",
+          projectPath: "docs/baseline_vs_variant_summary.md",
           tool: "OpenClaw CLI",
         }),
         expect.objectContaining({
-          projectPath: "data/baseline_vs_adaptation_results.csv",
+          projectPath: "data/baseline_vs_variant_results.csv",
           tool: "OpenClaw CLI",
         }),
       ]),
     });
     expect(
       readFileSync(
-        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary.md"),
+        path.join(projectRoot, "docs", "baseline_vs_variant_summary.md"),
         "utf-8",
       ),
-    ).toContain("Improved: adaptation accuracy +4.1 points");
+    ).toContain("Improved: variant accuracy +4.1 points");
     expect(
       readFileSync(
-        path.join(projectRoot, "data", "baseline_vs_adaptation_results.csv"),
+        path.join(projectRoot, "data", "baseline_vs_variant_results.csv"),
         "utf-8",
       ),
-    ).toContain("adaptation,0.751,60");
+    ).toContain("variant,0.751,60");
     expect(
       existsSync(
-        path.join(projectRoot, "reports", "baseline_vs_adaptation_summary.md"),
+        path.join(projectRoot, "reports", "baseline_vs_variant_summary.md"),
       ),
     ).toBe(false);
     expect(sendOpenClawMessage).toHaveBeenCalledOnce();

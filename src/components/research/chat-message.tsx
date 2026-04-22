@@ -219,7 +219,7 @@ function formatProgressDisplayPath(value: string): string {
 function normalizeProgressDisplayCommand(value: string, maxChars = 160): string {
   let normalized = value.trim().replaceAll("\\", "/").replace(/\s+/g, " ");
   normalized = normalized.replace(
-    /(^|\s)\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3(?=\s|$)/g,
+    /(^|\s)(?:\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3|\/usr\/bin\/python3)(?=\s|$)/g,
     "$1python3",
   );
   normalized = normalized.replace(
