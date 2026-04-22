@@ -788,8 +788,7 @@ function extractGbrainPreviewTarget(
     return null;
   }
 
-  const fallbackName =
-    normalized.split("/").pop() || slug.split("/").pop() || slug;
+  const fallbackName = slug.split("/").pop() || slug;
   return {
     path: normalized,
     slug,
