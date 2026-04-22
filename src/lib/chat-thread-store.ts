@@ -11,6 +11,18 @@ import {
   migrateLegacyProjectChat,
 } from "@/lib/state/project-storage";
 
+/**
+ * Canonical persisted backend identifier. PR #13 collapsed the runtime
+ * `Backend` union to a single value; the on-disk schema now matches.
+ *
+ * Legacy stored values (`"agent"`, `"direct"`) are still recognised by the
+ * read path and normalised to `"openclaw"`. The one-shot migration in
+ * `scripts/migrate-chat-threads-openclaw.ts` rewrites those records so the
+ * read-side normaliser becomes a belt-and-suspenders fallback rather than a
+ * load-bearing translator.
+ */
+export type PersistedConversationBackend = "openclaw";
+
 export interface PersistedChatThreadMessage {
   id: string;
   role: "user" | "assistant" | "system";
@@ -42,9 +54,29 @@ export interface PersistedChatThread {
   version: 1;
   project: string;
   conversationId: string | null;
-  conversationBackend?: "openclaw" | "agent" | "direct" | null;
+  conversationBackend?: PersistedConversationBackend | null;
   messages: PersistedChatThreadMessage[];
   artifactProvenance?: ArtifactProvenanceEntry[];
+}
+
+/**
+ * Legacy on-disk values the read-side migrator accepts and rewrites to
+ * `"openclaw"`. Kept distinct from the canonical type so writers cannot
+ * reintroduce them — `writeChatThread` only accepts `PersistedChatThread`.
+ */
+const LEGACY_BACKEND_VALUES = new Set(["agent", "direct"]);
+
+const migrationLogged = new Set<string>();
+
+function logLegacyBackendMigration(project: string, legacy: string): void {
+  const key = `${project}:${legacy}`;
+  if (migrationLogged.has(key)) return;
+  migrationLogged.add(key);
+  console.warn(
+    `[chat-thread-store] Normalising legacy conversationBackend `
+      + `"${legacy}" -> "openclaw" for project "${project}". `
+      + `Run \`npm run migrate:chat-threads-openclaw\` to rewrite stored threads.`,
+  );
 }
 
 function isPersistedMessage(value: unknown): value is PersistedChatThreadMessage {
@@ -106,18 +138,23 @@ function isPersistedTaskPhase(value: unknown): value is PersistedChatTaskPhase {
 
 function isPersistedThread(value: unknown): value is PersistedChatThread {
   if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<PersistedChatThread>;
+  const candidate = value as Partial<PersistedChatThread> & {
+    conversationBackend?: unknown;
+  };
+  // Read-side accepts the legacy backend strings so the migrator below can
+  // collapse them to "openclaw"; writes never produce them because the
+  // PersistedChatThread type only allows "openclaw" | null | undefined.
+  const backendOk =
+    candidate.conversationBackend === undefined
+    || candidate.conversationBackend === null
+    || candidate.conversationBackend === "openclaw"
+    || (typeof candidate.conversationBackend === "string"
+      && LEGACY_BACKEND_VALUES.has(candidate.conversationBackend));
   return (
     candidate.version === 1
     && typeof candidate.project === "string"
     && (candidate.conversationId === null || typeof candidate.conversationId === "string")
-    && (
-      candidate.conversationBackend === undefined
-      || candidate.conversationBackend === null
-      || candidate.conversationBackend === "openclaw"
-      || candidate.conversationBackend === "agent"
-      || candidate.conversationBackend === "direct"
-    )
+    && backendOk
     && Array.isArray(candidate.messages)
     && candidate.messages.every((message) => isPersistedMessage(message))
     && (
@@ -127,10 +164,33 @@ function isPersistedThread(value: unknown): value is PersistedChatThread {
   );
 }
 
-function normalizeConversationBackend(
-  value: PersistedChatThread["conversationBackend"],
-): PersistedChatThread["conversationBackend"] {
-  return value === "openclaw" || value === "agent" || value === "direct" ? value : null;
+/**
+ * Returns the canonical conversationBackend for a persisted record.
+ *
+ * - `"openclaw"` -> kept as-is.
+ * - Legacy `"agent"` / `"direct"` -> normalised to `"openclaw"` and logged
+ *   once per (project, legacy-value) pair.
+ * - Anything else (`null`, `undefined`, malformed) -> `null`.
+ */
+export function normalizePersistedConversationBackend(
+  value: unknown,
+  project: string,
+): PersistedConversationBackend | null {
+  if (value === "openclaw") return "openclaw";
+  if (typeof value === "string" && LEGACY_BACKEND_VALUES.has(value)) {
+    logLegacyBackendMigration(project, value);
+    return "openclaw";
+  }
+  return null;
+}
+
+/**
+ * Whether the on-disk record's `conversationBackend` field is in a legacy
+ * form that the migration script should rewrite. Exposed for the migrator;
+ * the runtime read path uses `normalizePersistedConversationBackend` directly.
+ */
+export function isLegacyConversationBackend(value: unknown): boolean {
+  return typeof value === "string" && LEGACY_BACKEND_VALUES.has(value);
 }
 
 export function getChatThreadPath(
@@ -161,7 +221,10 @@ export async function readChatThread(
     }
     return {
       ...parsed,
-      conversationBackend: normalizeConversationBackend(parsed.conversationBackend),
+      conversationBackend: normalizePersistedConversationBackend(
+        parsed.conversationBackend,
+        parsed.project,
+      ),
       artifactProvenance: Array.isArray(parsed.artifactProvenance)
         ? normalizeArtifactProvenanceEntries(parsed.artifactProvenance)
         : undefined,

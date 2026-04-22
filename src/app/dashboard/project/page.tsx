@@ -3803,6 +3803,7 @@ function ProjectPageContent() {
                                 userName={msg.userName}
                                 timestamp={msg.timestamp}
                                 isStreaming={false}
+                                projectId={projectName}
                                 taskPhases={
                                   firstRenderedBubbleIndex === i
                                     ? msg.taskPhases
@@ -3831,6 +3832,7 @@ function ProjectPageContent() {
                             }
                             steps={msg.steps}
                             taskPhases={msg.taskPhases}
+                            projectId={projectName}
                           />
                           {voiceSupported &&
                             msg.role === "assistant" &&
