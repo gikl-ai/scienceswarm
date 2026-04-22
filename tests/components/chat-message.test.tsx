@@ -294,6 +294,26 @@ describe("ChatMessage", () => {
     expect(screen.queryByText(/Read docs\/results_table\.csv/)).not.toBeInTheDocument();
   });
 
+  it("does not render a stored progress transcript after a completed assistant turn", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        progressLog={[
+          { kind: "thinking", text: "Planning how to inspect the chart files." },
+          { kind: "activity", text: "Read docs/results_table.csv" },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:00.000Z")}
+        isStreaming={false}
+      />,
+    );
+
+    expect(screen.getByText("Final answer")).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
+    expect(screen.queryByText("Planning how to inspect the chart files.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Read docs\/results_table\.csv/)).not.toBeInTheDocument();
+  });
+
   it("renders workspace media hints as chat media", () => {
     render(
       <ChatMessage

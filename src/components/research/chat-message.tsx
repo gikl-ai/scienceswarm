@@ -800,7 +800,7 @@ export function ChatMessage({
       : [];
   const visibleProgressLog =
     role === "assistant"
-      ? Array.isArray(progressLog) && progressLog.length > 0
+      ? isStreaming && Array.isArray(progressLog) && progressLog.length > 0
         ? progressLog
         : isStreaming
           ? buildFallbackProgressLog(thinking, visibleActivityLog)

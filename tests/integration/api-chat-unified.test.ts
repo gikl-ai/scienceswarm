@@ -1948,6 +1948,12 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).toContain("Execute all steps using your tools");
     expect(openClawMessage).toContain("Do not describe steps — do them.");
     expect(openClawMessage).toContain("Continue until fully complete.");
+    expect(openClawMessage).toContain(
+      `The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
+    );
+    expect(openClawMessage).toContain(
+      "Do not install new packages unless the user explicitly asked you to modify the environment.",
+    );
     expect(openClawOptions).toEqual(
       expect.objectContaining({
         cwd: projectRoot,
