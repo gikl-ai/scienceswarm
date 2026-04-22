@@ -52,6 +52,7 @@ type EvidenceMapPayload = {
 type EvidenceMapRequestBody = {
   projectId?: unknown;
   question?: unknown;
+  focusBrainSlug?: unknown;
 };
 
 function tokenize(value: string): string[] {
@@ -495,6 +496,7 @@ export async function POST(request: Request) {
   const question =
     readNonEmptyString(body.question)
     ?? "What does the current project evidence support, and where does it disagree?";
+  const focusBrainSlug = readNonEmptyString(body.focusBrainSlug);
 
   try {
     await ensureBrainStoreReady();
@@ -514,6 +516,15 @@ export async function POST(request: Request) {
     }
 
     const selectedPages = selectPagesForQuestion(projectPages, question);
+    if (focusBrainSlug) {
+      const focusedPage = projectPages.find((page) => page.path === focusBrainSlug);
+      if (focusedPage && !selectedPages.some((page) => page.path === focusedPage.path)) {
+        selectedPages.unshift(focusedPage);
+        if (selectedPages.length > PAGE_SELECTION_LIMIT) {
+          selectedPages.length = PAGE_SELECTION_LIMIT;
+        }
+      }
+    }
     const llm = getLLMClient(config);
     const completion = await llm.complete({
       system: SYSTEM_PROMPT,

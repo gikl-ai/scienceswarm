@@ -2811,6 +2811,10 @@ function ProjectPageContent() {
         body: JSON.stringify({
           projectId: activeProjectSlug,
           question,
+          focusBrainSlug:
+            selectedFileNode?.source === "gbrain" && selectedFileNode.slug
+              ? selectedFileNode.slug
+              : undefined,
         }),
       });
 
@@ -2852,6 +2856,7 @@ function ProjectPageContent() {
     openBrainArtifactInWorkspace,
     projectBrief?.nextMove?.recommendation,
     refreshProjectState,
+    selectedFileNode,
     setMessages,
   ]);
 
@@ -3761,6 +3766,15 @@ function ProjectPageContent() {
                         className="h-10 flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
                       />
                     </div>
+                    {selectedFileNode?.source === "gbrain" && selectedFileNode.slug && (
+                      <p className="mt-2 text-[11px] text-muted">
+                        Including the open artifact{" "}
+                        <span className="font-semibold text-foreground">
+                          {selectedFileNode.name}
+                        </span>{" "}
+                        in this run.
+                      </p>
+                    )}
                     {evidenceMapStatus.state === "saved" && (
                       <p className="mt-2 text-[11px] text-muted">
                         Saved {evidenceMapStatus.claimCount ?? 0} claims and{" "}
