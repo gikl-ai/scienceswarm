@@ -24,6 +24,7 @@ import {
   LARGE_FILE_FINGERPRINT_THRESHOLD_BYTES,
 } from "@/lib/import/file-fingerprint";
 import {
+  getScienceSwarmOpenClawStateDir,
   getScienceSwarmProjectsRoot,
   getScienceSwarmWorkspaceRoot,
 } from "@/lib/scienceswarm-paths";
@@ -1133,7 +1134,7 @@ async function handleGetMeta(filePath: string, projectId: string | null) {
 const MAX_READ_BYTES = 1_000_000;
 const MAX_RAW_BYTES = 50 * 1024 * 1024;
 const PARSEABLE_EXTENSIONS = new Set(["pdf", "xlsx", "xlsm", "ipynb"]);
-const RAW_RENDERABLE_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp"]);
+const RAW_RENDERABLE_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp", "html", "htm"]);
 
 const RAW_CONTENT_TYPES: Record<string, string> = {
   pdf: "application/pdf",
@@ -1142,6 +1143,8 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
+  html: "text/html; charset=utf-8",
+  htm: "text/html; charset=utf-8",
 };
 
 function buildInlineContentDisposition(filename: string): string {
@@ -1227,6 +1230,13 @@ function safeResolveInsideRoot(
   projectId: string | null,
 ): { realFile: string; stat: fs.Stats } | { error: string; status: number } {
   const root = resolveWorkspaceRoot(projectId);
+  return safeResolveInsideDirectory(root, filePath);
+}
+
+function safeResolveInsideDirectory(
+  root: string,
+  filePath: string,
+): { realFile: string; stat: fs.Stats } | { error: string; status: number } {
   if (!fs.existsSync(root)) {
     return { error: "Workspace root not found", status: 404 };
   }
@@ -1254,6 +1264,34 @@ function safeResolveInsideRoot(
   }
 
   return { realFile, stat };
+}
+
+function safeResolveOpenClawCanvasPath(
+  filePath: string,
+): { realFile: string; stat: fs.Stats } | { error: string; status: number } | null {
+  const normalized = filePath.replaceAll("\\", "/");
+  const prefix = "__openclaw__/canvas/";
+  if (!normalized.startsWith(prefix)) {
+    return null;
+  }
+
+  const canvasRoot = path.join(getScienceSwarmOpenClawStateDir(), "canvas");
+  const relativeCanvasPath = normalized.slice(prefix.length);
+  return safeResolveInsideDirectory(canvasRoot, relativeCanvasPath);
+}
+
+function safeResolveOpenClawMediaPath(
+  filePath: string,
+): { realFile: string; stat: fs.Stats } | { error: string; status: number } | null {
+  const normalized = filePath.replaceAll("\\", "/");
+  const prefix = "__openclaw__/media/";
+  if (!normalized.startsWith(prefix)) {
+    return null;
+  }
+
+  const mediaRoot = path.join(getScienceSwarmOpenClawStateDir(), "media");
+  const relativeMediaPath = normalized.slice(prefix.length);
+  return safeResolveInsideDirectory(mediaRoot, relativeMediaPath);
 }
 
 async function handleRead(filePath: string, projectId: string | null) {
@@ -1398,6 +1436,66 @@ async function handleRead(filePath: string, projectId: string | null) {
 }
 
 async function handleRaw(filePath: string, projectId: string | null) {
+  const openClawCanvasResolved = safeResolveOpenClawCanvasPath(filePath);
+  if (openClawCanvasResolved) {
+    if ("error" in openClawCanvasResolved) {
+      return new Response(openClawCanvasResolved.error, { status: openClawCanvasResolved.status });
+    }
+
+    const { realFile, stat } = openClawCanvasResolved;
+    const ext = path.extname(realFile).slice(1).toLowerCase();
+    if (!RAW_RENDERABLE_EXTENSIONS.has(ext)) {
+      return new Response("File type not allowed for raw preview", { status: 415 });
+    }
+
+    if (stat.size > MAX_RAW_BYTES) {
+      return new Response("File too large for raw preview", { status: 413 });
+    }
+
+    const buf = await fs.promises.readFile(realFile);
+    const contentType = RAW_CONTENT_TYPES[ext] || "application/octet-stream";
+
+    return new Response(new Uint8Array(buf), {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Content-Length": String(stat.size),
+        "Cache-Control": "private, max-age=60",
+        "Content-Disposition": buildInlineContentDisposition(path.basename(realFile)),
+      },
+    });
+  }
+
+  const openClawMediaResolved = safeResolveOpenClawMediaPath(filePath);
+  if (openClawMediaResolved) {
+    if ("error" in openClawMediaResolved) {
+      return new Response(openClawMediaResolved.error, { status: openClawMediaResolved.status });
+    }
+
+    const { realFile, stat } = openClawMediaResolved;
+    const ext = path.extname(realFile).slice(1).toLowerCase();
+    if (!RAW_RENDERABLE_EXTENSIONS.has(ext)) {
+      return new Response("File type not allowed for raw preview", { status: 415 });
+    }
+
+    if (stat.size > MAX_RAW_BYTES) {
+      return new Response("File too large for raw preview", { status: 413 });
+    }
+
+    const buf = await fs.promises.readFile(realFile);
+    const contentType = RAW_CONTENT_TYPES[ext] || "application/octet-stream";
+
+    return new Response(new Uint8Array(buf), {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Content-Length": String(stat.size),
+        "Cache-Control": "private, max-age=60",
+        "Content-Disposition": buildInlineContentDisposition(path.basename(realFile)),
+      },
+    });
+  }
+
   const gbrainEntry = await findGbrainWorkspaceEntry(filePath, projectId);
   if (gbrainEntry) {
     const ext = path.extname(gbrainEntry.workspacePath).slice(1).toLowerCase();
