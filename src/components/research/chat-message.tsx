@@ -780,6 +780,7 @@ function renderContent(content: string, projectId: string) {
 export function ChatMessage({
   role,
   content,
+  thinking,
   activityLog,
   progressLog,
   chatMode,
@@ -817,15 +818,29 @@ export function ChatMessage({
     role === "assistant" && Array.isArray(activityLog) && activityLog.length > 0
       ? activityLog
       : [];
+  const storedProgressLog =
+    role === "assistant" && Array.isArray(progressLog) && progressLog.length > 0
+      ? progressLog
+      : [];
+  const hasLegacyProgressFields =
+    role === "assistant"
+    && (
+      Boolean(thinking?.trim().length)
+      || visibleActivityLog.length > 0
+    );
   const visibleStreamProgressLog =
     role === "assistant" && isStreaming
-      ? Array.isArray(progressLog) && progressLog.length > 0
-        ? progressLog.filter((entry) => entry.kind === "activity")
+      ? storedProgressLog.length > 0
+        ? storedProgressLog.filter((entry) => entry.kind === "activity")
         : buildFallbackProgressLog(undefined, visibleActivityLog)
       : [];
   const visibleProgressLog =
     role === "assistant"
-      ? visibleStreamProgressLog
+      ? isStreaming
+        ? visibleStreamProgressLog
+        : storedProgressLog.length > 0 && !hasLegacyProgressFields
+          ? storedProgressLog
+          : []
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
