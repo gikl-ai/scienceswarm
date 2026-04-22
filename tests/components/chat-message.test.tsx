@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatMessage } from "@/components/research/chat-message";
 
@@ -31,8 +31,8 @@ describe("ChatMessage", () => {
     expect(screen.getByText(expectedFooter)).toBeInTheDocument();
   });
 
-  it("copies the full message body from the footer copy button", () => {
-    const writeText = vi.fn(async () => {});
+  it("copies rendered message text instead of raw bubble directives", async () => {
+    const writeText = vi.fn<(value: string) => Promise<void>>(async (_value) => {});
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText },
@@ -41,14 +41,43 @@ describe("ChatMessage", () => {
     render(
       <ChatMessage
         role="assistant"
-        content={"Line one\nLine two"}
+        content={"**Line one**\nMEDIA:docs/results_chart.png"}
+        projectId="project-alpha"
         timestamp={new Date("2026-04-22T16:45:00.000Z")}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
 
-    expect(writeText).toHaveBeenCalledWith("Line one\nLine two");
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copiedText = writeText.mock.calls[0]?.[0] ?? "";
+    expect(copiedText).toContain("Line one");
+    expect(copiedText).toContain("docs/results_chart.png");
+    expect(copiedText).not.toContain("**");
+    expect(copiedText).not.toContain("MEDIA:");
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+  });
+
+  it("surfaces copy failures inline when the clipboard write rejects", async () => {
+    const writeText = vi.fn<(value: string) => Promise<void>>(async (_value) => {
+      throw new Error("denied");
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(await screen.findByRole("button", { name: "Copy failed" })).toBeInTheDocument();
   });
 
   it("renders assistant task phases inside the message bubble", () => {

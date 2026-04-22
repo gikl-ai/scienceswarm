@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import type {
   ChatTaskPhase,
   MessageProgressEntry,
@@ -585,6 +585,31 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
   );
 }
 
+function getCopyableMessageText(root: HTMLDivElement | null, fallback: string): string {
+  const renderedText =
+    typeof root?.innerText === "string" && root.innerText.trim().length > 0
+      ? root.innerText
+      : root?.textContent ?? "";
+  const normalizedRenderedText = renderedText
+    .replace(/\u00a0/g, " ")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (normalizedRenderedText) {
+    return normalizedRenderedText;
+  }
+
+  return fallback
+    .replace(/!\[[^\]]*]\([^)]+\)/g, "")
+    .replace(/\[embed[^\]]*]/gi, "")
+    .replace(/^MEDIA:[^\n]+$/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function renderContent(content: string, projectId: string) {
   // Split on bold markers, MEDIA references, embed tags, and markdown images
   const parts = content.split(/(\*\*[^*]+\*\*|MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gi);
@@ -786,6 +811,9 @@ export function ChatMessage({
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
   const isOpenClawToolsTurn = chatMode === "openclaw-tools" && role !== "system";
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const copyFeedbackTimerRef = useRef<number | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const hasCopyableText = content.trim().length > 0 && !isStreaming;
   const timestampText = `${timestamp.toLocaleDateString(undefined, {
     month: "short",
@@ -803,11 +831,40 @@ export function ChatMessage({
     role === "user"
       ? "rounded border border-white/35 bg-transparent px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:border-white/70 hover:text-white"
       : "rounded border border-border bg-white px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-accent hover:text-accent";
-  const copyToClipboard = useCallback(() => {
+
+  useEffect(() => () => {
+    if (copyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimerRef.current);
+    }
+  }, []);
+
+  const scheduleCopyFeedbackReset = () => {
+    if (copyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimerRef.current);
+    }
+    copyFeedbackTimerRef.current = window.setTimeout(() => {
+      setCopyState("idle");
+    }, 2000);
+  };
+
+  const copyToClipboard = async () => {
+    const nextClipboardText = getCopyableMessageText(contentRef.current, content);
     const clipboard = navigator.clipboard;
-    if (!clipboard?.writeText) return;
-    void clipboard.writeText(content).catch(() => {});
-  }, [content]);
+    if (!clipboard?.writeText || nextClipboardText.length === 0) {
+      console.warn("ChatMessage copy failed: clipboard API unavailable or no visible text.");
+      setCopyState("error");
+      scheduleCopyFeedbackReset();
+      return;
+    }
+    try {
+      await clipboard.writeText(nextClipboardText);
+      setCopyState("copied");
+    } catch (error) {
+      console.warn("ChatMessage copy failed.", error);
+      setCopyState("error");
+    }
+    scheduleCopyFeedbackReset();
+  };
 
   return (
     <div
@@ -916,7 +973,10 @@ export function ChatMessage({
         )}
 
         {/* Message content */}
-        <div className={`whitespace-pre-wrap select-text ${selectionClass}`}>
+        <div
+          ref={contentRef}
+          className={`whitespace-pre-wrap select-text ${selectionClass}`}
+        >
           {renderContent(content, projectId)}
         </div>
 
@@ -926,9 +986,13 @@ export function ChatMessage({
               type="button"
               onClick={copyToClipboard}
               className={copyButtonClass}
-              title="Copy message to clipboard"
+              title={copyState === "error" ? "Copy failed" : "Copy message to clipboard"}
             >
-              Copy
+              {copyState === "copied"
+                ? "Copied"
+                : copyState === "error"
+                  ? "Copy failed"
+                  : "Copy"}
             </button>
           ) : (
             <div />
