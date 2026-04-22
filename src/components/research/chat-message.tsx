@@ -574,15 +574,28 @@ function parseEmbedDirective(part: string): {
 }
 
 function renderInlineMarkdownLite(value: string, keyPrefix: string) {
-  return value.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
-    part.startsWith("**") && part.endsWith("**") ? (
-      <strong key={`${keyPrefix}-bold-${index}`} className="font-semibold">
-        {part.slice(2, -2)}
-      </strong>
-    ) : (
-      <span key={`${keyPrefix}-text-${index}`}>{part}</span>
-    ),
-  );
+  return value.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={`${keyPrefix}-bold-${index}`} className="font-semibold">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code
+          key={`${keyPrefix}-code-${index}`}
+          className="rounded bg-slate-100 px-1 py-0.5 text-[0.95em] text-slate-800"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+
+    return <span key={`${keyPrefix}-text-${index}`}>{part}</span>;
+  });
 }
 
 function getCopyableMessageText(root: HTMLDivElement | null, fallback: string): string {
@@ -946,7 +959,11 @@ export function ChatMessage({
                         key={`${index}-${lineIndex}-${line}`}
                         className="whitespace-pre-wrap"
                       >
-                        {lineIndex === 0 ? `└ ${line}` : `  ${line}`}
+                        {lineIndex === 0 ? "└ " : "  "}
+                        {renderInlineMarkdownLite(
+                          line,
+                          `progress-explored-${index}-${lineIndex}`,
+                        )}
                       </div>
                     ))}
                   </div>

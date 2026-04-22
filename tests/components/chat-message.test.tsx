@@ -124,7 +124,7 @@ describe("ChatMessage", () => {
     const progressLog = screen.getByRole("log");
     expect(screen.getByText("• Explored")).toBeInTheDocument();
     expect(progressLog).toHaveTextContent("• Checking the imported files...");
-    expect(screen.getByText(/└ Read docs\/results_table\.csv/)).toBeInTheDocument();
+    expect(progressLog).toHaveTextContent("└ Read docs/results_table.csv");
     expect(screen.getByText(/Search activityLog in use-unified-chat\.ts/)).toBeInTheDocument();
     expect(progressLog).toHaveTextContent(/• Working \(\d+s • esc to interrupt\)/);
     expect(screen.queryByText("Thinking Trace")).not.toBeInTheDocument();
@@ -176,6 +176,28 @@ describe("ChatMessage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/\*\*Moving forward with embedding\*\*/)).not.toBeInTheDocument();
     expect(screen.getByText(/I think I'll finalize by saying "Made it"\./)).toBeInTheDocument();
+  });
+
+  it("renders inline code inside progress transcript rows and explored commands", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "thinking", text: "Saving output to `docs/results_chart.png`." },
+          { kind: "activity", text: "Read `docs/results_table.csv`" },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(
+      screen.getByText("docs/results_chart.png", { selector: "code" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("docs/results_table.csv", { selector: "code" }),
+    ).toBeInTheDocument();
   });
 
   it("normalizes legacy raw tool JSON lines in the visible transcript", () => {
