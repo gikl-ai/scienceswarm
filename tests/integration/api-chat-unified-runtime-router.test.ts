@@ -512,7 +512,11 @@ describe("/api/chat/unified runtime router facade", () => {
     expect(getDefaultRuntimeSessionStore().listSessions()).toEqual([
       expect.objectContaining({
         hostId: "openclaw",
+        mode: "mcp-tool",
         status: "completed",
+        preview: expect.objectContaining({
+          mode: "mcp-tool",
+        }),
       }),
     ]);
   });

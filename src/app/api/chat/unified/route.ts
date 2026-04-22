@@ -112,7 +112,10 @@ import {
   getDefaultRuntimeHostRouter,
   type RuntimeHostRouter,
 } from "@/lib/runtime-hosts/router";
-import type { RuntimeDataIncluded } from "@/lib/runtime-hosts/contracts";
+import type {
+  RuntimeDataIncluded,
+  RuntimeTurnMode,
+} from "@/lib/runtime-hosts/contracts";
 import {
   artifactSourceWorkspaceKeysForPage,
   buildArtifactSourceSnapshotFromPage,
@@ -191,6 +194,10 @@ interface AgentRuntimeStatus {
 
 type ChatMode = "reasoning" | "openclaw-tools";
 type RequestedBackend = "openclaw" | "agent" | "direct";
+
+function runtimeTurnModeForChatMode(chatMode: ChatMode): RuntimeTurnMode {
+  return chatMode === "openclaw-tools" ? "mcp-tool" : "chat";
+}
 
 const MAX_CONTEXT_FILES = 10;
 const AUTO_PROJECT_CONTEXT_MAX_FILES = 3;
@@ -7931,7 +7938,7 @@ export async function handleUnifiedChatPost(
         projectPolicy: "local-only",
         projectId: validatedProjectId,
         conversationId: typeof conversationId === "string" ? conversationId : null,
-        mode: "chat",
+        mode: runtimeTurnModeForChatMode(chatMode),
         prompt: userIntentMessage,
         inputFileRefs: mergedFiles
           .map((file) => file.workspacePath ?? file.brainSlug ?? file.name ?? "")
