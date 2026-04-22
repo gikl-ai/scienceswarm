@@ -36,7 +36,7 @@ const QUEUED_PROGRESS_RECOVERY_MESSAGE =
   "Queued in ScienceSwarm's hosted reasoning service. You can leave this page open or reopen the run from Recent Reasoning Analyses later.";
 const DEFAULT_STYLE_PROFILE = "professional";
 const SECTION_LABEL = "text-xs font-medium uppercase tracking-widest text-muted";
-const SUBMIT_BUTTON_LABEL = "Submit to Reasoning Engine";
+export const SUBMIT_BUTTON_LABEL = "Submit to Reasoning Engine";
 const REASONING_AUDIT_LOADING_AUTH_MESSAGE =
   "Loading your ScienceSwarm account…";
 const SCIENCESWARM_SIGN_IN_URL = getScienceSwarmSignInUrl();
@@ -69,8 +69,8 @@ type BrainArtifactPage = {
 type InputMode = "pdf" | "text";
 type FilterKind = "critique" | "fallacy" | "gap";
 type SubmittedReasoningInput =
-  | { kind: "pdf"; name: string; size: number }
-  | { kind: "text"; charCount: number; preview: string };
+  | { kind: "pdf"; name: string; size?: number }
+  | { kind: "text"; charCount?: number; preview: string };
 type BrainSaveStatus =
   | { state: "idle" }
   | { state: "saving" }
@@ -316,9 +316,9 @@ function buildSubmittedInputFromJob(
   if (!job) return null;
   const filename = job.pdf_filename?.trim();
   if (filename) {
-    return { kind: "pdf", name: filename, size: 0 };
+    return { kind: "pdf", name: filename };
   }
-  return { kind: "text", charCount: 0, preview: "Pasted text submission" };
+  return { kind: "text", preview: "Pasted text submission" };
 }
 
 function formatSubmittedInputTitle(input: SubmittedReasoningInput): string {
@@ -327,9 +327,11 @@ function formatSubmittedInputTitle(input: SubmittedReasoningInput): string {
 
 function formatSubmittedInputMeta(input: SubmittedReasoningInput): string {
   if (input.kind === "pdf") {
-    return input.size > 0 ? `PDF · ${formatFileSize(input.size)}` : "PDF";
+    return typeof input.size === "number" && input.size > 0
+      ? `PDF · ${formatFileSize(input.size)}`
+      : "PDF";
   }
-  return input.charCount > 0
+  return typeof input.charCount === "number" && input.charCount > 0
     ? `${input.charCount.toLocaleString()} characters`
     : "Text submission";
 }
@@ -356,7 +358,14 @@ function buildReasoningWaitEstimate(
   }
 
   if (input?.kind === "text") {
-    if (input.charCount > 0 && input.charCount < 12_000) {
+    if (typeof input.charCount !== "number" || input.charCount <= 0) {
+      return {
+        label: "Often 20-60 minutes for pasted text",
+        detail:
+          "No live ETA is available yet. Longer excerpts may run longer when the hosted queue is busy.",
+      };
+    }
+    if (input.charCount < 12_000) {
       return {
         label: "Usually 10-30 minutes for short text",
         detail:
@@ -371,7 +380,14 @@ function buildReasoningWaitEstimate(
   }
 
   if (input?.kind === "pdf") {
-    if (input.size > 0 && input.size < 5 * 1024 * 1024) {
+    if (typeof input.size !== "number" || input.size <= 0) {
+      return {
+        label: "Often 30-120+ minutes for paper PDFs",
+        detail:
+          "No live ETA is available yet. Large PDFs can take over 1 hour to process, especially when the hosted queue is busy.",
+      };
+    }
+    if (input.size < 5 * 1024 * 1024) {
       return {
         label: "Often 30-90 minutes for a paper PDF",
         detail:
@@ -2092,6 +2108,8 @@ function StructuredCritiquePageContent() {
   };
 
   const handleShowExampleReport = () => {
+    setIsPolling(false);
+    setPollStartTime(null);
     pollTokenRef.current += 1;
     setBrainArtifact(null);
     setSelectedJobId(null);

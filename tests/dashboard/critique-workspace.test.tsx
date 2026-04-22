@@ -22,10 +22,11 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import StructuredCritiquePage from "@/app/dashboard/reasoning/page";
+import StructuredCritiquePage, {
+  SUBMIT_BUTTON_LABEL,
+} from "@/app/dashboard/reasoning/page";
 
 const STORAGE_KEY = "structured-critique-history.v1";
-const SUBMIT_BUTTON_LABEL = "Submit to Reasoning Engine";
 const POLL_TIMEOUT_MESSAGE =
   "Analysis is taking longer than expected. This run is still saved in Recent Reasoning Analyses so you can check back shortly.";
 const QUEUED_POLL_TIMEOUT_MESSAGE =
