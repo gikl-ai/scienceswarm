@@ -489,6 +489,87 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
+  it("does not restore stale active task phases on completed assistant answers", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: "web:alpha-project:session-1",
+        conversationBackend: "openclaw",
+        messages: [
+          {
+            id: "user-1",
+            role: "user",
+            content: "Summarize the ablation run.",
+            timestamp: "2026-04-14T20:00:00.000Z",
+            channel: "web",
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "Saved the ablation run summary.",
+            timestamp: "2026-04-14T20:00:02.000Z",
+            chatMode: "openclaw-tools",
+            taskPhases: [
+              { id: "reading-file", label: "Reading file", status: "completed" },
+              { id: "importing-result", label: "Importing result", status: "active" },
+              { id: "done", label: "Done", status: "pending" },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+          llmProvider: "openai",
+          ollamaModels: [],
+          configuredLocalModel: null,
+        });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("web:alpha-project:session-1");
+    });
+
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "assistant:Saved the ablation run summary.",
+    );
+    expect(screen.getByTestId("phase-log").textContent).not.toContain("Importing result:active");
+    expect(screen.getByTestId("phase-log").textContent).not.toContain("Done:pending");
+  });
+
   it("requires a non-empty brain slug before adding gbrain chat context", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -1153,6 +1234,11 @@ describe("useUnifiedChat persistence", () => {
               content: "",
               thinking: "Working through the experiment setup.",
               timestamp: "2026-04-15T07:00:01.000Z",
+              taskPhases: [
+                { id: "reading-file", label: "Reading file", status: "completed" },
+                { id: "running-ablation", label: "Running ablation", status: "active" },
+                { id: "done", label: "Done", status: "pending" },
+              ],
             },
           ],
         });
@@ -1224,6 +1310,8 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain(
         "assistant:Finished the experiment and saved results/summary.md.",
       );
+      expect(screen.getByTestId("phase-log").textContent).not.toContain("Running ablation:active");
+      expect(screen.getByTestId("phase-log").textContent).not.toContain("Done:pending");
       expect(screen.getByTestId("generated-artifact-count").textContent).toBe("1");
       expect(screen.getByTestId("workspace-root-count").textContent).toBe("1");
     });
