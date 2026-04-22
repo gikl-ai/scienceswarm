@@ -212,4 +212,117 @@ describe("gateway-ws-client", () => {
       error: expect.any(GatewayPostAckError),
     });
   });
+
+  it("does not fan out untagged completion frames across concurrent turns", async () => {
+    const { sendMessageViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+
+    let firstStatus: "pending" | "resolved" | "rejected" = "pending";
+    let secondStatus: "pending" | "resolved" | "rejected" = "pending";
+
+    const firstTurn = sendMessageViaGateway("session-alpha", "first", {
+      timeoutMs: 60_000,
+    }).then(
+      (value) => {
+        firstStatus = "resolved";
+        return value;
+      },
+      (error) => {
+        firstStatus = "rejected";
+        throw error;
+      },
+    );
+
+    const secondTurn = sendMessageViaGateway("session-beta", "second", {
+      timeoutMs: 60_000,
+    }).then(
+      (value) => {
+        secondStatus = "resolved";
+        return value;
+      },
+      (error) => {
+        secondStatus = "rejected";
+        throw error;
+      },
+    );
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      const sendCount =
+        socket?.sentFrames.filter((frame) => frame.method === "sessions.send").length ?? 0;
+      return sendCount === 2;
+    });
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          stream: "lifecycle",
+          data: { phase: "end" },
+        },
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(firstStatus).toBe("pending");
+    expect(secondStatus).toBe("pending");
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          key: "session-alpha",
+          stream: "assistant",
+          data: { text: "alpha reply" },
+        },
+      }),
+    );
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          key: "session-alpha",
+          stream: "lifecycle",
+          data: { phase: "end" },
+        },
+      }),
+    );
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          key: "session-beta",
+          stream: "assistant",
+          data: { text: "beta reply" },
+        },
+      }),
+    );
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          key: "session-beta",
+          stream: "lifecycle",
+          data: { phase: "end" },
+        },
+      }),
+    );
+
+    await expect(firstTurn).resolves.toMatchObject({ text: "alpha reply" });
+    await expect(secondTurn).resolves.toMatchObject({ text: "beta reply" });
+    expect(firstStatus).toBe("resolved");
+    expect(secondStatus).toBe("resolved");
+  });
 });

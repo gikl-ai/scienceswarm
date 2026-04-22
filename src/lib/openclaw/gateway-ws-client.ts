@@ -147,6 +147,38 @@ const TURN_COMPLETE_SIGNALS = new Set([
   "done",
 ]);
 
+function getFrameSessionKey(frame: GatewayFrame): string {
+  return (
+    (frame.params?.key as string | undefined) ??
+    (frame.payload?.key as string | undefined) ??
+    (frame.payload?.session_key as string | undefined) ??
+    ""
+  );
+}
+
+function isTurnTerminalFrame(frame: GatewayFrame): boolean {
+  const method = frame.event ?? frame.method ?? "";
+  if (TURN_COMPLETE_SIGNALS.has(method)) return true;
+
+  if (method === "agent" && frame.payload) {
+    const payload = frame.payload as {
+      stream?: string;
+      data?: { phase?: string };
+    };
+    return payload.stream === "lifecycle" && payload.data?.phase === "end";
+  }
+
+  if (
+    (method === "sessions.message" || method === "sessions.messages.new") &&
+    frame.payload
+  ) {
+    const payload = frame.payload as { role?: string };
+    return payload.role === "assistant";
+  }
+
+  return false;
+}
+
 function debugLog(message: string, ...args: unknown[]): void {
   if (process.env.DEBUG_GATEWAY_WS) {
     // Intentionally use console.log here only when explicitly opted in.
@@ -526,20 +558,37 @@ async function connectAndAuth(): Promise<void> {
       // Listeners are session-scoped so concurrent turns cannot see each
       // other's events.
       if (frame.type === "event" || frame.type === "push") {
-        const frameSessionKey =
-          (frame.params?.key as string | undefined) ??
-          (frame.payload?.key as string | undefined) ??
-          (frame.payload?.session_key as string | undefined) ??
-          "";
-        for (const entry of _eventListeners) {
-          // Deliver to the matching session listener, or to all if the
-          // gateway didn't tag the frame with a session key.
-          if (!frameSessionKey || entry.sessionKey === frameSessionKey) {
-            try {
-              entry.handler(frame);
-            } catch {
-              // Don't let a bad listener break the connection
+        const frameSessionKey = getFrameSessionKey(frame);
+
+        if (!frameSessionKey) {
+          if (_eventListeners.length <= 1) {
+            const listener = _eventListeners[0];
+            if (listener) {
+              try {
+                listener.handler(frame);
+              } catch {
+                // Don't let a bad listener break the connection
+              }
             }
+            return;
+          }
+
+          debugLog(
+            `dropping untagged ${
+              isTurnTerminalFrame(frame) ? "terminal" : "ambiguous"
+            } frame while ${_eventListeners.length} turns are active`,
+            JSON.stringify(frame).slice(0, 150),
+          );
+          return;
+        }
+
+        for (const entry of _eventListeners) {
+          if (entry.sessionKey !== frameSessionKey) continue;
+
+          try {
+            entry.handler(frame);
+          } catch {
+            // Don't let a bad listener break the connection
           }
         }
       }
