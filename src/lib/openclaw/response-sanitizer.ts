@@ -2,8 +2,21 @@ export function sanitizeOpenClawUserVisibleResponse(
   response: string,
   options?: { trimEnd?: boolean },
 ): string {
-  const sanitized = response
-    .replace(/\r\n/g, "\n")
+  const normalized = response.replace(/\r\n/g, "\n");
+  if (
+    /^Context overflow:/im.test(normalized) ||
+    /\bprompt too large for the model\b/i.test(normalized)
+  ) {
+    return [
+      "ScienceSwarm could not complete this request because the research agent context became too large for the current turn.",
+      "",
+      "Your uploaded files and existing artifacts are still preserved in the workspace.",
+      "",
+      "Start a fresh project chat or retry after removing extra attached context.",
+    ].join("\n");
+  }
+
+  const sanitized = normalized
     .split("\n")
     .filter((line) => {
       const trimmed = line.trim();
@@ -11,7 +24,7 @@ export function sanitizeOpenClawUserVisibleResponse(
         return true;
       }
       if (
-        /^\[(?:agents\/[^\]]+|auth(?:-profiles)?|gateway|session|model|subagent|tool(?:s)?)[^\]]*\].*$/i.test(
+        /^\[(?:(?:agent|agents)\/[^\]]+|auth(?:-profiles)?|gateway|session|model|subagent|tool(?:s)?)[^\]]*\].*$/i.test(
           trimmed,
         )
       ) {

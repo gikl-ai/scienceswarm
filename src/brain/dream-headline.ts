@@ -83,8 +83,8 @@ export async function buildDreamHeadlineSummary(
   const now = input.now ?? new Date();
   const windowStart = resolveWindowStart(input.lastRunAt, now);
   const windowEnd = now.toISOString();
-  await ensureBrainStoreReady();
-  const store = getBrainStore();
+  await ensureBrainStoreReady({ root: input.config.root });
+  const store = getBrainStore({ root: input.config.root });
   const pages = await store.listPages({ limit: 5000 });
   const pageBySlug = new Map(pages.map((page) => [normalizeSlug(page.path), page]));
   const observedAtBySlug = collectSignalSlugs(input.events, windowStart, pages);

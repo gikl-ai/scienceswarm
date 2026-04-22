@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     try {
       const llm = getLLMClient(config);
       const uploadedBy = getCurrentUserHandle();
-      const gbrain = createInProcessGbrainClient();
+      const gbrain = createInProcessGbrainClient({ root: config.root });
       const result = await approveAndImport(
         config,
         llm,

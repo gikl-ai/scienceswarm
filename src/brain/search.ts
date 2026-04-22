@@ -123,7 +123,7 @@ export async function search(
   if (mode === "list" && useConfiguredGbrainStore) {
     try {
       const pages = await withDeadline(
-        listStorePages(input.query, limit),
+        listStorePages(input.query, limit, requestBrainRoot),
         settings.searchTimeoutMs,
       );
       if (pages.length > 0 || input.query.trim()) {
@@ -164,6 +164,7 @@ export async function search(
       gbrainResults = await searchStoreWithTimeout(
         normalizedInput,
         settings.searchTimeoutMs,
+        { root: requestBrainRoot },
       );
     } catch (error) {
       if (error instanceof BrainSearchTimeoutError || isBrainBackendUnavailableError(error)) {
@@ -198,12 +199,16 @@ export async function search(
 
 // ── Filesystem fallback helpers (legacy; Phase D cleanup) ──────────
 
-async function listStorePages(query: string, limit: number): Promise<SearchResult[]> {
+async function listStorePages(
+  query: string,
+  limit: number,
+  brainRoot: string,
+): Promise<SearchResult[]> {
   const storeModule = await import("./store");
   const { ensureBrainStoreReady, getBrainStore } = storeModule;
-  await ensureBrainStoreReady();
+  await ensureBrainStoreReady({ root: brainRoot });
   const queryTokens = tokenizeListQuery(query);
-  const pages = await getBrainStore().listPages({
+  const pages = await getBrainStore({ root: brainRoot }).listPages({
     limit: queryTokens.length > 0 ? LIST_MODE_SCAN_LIMIT : limit,
   });
   const scored = pages

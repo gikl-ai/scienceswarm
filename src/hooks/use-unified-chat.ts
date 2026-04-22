@@ -383,6 +383,38 @@ function isLikelyDuplicatePolledUserMessage(
   });
 }
 
+function normalizeReplayMessageContent(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function isLikelyDuplicatePolledAssistantMessage(
+  existingMessages: Message[],
+  candidate: Message,
+): boolean {
+  if (candidate.role !== "assistant") {
+    return false;
+  }
+
+  if (candidate.channel && candidate.channel !== "web") {
+    return false;
+  }
+
+  const candidateContent = normalizeReplayMessageContent(candidate.content);
+  if (candidateContent.length === 0) {
+    return false;
+  }
+
+  return existingMessages.some((message) => {
+    if (message.role !== "assistant") {
+      return false;
+    }
+    if (message.channel && message.channel !== "web") {
+      return false;
+    }
+    return normalizeReplayMessageContent(message.content) === candidateContent;
+  });
+}
+
 function isTransientAssistantScratchpad(message: Message): boolean {
   if (message.role !== "assistant") {
     return false;
@@ -427,7 +459,8 @@ function mergePolledMessagesIntoTranscript(
   const uniqueMessages = polledMessages.filter(
     (message) =>
       !existingIds.has(message.id)
-      && !isLikelyDuplicatePolledUserMessage(existingMessages, message),
+      && !isLikelyDuplicatePolledUserMessage(existingMessages, message)
+      && !isLikelyDuplicatePolledAssistantMessage(existingMessages, message),
   );
 
   for (const message of uniqueMessages) {
@@ -1430,7 +1463,9 @@ function isPersistableMessage(message: Message): boolean {
 }
 
 function sanitizeMessagesForPersistence(messages: Message[]): Message[] {
-  return messages.filter((message) => isPersistableMessage(message));
+  return dedupeAssistantReplayMessages(
+    messages.filter((message) => isPersistableMessage(message)),
+  );
 }
 
 async function fetchWithTimeout(
@@ -1494,6 +1529,37 @@ function demoteRestoredPreviews(messages: Message[]): Message[] {
       ? { ...m, content: m.content.replace("__FILE_PREVIEW__:", "__FILE_STATIC__:") }
       : m,
   );
+}
+
+const ASSISTANT_REPLAY_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
+
+function dedupeAssistantReplayMessages(messages: Message[]): Message[] {
+  const seenAssistantReplies = new Map<string, number>();
+  return messages.filter((message) => {
+    if (message.role !== "assistant" || (message.channel && message.channel !== "web")) {
+      return true;
+    }
+
+    const contentKey = normalizeReplayMessageContent(message.content);
+    if (contentKey.length === 0) {
+      return true;
+    }
+
+    const timestampMs = message.timestamp.getTime();
+    const firstSeenAt = seenAssistantReplies.get(contentKey);
+    if (
+      firstSeenAt !== undefined
+      && !Number.isNaN(timestampMs)
+      && Math.abs(timestampMs - firstSeenAt) <= ASSISTANT_REPLAY_DEDUPE_WINDOW_MS
+    ) {
+      return false;
+    }
+
+    if (!Number.isNaN(timestampMs)) {
+      seenAssistantReplies.set(contentKey, timestampMs);
+    }
+    return true;
+  });
 }
 
 function buildQueuedHistory(messages: Message[], assistantId: string): Message[] {
@@ -2927,6 +2993,12 @@ export function useUnifiedChat(
       }
       const responseMode = normalizeChatMode(data.mode) ?? modeHeader ?? context.chatMode;
       const responseBackend = mapResponseBackend(backendHeader) ?? context.backend;
+      const completedAt = new Date().toISOString();
+      const previousPollTime = Date.parse(lastPollRef.current);
+      const completedTime = Date.parse(completedAt);
+      if (Number.isNaN(previousPollTime) || completedTime > previousPollTime) {
+        lastPollRef.current = completedAt;
+      }
 
       // Update assistant message with response
       applyMessagesUpdate((prev) =>

@@ -4,10 +4,8 @@
 // Uses the universal agent-client for agent health checks so this endpoint
 // agrees with /api/chat/unified?action=health on every probe.
 
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-
 import { getOpenHandsUrl } from "@/lib/config/ports";
+import { isGbrainRootReady } from "@/lib/brain/readiness";
 import {
   buildOpenHandsLocalEvidenceSnapshot,
   buildRuntimeCapabilityContract,
@@ -212,10 +210,7 @@ function probeGbrain(): {
   localFolder: boolean;
 } {
   const root = getScienceSwarmBrainRoot();
-  const ready =
-    existsSync(root)
-    && existsSync(join(root, "BRAIN.md"))
-    && existsSync(join(root, "brain.pglite"));
+  const ready = isGbrainRootReady(root);
   return {
     read: ready,
     write: ready,

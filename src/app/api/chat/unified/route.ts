@@ -2619,6 +2619,8 @@ function isOpenClawFailureOutput(value: unknown): boolean {
     lower.includes("econnrefused") ||
     lower.includes("failed to connect") ||
     lower.includes("model not found") ||
+    lower.includes("context overflow") ||
+    lower.includes("prompt too large") ||
     lower.includes("openclaw returned an empty response") ||
     lower.includes("openclaw agent failed") ||
     lower.includes("openclaw killed by signal") ||
@@ -2654,6 +2656,14 @@ function buildOpenClawVisibleFailureResponse(value: unknown): string | null {
       "Your uploaded files and existing artifacts are still preserved in the workspace.",
       "Open Settings and make sure Ollama is running with `gemma4:latest`, then retry the same prompt.",
       `Technical detail: ${detail}`,
+    ].join("\n\n");
+  }
+
+  if (lower.includes("context overflow") || lower.includes("prompt too large")) {
+    return [
+      "ScienceSwarm could not complete this request because the research agent context became too large for the current turn.",
+      "Your uploaded files and existing artifacts are still preserved in the workspace.",
+      "Start a fresh project chat or retry after removing extra attached context.",
     ].join("\n\n");
   }
 

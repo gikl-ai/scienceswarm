@@ -566,6 +566,7 @@ describe("GET /api/chat/unified", () => {
         channel: "web",
         content: [
           "[agents/auth-profiles] synced openai-codex credentials from external cli",
+          "[agent/embedded] auto-compaction succeeded for openai/gpt-5.4; retrying prompt",
           "",
           "Here is your draft summary.",
           "",
@@ -593,6 +594,7 @@ describe("GET /api/chat/unified", () => {
       ]),
     );
     expect(body.messages[0]?.content).not.toContain("[agents/auth-profiles]");
+    expect(body.messages[0]?.content).not.toContain("[agent/embedded]");
   });
 
   it("keeps user-authored bracketed text in cross-channel CLI poll responses", async () => {
@@ -6513,6 +6515,49 @@ describe("POST /api/chat/unified", () => {
       backend: "openclaw",
       response: "OpenClaw reasoning answer",
     });
+  });
+
+  it("maps OpenClaw context overflow to a recoverable scientist-facing failure", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce(
+      [
+        "[agent/embedded] auto-compaction succeeded for openai/gpt-5.4; retrying prompt",
+        "Context overflow: prompt too large for the model. Try /reset (or /new) to start a fresh session, or use a larger-context model.",
+      ].join("\n"),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "context-overflow-test",
+      },
+      body: JSON.stringify({
+        message: "Record this failure case.",
+        messages: [{ role: "user", content: "Record this failure case." }],
+        backend: "openclaw",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.response).toContain("context became too large");
+    expect(body.response).toContain("preserved in the workspace");
+    expect(body.response).not.toContain("[agent/embedded]");
+    expect(body.response).not.toContain("gpt-5.4");
+    expect(body.generatedFiles).toEqual([]);
   });
 
   it("ignores an explicit `backend: \"direct\"` request and still routes through OpenClaw", async () => {
