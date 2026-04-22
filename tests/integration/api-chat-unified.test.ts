@@ -42,6 +42,8 @@ const {
   upsertBrainChunks,
   listOpenClawSkills,
   sendMessageViaGateway,
+  isGatewayPostAckError,
+  GatewayPostAckError,
 } = vi.hoisted(() => ({
   isLocalRequest: vi.fn(),
   resolveAgentConfig: vi.fn(),
@@ -68,6 +70,8 @@ const {
   upsertBrainChunks: vi.fn(),
   listOpenClawSkills: vi.fn(),
   sendMessageViaGateway: vi.fn(),
+  isGatewayPostAckError: vi.fn(() => false),
+  GatewayPostAckError: class GatewayPostAckError extends Error {},
 }));
 
 vi.mock("@/lib/agent-client", () => ({
@@ -116,6 +120,8 @@ vi.mock("@/lib/openclaw/skill-catalog", () => ({
 
 vi.mock("@/lib/openclaw/gateway-ws-client", () => ({
   sendMessageViaGateway,
+  isGatewayPostAckError,
+  GatewayPostAckError,
 }));
 
 vi.mock("@/lib/privacy-policy", () => ({

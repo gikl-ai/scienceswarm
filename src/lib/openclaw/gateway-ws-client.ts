@@ -285,6 +285,7 @@ const _pendingRequests = new Map<
 let _eventListeners: Array<{
   sessionKey: string;
   handler: (event: GatewayFrame) => void;
+  reject: (err: Error) => void;
 }> = [];
 let _requestIdCounter = 0;
 
@@ -374,6 +375,11 @@ async function connectAndAuth(): Promise<void> {
         rej(new Error("WebSocket connection closed"));
       }
       _pendingRequests.clear();
+      const staleListeners = _eventListeners;
+      _eventListeners = [];
+      for (const entry of staleListeners) {
+        entry.reject(new Error("WebSocket connection closed"));
+      }
     });
 
     ws.on("open", () => {
@@ -651,6 +657,7 @@ export async function sendMessageViaGateway(
   let listenerEntry: {
     sessionKey: string;
     handler: (event: GatewayFrame) => void;
+    reject: (err: Error) => void;
   } | null = null;
 
   const cleanupListener = () => {
@@ -768,7 +775,14 @@ export async function sendMessageViaGateway(
       }
     };
 
-    listenerEntry = { sessionKey, handler: listener };
+    listenerEntry = {
+      sessionKey,
+      handler: listener,
+      reject: (err: Error) => {
+        cleanupListener();
+        reject(err);
+      },
+    };
     _eventListeners.push(listenerEntry);
   });
 
