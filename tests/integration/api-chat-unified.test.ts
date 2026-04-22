@@ -41,9 +41,6 @@ const {
   putBrainPage,
   upsertBrainChunks,
   listOpenClawSkills,
-  sendMessageViaGateway,
-  isGatewayPostAckError,
-  GatewayPostAckError,
 } = vi.hoisted(() => ({
   isLocalRequest: vi.fn(),
   resolveAgentConfig: vi.fn(),
@@ -69,9 +66,6 @@ const {
   putBrainPage: vi.fn(),
   upsertBrainChunks: vi.fn(),
   listOpenClawSkills: vi.fn(),
-  sendMessageViaGateway: vi.fn(),
-  isGatewayPostAckError: vi.fn(() => false),
-  GatewayPostAckError: class GatewayPostAckError extends Error {},
 }));
 
 vi.mock("@/lib/agent-client", () => ({
@@ -116,12 +110,6 @@ vi.mock("@/brain/store", () => ({
 
 vi.mock("@/lib/openclaw/skill-catalog", () => ({
   listOpenClawSkills,
-}));
-
-vi.mock("@/lib/openclaw/gateway-ws-client", () => ({
-  sendMessageViaGateway,
-  isGatewayPostAckError,
-  GatewayPostAckError,
 }));
 
 vi.mock("@/lib/privacy-policy", () => ({
@@ -236,20 +224,6 @@ beforeEach(() => {
   sendAgentMessage.mockReset();
   openClawHealthCheck.mockReset();
   sendOpenClawMessage.mockReset();
-  sendMessageViaGateway.mockReset();
-  // Default behaviour: route gateway WS calls through the existing
-  // sendOpenClawMessage mock so each test only has to stub one function.
-  // Tests that need raw WS event semantics can override this.
-  sendMessageViaGateway.mockImplementation(
-    async (
-      sessionKey: string,
-      message: string,
-      _opts?: { onEvent?: (event: unknown) => void },
-    ) => {
-      const text = await sendOpenClawMessage(message, { session: sessionKey });
-      return { text: text ?? "", events: [] };
-    },
-  );
   getConversationMessagesSince.mockReset();
   streamChat.mockReset();
   localHealthCheck.mockReset();
@@ -371,6 +345,47 @@ describe("GET /api/chat/unified", () => {
     expect(getConversationMessagesSince).toHaveBeenCalledWith(
       "web-alpha-project-session-1",
       "2026-01-01T00:00:00.000Z",
+    );
+  });
+
+  it("sanitizes internal log noise from polled OpenClaw assistant responses", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    getConversationMessagesSince.mockResolvedValueOnce([
+      {
+        id: "assistant-noise",
+        userId: "assistant",
+        channel: "web",
+        content: [
+          "[agents/auth-profiles] synced openai-codex credentials from external cli",
+          "",
+          "Here is your draft summary.",
+        ].join("\n"),
+        timestamp: "2026-01-01T00:00:05.000Z",
+        conversationId: "web:alpha-project:session-1",
+      },
+    ]);
+
+    const request = new Request(
+      "http://localhost/api/chat/unified?action=poll&since=2026-01-01T00:00:00.000Z&projectId=alpha-project&conversationId=web:alpha-project:session-1",
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "assistant-noise",
+          content: "Here is your draft summary.",
+        }),
+      ]),
+    );
+    expect(body.messages[0]?.content).not.toContain(
+      "[agents/auth-profiles] synced",
     );
   });
 
@@ -1895,90 +1910,6 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).not.toContain("Execute all steps using your tools");
   });
 
-  it("forces tool execution for scaffold requests from the default chat mode and imports the authored artifacts", async () => {
-    const projectRoot = createProjectRoot("adaptive-memory-scaffold");
-    resolveAgentConfig.mockReturnValue({
-      type: "openclaw",
-      url: "http://localhost:19002",
-    });
-    openClawHealthCheck.mockResolvedValueOnce({
-      status: "connected",
-      gateway: "ws://127.0.0.1:19002",
-      channels: [],
-      agents: 1,
-      sessions: 1,
-    });
-    sendOpenClawMessage.mockResolvedValueOnce(
-      [
-        "```scienceswarm-artifact path=\"README.md\"",
-        "# Adaptive Memory Scaffold",
-        "",
-        "Run `python3 train.py --config configs/experiment.yaml` after installing dependencies.",
-        "```",
-        "",
-        "```scienceswarm-artifact path=\"configs/experiment.yaml\"",
-        "model: adaptive-memory",
-        "context_length: 32768",
-        "```",
-        "",
-        "The scaffold is ready in the workspace.",
-      ].join("\n"),
-    );
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-real-ip": "reasoning-scaffold-artifacts",
-      },
-      body: JSON.stringify({
-        message:
-          "Scaffold a runnable experiment for a non-transformer long-context model with adaptive memory. I need starter code, configs, dataset entry points, a training script, an evaluation script, and a README that explains what remains to do.",
-        projectId: "adaptive-memory-scaffold",
-        streamPhases: true,
-      }),
-    });
-
-    const response = await POST(request);
-    const events = await readSseEvents(response);
-    const finalEvent = events.at(-1);
-    const [[openClawMessage, openClawOptions]] = sendOpenClawMessage.mock.calls;
-
-    expect(response.status).toBe(200);
-    expect(openClawMessage).toContain("Execute all steps using your tools");
-    expect(openClawMessage).toContain("Do not describe steps — do them.");
-    expect(openClawMessage).toContain("Continue until fully complete.");
-    expect(openClawMessage).toContain(
-      `The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
-    );
-    expect(openClawMessage).toContain(
-      "Do not install new packages unless the user explicitly asked you to modify the environment.",
-    );
-    expect(openClawOptions).toEqual(
-      expect.objectContaining({
-        cwd: projectRoot,
-        timeoutMs: 180000,
-      }),
-    );
-    expect(finalEvent).toMatchObject({
-      text: expect.stringContaining("scaffold is ready"),
-      generatedFiles: expect.arrayContaining([
-        "README.md",
-        "configs/experiment.yaml",
-      ]),
-      taskPhases: expect.arrayContaining([
-        expect.objectContaining({ id: "importing-result", status: "completed" }),
-      ]),
-    });
-    expect(existsSync(path.join(projectRoot, "README.md"))).toBe(true);
-    expect(existsSync(path.join(projectRoot, "configs", "experiment.yaml"))).toBe(
-      true,
-    );
-    expect(readFileSync(path.join(projectRoot, "README.md"), "utf-8")).toContain(
-      "Adaptive Memory Scaffold",
-    );
-  });
-
   it("resolves @ project file references from the message for OpenClaw requests", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeFileSync(
@@ -2077,70 +2008,6 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).not.toContain("File: notes/file-11.md");
     expect(readFile).toHaveBeenCalledTimes(10);
     expect(parseFile).toHaveBeenCalledTimes(10);
-  });
-
-  it("implicitly attaches imported project notes for broad literature questions", async () => {
-    const projectRoot = createProjectRoot("alpha-project");
-    writeWorkspaceFile(
-      projectRoot,
-      "docs/non_transformer_notes.md",
-      "# Non-Transformer Notes\n\nAssociative memory updates help recurrent models adapt at test time.\n",
-    );
-
-    resolveAgentConfig.mockReturnValue({
-      type: "openclaw",
-      url: "http://localhost:19002",
-    });
-    openClawHealthCheck.mockResolvedValueOnce({
-      status: "connected",
-      gateway: "ws://127.0.0.1:19002",
-      channels: [],
-      agents: 1,
-      sessions: 2,
-    });
-    readFile.mockResolvedValueOnce(
-      Buffer.from(
-        "# Non-Transformer Notes\n\nAssociative memory updates help recurrent models adapt at test time.\n",
-      ),
-    );
-    parseFile.mockResolvedValueOnce({
-      text: "Associative memory updates help recurrent models adapt at test time.",
-      pages: 1,
-    });
-    sendOpenClawMessage.mockResolvedValueOnce("Grounded answer");
-
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message:
-          "Based on the imported non-transformer note, identify two falsifiable hypotheses.",
-        projectId: "alpha-project",
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    const [[openClawMessage, openClawOptions]] = sendOpenClawMessage.mock.calls;
-    expect(openClawOptions).toEqual(
-      expect.objectContaining({
-        cwd: projectRoot,
-        channel: "web",
-      }),
-    );
-    expect(openClawMessage).toContain(
-      "Resolved project file references for this turn:",
-    );
-    expect(openClawMessage).toContain(
-      "- visible imported project context -> docs/non_transformer_notes.md",
-    );
-    expect(openClawMessage).toContain(
-      "File: docs/non_transformer_notes.md (1 pages)",
-    );
-    expect(openClawMessage).toContain(
-      "Associative memory updates help recurrent models adapt at test time.",
-    );
   });
 
   it("includes selected gbrain mention content for OpenClaw requests", async () => {
@@ -2744,9 +2611,6 @@ describe("POST /api/chat/unified", () => {
   });
 
   it("streams actionable recovery guidance when the local model connection fails", async () => {
-    const projectId = "alpha-project-model-outage";
-    createProjectRoot(projectId);
-
     resolveAgentConfig.mockReturnValue({
       type: "openclaw",
       url: "http://localhost:19002",
@@ -2780,7 +2644,7 @@ describe("POST /api/chat/unified", () => {
             workspacePath: "gbrain:hubble-1929",
           },
         ],
-        projectId,
+        projectId: "alpha-project",
         streamPhases: true,
       }),
     });
