@@ -627,7 +627,7 @@ function renderContent(content: string, projectId: string) {
       const workspaceFilePath = normalizeMediaWorkspacePath(filePath);
       const ext = workspaceFilePath.split(".").pop()?.toLowerCase() || "";
       const src = `/api/workspace?action=raw&file=${encodeURIComponent(workspaceFilePath)}&projectId=${encodeURIComponent(projectId)}`;
-      if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) {
+      if (["png", "jpg", "jpeg", "gif", "webp", "avif"].includes(ext)) {
         return (
           <div key={i} className="my-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
