@@ -47,7 +47,7 @@ describe("ChatMessage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy message" }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     const copiedText = writeText.mock.calls[0]?.[0] ?? "";
@@ -55,7 +55,7 @@ describe("ChatMessage", () => {
     expect(copiedText).toContain("docs/results_chart.png");
     expect(copiedText).not.toContain("**");
     expect(copiedText).not.toContain("MEDIA:");
-    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Copied message" })).toBeInTheDocument();
   });
 
   it("surfaces copy failures inline when the clipboard write rejects", async () => {
@@ -75,7 +75,7 @@ describe("ChatMessage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy message" }));
 
     expect(await screen.findByRole("button", { name: "Copy failed" })).toBeInTheDocument();
   });
