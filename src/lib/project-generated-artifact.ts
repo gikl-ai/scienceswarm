@@ -214,7 +214,8 @@ async function updateProjectPage(input: {
 
   let content = "";
   try {
-    content = await readFile(absolutePath, "utf-8");
+    const currentContent = await readFile(absolutePath, "utf-8");
+    content = typeof currentContent === "string" ? currentContent : "";
   } catch {
     content = [
       `# ${input.projectTitle}`,

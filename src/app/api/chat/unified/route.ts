@@ -56,8 +56,15 @@ import {
   looksLikeExperimentDesignArtifact,
   summarizeExperimentDesignIteration,
 } from "@/lib/experiment-design-critique";
+import {
+  buildModelSystemApplicabilityAssessment,
+  isModelSystemApplicabilityRequest,
+  looksLikeModelSystemArtifact,
+} from "@/lib/model-system-applicability";
 import { isLocalRequest } from "@/lib/local-guard";
 import {
+  getScienceSwarmBrainRoot,
+  getScienceSwarmStateRoot,
   getScienceSwarmProjectRoot,
   getScienceSwarmWorkspaceRoot,
   getScienceSwarmOpenClawStateDir,
@@ -99,6 +106,7 @@ import {
   artifactSourceWorkspaceKeysForPage,
   buildArtifactSourceSnapshotFromPage,
 } from "@/lib/artifact-source-snapshots";
+import { persistGeneratedProjectArtifact } from "@/lib/project-generated-artifact";
 
 interface UnifiedChatMessage {
   role: "user" | "assistant" | "system";
@@ -3836,6 +3844,188 @@ async function maybeHandleExperimentDesignCritique(params: {
   );
 }
 
+async function maybeHandleModelSystemApplicability(params: {
+  chatMode: ChatMode | null;
+  userIntentMessage: string;
+  activeFile: { path: string; content: string } | null;
+  mergedFiles: UploadedFileDescriptor[];
+  projectId: string | null;
+}): Promise<Response | null> {
+  if (!isModelSystemApplicabilityRequest(params.userIntentMessage)) {
+    return null;
+  }
+
+  if (!params.projectId) {
+    return Response.json(
+      {
+        response:
+          "Open a project before running a model-system applicability assessment so ScienceSwarm can save the result with the visible research context.",
+        backend: "openclaw",
+        mode: params.chatMode,
+        generatedFiles: [],
+      },
+      {
+        headers: {
+          "X-Chat-Backend": "openclaw",
+          "X-Chat-Mode": params.chatMode ?? "reasoning",
+        },
+      },
+    );
+  }
+
+  const projectRoot = getScienceSwarmProjectRoot(params.projectId);
+  const sources: Array<{
+    workspacePath?: string | null;
+    sourceFilename: string;
+    title?: string;
+    text: string;
+  }> = [];
+  const activeFilePath = params.activeFile?.path?.trim().replace(/^\/+/, "");
+  if (activeFilePath && params.activeFile?.content.trim()) {
+    sources.push({
+      workspacePath: activeFilePath,
+      sourceFilename: path.basename(activeFilePath),
+      title: path.basename(activeFilePath).replace(/\.[a-z0-9]+$/i, ""),
+      text: params.activeFile.content.trim(),
+    });
+  }
+
+  for (const file of params.mergedFiles) {
+    if (sources.length >= 4) break;
+    const workspacePath =
+      typeof file.workspacePath === "string"
+        ? file.workspacePath.trim().replace(/^\/+/, "")
+        : "";
+    if (!workspacePath || sources.some((source) => source.workspacePath === workspacePath)) {
+      continue;
+    }
+    if (!/\.(?:csv|md|markdown|rst|tsv|txt)$/i.test(workspacePath)) {
+      continue;
+    }
+    if (
+      !looksLikeModelSystemArtifact(workspacePath)
+      && !looksLikeModelSystemArtifact(String(file.name ?? ""))
+      && !/\b(model|system|organoid|mouse|pdx|patient|cell line)\b/i.test(
+        params.userIntentMessage,
+      )
+    ) {
+      continue;
+    }
+    const text = readWorkspaceArtifactText(projectRoot, workspacePath, 16_000);
+    if (!text?.trim()) continue;
+    sources.push({
+      workspacePath,
+      sourceFilename: path.basename(workspacePath),
+      title: path.basename(workspacePath).replace(/\.[a-z0-9]+$/i, ""),
+      text,
+    });
+  }
+
+  const assessment = buildModelSystemApplicabilityAssessment({
+    prompt: params.userIntentMessage,
+    projectTitle: params.projectId,
+    sources,
+  });
+  const sourceRefs = sources.map((source) => ({
+    kind: "artifact" as const,
+    ref: source.workspacePath ?? source.sourceFilename,
+  }));
+
+  let persisted:
+    | {
+        savePath: string;
+        artifactPage: string;
+      }
+    | null = null;
+  try {
+    persisted = await persistGeneratedProjectArtifact({
+      brainRoot: getScienceSwarmBrainRoot(),
+      stateRoot: getScienceSwarmStateRoot(),
+      projectSlug: params.projectId,
+      projectTitle: params.projectId,
+      artifactType: "model-applicability",
+      title: assessment.title,
+      content: assessment.markdown,
+      workspaceFileName: "model-system-applicability-assessment.md",
+      sourceRefs,
+      tags: ["model-system", "applicability", "translation"],
+      prompt: params.userIntentMessage,
+      tool: "ScienceSwarm model-system applicability",
+    });
+  } catch (error) {
+    console.warn("Model-system applicability artifact persistence failed", error);
+  }
+
+  const responseLines = [
+    `**${assessment.title}**`,
+    "",
+    assessment.summary,
+    "",
+    "Transfer risks:",
+    ...assessment.transferRisks.slice(0, 4).map((risk) => `- ${risk}`),
+    "",
+    "Validation ladder:",
+    ...assessment.validationLadder.slice(0, 4).map((step, index) =>
+      `${index + 1}. ${step}`
+    ),
+  ];
+  if (assessment.comparedSystems.length > 0) {
+    responseLines.push(
+      "",
+      "Candidate-system comparison:",
+      ...assessment.comparedSystems.map(
+        (comparison) =>
+          `- ${comparison.system} (${comparison.fit}): ${comparison.tradeoff}`,
+      ),
+    );
+  }
+  responseLines.push(
+    "",
+    "Missing metadata ScienceSwarm will not assume:",
+    ...(assessment.missingMetadata.length > 0
+      ? assessment.missingMetadata.slice(0, 5).map((item) => `- ${item}`)
+      : ["- No major model, assay, or transfer metadata gap was visible."]),
+    "",
+    persisted
+      ? `Saved applicability artifact: [[${persisted.artifactPage}]]`
+      : "Applicability assessment completed, but ScienceSwarm could not save the artifact to gbrain in this pass.",
+  );
+
+  const generatedPath = persisted?.artifactPage
+    ? `gbrain:${persisted.artifactPage}`
+    : null;
+
+  return Response.json(
+    {
+      response: responseLines.join("\n"),
+      backend: "openclaw",
+      mode: params.chatMode,
+      generatedFiles: generatedPath ? [generatedPath] : [],
+      generatedArtifacts: generatedPath
+        ? [
+            {
+              projectPath: persisted?.savePath,
+              artifactSlug: persisted?.artifactPage,
+              sourceFiles: sources.map((source) =>
+                source.workspacePath ?? source.sourceFilename
+              ),
+              prompt: params.userIntentMessage,
+              tool: "ScienceSwarm model-system applicability",
+              createdAt: new Date().toISOString(),
+            },
+          ]
+        : [],
+      gbrainArtifacts: persisted?.artifactPage ? [persisted.artifactPage] : [],
+    },
+    {
+      headers: {
+        "X-Chat-Backend": "openclaw",
+        "X-Chat-Mode": params.chatMode ?? "reasoning",
+      },
+    },
+  );
+}
+
 function buildRevisionNeedsApprovalResponse(params: {
   paths: RevisionArtifactWorkspacePaths | null;
   hasApproval: boolean;
@@ -7385,6 +7575,18 @@ export async function handleUnifiedChatPost(
           },
         },
       );
+    }
+
+    const modelSystemApplicabilityResponse =
+      await maybeHandleModelSystemApplicability({
+        chatMode,
+        userIntentMessage,
+        activeFile,
+        mergedFiles,
+        projectId: validatedProjectId,
+      });
+    if (modelSystemApplicabilityResponse) {
+      return modelSystemApplicabilityResponse;
     }
 
     const experimentDesignCritiqueResponse =
