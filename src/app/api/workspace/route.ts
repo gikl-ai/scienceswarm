@@ -1399,6 +1399,9 @@ const RAW_RENDERABLE_EXTENSIONS = new Set([
   "wav",
   "ogg",
   "m4a",
+  "flac",
+  "opus",
+  "aac",
 ]);
 const SANDBOXED_PREVIEW_EXTENSIONS = new Set(["html", "htm", "svg"]);
 
@@ -1421,6 +1424,9 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   wav: "audio/wav",
   ogg: "audio/ogg",
   m4a: "audio/mp4",
+  flac: "audio/flac",
+  opus: "audio/ogg; codecs=opus",
+  aac: "audio/aac",
 };
 
 const HTML_PREVIEW_SHIM_MARKER = "data-scienceswarm-html-preview-shim";

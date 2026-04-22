@@ -602,7 +602,7 @@ describe("Critique workspace", () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
-  it("submits feedback only after both answers are selected", async () => {
+  it("does not show the structured-critique feedback harness in the workspace", async () => {
     const completedJob = makeCompletedJob();
     const feedbackRequests: RequestInit[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -625,10 +625,11 @@ describe("Critique workspace", () => {
           project_url: "/dashboard/project?name=paper&brain_slug=paper-critique",
         });
       }
-      expect(String(input)).toBe("/api/structured-critique/feedback");
-      expect(init).toBeDefined();
-      feedbackRequests.push(init as RequestInit);
-      return Response.json({ ok: true });
+      if (String(input) === "/api/structured-critique/feedback") {
+        feedbackRequests.push(init as RequestInit);
+        return Response.json({ ok: true });
+      }
+      throw new Error(`Unexpected fetch: ${String(input)}`);
     });
     vi.stubGlobal("fetch", fetchMock);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
@@ -639,29 +640,11 @@ describe("Critique workspace", () => {
 
     await screen.findByText("Audit for Synthetic Biology Draft");
 
-    fireEvent.click(screen.getByTitle("Useful"));
-
-    expect(screen.getByText("Choose the remaining answer to send feedback.")).toBeInTheDocument();
+    expect(screen.queryByTitle("Useful")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Not useful")).not.toBeInTheDocument();
+    expect(screen.queryByText("Would you revise?")).not.toBeInTheDocument();
+    expect(screen.queryByText("Choose the remaining answer to send feedback.")).not.toBeInTheDocument();
     expect(feedbackRequests).toHaveLength(0);
-
-    fireEvent.click(screen.getByRole("button", { name: "yes" }));
-
-    await waitFor(() => {
-      expect(feedbackRequests).toHaveLength(1);
-    });
-
-    const init = feedbackRequests[0];
-    expect(init.method).toBe("POST");
-    expect(JSON.parse(String(init.body))).toEqual({
-      job_id: "job-completed-1",
-      finding_id: "finding-1",
-      useful: true,
-      would_revise: true,
-    });
-
-    expect(
-      await screen.findByText(/Feedback recorded and added to this output's evaluation history/i),
-    ).toBeInTheDocument();
   });
 
   it("shows a warning and available findings on partial failure", async () => {
