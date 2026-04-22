@@ -1594,6 +1594,13 @@ export function useUnifiedChat(
     const decoder = new TextDecoder();
     let buffer = "";
     let streamDone = false;
+    // When the WS gateway streams progress events, the assistant content is
+    // built up incrementally from text deltas + tool/lifecycle progress
+    // lines. The final `text` payload then carries the complete response, so
+    // we replace the streamed scratchpad with the canonical text. Without
+    // any progress (CLI fallback path), we keep the existing append-only
+    // semantics so older tests / clients keep working.
+    let sawProgressEvent = false;
 
     while (!streamDone) {
       const { done, value } = await reader.read();
@@ -1620,6 +1627,123 @@ export function useUnifiedChat(
           if (typeof parsed.error === "string" && parsed.error.trim().length > 0) {
             await reader.cancel().catch(() => undefined);
             throw new Error(parsed.error);
+          }
+
+          // Handle gateway WebSocket progress events — intermediate agent
+          // activity forwarded as { progress: { type, method, payload } }.
+          // The CLI fallback never emits these, so older clients keep the
+          // existing append-only behaviour below.
+          if (
+            parsed.progress
+            && typeof parsed.progress === "object"
+            && !Array.isArray(parsed.progress)
+            && isSendContextCurrent(context)
+          ) {
+            const progress = parsed.progress as {
+              type?: string;
+              method?: string;
+              payload?: {
+                stream?: string;
+                data?: {
+                  text?: string;
+                  delta?: string;
+                  phase?: string;
+                  name?: string;
+                  toolCallId?: string;
+                  args?: string;
+                  input?: unknown;
+                  output?: string;
+                };
+                text?: string;
+                content?: string;
+                message?: string;
+              };
+            };
+            const p = progress.payload;
+            sawProgressEvent = true;
+
+            // Thinking trace — accumulate reasoning in the message's
+            // thinking field, leave content alone.
+            if (p?.stream === "thinking" && p.data?.delta) {
+              applyMessagesUpdate((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        thinking: (m.thinking || "") + (p.data?.delta ?? ""),
+                      }
+                    : m,
+                ),
+              );
+              continue;
+            }
+
+            if (p?.stream === "assistant" && p.data?.delta) {
+              // Streaming text delta — append to existing content
+              applyMessagesUpdate((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content: (m.content || "") + (p.data?.delta ?? ""),
+                      }
+                    : m,
+                ),
+              );
+              continue;
+            }
+
+            let progressLine = "";
+
+            // Richer tool events: include args on start and output on result
+            // so the user sees what the agent is doing, not just a spinner.
+            if (p?.stream === "tool" && p.data?.phase === "start") {
+              const toolName = p.data.name ?? "tool";
+              const toolArgs = typeof p.data.args === "string"
+                ? p.data.args
+                : (p.data.input
+                  ? JSON.stringify(p.data.input).slice(0, 120)
+                  : "");
+              progressLine = toolArgs
+                ? `🔧 ${toolName}: ${toolArgs}`
+                : `🔧 ${toolName}...`;
+            } else if (p?.stream === "tool" && p.data?.phase === "result") {
+              const toolName = p.data.name ?? "tool";
+              const toolResult = typeof p.data.output === "string"
+                ? p.data.output.slice(0, 200)
+                : "";
+              progressLine = toolResult
+                ? `✅ ${toolName}: ${toolResult}`
+                : `✅ ${toolName} done`;
+            } else if (p?.stream === "lifecycle" && p.data?.phase === "start") {
+              progressLine = "⏳ Thinking...";
+            } else if (
+              typeof p?.text === "string"
+              || typeof p?.content === "string"
+              || typeof p?.message === "string"
+            ) {
+              progressLine = (typeof p.text === "string"
+                ? p.text
+                : typeof p.content === "string"
+                ? p.content
+                : typeof p.message === "string"
+                ? p.message
+                : "") ?? "";
+            }
+
+            if (progressLine) {
+              applyMessagesUpdate((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content:
+                          (m.content ? m.content + "\n" : "") + progressLine,
+                      }
+                    : m,
+                ),
+              );
+            }
           }
 
           const taskPhases = restoreTaskPhases(parsed.taskPhases);
@@ -1668,14 +1792,23 @@ export function useUnifiedChat(
               || (typeof parsed.thinking === "string" && parsed.thinking.length > 0)
             )
           ) {
+            const finalText =
+              typeof parsed.text === "string" && parsed.text.length > 0
+                ? parsed.text
+                : null;
             applyMessagesUpdate((prev) =>
               prev.map((m) =>
                 m.id === assistantId
                   ? {
                       ...m,
                       content:
-                        typeof parsed.text === "string" && parsed.text.length > 0
-                          ? m.content + parsed.text
+                        finalText !== null
+                          ? sawProgressEvent
+                            // The WS gateway has been streaming deltas + tool
+                            // progress into m.content; replace the scratchpad
+                            // with the canonical sanitized response.
+                            ? finalText
+                            : m.content + finalText
                           : m.content,
                       thinking:
                         typeof parsed.thinking === "string" && parsed.thinking.length > 0
