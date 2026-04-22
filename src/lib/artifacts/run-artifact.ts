@@ -6,7 +6,8 @@ import {
   sendPendingMessage,
   startConversation,
 } from "@/lib/openhands";
-import { DEFAULT_OPENAI_MODEL } from "@/lib/openai-models";
+import { resolveOpenHandsConversationModel } from "@/lib/runtime";
+import { getCurrentLlmRuntimeEnv } from "@/lib/runtime-saved-env";
 import { slugifyWorkspaceSegment } from "@/lib/workspace-manager";
 import type { ArtifactContextBundle } from "./context-bundle";
 
@@ -46,9 +47,15 @@ async function startArtifactConversation(
   prompt: string,
   options: ArtifactRunOptions,
 ): Promise<string> {
+  const runtime = getCurrentLlmRuntimeEnv(process.env);
+  const resolvedConversationModel = resolveOpenHandsConversationModel({
+    LLM_PROVIDER: runtime.llmProvider,
+    LLM_MODEL: runtime.llmModel ?? undefined,
+    OLLAMA_MODEL: runtime.ollamaModel ?? undefined,
+  });
   const task = await startConversation({
     message: prompt,
-    model: process.env.LLM_MODEL || DEFAULT_OPENAI_MODEL,
+    model: resolvedConversationModel,
   });
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_ARTIFACT_POLL_INTERVAL_MS;
 
