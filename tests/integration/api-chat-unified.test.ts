@@ -1590,6 +1590,46 @@ describe("POST /api/chat/unified", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("returns an actionable OpenClaw error when the web gateway turn fails", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockRejectedValueOnce(
+      new Error("OpenClaw gateway unreachable"),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "openclaw-gateway-failure",
+      },
+      body: JSON.stringify({
+        message: "Hello",
+        projectId: "alpha-project",
+        mode: "openclaw-tools",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
+    const body = await response.json();
+    expect(body.backend).toBe("openclaw");
+    expect(body.error).toContain("ScienceSwarm could not complete this request.");
+    expect(body.error).toContain("Technical detail: OpenClaw gateway unreachable");
+    expect(streamChat).not.toHaveBeenCalled();
+  });
+
   // The two tests that used to live here ("returns an actionable settings
   // error when the local model is configured but not downloaded" and
   // "allows local fallback when cloud privacy blocks remote chat") exercised

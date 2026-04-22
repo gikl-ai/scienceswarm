@@ -6947,6 +6947,9 @@ export async function handleUnifiedChatPost(
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  let responseChatMode: ChatMode = "reasoning";
+  let attemptedOpenClawTurn = false;
+
   try {
     const body = await request.json();
     const {
@@ -6961,6 +6964,7 @@ export async function handleUnifiedChatPost(
       activeFile: rawActiveFile,
     } = body;
     const chatMode = normalizeChatMode(rawMode);
+    responseChatMode = chatMode;
     const requestedBackend = normalizeRequestedBackend(rawBackend);
     const commandTransport = options.commandTransport === true;
     const messagesRaw = normalizeMessages(rawMessages, fallbackMessage);
@@ -7171,6 +7175,7 @@ export async function handleUnifiedChatPost(
       // Preserve the `selectedAgent.type === "openclaw"` block body without
       // reindenting every line below. The outer precondition above has
       // already enforced type === "openclaw" && status === "connected".
+      attemptedOpenClawTurn = true;
 
       if (validatedProjectId && !shouldPreMaterializeProjectWorkspace) {
         await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
@@ -7534,6 +7539,25 @@ export async function handleUnifiedChatPost(
       );
     }
   } catch (err) {
+    if (attemptedOpenClawTurn) {
+      const visibleFailure = buildOpenClawVisibleFailureResponse(err);
+      if (visibleFailure) {
+        return Response.json(
+          {
+            error: visibleFailure,
+            backend: "openclaw",
+            mode: responseChatMode,
+          },
+          {
+            status: 502,
+            headers: {
+              "X-Chat-Backend": "openclaw",
+              "X-Chat-Mode": responseChatMode,
+            },
+          },
+        );
+      }
+    }
     console.error(
       "Chat POST handler failed:",
       err instanceof Error ? `${err.name}: ${err.message}` : String(err),
