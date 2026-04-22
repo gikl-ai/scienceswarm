@@ -28,6 +28,9 @@ function ChatHarness({ projectName }: { projectName: string }) {
   return (
     <div>
       <button onClick={() => void sendMessage("Hello from the browser")}>Send</button>
+      <button onClick={() => void sendMessage("Run the training experiment and save the report in the workspace")}>
+        Send execution request
+      </button>
       <button onClick={() => void sendMessage("Second queued message")}>Send second</button>
       <button onClick={() => void sendMessage("Review @Example Paper for me")}>Send explicit file</button>
       <button onClick={() => void sendMessage("Describe how all files are synchronized")}>Send broad all files</button>
@@ -641,6 +644,12 @@ describe("useUnifiedChat persistence", () => {
             timestamp: "2026-04-14T20:00:00.000Z",
           },
           {
+            id: "user-message",
+            role: "user",
+            content: "[agents/auth-profiles] leave this user-authored note intact",
+            timestamp: "2026-04-14T20:00:00.500Z",
+          },
+          {
             id: "opened-file",
             role: "system",
             content: "[User opened file: papers/example.pdf] (pdf file, preview shown in chat)",
@@ -655,7 +664,11 @@ describe("useUnifiedChat persistence", () => {
           {
             id: "assistant",
             role: "assistant",
-            content: "Keep this useful response.",
+            content: [
+              "[agents/auth-profiles] synced openai-codex credentials from external cli",
+              "",
+              "Keep this useful response.",
+            ].join("\n"),
             timestamp: "2026-04-14T20:00:03.000Z",
           },
         ],
@@ -703,9 +716,11 @@ describe("useUnifiedChat persistence", () => {
 
     const messageLog = screen.getByTestId("message-log").textContent ?? "";
     expect(messageLog).toContain("Project **alpha-project** loaded.");
+    expect(messageLog).toContain("[agents/auth-profiles] leave this user-authored note intact");
     expect(messageLog).not.toContain("[User opened file:");
     expect(messageLog).not.toContain("new files synced:");
     expect(messageLog).not.toContain("updated since import:");
+    expect(messageLog).not.toContain("[agents/auth-profiles] synced openai-codex credentials from external cli");
   });
 
   it("keeps workspace change checks out of the visible chat pane", async () => {
@@ -2310,6 +2325,92 @@ describe("useUnifiedChat persistence", () => {
     const secondBody = JSON.parse(String((chatPosts[1]?.[1] as RequestInit | undefined)?.body));
     expect(secondBody.conversationId).toBe("web:alpha-project:session-1");
     expect(secondBody.mode).toBe("reasoning");
+  });
+
+  it("reuses the live OpenClaw conversationId for execution-style reasoning turns", async () => {
+    let chatRequestCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:latest"],
+          configuredLocalModel: "gemma4",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        const body = JSON.parse(String(init?.body));
+        chatRequestCount += 1;
+        return Response.json({
+          response: chatRequestCount === 1 ? "OpenClaw answer" : "Follow-up answer",
+          conversationId: body.conversationId ?? "conv-openclaw",
+          messages: [],
+        }, { headers: { "X-Chat-Backend": "openclaw" } });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Use OpenClaw tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Use Reasoning" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-mode").textContent).toBe("reasoning");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send execution request" }));
+
+    await waitFor(() => {
+      const chatPosts = fetchMock.mock.calls.filter(([url, init]) =>
+        url === "/api/chat/unified" && (init as RequestInit | undefined)?.method === "POST",
+      );
+      expect(chatPosts).toHaveLength(2);
+    });
+
+    const chatPosts = fetchMock.mock.calls.filter(([url, init]) =>
+      url === "/api/chat/unified" && (init as RequestInit | undefined)?.method === "POST",
+    );
+    const secondBody = JSON.parse(String((chatPosts[1]?.[1] as RequestInit | undefined)?.body));
+    expect(secondBody.mode).toBe("reasoning");
+    expect(secondBody.message).toBe("Run the training experiment and save the report in the workspace");
+    expect(secondBody.conversationId).toBe("conv-openclaw");
   });
 
   it("refreshes the workspace tree after a direct SSE fallback completes", async () => {

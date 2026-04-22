@@ -4,9 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  realpathSync,
   rmSync,
-  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -24,6 +22,7 @@ const {
   openClawHealthCheck,
   sendOpenClawMessage,
   getConversationMessagesSince,
+  runOpenClaw,
   streamChat,
   localHealthCheck,
   hasLocalModel,
@@ -52,6 +51,7 @@ const {
   openClawHealthCheck: vi.fn(),
   sendOpenClawMessage: vi.fn(),
   getConversationMessagesSince: vi.fn(),
+  runOpenClaw: vi.fn(),
   streamChat: vi.fn(),
   localHealthCheck: vi.fn(),
   hasLocalModel: vi.fn(),
@@ -88,6 +88,10 @@ vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
   sendAgentMessage: sendOpenClawMessage,
   getConversationMessagesSince,
+}));
+
+vi.mock("@/lib/openclaw/runner", () => ({
+  runOpenClaw,
 }));
 
 vi.mock("@/lib/openclaw-bridge", () => ({
@@ -236,6 +240,7 @@ beforeEach(() => {
   sendAgentMessage.mockReset();
   openClawHealthCheck.mockReset();
   sendOpenClawMessage.mockReset();
+  runOpenClaw.mockReset();
   sendMessageViaGateway.mockReset();
   // Default behaviour: route gateway WS calls through the existing
   // sendOpenClawMessage mock so each test only has to stub one function.
@@ -547,6 +552,105 @@ describe("GET /api/chat/unified", () => {
         path.join(projectRoot, "docs", "baseline_vs_adaptation_summary-2.md"),
       ),
     ).toBe(false);
+  });
+
+  it("sanitizes internal log noise from polled OpenClaw assistant responses", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    getConversationMessagesSince.mockResolvedValueOnce([
+      {
+        id: "assistant-noise",
+        userId: "assistant",
+        channel: "web",
+        content: [
+          "[agents/auth-profiles] synced openai-codex credentials from external cli",
+          "",
+          "Here is your draft summary.",
+          "",
+          "",
+        ].join("\n"),
+        timestamp: "2026-01-01T00:00:05.000Z",
+        conversationId: "web:alpha-project:session-1",
+      },
+    ]);
+
+    const request = new Request(
+      "http://localhost/api/chat/unified?action=poll&since=2026-01-01T00:00:00.000Z&projectId=alpha-project&conversationId=web:alpha-project:session-1",
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "assistant-noise",
+          content: "Here is your draft summary.",
+        }),
+      ]),
+    );
+    expect(body.messages[0]?.content).not.toContain("[agents/auth-profiles]");
+  });
+
+  it("keeps user-authored bracketed text in cross-channel CLI poll responses", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    runOpenClaw.mockResolvedValueOnce({
+      ok: true,
+      stdout: JSON.stringify([
+        {
+          id: "user-cross-channel",
+          userId: "user",
+          channel: "telegram",
+          content: "[agents/auth-profiles] keep this user-authored line",
+          timestamp: "2026-01-01T00:00:01.000Z",
+        },
+        {
+          id: "assistant-cross-channel",
+          userId: "assistant",
+          channel: "telegram",
+          content: [
+            "[agents/auth-profiles] synced openai-codex credentials from external cli",
+            "",
+            "Delivered update.",
+            "",
+            "",
+          ].join("\n"),
+          timestamp: "2026-01-01T00:00:02.000Z",
+        },
+      ]),
+    });
+
+    const request = new Request(
+      "http://localhost/api/chat/unified?action=poll&since=2026-01-01T00:00:00.000Z&projectId=alpha-project",
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      backend: "openclaw",
+      messages: [
+        expect.objectContaining({
+          id: "user-cross-channel",
+          content: "[agents/auth-profiles] keep this user-authored line",
+        }),
+        expect.objectContaining({
+          id: "assistant-cross-channel",
+          content: "Delivered update.",
+        }),
+      ],
+    });
+    expect(runOpenClaw).toHaveBeenCalledWith(
+      ["sessions", "messages", "--json", "--limit", "20"],
+      { timeoutMs: 5000 },
+    );
   });
 
   it("imports generated OpenClaw outputs referenced by assistant web completions", async () => {
@@ -2123,6 +2227,12 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).toContain("Execute all steps using your tools");
     expect(openClawMessage).toContain("Do not describe steps — do them.");
     expect(openClawMessage).toContain("Continue until fully complete.");
+    expect(openClawMessage).toContain(
+      `The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
+    );
+    expect(openClawMessage).toContain(
+      "Do not install new packages unless the user explicitly asked you to modify the environment.",
+    );
     expect(openClawOptions).toEqual(
       expect.objectContaining({
         cwd: projectRoot,
@@ -6075,6 +6185,42 @@ describe("POST /api/chat/unified", () => {
     expect(sendOpenClawMessage).toHaveBeenCalledOnce();
     expect(streamChat).not.toHaveBeenCalled();
     expect(localHealthCheck).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes internal OpenClaw status lines from non-stream chat responses", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce([
+      "[agents/auth-profiles] synced openai-codex credentials from external cli",
+      "",
+      "OpenClaw reasoning answer",
+    ].join("\n"));
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Explain the trend",
+        projectId: "alpha-project",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      backend: "openclaw",
+      response: "OpenClaw reasoning answer",
+    });
   });
 
   it("ignores an explicit `backend: \"direct\"` request and still routes through OpenClaw", async () => {
