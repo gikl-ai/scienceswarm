@@ -1,13 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { execFileMock, execFileSyncMock } = vi.hoisted(() => ({
-  execFileMock: vi.fn(),
-  execFileSyncMock: vi.fn(),
-}));
+const { execFileMock, execFileSyncMock, sendMessageViaGatewayMock } = vi.hoisted(
+  () => ({
+    execFileMock: vi.fn(),
+    execFileSyncMock: vi.fn(),
+    sendMessageViaGatewayMock: vi.fn(),
+  }),
+);
 
 vi.mock("child_process", () => ({
   execFile: execFileMock,
   execFileSync: execFileSyncMock,
+}));
+
+// Force the WS gateway path to fail in unit tests so sendAgentMessage falls
+// back to the CLI assertions below. Without this, sendAgentMessage with a
+// `session` would try to read the local OpenClaw config + open a WS to the
+// real local gateway on the dev machine.
+vi.mock("@/lib/openclaw/gateway-ws-client", () => ({
+  sendMessageViaGateway: sendMessageViaGatewayMock,
 }));
 
 import { getConversationMessagesSince, healthCheck, sendAgentMessage } from "@/lib/openclaw";
@@ -167,6 +178,12 @@ describe("sendAgentMessage output sanitization", () => {
     vi.unstubAllEnvs();
     execFileMock.mockReset();
     execFileSyncMock.mockReset();
+    sendMessageViaGatewayMock.mockReset();
+    // Force the WS gateway to fail so sendAgentMessage falls back to the
+    // CLI path the assertions below exercise.
+    sendMessageViaGatewayMock.mockRejectedValue(
+      new Error("mocked: gateway unavailable"),
+    );
   });
 
   it("returns only the user-facing tail after a channel marker", async () => {
