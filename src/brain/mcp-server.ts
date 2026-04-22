@@ -248,7 +248,7 @@ export async function handleBrainMaintenance(
   const report = await generateHealthReportWithGbrain(config);
   const plan = buildBrainMaintenancePlan(
     report,
-    buildScienceSwarmMaintenanceContext(report),
+    buildScienceSwarmMaintenanceContext(report, process.env, config.root),
   );
   return {
     content: [{ type: "text", text: JSON.stringify(plan, null, 2) }],

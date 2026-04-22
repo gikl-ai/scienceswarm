@@ -373,6 +373,8 @@ describe("brain_status", () => {
 describe("brain_maintenance", () => {
   it("returns ranked maintenance recommendations", async () => {
     const config = makeConfig();
+    mkdirSync(join(TEST_ROOT, "concepts"), { recursive: true });
+    writeFileSync(join(TEST_ROOT, "concepts", "rlhf.md"), "# RLHF\n", "utf-8");
 
     const result = await handleBrainMaintenance(config);
 
@@ -391,6 +393,13 @@ describe("brain_maintenance", () => {
         priority: expect.any(String),
         action: expect.any(String),
       }),
+    );
+    expect(parsed.recommendations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "bridge-research-layout",
+        }),
+      ]),
     );
   });
 });

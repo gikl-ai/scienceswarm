@@ -81,7 +81,10 @@ The setup flow initializes the local research store, verifies local runtimes,
 defaults new installs to the `scientific_research` brain preset, and can
 connect OpenClaw, OpenHands, Ollama, and Telegram when you want the full agent
 path. If you want the broader legacy-oriented layout instead, the setup UI also
-offers a `generic_scientist` preset.
+offers a `generic_scientist` preset. Existing brains are not auto-renamed; use
+the `bridge-research-layout` maintenance action to preview legacy `wiki/*`
+homes and optionally create non-destructive README bridges for the canonical
+research-first layout.
 
 ### Windows via WSL2
 
