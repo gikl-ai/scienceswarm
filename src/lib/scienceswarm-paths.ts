@@ -54,6 +54,10 @@ export function getScienceSwarmWorkspaceRoot(): string {
   return path.join(getScienceSwarmDataRoot(), "workspace");
 }
 
+export function getScienceSwarmCacheRoot(): string {
+  return path.join(getScienceSwarmDataRoot(), "cache");
+}
+
 export function getScienceSwarmBrainRoot(): string {
   // Respect an explicit BRAIN_ROOT override first (users may mount
   // the brain on an external drive independent of SCIENCESWARM_DIR).
@@ -77,6 +81,14 @@ export function getScienceSwarmTelegramRoot(): string {
 
 export function getScienceSwarmTelegramSessionPath(): string {
   return path.join(getScienceSwarmTelegramRoot(), "session");
+}
+
+export function getScienceSwarmMarketRoot(): string {
+  return path.join(getScienceSwarmDataRoot(), "market");
+}
+
+export function getScienceSwarmMarketPluginsRoot(): string {
+  return path.join(getScienceSwarmMarketRoot(), "plugins");
 }
 
 // OpenClaw state-dir mode lives under $SCIENCESWARM_DIR/openclaw so every

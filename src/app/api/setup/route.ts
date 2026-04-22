@@ -25,6 +25,7 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
 import { isLocalRequest } from "@/lib/local-guard";
+import { isBrainPresetId } from "@/brain/presets/types";
 import { resolveConfiguredPath } from "@/lib/scienceswarm-paths";
 import {
   validateOpenAiKey,
@@ -52,6 +53,7 @@ interface SetupRequestBody {
   googleClientSecret?: string;
   githubId?: string;
   githubSecret?: string;
+  brainPreset?: string;
   // PR B stage B1 additions: brain profile, LLM provider toggle,
   // Ollama model selection, and agent backend pick. These are all
   // plain-string fields that round-trip into .env verbatim, with the
@@ -80,6 +82,7 @@ const FIELD_TO_ENV_KEY: Readonly<Record<SetupFieldName, string>> = {
   googleClientSecret: "GOOGLE_CLIENT_SECRET",
   githubId: "GITHUB_ID",
   githubSecret: "GITHUB_SECRET",
+  brainPreset: "BRAIN_PRESET",
   brainProfileName: "BRAIN_PROFILE_NAME",
   brainProfileField: "BRAIN_PROFILE_FIELD",
   brainProfileInstitution: "BRAIN_PROFILE_INSTITUTION",
@@ -205,6 +208,17 @@ async function validateProvidedFields(
   // other fields stay consistent. A wrong value fails with a helpful
   // reason listing the accepted tokens.
   if (
+    body.brainPreset !== undefined
+    && body.brainPreset !== ""
+    && !isBrainPresetId(body.brainPreset)
+  ) {
+    errors.brainPreset = {
+      state: "invalid",
+      reason: "brainPreset must be one of: generic_scientist, scientific_research",
+    };
+  }
+
+  if (
     body.llmProvider !== undefined
     && body.llmProvider !== ""
     && !VALID_LLM_PROVIDERS.has(body.llmProvider)
@@ -272,6 +286,7 @@ async function loadEnvDocument(repoRoot: string): Promise<EnvDocument> {
 const EMPTY_MEANS_REMOVE: ReadonlySet<SetupFieldName> = new Set<SetupFieldName>(
   [
     "scienceswarmDir",
+    "brainPreset",
     "brainProfileName",
     "brainProfileField",
     "brainProfileInstitution",

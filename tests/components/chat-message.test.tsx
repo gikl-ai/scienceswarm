@@ -1,12 +1,83 @@
 // @vitest-environment jsdom
 
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatMessage } from "@/components/research/chat-message";
 
 describe("ChatMessage", () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("renders a full date and time footer for message bubbles", () => {
+    const timestamp = new Date(2026, 3, 22, 16, 45, 0);
+    const expectedFooter = `${timestamp.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })} · ${timestamp.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        timestamp={timestamp}
+      />,
+    );
+
+    expect(screen.getByText(expectedFooter)).toBeInTheDocument();
+  });
+
+  it("copies rendered message text instead of raw bubble directives", async () => {
+    const writeText = vi.fn<(value: string) => Promise<void>>(async (_value) => {});
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"**Line one**\nMEDIA:docs/results_chart.png"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copiedText = writeText.mock.calls[0]?.[0] ?? "";
+    expect(copiedText).toContain("Line one");
+    expect(copiedText).toContain("docs/results_chart.png");
+    expect(copiedText).not.toContain("**");
+    expect(copiedText).not.toContain("MEDIA:");
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+  });
+
+  it("surfaces copy failures inline when the clipboard write rejects", async () => {
+    const writeText = vi.fn<(value: string) => Promise<void>>(async (_value) => {
+      throw new Error("denied");
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(await screen.findByRole("button", { name: "Copy failed" })).toBeInTheDocument();
   });
 
   it("renders assistant task phases inside the message bubble", () => {
@@ -52,7 +123,7 @@ describe("ChatMessage", () => {
 
     const progressLog = screen.getByRole("log");
     expect(screen.getByText("• Explored")).toBeInTheDocument();
-    expect(progressLog).toHaveTextContent("• Checking the imported files...");
+    expect(progressLog).not.toHaveTextContent("Checking the imported files...");
     expect(screen.getByText(/└ Read docs\/results_table\.csv/)).toBeInTheDocument();
     expect(screen.getByText(/Search activityLog in use-unified-chat\.ts/)).toBeInTheDocument();
     expect(progressLog).toHaveTextContent(/• Working \(\d+s • esc to interrupt\)/);
@@ -61,7 +132,7 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
   });
 
-  it("ticks the working timer every second while the message is streaming", () => {
+  it("shows the streaming spinner while only hidden thinking updates are available", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
 
@@ -77,16 +148,18 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByRole("log")).toHaveTextContent("• Working (5s • esc to interrupt)");
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(1000);
     });
 
-    expect(screen.getByRole("log")).toHaveTextContent("• Working (6s • esc to interrupt)");
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
   });
 
-  it("renders markdown bold inside progress transcript rows", () => {
+  it("keeps raw thinking rows out of the visible assistant progress transcript", () => {
     render(
       <ChatMessage
         role="assistant"
@@ -100,11 +173,10 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Moving forward with embedding", { selector: "strong" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/\*\*Moving forward with embedding\*\*/)).not.toBeInTheDocument();
-    expect(screen.getByText(/I think I'll finalize by saying "Made it"\./)).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.queryByText(/Moving forward with embedding/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/I think I'll finalize by saying "Made it"\./)).not.toBeInTheDocument();
   });
 
   it("normalizes legacy raw tool JSON lines in the visible transcript", () => {
@@ -194,7 +266,7 @@ describe("ChatMessage", () => {
     );
 
     const progressLog = screen.getByRole("log");
-    expect(progressLog).toHaveTextContent("• Planning how to inspect the chart files.");
+    expect(progressLog).not.toHaveTextContent("Planning how to inspect the chart files.");
     expect(progressLog).toHaveTextContent("Read docs/results_table.csv");
     expect(progressLog).not.toHaveTextContent("Turn started");
     expect(progressLog).not.toHaveTextContent("Tool read_file:");
@@ -212,6 +284,10 @@ describe("ChatMessage", () => {
         activityLog={[
           "Tool read_file: {\"path\":\"docs/results_table.csv\"}",
         ]}
+        progressLog={[
+          { kind: "thinking", text: "Hidden turn plan" },
+          { kind: "activity", text: "Read docs/results_table.csv" },
+        ]}
         timestamp={new Date("2026-04-20T10:03:00.000Z")}
         isStreaming={false}
       />,
@@ -220,6 +296,26 @@ describe("ChatMessage", () => {
     expect(screen.getByText("Final answer")).toBeInTheDocument();
     expect(screen.queryByRole("log")).not.toBeInTheDocument();
     expect(screen.queryByText("Internal planning that should stay hidden.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Read docs\/results_table\.csv/)).not.toBeInTheDocument();
+  });
+
+  it("does not render a stored progress transcript after a completed assistant turn", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        progressLog={[
+          { kind: "thinking", text: "Planning how to inspect the chart files." },
+          { kind: "activity", text: "Read docs/results_table.csv" },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:00.000Z")}
+        isStreaming={false}
+      />,
+    );
+
+    expect(screen.getByText("Final answer")).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
+    expect(screen.queryByText("Planning how to inspect the chart files.")).not.toBeInTheDocument();
     expect(screen.queryByText(/Read docs\/results_table\.csv/)).not.toBeInTheDocument();
   });
 

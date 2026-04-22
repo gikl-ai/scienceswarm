@@ -30,6 +30,8 @@ interface RadarLastRunFile {
   concepts_processed: number;
   errors_count: number;
   schedule_interval_ms: number;
+  briefing_slug?: string;
+  journal_slug?: string;
 }
 
 interface RadarHealthPayload {
@@ -39,6 +41,8 @@ interface RadarHealthPayload {
   age_ms: number;
   stale: boolean;
   schedule_interval_ms: number;
+  briefing_slug?: string;
+  journal_slug?: string;
 }
 
 /**
@@ -68,6 +72,8 @@ async function readRadarLastRun(brainRoot: string): Promise<RadarHealthPayload |
   if (typeof file.timestamp !== "string") return null;
   if (typeof file.concepts_processed !== "number") return null;
   if (typeof file.errors_count !== "number") return null;
+  if (file.briefing_slug !== undefined && typeof file.briefing_slug !== "string") return null;
+  if (file.journal_slug !== undefined && typeof file.journal_slug !== "string") return null;
 
   const ts = Date.parse(file.timestamp);
   if (!Number.isFinite(ts)) return null;
@@ -88,6 +94,8 @@ async function readRadarLastRun(brainRoot: string): Promise<RadarHealthPayload |
     // to recover before we surface a warning chip on the dashboard.
     stale: ageMs > 2 * intervalMs,
     schedule_interval_ms: intervalMs,
+    briefing_slug: file.briefing_slug,
+    journal_slug: file.journal_slug,
   };
 }
 

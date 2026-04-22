@@ -4,9 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  realpathSync,
   rmSync,
-  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -24,6 +22,7 @@ const {
   openClawHealthCheck,
   sendOpenClawMessage,
   getConversationMessagesSince,
+  runOpenClaw,
   streamChat,
   localHealthCheck,
   hasLocalModel,
@@ -52,6 +51,7 @@ const {
   openClawHealthCheck: vi.fn(),
   sendOpenClawMessage: vi.fn(),
   getConversationMessagesSince: vi.fn(),
+  runOpenClaw: vi.fn(),
   streamChat: vi.fn(),
   localHealthCheck: vi.fn(),
   hasLocalModel: vi.fn(),
@@ -88,6 +88,10 @@ vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
   sendAgentMessage: sendOpenClawMessage,
   getConversationMessagesSince,
+}));
+
+vi.mock("@/lib/openclaw/runner", () => ({
+  runOpenClaw,
 }));
 
 vi.mock("@/lib/openclaw-bridge", () => ({
@@ -236,6 +240,7 @@ beforeEach(() => {
   sendAgentMessage.mockReset();
   openClawHealthCheck.mockReset();
   sendOpenClawMessage.mockReset();
+  runOpenClaw.mockReset();
   sendMessageViaGateway.mockReset();
   // Default behaviour: route gateway WS calls through the existing
   // sendOpenClawMessage mock so each test only has to stub one function.
@@ -358,6 +363,7 @@ describe("GET /api/chat/unified", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       backend: "openclaw",
+      conversationId: "web-alpha-project-session-1",
       generatedArtifacts: [],
       generatedFiles: [],
       messages: [
@@ -371,6 +377,279 @@ describe("GET /api/chat/unified", () => {
     expect(getConversationMessagesSince).toHaveBeenCalledWith(
       "web-alpha-project-session-1",
       "2026-01-01T00:00:00.000Z",
+    );
+  });
+
+  it("discovers the latest project-scoped OpenClaw session when conversationId is missing", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+
+    const projectRoot = createProjectRoot("alpha-project");
+    const sessionsRoot = path.join(
+      ensureScienceSwarmDir(),
+      "openclaw",
+      "agents",
+      "main",
+      "sessions",
+    );
+    mkdirSync(sessionsRoot, { recursive: true });
+    const sessionWorkspace = path.join(ensureScienceSwarmDir(), "openclaw", "workspace");
+    mkdirSync(path.join(sessionWorkspace, "reports"), { recursive: true });
+    const sessionSummaryFile = path.join(
+      sessionWorkspace,
+      "reports",
+      "baseline_vs_adaptation_summary.md",
+    );
+    writeFileSync(sessionSummaryFile, "# Summary\n");
+    utimesSync(
+      sessionSummaryFile,
+      new Date("2026-01-01T00:00:02.500Z"),
+      new Date("2026-01-01T00:00:02.500Z"),
+    );
+
+    const olderSessionId = "web-alpha-project-older";
+    const newerSessionId = "web-alpha-project-newer";
+    const olderSessionFile = path.join(sessionsRoot, `${olderSessionId}.jsonl`);
+    const newerSessionFile = path.join(sessionsRoot, `${newerSessionId}.jsonl`);
+    writeFileSync(olderSessionFile, `${JSON.stringify({ type: "session", id: olderSessionId, cwd: sessionWorkspace })}\n`);
+    writeFileSync(newerSessionFile, `${JSON.stringify({ type: "session", id: newerSessionId, cwd: sessionWorkspace })}\n`);
+    utimesSync(
+      olderSessionFile,
+      new Date("2026-01-01T00:00:01.000Z"),
+      new Date("2026-01-01T00:00:01.000Z"),
+    );
+    utimesSync(
+      newerSessionFile,
+      new Date("2026-01-01T00:00:03.000Z"),
+      new Date("2026-01-01T00:00:03.000Z"),
+    );
+
+    getConversationMessagesSince.mockResolvedValueOnce([
+      {
+        id: "assistant-finished",
+        userId: "assistant",
+        role: "assistant",
+        channel: "web",
+        content:
+          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_adaptation_summary.md.",
+        timestamp: "2026-01-01T00:00:04.000Z",
+        conversationId: newerSessionId,
+      },
+    ]);
+
+    const request = new Request(
+      "http://localhost/api/chat/unified?action=poll&since=2026-01-01T00:00:00.000Z&projectId=alpha-project",
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      backend: "openclaw",
+      conversationId: newerSessionId,
+      generatedArtifacts: [
+        expect.objectContaining({
+          projectPath: "docs/baseline_vs_adaptation_summary.md",
+          tool: "OpenClaw CLI",
+        }),
+      ],
+      generatedFiles: ["docs/baseline_vs_adaptation_summary.md"],
+      messages: [
+        expect.objectContaining({
+          id: "assistant-finished",
+          channel: "web",
+          content: expect.stringContaining(
+            "docs/baseline_vs_adaptation_summary.md",
+          ),
+        }),
+      ],
+    });
+    expect(getConversationMessagesSince).toHaveBeenCalledWith(
+      newerSessionId,
+      "2026-01-01T00:00:00.000Z",
+    );
+    expect(
+      existsSync(
+        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary.md"),
+      ),
+    ).toBe(true);
+  });
+
+  it("reuses already imported poll artifacts instead of creating suffixed duplicates", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+
+    const projectRoot = createProjectRoot("alpha-project");
+    const sessionsRoot = path.join(
+      ensureScienceSwarmDir(),
+      "openclaw",
+      "agents",
+      "main",
+      "sessions",
+    );
+    mkdirSync(sessionsRoot, { recursive: true });
+
+    const sessionWorkspace = path.join(ensureScienceSwarmDir(), "openclaw", "workspace");
+    mkdirSync(path.join(sessionWorkspace, "reports"), { recursive: true });
+    const sessionSummaryFile = path.join(
+      sessionWorkspace,
+      "reports",
+      "baseline_vs_adaptation_summary.md",
+    );
+    writeFileSync(sessionSummaryFile, "# Summary\n");
+    utimesSync(
+      sessionSummaryFile,
+      new Date("2026-01-01T00:00:02.500Z"),
+      new Date("2026-01-01T00:00:02.500Z"),
+    );
+
+    const sessionId = "web-alpha-project-session-1";
+    writeFileSync(
+      path.join(sessionsRoot, `${sessionId}.jsonl`),
+      `${JSON.stringify({ type: "session", id: sessionId, cwd: sessionWorkspace })}\n`,
+    );
+
+    getConversationMessagesSince.mockResolvedValue([
+      {
+        id: "assistant-finished",
+        userId: "assistant",
+        role: "assistant",
+        channel: "web",
+        content:
+          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_adaptation_summary.md.",
+        timestamp: "2026-01-01T00:00:04.000Z",
+        conversationId: sessionId,
+      },
+    ]);
+
+    const request = new Request(
+      "http://localhost/api/chat/unified?action=poll&since=2026-01-01T00:00:00.000Z&projectId=alpha-project",
+    );
+
+    const firstResponse = await GET(request);
+    expect(firstResponse.status).toBe(200);
+    await expect(firstResponse.json()).resolves.toMatchObject({
+      generatedFiles: ["docs/baseline_vs_adaptation_summary.md"],
+    });
+
+    const secondResponse = await GET(request);
+    expect(secondResponse.status).toBe(200);
+    await expect(secondResponse.json()).resolves.toMatchObject({
+      generatedFiles: ["docs/baseline_vs_adaptation_summary.md"],
+    });
+
+    expect(
+      existsSync(
+        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary.md"),
+      ),
+    ).toBe(true);
+    expect(
+      existsSync(
+        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary-2.md"),
+      ),
+    ).toBe(false);
+  });
+
+  it("sanitizes internal log noise from polled OpenClaw assistant responses", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    getConversationMessagesSince.mockResolvedValueOnce([
+      {
+        id: "assistant-noise",
+        userId: "assistant",
+        channel: "web",
+        content: [
+          "[agents/auth-profiles] synced openai-codex credentials from external cli",
+          "",
+          "Here is your draft summary.",
+          "",
+          "",
+        ].join("\n"),
+        timestamp: "2026-01-01T00:00:05.000Z",
+        conversationId: "web:alpha-project:session-1",
+      },
+    ]);
+
+    const request = new Request(
+      "http://localhost/api/chat/unified?action=poll&since=2026-01-01T00:00:00.000Z&projectId=alpha-project&conversationId=web:alpha-project:session-1",
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "assistant-noise",
+          content: "Here is your draft summary.",
+        }),
+      ]),
+    );
+    expect(body.messages[0]?.content).not.toContain("[agents/auth-profiles]");
+  });
+
+  it("keeps user-authored bracketed text in cross-channel CLI poll responses", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    runOpenClaw.mockResolvedValueOnce({
+      ok: true,
+      stdout: JSON.stringify([
+        {
+          id: "user-cross-channel",
+          userId: "user",
+          channel: "telegram",
+          content: "[agents/auth-profiles] keep this user-authored line",
+          timestamp: "2026-01-01T00:00:01.000Z",
+        },
+        {
+          id: "assistant-cross-channel",
+          userId: "assistant",
+          channel: "telegram",
+          content: [
+            "[agents/auth-profiles] synced openai-codex credentials from external cli",
+            "",
+            "Delivered update.",
+            "",
+            "",
+          ].join("\n"),
+          timestamp: "2026-01-01T00:00:02.000Z",
+        },
+      ]),
+    });
+
+    const request = new Request(
+      "http://localhost/api/chat/unified?action=poll&since=2026-01-01T00:00:00.000Z&projectId=alpha-project",
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      backend: "openclaw",
+      messages: [
+        expect.objectContaining({
+          id: "user-cross-channel",
+          content: "[agents/auth-profiles] keep this user-authored line",
+        }),
+        expect.objectContaining({
+          id: "assistant-cross-channel",
+          content: "Delivered update.",
+        }),
+      ],
+    });
+    expect(runOpenClaw).toHaveBeenCalledWith(
+      ["sessions", "messages", "--json", "--limit", "20"],
+      { timeoutMs: 5000 },
     );
   });
 
@@ -1366,6 +1645,12 @@ describe("POST /api/chat/unified", () => {
       "Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
     );
     expect(openClawMessage).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(openClawMessage).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
+    expect(openClawMessage).toContain(
       "Do not run git add, git commit, or git push unless the user explicitly asked",
     );
     expect(openClawMessage).toContain(
@@ -1677,6 +1962,12 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).toContain(
       "Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
     );
+    expect(openClawMessage).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(openClawMessage).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
   });
 
   it("sanitizes active file fences before sending current-preview context to OpenClaw", async () => {
@@ -1948,6 +2239,12 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).toContain("Execute all steps using your tools");
     expect(openClawMessage).toContain("Do not describe steps — do them.");
     expect(openClawMessage).toContain("Continue until fully complete.");
+    expect(openClawMessage).toContain(
+      `The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
+    );
+    expect(openClawMessage).toContain(
+      "Do not install new packages unless the user explicitly asked you to modify the environment.",
+    );
     expect(openClawOptions).toEqual(
       expect.objectContaining({
         cwd: projectRoot,
@@ -4152,6 +4449,12 @@ describe("POST /api/chat/unified", () => {
       "Return exactly one complete machine-readable artifact block",
     );
     expect(blockRepairPrompt).toContain("Do not use workspace tools");
+    expect(blockRepairPrompt).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(blockRepairPrompt).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
     expect(blockRepairPrompt).toContain("Current revised manuscript content");
     expect(sendOpenClawMessage).toHaveBeenCalledTimes(2);
   });
@@ -5228,6 +5531,12 @@ describe("POST /api/chat/unified", () => {
       "Retry this artifact-writing request with compact context",
     );
     expect(retryPrompt).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(retryPrompt).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
+    expect(retryPrompt).toContain(
       path.join(projectRoot, "docs", "hubble-1929-revised-manuscript.md"),
     );
     expect(retryPrompt).toContain(
@@ -5615,6 +5924,113 @@ describe("POST /api/chat/unified", () => {
     ).toBe(true);
   });
 
+  it("treats markdown-emphasized output paths as satisfying explicit requested artifacts", async () => {
+    const projectRoot = createProjectRoot("adaptive-inference-7747");
+    const stateRoot = ensureScienceSwarmDir();
+    const summaryPath = path.join(
+      stateRoot,
+      "openclaw",
+      "workspace",
+      "reports",
+      "baseline_vs_adaptation_summary.md",
+    );
+    const resultsPath = path.join(
+      stateRoot,
+      "openclaw",
+      "workspace",
+      "reports",
+      "baseline_vs_adaptation_results.csv",
+    );
+
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockImplementationOnce(async () => {
+      mkdirSync(path.dirname(summaryPath), { recursive: true });
+      writeFileSync(
+        summaryPath,
+        [
+          "# Baseline vs Adaptation Summary",
+          "",
+          "- Improved: adaptation accuracy +4.1 points",
+          "- Regressed: latency +18 ms",
+          "- Runtime cost: 1 extra optimization step per batch",
+        ].join("\n"),
+      );
+      writeFileSync(
+        resultsPath,
+        [
+          "condition,accuracy,latency_ms",
+          "baseline,0.71,42",
+          "adaptation,0.751,60",
+        ].join("\n"),
+      );
+      return [
+        "Summary written to **reports/baseline_vs_adaptation_summary.md**.",
+        "Results written to **reports/baseline_vs_adaptation_results.csv**.",
+      ].join(" ");
+    });
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message:
+          "Build and run a tiny reproducible baseline-versus-test-time-adaptation experiment for a non-transformer sequence model on a synthetic sequence task. Save the outputs as reports/baseline_vs_adaptation_summary.md and reports/baseline_vs_adaptation_results.csv in this workspace.",
+        projectId: "adaptive-inference-7747",
+        mode: "openclaw-tools",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      backend: "openclaw",
+      response: expect.stringContaining("docs/baseline_vs_adaptation_summary.md"),
+      generatedFiles: expect.arrayContaining([
+        "docs/baseline_vs_adaptation_summary.md",
+        "data/baseline_vs_adaptation_results.csv",
+      ]),
+      generatedArtifacts: expect.arrayContaining([
+        expect.objectContaining({
+          projectPath: "docs/baseline_vs_adaptation_summary.md",
+          tool: "OpenClaw CLI",
+        }),
+        expect.objectContaining({
+          projectPath: "data/baseline_vs_adaptation_results.csv",
+          tool: "OpenClaw CLI",
+        }),
+      ]),
+    });
+    expect(
+      readFileSync(
+        path.join(projectRoot, "docs", "baseline_vs_adaptation_summary.md"),
+        "utf-8",
+      ),
+    ).toContain("Improved: adaptation accuracy +4.1 points");
+    expect(
+      readFileSync(
+        path.join(projectRoot, "data", "baseline_vs_adaptation_results.csv"),
+        "utf-8",
+      ),
+    ).toContain("adaptation,0.751,60");
+    expect(
+      existsSync(
+        path.join(projectRoot, "reports", "baseline_vs_adaptation_summary.md"),
+      ),
+    ).toBe(false);
+    expect(sendOpenClawMessage).toHaveBeenCalledOnce();
+  });
+
   it("does not import absolute paths that escape the project and OpenClaw roots", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     const outsideRoot = mkdtempSync(path.join(tmpdir(), "openclaw-outside-"));
@@ -5793,6 +6209,42 @@ describe("POST /api/chat/unified", () => {
     expect(sendOpenClawMessage).toHaveBeenCalledOnce();
     expect(streamChat).not.toHaveBeenCalled();
     expect(localHealthCheck).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes internal OpenClaw status lines from non-stream chat responses", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce([
+      "[agents/auth-profiles] synced openai-codex credentials from external cli",
+      "",
+      "OpenClaw reasoning answer",
+    ].join("\n"));
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Explain the trend",
+        projectId: "alpha-project",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      backend: "openclaw",
+      response: "OpenClaw reasoning answer",
+    });
   });
 
   it("ignores an explicit `backend: \"direct\"` request and still routes through OpenClaw", async () => {

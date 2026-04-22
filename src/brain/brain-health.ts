@@ -445,10 +445,10 @@ function suggestedStaleAction(type: ContentType, title: string): string {
 function findMissingLinks(
   pages: PageInfo[],
 ): BrainHealthReport["missingLinks"] {
-  // Build a map of known entities (title -> path) for person and concept pages
+  // Build a map of known entities (title -> path) for person and topic pages.
   const knownEntities = new Map<string, string>();
   for (const page of pages) {
-    if (page.type === "person" || page.type === "concept") {
+    if (page.type === "person" || page.type === "concept" || page.type === "topic") {
       knownEntities.set(page.title.toLowerCase(), page.path);
     }
   }
@@ -457,7 +457,7 @@ function findMissingLinks(
 
   for (const page of pages) {
     // Skip entity pages themselves to avoid self-referencing suggestions
-    if (page.type === "person" || page.type === "concept") continue;
+    if (page.type === "person" || page.type === "concept" || page.type === "topic") continue;
 
     const existingLinks = new Set(page.wikiLinks.map((l) => l.toLowerCase()));
 
@@ -518,7 +518,7 @@ function computeHealthScore(
 
   // Completeness: 20% weight — based on variety of page types
   const typeSet = new Set(pages.map((p) => p.type));
-  const expectedTypes = ["paper", "note", "project", "person", "concept"];
+  const expectedTypes = ["paper", "note", "project", "person", "concept", "topic"];
   const completenessScore = Math.round(
     (expectedTypes.filter((t) => typeSet.has(t as ContentType)).length /
       expectedTypes.length) *
@@ -642,10 +642,17 @@ function inferType(
   if (path.includes("resources/data/")) return "data";
   if (path.includes("experiments")) return "experiment";
   if (path.includes("hypotheses")) return "hypothesis";
+  if (path.includes("topics")) return "topic";
   if (path.includes("concepts")) return "concept";
+  if (path.includes("surveys")) return "survey";
+  if (path.includes("methods")) return "method";
+  if (path.includes("originals")) return "original_synthesis";
   if (path.includes("/projects/")) return "project";
   if (path.includes("entities/decisions")) return "decision";
   if (path.includes("entities/tasks")) return "task";
+  if (path.includes("packets")) return "research_packet";
+  if (path.includes("journals")) return "overnight_journal";
+  if (path.includes("jobs")) return "job_run";
   if (path.includes("entities/artifacts")) return "artifact";
   if (path.includes("entities/frontier")) return "frontier_item";
   if (path.includes("observations")) return "observation";

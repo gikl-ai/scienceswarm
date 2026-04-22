@@ -72,7 +72,9 @@ import {
   rewriteProjectRootMentions,
   writeBackOpenClawGeneratedFiles,
 } from "@/lib/openclaw/gbrain-writeback";
-import { listOpenClawSkills } from "@/lib/openclaw/skill-catalog";
+import { sanitizeOpenClawUserVisibleResponse } from "@/lib/openclaw/response-sanitizer";
+import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
+import { listScienceSwarmOpenClawSlashCommandSkills } from "@/lib/openclaw/skill-registry";
 import {
   buildOpenClawSlashCommands,
   buildOpenClawSlashCommandPrompt,
@@ -266,7 +268,7 @@ function normalizeRequestedBackend(value: unknown): RequestedBackend | null {
 
 async function loadOpenClawSlashCommands() {
   try {
-    const skills = await listOpenClawSkills();
+    const skills = await listScienceSwarmOpenClawSlashCommandSkills();
     return buildOpenClawSlashCommands(skills);
   } catch {
     return buildOpenClawSlashCommands([]);
@@ -420,31 +422,6 @@ function shouldUseCompactOpenClawArtifactContext(
   );
 }
 
-function shouldForceOpenClawToolExecution(message: string): boolean {
-  if (isExplanatoryClarificationRequest(message)) {
-    return false;
-  }
-
-  const asksToCreateConcreteWorkspaceOutputs =
-    /\b(?:scaffold|build|create|generate|write|draft|produce|implement|save|export|set\s+up|setup)\b/i.test(
-      message,
-    ) &&
-    /\b(?:visible\s+)?(?:artifact|artifacts|file|files|workspace|project|experiment|starter code|codebase|code|config(?:uration)?s?|dataset(?:\s+entry\s+points?)?|entry\s+points?|training script|evaluation script|readme|notebook|chart|plot|graph|figure|report|plan|critique|cover letter|manuscript|package|benchmark|sweep|ablation)\b/i.test(
-      message,
-    );
-  const asksToExecuteResearchWorkflow =
-    /\b(?:run|rerun|re-run|execute|perform|start|train|evaluate|benchmark|sweep)\b/i.test(
-      message,
-    ) &&
-    /\b(?:experiment|training|evaluation|benchmark|sweep|ablation|test[- ]time|analysis|script|job|pipeline|workflow)\b/i.test(
-      message,
-    );
-
-  return (
-    asksToCreateConcreteWorkspaceOutputs || asksToExecuteResearchWorkflow
-  );
-}
-
 function openClawAgentOptions(
   session: string | null | undefined,
   cwd: string | undefined,
@@ -595,11 +572,11 @@ function gbrainSlugFromReference(candidate: string): string | null {
 
 function extractWorkspaceReferenceCandidates(message: string): string[] {
   const gbrainReferencePattern =
-    /(?:^|[\s("'`])@?(gbrain:[A-Za-z0-9][A-Za-z0-9._/-]*(?:\.md)?)(?=$|[\s)"'`,.:;!?])/gi;
+    /(?:^|[\s("'`*])@?(gbrain:[A-Za-z0-9][A-Za-z0-9._/-]*(?:\.md)?)(?=$|[\s)"'`*,.:;!?])/gi;
   const fileReferencePattern =
-    /(?:^|[\s("'`])@?((?:~\/|\/)?[A-Za-z0-9._-][A-Za-z0-9._\-\/]*\.[A-Za-z0-9]{1,8})(?=$|[\s)"'`,.:;!?])/g;
+    /(?:^|[\s("'`*])@?((?:~\/|\/)?[A-Za-z0-9._-][A-Za-z0-9._\-\/]*\.[A-Za-z0-9]{1,8})(?=$|[\s)"'`*,.:;!?])/g;
   const contextualBareReferencePattern =
-    /\b(?:read|open|inspect|preview|summarize|analyze|use|plot|chart|extract)\s+(?:the\s+)?(?:file\s+)?([A-Za-z0-9._/-]{2,})(?=$|[\s)"'`,.:;!?])/gi;
+    /\b(?:read|open|inspect|preview|summarize|analyze|use|plot|chart|extract)\s+(?:the\s+)?(?:file\s+)?([A-Za-z0-9._/-]{2,})(?=$|[\s)"'`*,.:;!?])/gi;
   const matches = new Set<string>();
   let match: RegExpExecArray | null = null;
 
@@ -1432,20 +1409,6 @@ async function buildWorkspaceFileContext(
   };
 }
 
-function withWorkspaceFileContext(
-  messages: UnifiedChatMessage[],
-  workspaceFileContext?: WorkspaceFileContext | null,
-): UnifiedChatMessage[] {
-  if (!workspaceFileContext?.contextMessage) {
-    return messages;
-  }
-
-  return [
-    { role: "user", content: workspaceFileContext.contextMessage },
-    ...messages,
-  ];
-}
-
 /**
  * Inject the "currently selected file" context into the message list.
  *
@@ -1496,21 +1459,6 @@ async function prependScienceSwarmProjectPrompt(params: {
     return params.message;
   }
   return `${promptContext}\n\nCurrent user request:\n${params.message}`;
-}
-
-function appendWorkspaceContextToUserMessage(
-  message: string,
-  workspaceFileContext?: WorkspaceFileContext | null,
-): string {
-  if (!workspaceFileContext?.contextMessage) {
-    return message;
-  }
-
-  return [
-    workspaceFileContext.contextMessage,
-    "User request:",
-    message,
-  ].join("\n\n");
 }
 
 function buildOpenClawSessionId(
@@ -1581,6 +1529,37 @@ async function readOpenClawThinkingTrace(
   return readOpenClawThinkingTraceFromFile(sessionFile);
 }
 
+async function readOpenClawSessionWorkingDirectory(
+  conversationId: string | null | undefined,
+): Promise<string | undefined> {
+  const sessionFile = getOpenClawSessionFilePath(conversationId);
+  if (!sessionFile) {
+    return undefined;
+  }
+
+  try {
+    const lines = (await readFile(sessionFile, "utf8"))
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      if (
+        parsed.type === "session"
+        && typeof parsed.cwd === "string"
+        && parsed.cwd.trim().length > 0
+      ) {
+        return parsed.cwd;
+      }
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
 function getOpenClawSessionFilePath(
   conversationId: string | null | undefined,
 ): string | null {
@@ -1596,6 +1575,53 @@ function getOpenClawSessionFilePath(
     "sessions",
     `${normalizedConversationId}.jsonl`,
   );
+}
+
+async function findLatestProjectOpenClawConversationId(
+  projectId: string | null,
+): Promise<string | null> {
+  const normalizedProjectId = normalizeOpenClawSessionId(projectId);
+  if (!normalizedProjectId) {
+    return null;
+  }
+
+  const sessionsRoot = path.join(
+    getScienceSwarmOpenClawStateDir(),
+    "agents",
+    "main",
+    "sessions",
+  );
+  const prefix = `web-${normalizedProjectId}-`;
+
+  let names: string[];
+  try {
+    names = await readdir(sessionsRoot);
+  } catch {
+    return null;
+  }
+
+  let latestConversationId: string | null = null;
+  let latestMtimeMs = -Infinity;
+
+  for (const name of names) {
+    if (!name.startsWith(prefix) || !name.endsWith(".jsonl")) {
+      continue;
+    }
+
+    const conversationId = name.slice(0, -".jsonl".length);
+    const sessionFile = path.join(sessionsRoot, name);
+    try {
+      const sessionStat = await stat(sessionFile);
+      if (sessionStat.mtimeMs > latestMtimeMs) {
+        latestMtimeMs = sessionStat.mtimeMs;
+        latestConversationId = conversationId;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return latestConversationId;
 }
 
 async function readOpenClawThinkingTraceFromFile(
@@ -1655,11 +1681,16 @@ async function readOpenClawThinkingTraceFromFile(
           }
         }
       }
-      latestThinking =
+      const latestThinkingRaw =
         thinkingParts.length > 0 ? thinkingParts.join("\n\n") : null;
+      latestThinking = latestThinkingRaw
+        ? sanitizeOpenClawUserVisibleResponse(latestThinkingRaw, {
+            trimEnd: false,
+          })
+        : null;
     }
 
-    return latestThinking;
+    return latestThinking && latestThinking.length > 0 ? latestThinking : null;
   } catch {
     return null;
   }
@@ -1847,6 +1878,8 @@ function buildCompactOpenClawArtifactRetryMessage(params: {
     "",
     "ScienceSwarm web task rules:",
     "- Produce only scientist-facing output. Do not mention internal tool, gateway, session, model, or subagent mechanics.",
+    "- Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    "- Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     "- Do not spawn subagents, background agents, sessions, or gateway pairing flows. Complete the task in this OpenClaw session.",
     "- Do not run git add, git commit, or git push unless the user explicitly asked for repo version-control work.",
     "- Do not mutate .brain/state or .brain/wiki directly when a canonical gbrain tool exists.",
@@ -1907,6 +1940,8 @@ function buildOpenClawWebTaskGuardrails(
   const rules = [
     "ScienceSwarm web task rules:",
     "- Produce only scientist-facing output. Do not mention internal tool, gateway, session, model, or subagent mechanics.",
+    "- Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    "- Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     "- If an internal tool attempt fails but you recover, do not mention the failed attempt or tool name. Summarize only the final visible result. If you cannot recover, explain the user-visible blocker in plain language without tool names.",
     "- Do not spawn subagents, background agents, sessions, or gateway pairing flows. Complete the task in this OpenClaw session.",
     "- Do not run git add, git commit, or git push unless the user explicitly asked for repo version-control work.",
@@ -1916,6 +1951,16 @@ function buildOpenClawWebTaskGuardrails(
     "- Treat provided gbrain/file excerpts as enough evidence when they answer the request.",
     "- Do not auto-read AGENTS.md or other startup-convention files unless the user explicitly asks.",
   ];
+
+  if (projectRoot && shouldForceOpenClawToolExecution(message)) {
+    rules.push(
+      `- The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
+      `- Use absolute paths rooted under ${projectRoot} for every write, exec, and saved artifact. If you need a scratch or artifacts folder, create it under ${projectRoot}.`,
+      `- Never write to the generic OpenClaw workspace, WORK_DIR, home directory, or any path outside ${projectRoot} unless the user explicitly asked for that destination.`,
+      `- For toy or local validation runs, prefer the Python standard library or dependencies already available in the current environment. Do not install new packages unless the user explicitly asked you to modify the environment.`,
+      `- If a tool wrote something outside ${projectRoot}, treat that as a mistake: rewrite or move it into ${projectRoot} before you finish, then report the project-visible path.`,
+    );
+  }
 
   if (isExplanatoryClarificationRequest(message)) {
     rules.push(
@@ -2588,32 +2633,6 @@ function buildOpenClawVisibleFailureResponse(value: unknown): string | null {
   ].join("\n\n");
 }
 
-function sanitizeOpenClawUserVisibleResponse(response: string): string {
-  return response
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        return true;
-      }
-      if (
-        /^\[(?:agents\/[^\]]+|auth(?:-profiles)?|gateway|session|model|subagent|tool(?:s)?)[^\]]*\].*$/i.test(
-          trimmed,
-        )
-      ) {
-        return false;
-      }
-      if (/\bsynced\b.*\bcredentials\b.*\bexternal cli\b/i.test(trimmed)) {
-        return false;
-      }
-      return true;
-    })
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 async function resolveOpenClawWorkingDirectory(
   projectId: string | null,
 ): Promise<string | undefined> {
@@ -3115,6 +3134,66 @@ async function reserveUniqueProjectOutputPath(
   }
 }
 
+async function findExistingImportedProjectOutput(
+  projectRoot: string,
+  sourcePath: string,
+): Promise<string | null> {
+  const fileName = path.basename(sourcePath);
+  const targetDir = path.join(projectRoot, getTargetFolder(fileName));
+
+  let sourceStats;
+  try {
+    sourceStats = await stat(sourcePath);
+  } catch {
+    return null;
+  }
+
+  let sourceBytes: Buffer | null = null;
+  const ext = path.extname(fileName);
+  const baseName = path.basename(fileName, ext);
+  const candidatePattern = new RegExp(
+    `^${baseName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:-\\d+)?${ext.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+    "i",
+  );
+
+  let entries: Array<{ name: string; isFile(): boolean }>;
+  try {
+    entries = await readdir(targetDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !candidatePattern.test(entry.name)) {
+      continue;
+    }
+
+    const candidatePath = path.join(targetDir, entry.name);
+    let candidateStats;
+    try {
+      candidateStats = await stat(candidatePath);
+    } catch {
+      continue;
+    }
+
+    if (candidateStats.size !== sourceStats.size) {
+      continue;
+    }
+
+    try {
+      sourceBytes ??= readFileSync(sourcePath);
+      const candidateBytes = readFileSync(candidatePath);
+      if (sourceBytes.equals(candidateBytes)) {
+        return candidatePath;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 async function relativePathWithinRoot(
   absolutePath: string,
   root: string,
@@ -3190,11 +3269,19 @@ async function importOpenClawGeneratedFile(
       path.relative(normalizedProjectRoot, normalizedSource),
     );
   } else {
-    const targetPath = await reserveUniqueProjectOutputPath(
+    const existingImportedPath = await findExistingImportedProjectOutput(
       projectRoot,
-      path.basename(sourcePath),
+      normalizedSource,
     );
-    await copyFile(sourcePath, targetPath);
+    const targetPath =
+      existingImportedPath
+      ?? (await reserveUniqueProjectOutputPath(
+        projectRoot,
+        path.basename(sourcePath),
+      ));
+    if (!existingImportedPath) {
+      await copyFile(sourcePath, targetPath);
+    }
     workspacePath = normalizeWorkspacePath(
       path.relative(projectRoot, targetPath),
     );
@@ -4119,6 +4206,8 @@ function buildOpenClawAuthoredArtifactOnlyRepairMessage(params: {
     "ScienceSwarm web task rules:",
     "- Produce only scientist-facing artifact content.",
     "- Do not mention internal tool, gateway, session, model, or subagent mechanics.",
+    "- Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    "- Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     "- Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
     "",
     "Revise-and-resubmit artifact rules:",
@@ -4180,27 +4269,46 @@ function buildArtifactVerificationFailureResponse(params: {
 const REQUESTED_ARTIFACT_CREATION_VERB_PATTERN =
   /\b(save|write|create|draft|export|produce|generate|materialize|store)\b/i;
 const REQUESTED_ARTIFACT_PATH_PATTERN =
-  /(?:^|[\s("'`])((?:\.\/)?(?:docs|results|figures|tables|data|analysis|reports|artifacts|manuscripts|papers|outputs)\/[^\s"'`<>]+?\.[A-Za-z0-9]{1,8})(?=$|[\s)"'`,.;!?])/gi;
+  /(?:^|[\s("'`*])((?:\.\/)?(?:docs|results|figures|tables|data|analysis|reports|artifacts|manuscripts|papers|outputs)\/[^\s"'`<>]+?\.[A-Za-z0-9]{1,8})(?=$|[\s)"'`*,.;!?])/gi;
+
+function isSentenceBoundaryCharacter(
+  message: string,
+  index: number,
+): boolean {
+  const char = message[index];
+  if (char === "\n") {
+    return true;
+  }
+  if (char !== "." && char !== "?" && char !== "!") {
+    return false;
+  }
+  if (index === message.length - 1) {
+    return true;
+  }
+  return /\s/.test(message[index + 1] ?? "");
+}
 
 function textSegmentAroundPath(
   message: string,
   pathStart: number,
   pathEnd: number,
 ): string {
-  const beforeBoundaries = [
-    message.lastIndexOf(".", pathStart - 1),
-    message.lastIndexOf("?", pathStart - 1),
-    message.lastIndexOf("!", pathStart - 1),
-    message.lastIndexOf("\n", pathStart - 1),
-  ];
-  const afterBoundaryCandidates = [".", "?", "!", "\n"]
-    .map((boundary) => message.indexOf(boundary, pathEnd))
-    .filter((index) => index >= 0);
-  const segmentStart = Math.max(...beforeBoundaries) + 1;
-  const segmentEnd =
-    afterBoundaryCandidates.length > 0
-      ? Math.min(...afterBoundaryCandidates)
-      : message.length;
+  let segmentStart = 0;
+  for (let index = pathStart - 1; index >= 0; index -= 1) {
+    if (isSentenceBoundaryCharacter(message, index)) {
+      segmentStart = index + 1;
+      break;
+    }
+  }
+
+  let segmentEnd = message.length;
+  for (let index = pathEnd; index < message.length; index += 1) {
+    if (isSentenceBoundaryCharacter(message, index)) {
+      segmentEnd = index;
+      break;
+    }
+  }
+
   return message.slice(segmentStart, segmentEnd);
 }
 
@@ -4269,59 +4377,85 @@ function inferredRequiredWorkspaceArtifactPaths(params: {
   return required;
 }
 
+function visibleWorkspaceCandidatesForRequestedArtifact(
+  workspacePath: string,
+): string[] {
+  const normalizedPath = normalizeWorkspacePath(workspacePath);
+  const fileName = path.posix.basename(normalizedPath);
+  const targetFolder = getTargetFolder(fileName);
+  const mappedPath = normalizeWorkspacePath(
+    path.posix.join(targetFolder, fileName),
+  );
+  return Array.from(new Set([normalizedPath, mappedPath]));
+}
+
+function findGeneratedFileForRequestedPath(
+  generatedFiles: ImportedGeneratedFile[],
+  requestedPath: string,
+): ImportedGeneratedFile | null {
+  const requestedCandidates = new Set(
+    visibleWorkspaceCandidatesForRequestedArtifact(requestedPath),
+  );
+  return (
+    generatedFiles.find((file) =>
+      requestedCandidates.has(normalizeWorkspacePath(file.workspacePath)),
+    ) ?? null
+  );
+}
+
+async function materializeRequestedWorkspaceArtifactImport(params: {
+  projectRoot: string;
+  workspacePath: string;
+  startedAtMs?: number;
+}): Promise<ImportedGeneratedFile | null> {
+  const normalizedRoot = path.resolve(params.projectRoot);
+
+  for (const candidateWorkspacePath of visibleWorkspaceCandidatesForRequestedArtifact(
+    params.workspacePath,
+  )) {
+    const absolutePath = path.resolve(params.projectRoot, candidateWorkspacePath);
+    if (
+      absolutePath !== normalizedRoot &&
+      !absolutePath.startsWith(`${normalizedRoot}${path.sep}`)
+    ) {
+      continue;
+    }
+
+    const fileStats = await stat(absolutePath).catch(() => null);
+    if (!fileStats || !fileStats.isFile() || fileStats.size === 0) {
+      continue;
+    }
+
+    if (
+      typeof params.startedAtMs === "number" &&
+      fileStats.mtimeMs + 1_000 < params.startedAtMs
+    ) {
+      continue;
+    }
+
+    return {
+      sourcePath: normalizeWorkspacePath(absolutePath),
+      workspacePath: candidateWorkspacePath,
+      createdAt: fileStats.mtime.toISOString(),
+    };
+  }
+
+  return null;
+}
+
 async function materializeFreshRequestedWorkspaceArtifactImport(params: {
   projectRoot: string;
   workspacePath: string;
   startedAtMs: number;
 }): Promise<ImportedGeneratedFile | null> {
-  const absolutePath = path.resolve(params.projectRoot, params.workspacePath);
-  const normalizedRoot = path.resolve(params.projectRoot);
-  if (
-    absolutePath !== normalizedRoot &&
-    !absolutePath.startsWith(`${normalizedRoot}${path.sep}`)
-  ) {
-    return null;
-  }
-
-  const fileStats = await stat(absolutePath).catch(() => null);
-  if (!fileStats || !fileStats.isFile() || fileStats.size === 0) {
-    return null;
-  }
-
-  if (fileStats.mtimeMs + 1000 < params.startedAtMs) {
-    return null;
-  }
-
-  return {
-    sourcePath: normalizeWorkspacePath(absolutePath),
-    workspacePath: params.workspacePath,
-    createdAt: fileStats.mtime.toISOString(),
-  };
+  return materializeRequestedWorkspaceArtifactImport(params);
 }
 
 async function materializeExistingWorkspaceArtifactImport(params: {
   projectRoot: string;
   workspacePath: string;
 }): Promise<ImportedGeneratedFile | null> {
-  const absolutePath = path.resolve(params.projectRoot, params.workspacePath);
-  const normalizedRoot = path.resolve(params.projectRoot);
-  if (
-    absolutePath !== normalizedRoot &&
-    !absolutePath.startsWith(`${normalizedRoot}${path.sep}`)
-  ) {
-    return null;
-  }
-
-  const fileStats = await stat(absolutePath).catch(() => null);
-  if (!fileStats || !fileStats.isFile() || fileStats.size === 0) {
-    return null;
-  }
-
-  return {
-    sourcePath: normalizeWorkspacePath(absolutePath),
-    workspacePath: params.workspacePath,
-    createdAt: fileStats.mtime.toISOString(),
-  };
+  return materializeRequestedWorkspaceArtifactImport(params);
 }
 
 function buildMissingRequestedArtifactRepairMessage(params: {
@@ -4516,8 +4650,12 @@ async function maybeRepairMissingRequestedArtifacts(params: {
   const missingPaths: string[] = [];
 
   for (const requestedPath of requestedPaths) {
-    if (generatedFiles.some((file) => file.workspacePath === requestedPath)) {
-      verifiedPaths.push(requestedPath);
+    const matchingGeneratedFile = findGeneratedFileForRequestedPath(
+      generatedFiles,
+      requestedPath,
+    );
+    if (matchingGeneratedFile) {
+      verifiedPaths.push(matchingGeneratedFile.workspacePath);
       continue;
     }
 
@@ -4537,7 +4675,7 @@ async function maybeRepairMissingRequestedArtifacts(params: {
         sessionId: params.sessionId,
         importedFiles: [existingArtifact],
       });
-      verifiedPaths.push(requestedPath);
+      verifiedPaths.push(existingArtifact.workspacePath);
       continue;
     }
 
@@ -4611,7 +4749,7 @@ async function maybeRepairMissingRequestedArtifacts(params: {
 
     const verifiedFile =
       authoredArtifact ??
-      generatedFiles.find((file) => file.workspacePath === requestedPath) ??
+      findGeneratedFileForRequestedPath(generatedFiles, requestedPath) ??
       (await materializeFreshRequestedWorkspaceArtifactImport({
         projectRoot,
         workspacePath: requestedPath,
@@ -4634,7 +4772,7 @@ async function maybeRepairMissingRequestedArtifacts(params: {
           importedFiles: [verifiedFile],
         });
       }
-      repairedPaths.push(requestedPath);
+      repairedPaths.push(verifiedFile.workspacePath);
     } else {
       stillMissing.push(requestedPath);
     }
@@ -6050,6 +6188,7 @@ async function importOpenClawOutputsFromMessages(params: {
   messages: Array<Record<string, unknown>>;
   projectId: string | null;
   workingDirectory: string | undefined;
+  startedAtMs?: number;
 }): Promise<{
   messages: Array<Record<string, unknown>>;
   generatedFiles: string[];
@@ -6079,10 +6218,13 @@ async function importOpenClawOutputsFromMessages(params: {
         projectId: params.projectId,
         workingDirectory: params.workingDirectory,
         startedAtMs:
-          typeof message.timestamp === "string" &&
-          !Number.isNaN(Date.parse(message.timestamp))
-            ? Date.parse(message.timestamp)
-            : Date.now(),
+          params.startedAtMs
+          ?? (
+            typeof message.timestamp === "string" &&
+            !Number.isNaN(Date.parse(message.timestamp))
+              ? Date.parse(message.timestamp)
+              : Date.now()
+          ),
         files: [],
         message: "",
         sessionId:
@@ -6103,9 +6245,11 @@ async function importOpenClawOutputsFromMessages(params: {
         });
       }
 
-      return imported.response === message.content
+      const sanitizedResponse =
+        sanitizeOpenClawUserVisibleResponse(imported.response);
+      return sanitizedResponse === message.content
         ? message
-        : { ...message, content: imported.response };
+        : { ...message, content: sanitizedResponse };
     }),
   );
 
@@ -6219,7 +6363,18 @@ function streamOpenClawResponse(params: {
           });
           const sendFinalEvent = async (payload: Record<string, unknown>) => {
             await thinkingTraceStreamer.flush();
-            sendEvent(payload);
+            const sanitizedPayload = { ...payload };
+            if (typeof sanitizedPayload.text === "string") {
+              sanitizedPayload.text = sanitizeOpenClawUserVisibleResponse(
+                sanitizedPayload.text,
+              );
+            }
+            if (typeof sanitizedPayload.thinking === "string") {
+              sanitizedPayload.thinking = sanitizeOpenClawUserVisibleResponse(
+                sanitizedPayload.thinking,
+              );
+            }
+            sendEvent(sanitizedPayload);
           };
           // Wrap the caller-provided sendToOpenClaw so any per-turn WS event
           // (tool start/result, text/lifecycle deltas) is forwarded to the
@@ -6759,7 +6914,7 @@ async function handleExplicitOpenClawSlashCommand(params: {
   });
   return Response.json(
     {
-      response: importedOutputs.response,
+      response: sanitizeOpenClawUserVisibleResponse(importedOutputs.response),
       conversationId: openClawConversationId,
       backend: "openclaw",
       mode: params.chatMode,
@@ -7217,7 +7372,9 @@ export async function handleUnifiedChatPost(
       if (fastRevisionOutputs) {
         return Response.json(
           {
-            response: fastRevisionOutputs.response,
+            response: sanitizeOpenClawUserVisibleResponse(
+              fastRevisionOutputs.response,
+            ),
             conversationId: openClawConversationId,
             backend: "openclaw",
             mode: chatMode,
@@ -7352,7 +7509,7 @@ export async function handleUnifiedChatPost(
 
       return Response.json(
         {
-          response: importedOutputs.response,
+          response: sanitizeOpenClawUserVisibleResponse(importedOutputs.response),
           thinking:
             (await readOpenClawThinkingTrace(openClawConversationId)) ?? undefined,
           conversationId: openClawConversationId,
@@ -7527,27 +7684,33 @@ export async function GET(request: Request) {
       return Response.json({ messages: [], backend: "none" });
     }
     try {
-      if (openClawConversationId) {
+      const polledConversationId =
+        openClawConversationId
+        ?? (await findLatestProjectOpenClawConversationId(projectId));
+      if (polledConversationId) {
         const { getConversationMessagesSince } = await import("@/lib/openclaw");
         const messages = await getConversationMessagesSince(
-          openClawConversationId,
+          polledConversationId,
           since,
         );
         const workingDirectory =
+          (await readOpenClawSessionWorkingDirectory(polledConversationId))
+          ??
           await resolveOpenClawWorkingDirectory(projectId);
         const imported = await importOpenClawOutputsFromMessages({
           messages: messages as unknown as Array<Record<string, unknown>>,
           projectId,
           workingDirectory,
+          startedAtMs: Date.parse(since),
         });
         return Response.json({
           messages: imported.messages,
           backend: "openclaw",
+          conversationId: polledConversationId,
           generatedFiles: imported.generatedFiles,
           generatedArtifacts: imported.generatedArtifacts,
         });
       }
-
       const { runOpenClaw } = await import("@/lib/openclaw/runner");
       const result = await runOpenClaw(
         ["sessions", "messages", "--json", "--limit", "20"],
@@ -7564,7 +7727,17 @@ export async function GET(request: Request) {
           m.channel !== "web" &&
           m.timestamp &&
           m.timestamp > since,
-      );
+      ).map((message: Record<string, unknown>) => {
+        const isUserMessage =
+          message.role === "user" || message.userId === "user";
+        return {
+          ...message,
+          content:
+            typeof message.content === "string" && !isUserMessage
+              ? sanitizeOpenClawUserVisibleResponse(message.content)
+              : message.content,
+        };
+      });
 
       return Response.json({ messages: crossChannel, backend: "openclaw" });
     } catch {

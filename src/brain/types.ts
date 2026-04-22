@@ -19,12 +19,32 @@ export type ContentType =
   | "web"
   | "voice"
   | "concept"
+  | "topic"
+  | "survey"
+  | "method"
   | "project"
   | "decision"
   | "task"
   | "artifact"
+  | "original_synthesis"
+  | "research_packet"
+  | "overnight_journal"
+  | "job_run"
   | "frontier_item"
   | "person";
+
+export type ResearchContentType =
+  | "concept"
+  | "topic"
+  | "survey"
+  | "method"
+  | "hypothesis"
+  | "original_synthesis"
+  | "research_packet"
+  | "overnight_journal"
+  | "job_run"
+  | "paper"
+  | "project";
 
 export type PARACategory = "projects" | "areas" | "resources" | "archives";
 
@@ -42,7 +62,24 @@ export type FrontierStatus = "staged" | "promoted" | "dismissed";
 
 export type CaptureChannel = "telegram" | "web" | "openclaw";
 
-export type CaptureKind = "note" | "observation" | "decision" | "hypothesis" | "task";
+export const CAPTURE_KINDS = [
+  "note",
+  "observation",
+  "decision",
+  "hypothesis",
+  "task",
+  "survey",
+  "method",
+  "original_synthesis",
+  "research_packet",
+  "overnight_journal",
+] as const;
+
+export type CaptureKind = (typeof CAPTURE_KINDS)[number];
+
+export function isCaptureKind(value: unknown): value is CaptureKind {
+  return typeof value === "string" && CAPTURE_KINDS.includes(value as CaptureKind);
+}
 
 export interface SourceRef {
   kind: "import" | "capture" | "external" | "artifact" | "conversation";
@@ -518,12 +555,15 @@ export interface ColdstartBriefing {
 
 export type SearchMode = "index" | "grep" | "qmd" | "list";
 export type SearchDetail = "low" | "medium" | "high";
+export type SearchProfile = "interactive" | "synthesis";
 
 export interface SearchInput {
   query: string;
   mode?: SearchMode;
   limit?: number;
   detail?: SearchDetail;
+  profile?: SearchProfile;
+  allowDegradedResults?: boolean;
 }
 
 export interface SearchResult {

@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowSquareOut, Brain, Database, SpinnerGap } from "@phosphor-icons/react";
 import { OpenClawSkillsBrowser } from "@/components/openclaw/skills-browser";
+import { InstalledMarketPluginsBrowser } from "@/components/skills/installed-market-browser";
 import { WorkspaceSkillsBrowser } from "@/components/skills/workspace-browser";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -63,7 +64,7 @@ type BrainArtifactState =
   | { status: "error"; slug: string; message: string };
 
 type GbrainView = "pages" | "skills";
-type GbrainSkillsCatalog = "workspace" | "openclaw";
+type GbrainSkillsCatalog = "workspace" | "openclaw" | "installed";
 
 function GbrainPageContent() {
   const router = useRouter();
@@ -72,7 +73,11 @@ function GbrainPageContent() {
   const requestedBrainSlug = searchParams.get("brain_slug");
   const requestedSkillSlug = normalizeSkillSlug(searchParams.get("skill"));
   const activeSkillsCatalog: GbrainSkillsCatalog =
-    searchParams.get("skills_catalog") === "openclaw" ? "openclaw" : "workspace";
+    searchParams.get("skills_catalog") === "openclaw"
+      ? "openclaw"
+      : searchParams.get("skills_catalog") === "installed"
+        ? "installed"
+        : "workspace";
   const activeProjectSlug = safeProjectSlugOrNull(projectSlugFromUrl);
   const activeView: GbrainView = searchParams.get("view") === "skills" ? "skills" : "pages";
   const [brainBootstrapState, setBrainBootstrapState] = useState<BrainBootstrapState>({ status: "loading" });
@@ -303,7 +308,9 @@ function GbrainPageContent() {
                 ? "Dream Cycle, search, and page inspection for your current project's gbrain."
                 : activeSkillsCatalog === "workspace"
                   ? "Curate host-neutral skills in this repo, keep some private, and sync them into OpenClaw, Claude Code, Codex, and other adapters."
-                  : "Inspect the generated OpenClaw adapter output that ScienceSwarm materializes from the canonical workspace skill source."}
+                  : activeSkillsCatalog === "openclaw"
+                    ? "Inspect the generated OpenClaw adapter output that ScienceSwarm materializes from the canonical workspace skill source."
+                    : "Inspect, install, and manage private third-party market plugin bundles that ScienceSwarm pins locally and projects into OpenClaw, Codex, and Claude Code without promoting them into the public catalog."}
             </p>
             <div className="mt-4 inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1">
               <button
@@ -379,7 +386,7 @@ function GbrainPageContent() {
                 Skills catalog
               </div>
               <p className="mt-1 text-sm text-muted">
-                The workspace catalog is the source of truth. The OpenClaw view shows one generated host projection.
+                The workspace catalog is the source of truth. Private market installs stay user-local and separate from the public catalog.
               </p>
             </div>
             <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1">
@@ -405,6 +412,17 @@ function GbrainPageContent() {
               >
                 OpenClaw
               </button>
+              <button
+                type="button"
+                onClick={() => handleSelectSkillsCatalog("installed")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  activeSkillsCatalog === "installed"
+                    ? "bg-white text-foreground shadow-sm"
+                    : "text-muted hover:text-foreground"
+                }`}
+              >
+                Installed
+              </button>
             </div>
           </div>
 
@@ -413,11 +431,16 @@ function GbrainPageContent() {
               selectedSkillSlug={requestedSkillSlug}
               onSelectSkill={handleSelectSkill}
             />
-          ) : (
+          ) : activeSkillsCatalog === "openclaw" ? (
             <OpenClawSkillsBrowser
               selectedSkillSlug={requestedSkillSlug}
               onSelectSkill={handleSelectSkill}
               radarStatus={brainBootstrapState.status === "ready" ? brainBootstrapState.radar : null}
+            />
+          ) : (
+            <InstalledMarketPluginsBrowser
+              selectedPluginId={requestedSkillSlug}
+              onSelectPlugin={handleSelectSkill}
             />
           )}
         </div>
@@ -561,7 +584,7 @@ function normalizeBrainArtifactSlug(slug: string | null | undefined): string | n
 function normalizeSkillSlug(slug: string | null | undefined): string | null {
   const trimmed = slug?.trim().toLowerCase();
   if (!trimmed) return null;
-  return /^[a-z0-9][a-z0-9-]*$/.test(trimmed) ? trimmed : null;
+  return /^[a-z0-9][a-z0-9._-]*$/.test(trimmed) ? trimmed : null;
 }
 
 function buildGbrainDashboardHref({
@@ -588,7 +611,14 @@ function buildGbrainDashboardHref({
   const params = new URLSearchParams(queryString ?? "");
   if (view === "skills") {
     params.set("view", "skills");
-    params.set("skills_catalog", skillsCatalog === "openclaw" ? "openclaw" : "workspace");
+    params.set(
+      "skills_catalog",
+      skillsCatalog === "openclaw"
+        ? "openclaw"
+        : skillsCatalog === "installed"
+          ? "installed"
+          : "workspace",
+    );
     if (nextSkillSlug) {
       params.set("skill", nextSkillSlug);
     } else {

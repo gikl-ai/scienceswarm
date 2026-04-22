@@ -171,4 +171,44 @@ describe("buildBrainMaintenancePlan", () => {
       automatable: false,
     });
   });
+
+  it("recommends a research-layout bridge when legacy homes remain", () => {
+    const plan = buildBrainMaintenancePlan(
+      makeReport({
+        score: 95,
+        brainScore: 95,
+        embedCoverage: 0.99,
+        issueCounts: {
+          stalePages: 0,
+          orphanPages: 0,
+          deadLinks: 0,
+          missingEmbeddings: 0,
+        },
+        embeddingGaps: 0,
+      }),
+      {
+        researchLayout: {
+          generatedAt: "2026-04-22T00:00:00.000Z",
+          legacyHomesDetected: 2,
+          legacyPagesDetected: 9,
+          bridgeableHomes: 2,
+          homes: [],
+          unmappedLegacyHomes: [],
+          warnings: [],
+        },
+      },
+    );
+
+    expect(plan.signals).toMatchObject({
+      legacyResearchHomes: 2,
+      legacyResearchPages: 9,
+    });
+    expect(plan.recommendations).toEqual([
+      expect.objectContaining({
+        id: "bridge-research-layout",
+        automatable: true,
+        approvalRequired: true,
+      }),
+    ]);
+  });
 });

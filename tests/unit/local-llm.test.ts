@@ -12,7 +12,7 @@ vi.mock("@/lib/runtime-saved-env", () => ({
   getCurrentLlmRuntimeEnv: vi.fn(() => ({ ollamaModel: "gemma4:latest" })),
 }));
 
-import { completeLocal, streamLocal } from "@/lib/local-llm";
+import { streamLocal } from "@/lib/local-llm";
 
 describe("local-llm", () => {
   beforeEach(() => {

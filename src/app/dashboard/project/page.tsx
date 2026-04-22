@@ -170,6 +170,8 @@ type BrainRadarStatus = {
   age_ms: number;
   stale: boolean;
   schedule_interval_ms: number;
+  briefing_slug?: string;
+  journal_slug?: string;
 };
 
 type BrainBootstrapState =
@@ -535,6 +537,20 @@ function parseExplicitCaptureIntent(
     { pattern: /^\s*decision\s*:\s*([\s\S]+)$/i, kind: "decision" },
     { pattern: /^\s*hypothesis\s*:\s*([\s\S]+)$/i, kind: "hypothesis" },
     { pattern: /^\s*(?:task|todo)\s*:\s*([\s\S]+)$/i, kind: "task" },
+    { pattern: /^\s*survey\s*:\s*([\s\S]+)$/i, kind: "survey" },
+    { pattern: /^\s*method\s*:\s*([\s\S]+)$/i, kind: "method" },
+    {
+      pattern: /^\s*(?:original\s+synthesis|synthesis)\s*:\s*([\s\S]+)$/i,
+      kind: "original_synthesis",
+    },
+    {
+      pattern: /^\s*(?:research\s+packet|packet)\s*:\s*([\s\S]+)$/i,
+      kind: "research_packet",
+    },
+    {
+      pattern: /^\s*(?:overnight\s+journal|journal)\s*:\s*([\s\S]+)$/i,
+      kind: "overnight_journal",
+    },
   ];
 
   for (const { pattern, kind, mode } of patterns) {
@@ -549,7 +565,20 @@ function parseExplicitCaptureIntent(
 }
 
 function formatCaptureKind(kind: CaptureKind): string {
-  return kind.slice(0, 1).toUpperCase() + kind.slice(1);
+  const labels: Record<CaptureKind, string> = {
+    note: "Note",
+    observation: "Observation",
+    decision: "Decision",
+    hypothesis: "Hypothesis",
+    task: "Task",
+    survey: "Survey",
+    method: "Method",
+    original_synthesis: "Original synthesis",
+    research_packet: "Research packet",
+    overnight_journal: "Overnight journal",
+  };
+
+  return labels[kind];
 }
 
 function isCaretOnFirstLine(element: HTMLTextAreaElement): boolean {

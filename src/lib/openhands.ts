@@ -1,5 +1,6 @@
 import { getOpenHandsUrl } from "@/lib/config/ports";
 import { resolveOpenHandsConversationModel } from "@/lib/runtime";
+import { getCurrentLlmRuntimeEnv } from "@/lib/runtime-saved-env";
 
 export interface ConversationStartRequest {
   message: string;
@@ -19,6 +20,13 @@ export interface Conversation {
 }
 
 export async function startConversation(req: ConversationStartRequest) {
+  const runtime = getCurrentLlmRuntimeEnv(process.env);
+  const resolvedConversationModel = resolveOpenHandsConversationModel({
+    LLM_PROVIDER: runtime.llmProvider,
+    LLM_MODEL: runtime.llmModel ?? undefined,
+    OLLAMA_MODEL: runtime.ollamaModel ?? undefined,
+  });
+
   // OpenHands 1.6 takes a request with `initial_message` populated,
   // but that path goes through `_construct_initial_message_with_plugin_params`
   // and the sandbox's start-conversation endpoint which does NOT
@@ -43,7 +51,7 @@ export async function startConversation(req: ConversationStartRequest) {
       selected_repository: req.repository || null,
       selected_branch: req.branch || "main",
       git_provider: req.repository ? "github" : null,
-      llm_model: req.model || resolveOpenHandsConversationModel(),
+      llm_model: req.model || resolvedConversationModel,
     }),
   });
 

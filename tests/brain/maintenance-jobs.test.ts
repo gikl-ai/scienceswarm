@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -194,5 +202,82 @@ describe("maintenance jobs", () => {
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
+  });
+
+  it("previews a research-layout bridge without moving legacy pages", async () => {
+    mkdirSync(join(root, "concepts"), { recursive: true });
+    mkdirSync(join(root, "wiki", "entities", "papers"), { recursive: true });
+    writeFileSync(join(root, "concepts", "rlhf.md"), "# RLHF\n", "utf-8");
+    writeFileSync(
+      join(root, "wiki", "entities", "papers", "smith-2026.md"),
+      "# Smith 2026\n",
+      "utf-8",
+    );
+
+    const job = await startMaintenanceJob({
+      config: makeConfig(),
+      action: "bridge-research-layout",
+      mode: "dry-run",
+    });
+
+    expect(job).toMatchObject({
+      action: "bridge-research-layout",
+      mode: "dry-run",
+      status: "completed",
+      result: {
+        metrics: {
+          legacyHomesDetected: 2,
+          bridgeableHomes: 2,
+        },
+      },
+    });
+    expect(existsSync(join(root, "topics", "README.md"))).toBe(false);
+    expect(existsSync(join(root, "papers", "README.md"))).toBe(false);
+  });
+
+  it("creates canonical README bridges after an approved research-layout preview", async () => {
+    const config = makeConfig();
+    mkdirSync(join(root, "concepts"), { recursive: true });
+    mkdirSync(join(root, "wiki", "entities", "papers"), { recursive: true });
+    writeFileSync(join(root, "concepts", "rlhf.md"), "# RLHF\n", "utf-8");
+    writeFileSync(
+      join(root, "wiki", "entities", "papers", "smith-2026.md"),
+      "# Smith 2026\n",
+      "utf-8",
+    );
+
+    const preview = await startMaintenanceJob({
+      config,
+      action: "bridge-research-layout",
+      mode: "dry-run",
+    });
+
+    const started = await startMaintenanceJob({
+      config,
+      action: "bridge-research-layout",
+      mode: "start",
+      previewJobId: preview.id,
+    });
+
+    expect(started.status).toBe("queued");
+    let completed = false;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const job = await readMaintenanceJob(started.id, root);
+      if (job?.status === "completed") {
+        expect(job.result?.metrics).toMatchObject({
+          createdReadmes: 2,
+        });
+        completed = true;
+        break;
+      }
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
+    }
+
+    expect(completed).toBe(true);
+    expect(existsSync(join(root, "topics", "README.md"))).toBe(true);
+    expect(existsSync(join(root, "papers", "README.md"))).toBe(true);
+    expect(readFileSync(join(root, "topics", "README.md"), "utf-8")).toContain(
+      "No files were moved.",
+    );
   });
 });

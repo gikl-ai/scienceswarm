@@ -104,6 +104,7 @@ async function main(): Promise<number> {
     report = {
       timestamp: new Date().toISOString(),
       mode,
+      journal_slug: result.journalSlug ?? undefined,
       pages_compiled: result.pagesCompiled,
       contradictions_found: result.contradictionsFound,
       backlinks_added: result.backlinksAdded,

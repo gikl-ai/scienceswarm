@@ -213,10 +213,12 @@ describe("runResearchRadarSkill — happy path", () => {
 
     const result = await runResearchRadarSkill(env);
 
-    // The briefing summary page was written under briefings/.
-    expect(captured.pages.length).toBe(1);
+    // The briefing summary page and overnight journal were both written.
+    expect(captured.pages.length).toBe(2);
     expect(captured.pages[0].slug).toMatch(/^briefings\/2026-04-13-radar-1$/);
     expect(captured.pages[0].title).toContain("Radar");
+    expect(captured.pages[1].slug).toMatch(/^journals\/2026-04-13-research-radar-radar-1$/);
+    expect(captured.pages[1].title).toContain("Research Radar Journal");
 
     // The single matched topic produced exactly one Timeline entry +
     // one back-link from the briefing to the concept page.
@@ -224,10 +226,20 @@ describe("runResearchRadarSkill — happy path", () => {
     expect(captured.timelineEntries[0].slug).toBe(
       "concepts/mechanistic-interpretability",
     );
-    expect(captured.links.length).toBe(1);
-    expect(captured.links[0].from).toBe("briefings/2026-04-13-radar-1");
-    expect(captured.links[0].to).toBe("concepts/mechanistic-interpretability");
-    expect(captured.links[0].linkType).toBe("supports");
+    expect(captured.links).toEqual(
+      expect.arrayContaining([
+        {
+          from: "briefings/2026-04-13-radar-1",
+          to: "concepts/mechanistic-interpretability",
+          linkType: "supports",
+        },
+        {
+          from: "journals/2026-04-13-research-radar-radar-1",
+          to: "briefings/2026-04-13-radar-1",
+          linkType: "supports",
+        },
+      ]),
+    );
 
     // Lifecycle: connected, schema initialized, disconnected.
     expect(captured.connected).toBe(true);
@@ -240,6 +252,8 @@ describe("runResearchRadarSkill — happy path", () => {
     expect(pointer.value!.concepts_processed).toBe(1);
     expect(pointer.value!.errors_count).toBe(0);
     expect(pointer.value!.schedule_interval_ms).toBeGreaterThan(0);
+    expect(pointer.value!.briefing_slug).toBe("briefings/2026-04-13-radar-1");
+    expect(pointer.value!.journal_slug).toBe("journals/2026-04-13-research-radar-radar-1");
 
     expect(result.errors).toEqual([]);
     expect(result.radars_processed).toBe(1);
@@ -451,11 +465,12 @@ describe("runResearchRadarSkill — partial failure path", () => {
 
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.errors[0]).toMatch(/addTimelineEntry/);
-    // The summary page WAS written before the failure.
-    expect(captured.pages.length).toBe(1);
+    // The summary page and journal were written before the concept-link failure.
+    expect(captured.pages.length).toBe(2);
     // Pointer still written, with errors_count reflecting the failure.
     expect(pointer.value).not.toBeNull();
     expect(pointer.value!.errors_count).toBeGreaterThan(0);
+    expect(pointer.value!.journal_slug).toBe("journals/2026-04-13-research-radar-radar-1");
     // Engine still cleaned up.
     expect(captured.disconnected).toBe(true);
   });

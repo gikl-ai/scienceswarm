@@ -31,11 +31,21 @@ The core system is:
 ## Key Features
 
 - Project-scoped imports for papers, notes, code, and datasets
+- Research-first brain setup that defaults new installs to the
+  `scientific_research` preset while still offering a
+  `generic_scientist` preset for broader workflows
 - A searchable `gbrain`-backed research memory that enriches chat with project
   context
+- Deterministic literature-packet runs across PubMed, arXiv, OpenAlex, and
+  Crossref, with durable `research_packet` and `overnight_journal` artifacts
 - Direct chat plus OpenClaw-routed chat when the agent runtime is available
 - OpenHands-backed execution for code and longer-running agent tasks
+- Dream Cycle and Research Radar overnight runs that leave auditable journal
+  artifacts in the brain
 - A reasoning workspace for critique, review, and structured audit flows
+- Private local installation of third-party market plugin bundles from pinned
+  upstream GitHub refs, with local OpenClaw, Codex, and Claude Code exposure
+  but no automatic promotion into the public ScienceSwarm catalog
 - Local-first setup with optional integrations for OpenAI, GitHub, Google,
   Slack, Jira, and Telegram
 
@@ -71,8 +81,13 @@ checkout path. Runtime state is separate: `SCIENCESWARM_DIR` is the local app-da
 Then open <http://localhost:3001/setup>.
 
 The setup flow initializes the local research store, verifies local runtimes,
-and can connect OpenClaw, OpenHands, Ollama, and Telegram when you want the
-full agent path.
+defaults new installs to the `scientific_research` brain preset, and can
+connect OpenClaw, OpenHands, Ollama, and Telegram when you want the full agent
+path. If you want the broader legacy-oriented layout instead, the setup UI also
+offers a `generic_scientist` preset. Existing brains are not auto-renamed; use
+the `bridge-research-layout` maintenance action to preview legacy `wiki/*`
+homes and optionally create non-destructive README bridges for the canonical
+research-first layout.
 
 ### Windows via WSL2
 
@@ -98,10 +113,41 @@ Important:
 
 ### First Use
 
-1. Complete `/setup`
+1. Complete `/setup` and keep the default `scientific_research` preset unless
+   you specifically want the broader `generic_scientist` layout
 2. Open `/dashboard/project`
 3. Import a folder of papers, notes, code, or datasets
 4. Start chatting with a project that already has context
+5. Run a literature packet from chat or MCP when you want a deterministic
+   multi-source landscape review with durable packet/journal outputs
+
+### Private Market Plugins
+
+ScienceSwarm keeps two distinct skill/plugin surfaces:
+
+- Repo-backed workspace skills under `skills/` are the canonical first-party
+  and public catalog authoring path.
+- Third-party market plugin installs are private and user-local by default.
+
+Use the dashboard Skills view and switch to the `Installed` catalog to install
+a third-party plugin bundle from GitHub by `repo`, `ref`, and bundle `path`
+such as `plugins/life-science-research`.
+
+ScienceSwarm first inspects the upstream bundle, records the requested ref plus
+resolved commit SHA, then stores a pinned private bundle snapshot under
+`SCIENCESWARM_DIR/market/plugins/<plugin>/bundle`. From that local snapshot it:
+
+- installs the bundle into the local OpenClaw state under
+  `SCIENCESWARM_DIR/openclaw`
+- projects bundled skills into repo-local `.codex/skills/`
+- projects bundled skills into repo-local `.claude/skills/`
+
+These installs are not added to `skills/public-index.json`, are not promoted
+into the public ScienceSwarm catalog automatically, and stay local by default.
+ScienceSwarm also exposes explicit `Inspect`, `Update from upstream`, and
+`Reinstall hosts` actions so provenance and trust stay visible instead of
+hidden behind a one-shot import. Third-party bundles may include scripts or
+other executable files, so review upstream sources before installing them.
 
 ### Frontend-Only Development
 

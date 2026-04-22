@@ -1,4 +1,5 @@
 import type { BrainHealthReport } from "./brain-health";
+import type { ResearchLayoutMigrationPreview } from "./research-migration";
 
 export type MaintenancePriority = "critical" | "high" | "medium" | "low";
 
@@ -15,6 +16,7 @@ export type MaintenanceActionId =
   | "repair-dead-links"
   | "extract-links"
   | "extract-timeline"
+  | "bridge-research-layout"
   | "configure-integrations"
   | "configure-sync"
   | "sync-from-repo"
@@ -31,6 +33,7 @@ export interface BrainMaintenanceIntegrationSignal {
 export interface BrainMaintenanceContext {
   integrations?: BrainMaintenanceIntegrationSignal[];
   syncConfigured?: boolean;
+  researchLayout?: ResearchLayoutMigrationPreview;
 }
 
 export interface BrainMaintenanceSignals {
@@ -47,6 +50,8 @@ export interface BrainMaintenanceSignals {
   deadLinks: number;
   missingEmbeddings: number;
   missingLinkCandidates: number;
+  legacyResearchHomes: number;
+  legacyResearchPages: number;
   unconfiguredIntegrations: string[];
   syncConfigured?: boolean;
   source: BrainHealthReport["source"];
@@ -81,6 +86,7 @@ export function buildBrainMaintenancePlan(
     deadLinkRecommendation(signals),
     linkExtractionRecommendation(signals),
     timelineExtractionRecommendation(signals),
+    researchLayoutRecommendation(signals),
     integrationRecommendation(signals),
     syncRecommendation(signals),
     stalePageRecommendation(signals),
@@ -125,6 +131,8 @@ function buildSignals(
     missingEmbeddings:
       issueCounts?.missingEmbeddings ?? report.embeddingGaps,
     missingLinkCandidates: report.missingLinks.length,
+    legacyResearchHomes: context.researchLayout?.legacyHomesDetected ?? 0,
+    legacyResearchPages: context.researchLayout?.legacyPagesDetected ?? 0,
     unconfiguredIntegrations,
     syncConfigured,
     source: report.source,
@@ -247,6 +255,27 @@ function integrationRecommendation(
       "Configure only the integrations that match the user's workflow, then use /api/brain/integrations for explicit sync.",
     approvalRequired: true,
     automatable: false,
+  };
+}
+
+function researchLayoutRecommendation(
+  signals: BrainMaintenanceSignals,
+): BrainMaintenanceRecommendation | null {
+  if (signals.legacyResearchHomes <= 0) {
+    return null;
+  }
+
+  return {
+    id: "bridge-research-layout",
+    priority: signals.legacyResearchHomes >= 3 ? "medium" : "low",
+    category: "operations",
+    title: "Bridge legacy research homes into the research-first layout",
+    rationale:
+      `${signals.legacyResearchHomes} legacy research home(s) still hold ${signals.legacyResearchPages} markdown page(s).`,
+    action:
+      "Run a ScienceSwarm dry-run research-layout bridge preview, then optionally create canonical README bridges without moving existing pages.",
+    approvalRequired: true,
+    automatable: true,
   };
 }
 

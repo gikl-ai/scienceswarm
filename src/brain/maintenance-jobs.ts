@@ -22,6 +22,10 @@ import {
   runRuntimeEmbed,
   runRuntimeExtract,
 } from "./stores/gbrain-runtime.mjs";
+import {
+  applyResearchLayoutBridge,
+  previewResearchLayoutMigration,
+} from "./research-migration";
 import { enqueueGbrainWrite } from "@/lib/gbrain/write-queue";
 import { resolveConfiguredPath } from "@/lib/scienceswarm-paths";
 import { readJsonFile, writeJsonFile } from "@/lib/state/atomic-json";
@@ -101,6 +105,7 @@ const VALID_ACTIONS = new Set<MaintenanceJobAction>([
   "repair-dead-links",
   "extract-links",
   "extract-timeline",
+  "bridge-research-layout",
   "configure-integrations",
   "configure-sync",
   "sync-from-repo",
@@ -112,6 +117,7 @@ const RUNNABLE_ACTIONS = new Set<MaintenanceJobAction>([
   "refresh-embeddings",
   "extract-links",
   "extract-timeline",
+  "bridge-research-layout",
   "sync-from-repo",
 ]);
 
@@ -287,6 +293,26 @@ async function executeMaintenanceJob(
   job: MaintenanceJobRecord,
   input: StartMaintenanceJobInput,
 ): Promise<MaintenanceJobResult> {
+  if (job.action === "bridge-research-layout") {
+    const preview = previewResearchLayoutMigration(input.config.root);
+    const result = applyResearchLayoutBridge(input.config.root, preview);
+    const summary =
+      result.createdReadmes > 0
+        ? `Created ${result.createdReadmes} research-layout bridge README(s) without moving legacy content.`
+        : "Research-layout bridge is already in place; no new README files were needed.";
+
+    return {
+      summary,
+      steps: [
+        "Scanned legacy research homes",
+        "Created canonical README bridges only where missing",
+        "Left all existing legacy pages in place",
+      ],
+      warnings: result.warnings,
+      metrics: { ...result },
+    };
+  }
+
   await ensureBrainStoreReady();
   const adapter = getBrainStore() as GbrainEngineAdapter;
   const engine = adapter.engine;
@@ -375,10 +401,27 @@ async function buildDryRunResult(
   action: MaintenanceJobAction,
   repoPath?: string,
 ): Promise<MaintenanceJobResult> {
+  if (action === "bridge-research-layout") {
+    const preview = previewResearchLayoutMigration(config.root);
+    return {
+      summary:
+        preview.legacyHomesDetected > 0
+          ? `Dry run found ${preview.legacyHomesDetected} legacy research home(s) with ${preview.legacyPagesDetected} markdown page(s).`
+          : "Dry run found no legacy research homes that need a bridge.",
+      steps: [
+        "Scan legacy research-first predecessor homes",
+        "Group them under canonical research-first homes",
+        "Create README bridges only after explicit approval",
+      ],
+      warnings: preview.warnings,
+      metrics: { ...preview },
+    };
+  }
+
   const report = await generateHealthReportWithGbrain(config);
   const plan = buildBrainMaintenancePlan(
     report,
-    buildScienceSwarmMaintenanceContext(report),
+    buildScienceSwarmMaintenanceContext(report, process.env, config.root),
   );
   const recommendation = plan.recommendations.find((item) => item.id === action);
 

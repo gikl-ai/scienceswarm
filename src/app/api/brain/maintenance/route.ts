@@ -41,7 +41,7 @@ export async function GET(request: Request) {
     return Response.json(
       buildBrainMaintenancePlan(
         report,
-        buildScienceSwarmMaintenanceContext(report),
+        buildScienceSwarmMaintenanceContext(report, process.env, config.root),
       ),
     );
   } catch (err) {
