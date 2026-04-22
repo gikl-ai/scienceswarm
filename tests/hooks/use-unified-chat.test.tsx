@@ -426,6 +426,94 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
+  it("does not POST the restored thread back to the server on the first hydration render", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: "conv-alpha",
+        conversationBackend: "openclaw",
+        messages: [
+          {
+            id: "user-1",
+            role: "user",
+            content: "remembered prompt",
+            timestamp: "2026-04-11T08:00:00.000Z",
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "Persisted answer",
+            timestamp: "2026-04-11T08:00:01.000Z",
+          },
+        ],
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: "conv-alpha",
+          conversationBackend: "openclaw",
+          messages: [
+            {
+              id: "server-user-1",
+              role: "user",
+              content: "remembered prompt",
+              timestamp: "2026-04-11T08:00:00.000Z",
+            },
+            {
+              id: "server-assistant-1",
+              role: "assistant",
+              content: "Persisted answer",
+              timestamp: "2026-04-11T08:00:01.000Z",
+            },
+          ],
+        });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          openclaw: "connected",
+          nanoclaw: "connected",
+          openhands: "disconnected",
+        });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-alpha");
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    });
+
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, init]) => url === "/api/chat/thread" && (init?.method ?? "GET") === "POST",
+      ),
+    ).toHaveLength(0);
+  });
+
   it("flushes the live project thread back to local storage on pagehide", async () => {
     const capturedBodies: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

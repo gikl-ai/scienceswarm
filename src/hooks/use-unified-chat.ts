@@ -2161,6 +2161,7 @@ export function useUnifiedChat(
   const lastPollRef = useRef<string>(new Date().toISOString());
   const hydratedChatKeyRef = useRef<string | null>(null);
   const pendingHydrationKeyRef = useRef<string | null>(null);
+  const skipHydrationPersistKeyRef = useRef<string | null>(null);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unloadPersistedRef = useRef(false);
   const liveMessagesRef = useRef<Message[]>(messages);
@@ -2182,74 +2183,30 @@ export function useUnifiedChat(
   const sendQueueProcessingRef = useRef(false);
   const scopedConversationId = getScopedConversationId(conversationId, conversationBackend, backend);
 
-  // These updater callbacks must stay pure. We mirror the computed next value
-  // into live refs so unload persistence can read the latest state
-  // synchronously, and the StrictMode regression tests rely on same prev =>
-  // same next remaining idempotent.
+  // Keep state updater callbacks pure. The layout effect below mirrors the
+  // committed state into live refs before passive cleanup reads them.
   const setMessages = useCallback((updater: SetStateAction<Message[]>) => {
-    setMessagesState((prev) => {
-      const next =
-        typeof updater === "function"
-          ? (updater as (messages: Message[]) => Message[])(prev)
-          : updater;
-      liveMessagesRef.current = next;
-      return next;
-    });
+    setMessagesState(updater);
   }, []);
 
   const setBackend = useCallback((updater: SetStateAction<Backend>) => {
-    setBackendState((prev) => {
-      const next =
-        typeof updater === "function"
-          ? (updater as (value: Backend) => Backend)(prev)
-          : updater;
-      liveBackendRef.current = next;
-      return next;
-    });
+    setBackendState(updater);
   }, []);
 
   const setChatMode = useCallback((updater: SetStateAction<ChatMode>) => {
-    setChatModeState((prev) => {
-      const next =
-        typeof updater === "function"
-          ? (updater as (value: ChatMode) => ChatMode)(prev)
-          : updater;
-      liveChatModeRef.current = next;
-      return next;
-    });
+    setChatModeState(updater);
   }, []);
 
   const setConversationId = useCallback((updater: SetStateAction<string | null>) => {
-    setConversationIdState((prev) => {
-      const next =
-        typeof updater === "function"
-          ? (updater as (value: string | null) => string | null)(prev)
-          : updater;
-      liveConversationIdRef.current = next;
-      return next;
-    });
+    setConversationIdState(updater);
   }, []);
 
   const setConversationBackend = useCallback((updater: SetStateAction<Backend | null>) => {
-    setConversationBackendState((prev) => {
-      const next =
-        typeof updater === "function"
-          ? (updater as (value: Backend | null) => Backend | null)(prev)
-          : updater;
-      liveConversationBackendRef.current = next;
-      return next;
-    });
+    setConversationBackendState(updater);
   }, []);
 
   const setArtifactProvenance = useCallback((updater: SetStateAction<ArtifactProvenanceEntry[]>) => {
-    setArtifactProvenanceState((prev) => {
-      const next =
-        typeof updater === "function"
-          ? (updater as (value: ArtifactProvenanceEntry[]) => ArtifactProvenanceEntry[])(prev)
-          : updater;
-      liveArtifactProvenanceRef.current = next;
-      return next;
-    });
+    setArtifactProvenanceState(updater);
   }, []);
 
   const applyMessagesUpdate = useCallback((updater: (messages: Message[]) => Message[]) => {
@@ -2316,6 +2273,7 @@ export function useUnifiedChat(
     projectVersionRef.current += 1;
     hydratedChatKeyRef.current = null;
     pendingHydrationKeyRef.current = storageKey;
+    skipHydrationPersistKeyRef.current = storageKey;
     const hydratedMessages = materializeMessages(projectName, restored);
     const restoredBackend: Backend = "openclaw";
     const restoredChatMode: ChatMode =
@@ -2386,6 +2344,10 @@ export function useUnifiedChat(
   useEffect(() => {
     const storageKey = getChatStorageKey(projectName);
     if (hydratedChatKeyRef.current !== storageKey) {
+      return;
+    }
+    if (skipHydrationPersistKeyRef.current === storageKey) {
+      skipHydrationPersistKeyRef.current = null;
       return;
     }
     persistChat(projectName, messages, conversationId, conversationBackend, artifactProvenance);
