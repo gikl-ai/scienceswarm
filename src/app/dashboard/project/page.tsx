@@ -1075,15 +1075,14 @@ function LazyFileCard({
     }
 
     let cancelled = false;
-    const restoredGbrainTarget = extractGbrainPreviewTarget(filePath);
     setPreview({
       status: "loading",
       path: filePath,
-      source: restoredGbrainTarget ? "gbrain" : "workspace",
+      source: gbrainTarget ? "gbrain" : "workspace",
     });
 
-    if (restoredGbrainTarget) {
-      void loadGbrainPreviewState(restoredGbrainTarget).then((nextPreview) => {
+    if (gbrainTarget) {
+      void loadGbrainPreviewState(gbrainTarget).then((nextPreview) => {
         if (cancelled) return;
         setPreview(nextPreview);
       });
