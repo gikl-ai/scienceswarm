@@ -765,6 +765,167 @@ function normalizeBrainArtifactSlug(
   return trimmed.replace(/\.md$/i, "");
 }
 
+interface GbrainPreviewTarget {
+  path: string;
+  slug: string;
+  fallbackName: string;
+}
+
+function extractGbrainPreviewTarget(
+  path: string,
+): GbrainPreviewTarget | null {
+  const normalized = path.trim();
+  const markerIndex = normalized.lastIndexOf("gbrain:");
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  const slug = normalized
+    .slice(markerIndex + "gbrain:".length)
+    .trim()
+    .replace(/^\/+/, "");
+  if (!slug) {
+    return null;
+  }
+
+  const fallbackName =
+    normalized.split("/").pop() || slug.split("/").pop() || slug;
+  return {
+    path: normalized,
+    slug,
+    fallbackName,
+  };
+}
+
+function buildSyntheticGbrainFileNode(path: string): FileNode | null {
+  const target = extractGbrainPreviewTarget(path);
+  if (!target) {
+    return null;
+  }
+
+  return {
+    name: target.fallbackName,
+    type: "file",
+    source: "gbrain",
+    slug: target.slug,
+    icon: "\uD83E\uDDE0",
+  };
+}
+
+async function loadGbrainPreviewState(
+  target: GbrainPreviewTarget,
+): Promise<FilePreviewState> {
+  try {
+    const readRes = await fetch(
+      `/api/brain/read?path=${encodeURIComponent(target.slug)}`,
+    );
+    if (readRes.ok) {
+      const compiledPage = (await readRes.json()) as CompiledPageRead;
+      const hasCompiledPayload =
+        typeof compiledPage.path === "string" &&
+        (typeof compiledPage.compiled_truth === "string" ||
+          compiledPage.frontmatter !== undefined ||
+          Array.isArray(compiledPage.timeline) ||
+          Array.isArray(compiledPage.links) ||
+          Array.isArray(compiledPage.backlinks));
+      if (hasCompiledPayload) {
+        const compiledContent =
+          compiledPage.compiled_truth ?? compiledPage.content ?? "";
+        return {
+          status: "ready",
+          path: target.path,
+          source: "gbrain",
+          kind: "markdown",
+          content: compiledContent,
+          mime: "text/markdown",
+          editable: false,
+          compiledPage,
+        };
+      }
+    }
+  } catch {
+    // Fall through to file-ref rendering.
+  }
+
+  const brainFileUrl = `/api/brain/file?slug=${encodeURIComponent(target.slug)}`;
+
+  try {
+    const metaRes = await fetch(`${brainFileUrl}&metadata=1`);
+    if (metaRes.ok) {
+      const meta = (await metaRes.json()) as {
+        mime?: string;
+        source_filename?: string;
+        size?: number;
+      };
+      const kind = classifyFile(
+        meta.source_filename ?? target.fallbackName,
+        meta.mime,
+      );
+
+      if (isRawRenderableKind(kind)) {
+        return {
+          status: "ready",
+          path: target.path,
+          source: "gbrain",
+          kind,
+          rawUrl: brainFileUrl,
+          mime: meta.mime,
+          sizeBytes: meta.size,
+          editable: false,
+        };
+      }
+
+      if (shouldLoadAsText(kind)) {
+        const rawRes = await fetch(brainFileUrl);
+        if (rawRes.ok) {
+          return {
+            status: "ready",
+            path: target.path,
+            source: "gbrain",
+            kind,
+            content: await rawRes.text(),
+            mime: meta.mime,
+            sizeBytes: meta.size,
+            editable: false,
+          };
+        }
+      }
+    }
+  } catch {
+    // Fall through to page content.
+  }
+
+  try {
+    const pageRes = await fetch(
+      `/api/brain/page?slug=${encodeURIComponent(target.slug)}`,
+    );
+    if (pageRes.ok) {
+      const pageData = (await pageRes.json()) as { content?: string };
+      if (typeof pageData.content === "string") {
+        return {
+          status: "ready",
+          path: target.path,
+          source: "gbrain",
+          kind: "markdown",
+          content: pageData.content,
+          mime: "text/markdown",
+          editable: false,
+        };
+      }
+    }
+  } catch {
+    // Fall through.
+  }
+
+  return {
+    status: "error",
+    path: target.path,
+    source: "gbrain",
+    message: `Failed to load ${target.slug}.`,
+    retryable: true,
+  };
+}
+
 function buildActiveCompiledPageContext(
   preview: FilePreviewState,
 ): string | null {
@@ -898,10 +1059,11 @@ function LazyFileCard({
   onSaveContent: (content: string) => Promise<void>;
   onNavigateBrainPage: (slug: string) => void;
 }) {
+  const gbrainTarget = extractGbrainPreviewTarget(filePath);
   const [preview, setPreview] = useState<FilePreviewState>({
     status: "loading",
     path: filePath,
-    source: "workspace",
+    source: gbrainTarget ? "gbrain" : "workspace",
   });
 
   useEffect(() => {
@@ -914,6 +1076,23 @@ function LazyFileCard({
     }
 
     let cancelled = false;
+    const restoredGbrainTarget = extractGbrainPreviewTarget(filePath);
+    setPreview({
+      status: "loading",
+      path: filePath,
+      source: restoredGbrainTarget ? "gbrain" : "workspace",
+    });
+
+    if (restoredGbrainTarget) {
+      void loadGbrainPreviewState(restoredGbrainTarget).then((nextPreview) => {
+        if (cancelled) return;
+        setPreview(nextPreview);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const kind = classifyFile(filePath);
 
     // For raw-renderable files (images, PDFs), we can resolve immediately
@@ -2214,8 +2393,10 @@ function ProjectPageContent() {
       node?: FileNode,
       options: { forceReload?: boolean; appendPreviewMessage?: boolean } = {},
     ) => {
+      const resolvedNode =
+        node ?? buildSyntheticGbrainFileNode(path) ?? undefined;
       const source: WorkspacePreviewSource =
-        node?.source === "gbrain" ? "gbrain" : "workspace";
+        resolvedNode?.source === "gbrain" ? "gbrain" : "workspace";
       const requestSeq = previewRequestSeqRef.current + 1;
       previewRequestSeqRef.current = requestSeq;
       const appendPreviewMessage = options.appendPreviewMessage !== false;
@@ -2229,7 +2410,7 @@ function ProjectPageContent() {
         setFilePreview(next);
       };
 
-      setSelectedFileNode(node ?? null);
+      setSelectedFileNode(resolvedNode ?? null);
       const renderFilePreviewInChat =
         filePreviewLocationRef.current === "chat-pane";
 
@@ -2297,121 +2478,17 @@ function ProjectPageContent() {
       setActiveTab("editor");
 
       // ── gbrain-sourced nodes: prefer compiled-page read, then raw file refs ──
-      if (node?.source === "gbrain" && node.slug) {
-        try {
-          const readRes = await fetch(
-            `/api/brain/read?path=${encodeURIComponent(node.slug)}`,
-          );
-          if (readRes.ok) {
-            const compiledPage = (await readRes.json()) as CompiledPageRead;
-            const hasCompiledPayload =
-              typeof compiledPage.path === "string" &&
-              (typeof compiledPage.compiled_truth === "string" ||
-                compiledPage.frontmatter !== undefined ||
-                Array.isArray(compiledPage.timeline) ||
-                Array.isArray(compiledPage.links) ||
-                Array.isArray(compiledPage.backlinks));
-            if (hasCompiledPayload) {
-              const compiledContent =
-                compiledPage.compiled_truth ?? compiledPage.content ?? "";
-              applyPreview({
-                status: "ready",
-                path,
-                source: "gbrain",
-                kind: "markdown",
-                content: compiledContent,
-                mime: "text/markdown",
-                editable: false,
-                compiledPage,
-              });
-              return;
-            }
-          }
-        } catch {
-          // Fall through to file-ref rendering.
-        }
-
-        const brainFileUrl = `/api/brain/file?slug=${encodeURIComponent(node.slug)}`;
-        let meta: {
-          mime?: string;
-          source_filename?: string;
-          size?: number;
-        } | null = null;
-        try {
-          const metaRes = await fetch(`${brainFileUrl}&metadata=1`);
-          if (metaRes.ok) {
-            meta = (await metaRes.json()) as {
-              mime?: string;
-              source_filename?: string;
-              size?: number;
-            };
-            const kind = classifyFile(
-              meta?.source_filename ?? node.name,
-              meta?.mime,
-            );
-            if (isRawRenderableKind(kind)) {
-              applyPreview({
-                status: "ready",
-                path,
-                source: "gbrain",
-                kind,
-                rawUrl: brainFileUrl,
-                mime: meta?.mime,
-                sizeBytes: meta?.size,
-                editable: false,
-              });
-              return;
-            }
-            if (shouldLoadAsText(kind)) {
-              const rawRes = await fetch(brainFileUrl);
-              if (rawRes.ok) {
-                applyPreview({
-                  status: "ready",
-                  path,
-                  source: "gbrain",
-                  kind,
-                  content: await rawRes.text(),
-                  mime: meta?.mime,
-                  sizeBytes: meta?.size,
-                  editable: false,
-                });
-                return;
-              }
-            }
-          }
-        } catch {
-          // Fall through to page content.
-        }
-        // For non-binary types, load the page markdown body.
-        try {
-          const pageRes = await fetch(
-            `/api/brain/page?slug=${encodeURIComponent(node.slug)}`,
-          );
-          if (pageRes.ok) {
-            const pageData = (await pageRes.json()) as { content?: string };
-            if (typeof pageData.content === "string") {
-              applyPreview({
-                status: "ready",
-                path,
-                source: "gbrain",
-                kind: "markdown",
-                content: pageData.content,
-                mime: "text/markdown",
-                editable: false,
-              });
-              return;
-            }
-          }
-        } catch {
-          // Fall through.
-        }
-        applyPreview({
-          status: "error",
-          path,
-          source: "gbrain",
-          message: `Failed to load ${node.slug}.`,
-          retryable: true,
-        });
+      if (resolvedNode?.source === "gbrain" && resolvedNode.slug) {
+        applyPreview(
+          await loadGbrainPreviewState({
+            path,
+            slug: resolvedNode.slug,
+            fallbackName:
+              resolvedNode.name ||
+              path.split("/").pop() ||
+              resolvedNode.slug,
+          }),
+        );
         return;
       }
 
