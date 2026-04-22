@@ -1,5 +1,5 @@
 import path from "node:path";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -441,6 +441,54 @@ describe("sendAgentMessage output sanitization", () => {
     expect(options?.env?.OPENCLAW_CONFIG_PATH).toBe(`${root}/openclaw/openclaw.json`);
   });
 
+  it("uses the gateway for web chat sessions even when cwd is provided, and records session cwd metadata", async () => {
+    const root = mkdtempSync(
+      path.join(tmpdir(), "scienceswarm-openclaw-web-session-"),
+    );
+    vi.stubEnv("SCIENCESWARM_DIR", root);
+    sendMessageViaGatewayMock.mockReset();
+    sendMessageViaGatewayMock.mockResolvedValueOnce({
+      text: "ws web ok",
+      events: [],
+    });
+
+    await expect(
+      sendAgentMessage("Explain", {
+        session: "web:test:gateway-web",
+        channel: "web",
+        cwd: path.join(root, "projects", "project-alpha"),
+      }),
+    ).resolves.toBe("ws web ok");
+
+    expect(sendMessageViaGatewayMock).toHaveBeenCalledWith(
+      "web:test:gateway-web",
+      "Explain",
+      expect.objectContaining({
+        timeoutMs: 600_000,
+      }),
+    );
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(
+      readFileSync(
+        path.join(
+          root,
+          "openclaw",
+          "agents",
+          "main",
+          "sessions",
+          "web:test:gateway-web.jsonl",
+        ),
+        "utf8",
+      ),
+    ).toContain(
+      JSON.stringify({
+        type: "session",
+        id: "web:test:gateway-web",
+        cwd: path.join(root, "projects", "project-alpha"),
+      }),
+    );
+  });
+
   it("falls back to pre-marker text when a trailing marker has no content", async () => {
     mockExecFile("The chart is ready at results/r3_chart.svg.\n<channel|>\n");
 
@@ -506,6 +554,23 @@ describe("sendAgentMessage output sanitization", () => {
     ).resolves.toBe("fallback worked");
 
     expect(execFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT fall back to the CLI on a pre-ACK gateway failure for web chat sessions", async () => {
+    sendMessageViaGatewayMock.mockReset();
+    sendMessageViaGatewayMock.mockRejectedValueOnce(
+      new Error("mocked: gateway unreachable"),
+    );
+
+    await expect(
+      sendAgentMessage("Hello", {
+        session: "web:test:web-only-no-cli-fallback",
+        channel: "web",
+        cwd: "/tmp/project-alpha",
+      }),
+    ).rejects.toThrow("gateway unreachable");
+
+    expect(execFileMock).not.toHaveBeenCalled();
   });
 });
 
