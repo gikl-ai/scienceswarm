@@ -132,6 +132,33 @@ describe("runtime host path mapping and artifact import", () => {
     });
   });
 
+  it("rejects relative paths for local-absolute artifact imports", async () => {
+    const mapper = createRuntimePathMapper({
+      projectId: "project-alpha",
+      hostId: "openhands",
+      projectRoot: path.join(os.tmpdir(), "project-alpha"),
+      hostWorkspaceRoot: "/workspace/project-alpha",
+    });
+
+    await expect(
+      validateRuntimeArtifactImport({
+        projectId: "project-alpha",
+        sourceHostId: "openhands",
+        sourceSessionId: "session-1",
+        sourcePath: "relative/summary.md",
+        sourcePathKind: "local-absolute",
+        importReason: "user-selected-external-path",
+        approvalState: "approved",
+        allowedRoots: [path.join(os.tmpdir(), "project-alpha")],
+        pathMapper: mapper,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      approvalRequired: false,
+      reason: "invalid-path",
+    });
+  });
+
   it("preserves host, session, path, and provenance on artifact records", () => {
     const record = createRuntimeArtifactRecord({
       projectId: "project-alpha",

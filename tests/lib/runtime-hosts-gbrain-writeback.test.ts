@@ -144,6 +144,42 @@ describe("runtime gbrain writeback", () => {
     ]);
   });
 
+  it("falls back to a generated slug when artifact gbrainSlug is blank", async () => {
+    const writes: Array<{ slug: string; content: string }> = [];
+    const gbrain: GbrainClient = {
+      async putPage(slug, content) {
+        writes.push({ slug, content });
+        return { stdout: "ok", stderr: "" };
+      },
+      async linkPages() {
+        return { stdout: "ok", stderr: "" };
+      },
+    };
+
+    const result = await writeRuntimeArtifactsToGbrain({
+      projectId: "project-alpha",
+      runtimeSessionId: "session-1",
+      hostId: "openhands",
+      uploadedBy: "@tester",
+      artifacts: [{ ...artifact, gbrainSlug: "   " }],
+      provenance: {
+        runtimeSessionId: "session-1",
+        hostId: "openhands",
+        sourceArtifactId: "artifact-1",
+        promptHash: "prompt-hash-1",
+        inputFileRefs: [],
+        approvalState: "approved",
+      },
+      gbrain,
+    });
+
+    expect(result.created[0]).toEqual({
+      artifactId: "artifact-1",
+      slug: "runtime-openhands-session-1-results-summary-md",
+    });
+    expect(writes[0].slug).toBe("runtime-openhands-session-1-results-summary-md");
+  });
+
   it("documents that Track 1 session statuses do not yet carry literal writeback states", () => {
     expect(runtimeSessionSupportsNativeWritebackStatuses()).toBe(false);
   });

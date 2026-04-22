@@ -220,7 +220,7 @@ export async function writeRuntimeArtifactsToGbrain(
   }
 
   for (const artifact of errors.length === 0 ? input.artifacts : []) {
-    const slug = artifact.gbrainSlug ?? runtimeArtifactSlug(artifact);
+    const slug = artifact.gbrainSlug?.trim() || runtimeArtifactSlug(artifact);
     try {
       await gbrain.putPage(
         slug,

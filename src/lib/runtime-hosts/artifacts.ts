@@ -151,6 +151,17 @@ function mapRequestPath(input: ValidateRuntimeArtifactImportInput):
         external: false,
       };
     }
+    if (!path.isAbsolute(input.sourcePath)) {
+      return {
+        error: {
+          ok: false,
+          approvalRequired: false,
+          reason: "invalid-path",
+          detail: "Local artifact import paths must be absolute.",
+          request: input,
+        },
+      };
+    }
     const localAbsolutePath = path.resolve(input.sourcePath);
     try {
       return {

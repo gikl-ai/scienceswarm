@@ -155,6 +155,57 @@ describe("OpenHands runtime host adapter", () => {
     ]);
   });
 
+  it("resolves runtime session ids to OpenHands conversation ids for control APIs", async () => {
+    const calls: string[] = [];
+    const adapter = createOpenHandsRuntimeHostAdapter({
+      client: {
+        async startConversation() {
+          return { id: "native-conversation-1" };
+        },
+        async queuePendingMessage() {},
+        async cancelConversation(conversationId) {
+          calls.push(`cancel:${conversationId}`);
+          return { sessionId: conversationId, cancelled: true };
+        },
+        async getEvents(conversationId) {
+          calls.push(`events:${conversationId}`);
+          return [];
+        },
+        async listFiles(conversationId) {
+          calls.push(`files:${conversationId}`);
+          return [];
+        },
+      },
+    });
+
+    const session = await adapter.executeTask({
+      hostId: "openhands",
+      projectId: "project-alpha",
+      conversationId: null,
+      mode: "task",
+      prompt: "Create a results summary",
+      inputFileRefs: [],
+      dataIncluded: preview.dataIncluded,
+      approvalState: "approved",
+      preview,
+    });
+
+    await expect(adapter.cancel(session.id)).resolves.toEqual({
+      sessionId: session.id,
+      cancelled: true,
+    });
+    for await (const _event of adapter.streamEvents(session.id)) {
+      // Exhaust the iterable to force the client call.
+    }
+    await adapter.artifactImportHints(session.id);
+
+    expect(calls).toEqual([
+      "cancel:native-conversation-1",
+      "events:native-conversation-1",
+      "files:native-conversation-1",
+    ]);
+  });
+
   it("returns artifact import hints for files under the OpenHands workspace root", async () => {
     const adapter = createOpenHandsRuntimeHostAdapter({
       projectId: "project-alpha",

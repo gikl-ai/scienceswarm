@@ -331,7 +331,12 @@ export class OpenHandsRuntimeHostAdapter implements ResearchRuntimeHost {
         detail: "OpenHands cancellation is not exposed by the current client boundary.",
       };
     }
-    return this.client.cancelConversation(sessionId);
+    const conversationId = this.conversationIdForRuntimeSession(sessionId);
+    const result = await this.client.cancelConversation(conversationId);
+    return {
+      ...result,
+      sessionId,
+    };
   }
 
   async listSessions(projectId: string): Promise<RuntimeSessionRecord[]> {
@@ -349,7 +354,8 @@ export class OpenHandsRuntimeHostAdapter implements ResearchRuntimeHost {
     const getEvents = this.client.getEvents ?? defaults.getEvents;
     if (!getEvents) return;
 
-    const rawEvents = await getEvents(sessionId, 50, "TIMESTAMP");
+    const conversationId = this.conversationIdForRuntimeSession(sessionId);
+    const rawEvents = await getEvents(conversationId, 50, "TIMESTAMP");
     const extractAgentMessageText = this.client.extractAgentMessageText
       ?? defaults.extractAgentMessageText;
     for (const [index, event] of rawEvents.entries()) {
@@ -380,7 +386,8 @@ export class OpenHandsRuntimeHostAdapter implements ResearchRuntimeHost {
       projectRoot: this.projectRoot,
       hostWorkspaceRoot: this.hostWorkspaceRoot,
     });
-    const files = unwrapFileList(await listFiles(sessionId, this.hostWorkspaceRoot));
+    const conversationId = this.conversationIdForRuntimeSession(sessionId);
+    const files = unwrapFileList(await listFiles(conversationId, this.hostWorkspaceRoot));
     const hints: ArtifactImportRequest[] = [];
 
     for (const entry of files) {
@@ -407,6 +414,17 @@ export class OpenHandsRuntimeHostAdapter implements ResearchRuntimeHost {
     }
 
     return hints;
+  }
+
+  private conversationIdForRuntimeSession(sessionId: string): string {
+    const session = this.sessionStore.getSession(sessionId);
+    if (
+      session?.conversationId
+      && session.conversationId.trim().length > 0
+    ) {
+      return session.conversationId;
+    }
+    return sessionId;
   }
 }
 
