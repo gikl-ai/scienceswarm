@@ -90,6 +90,7 @@ import {
   rewriteProjectRootMentions,
   writeBackOpenClawGeneratedFiles,
 } from "@/lib/openclaw/gbrain-writeback";
+import { formatOpenClawContextOverflowMessage } from "@/lib/openclaw/error-messages";
 import { sanitizeOpenClawUserVisibleResponse } from "@/lib/openclaw/response-sanitizer";
 import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
 import { listScienceSwarmOpenClawSlashCommandSkills } from "@/lib/openclaw/skill-registry";
@@ -2657,11 +2658,7 @@ function buildOpenClawVisibleFailureResponse(value: unknown): string | null {
   }
 
   if (lower.includes("context overflow") || lower.includes("prompt too large")) {
-    return [
-      "ScienceSwarm could not complete this request because the research agent context became too large for the current turn.",
-      "Your uploaded files and existing artifacts are still preserved in the workspace.",
-      "Start a fresh project chat or retry after removing extra attached context.",
-    ].join("\n\n");
+    return formatOpenClawContextOverflowMessage();
   }
 
   if (/empty response/i.test(detail)) {
