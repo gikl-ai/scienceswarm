@@ -5,7 +5,10 @@ import type { LLMClient } from "@/brain/llm";
 import {
   saveProjectArtifact,
 } from "@/lib/workspace-manager";
-import { getScienceSwarmProjectRoot } from "@/lib/scienceswarm-paths";
+import {
+  getScienceSwarmProjectRoot,
+  getScienceSwarmProjectsRoot,
+} from "@/lib/scienceswarm-paths";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
 const TABLE_EXTENSIONS = new Set([".csv", ".tsv"]);
@@ -115,6 +118,8 @@ export async function interpretMultimodalResultPacket(input: {
     title,
     content: artifactBody,
     fileName: `${slugifyTitle(title)}.md`,
+    root: getScienceSwarmProjectsRoot(),
+    returnPathBase: "project",
   });
 
   const response = [
