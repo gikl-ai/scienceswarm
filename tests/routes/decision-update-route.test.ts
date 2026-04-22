@@ -108,4 +108,20 @@ describe("decision update route", () => {
     });
     expect(mocks.putPage).not.toHaveBeenCalled();
   });
+
+  it("rejects invalid project slugs with a clean 400", async () => {
+    const { POST } = await import("@/app/api/brain/decision-update/route");
+    const response = await POST(request({
+      slug: "project-alpha-decision",
+      project: "../project-alpha",
+      content: "Attempted update.",
+      sourceRefs: [],
+    }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "project must be a safe bare slug",
+    });
+    expect(mocks.putPage).not.toHaveBeenCalled();
+  });
 });

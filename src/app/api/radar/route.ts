@@ -9,13 +9,10 @@
 import { getActiveRadar, createRadar, updateRadar } from "@/lib/radar/store"
 import { defaultSourcesForTopics } from "@/lib/radar/default-sources"
 import { isLocalRequest } from "@/lib/local-guard"
-
-function getStateDir(): string {
-  return process.env.RADAR_STATE_DIR || process.env.BRAIN_ROOT || "state"
-}
+import { getRadarStateDir } from "@/lib/radar/state-dir"
 
 export async function GET(_request: Request): Promise<Response> {
-  const stateDir = getStateDir()
+  const stateDir = getRadarStateDir()
   const radar = await getActiveRadar(stateDir)
 
   if (!radar) {
@@ -34,7 +31,7 @@ export async function POST(request: Request): Promise<Response> {
     const body = await request.json()
     const { prompt, topics, sources, schedule, channels } = body
 
-    const stateDir = getStateDir()
+    const stateDir = getRadarStateDir()
 
     let radarTopics = topics
     let radarSources = sources
@@ -83,7 +80,7 @@ export async function PATCH(request: Request): Promise<Response> {
       return Response.json({ error: "radarId is required" }, { status: 400 })
     }
 
-    const stateDir = getStateDir()
+    const stateDir = getRadarStateDir()
     const updated = await updateRadar(stateDir, radarId, updates)
 
     return Response.json(updated)

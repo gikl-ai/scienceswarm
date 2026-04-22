@@ -7,6 +7,7 @@ import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 import { updateProjectManifest } from "@/lib/state/project-manifests";
 import { saveProjectArtifact, slugifyWorkspaceSegment } from "@/lib/workspace-manager";
+import { getScienceSwarmProjectsRoot } from "@/lib/scienceswarm-paths";
 import type { ArtifactProvenanceEntry } from "@/lib/artifact-provenance";
 import type { ProjectManifest } from "@/brain/types";
 
@@ -45,6 +46,8 @@ export async function persistGeneratedProjectArtifact(
     title: input.title,
     content: input.content,
     fileName: input.workspaceFileName,
+    root: getScienceSwarmProjectsRoot(),
+    returnPathBase: "project",
     timestamp: now,
   });
 
