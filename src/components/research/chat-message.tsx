@@ -656,6 +656,7 @@ function renderContent(content: string, projectId: string) {
               src={src}
               title={filePath}
               className="w-full min-w-0 h-[80vh] min-h-[600px] rounded-lg border border-border bg-white"
+              sandbox=""
             />
             <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
           </div>
