@@ -41,6 +41,9 @@ const {
   putBrainPage,
   upsertBrainChunks,
   listOpenClawSkills,
+  sendMessageViaGateway,
+  isGatewayPostAckError,
+  GatewayPostAckError,
 } = vi.hoisted(() => ({
   isLocalRequest: vi.fn(),
   resolveAgentConfig: vi.fn(),
@@ -66,6 +69,9 @@ const {
   putBrainPage: vi.fn(),
   upsertBrainChunks: vi.fn(),
   listOpenClawSkills: vi.fn(),
+  sendMessageViaGateway: vi.fn(),
+  isGatewayPostAckError: vi.fn(() => false),
+  GatewayPostAckError: class GatewayPostAckError extends Error {},
 }));
 
 vi.mock("@/lib/agent-client", () => ({
@@ -110,6 +116,12 @@ vi.mock("@/brain/store", () => ({
 
 vi.mock("@/lib/openclaw/skill-catalog", () => ({
   listOpenClawSkills,
+}));
+
+vi.mock("@/lib/openclaw/gateway-ws-client", () => ({
+  sendMessageViaGateway,
+  isGatewayPostAckError,
+  GatewayPostAckError,
 }));
 
 vi.mock("@/lib/privacy-policy", () => ({
@@ -224,6 +236,20 @@ beforeEach(() => {
   sendAgentMessage.mockReset();
   openClawHealthCheck.mockReset();
   sendOpenClawMessage.mockReset();
+  sendMessageViaGateway.mockReset();
+  // Default behaviour: route gateway WS calls through the existing
+  // sendOpenClawMessage mock so each test only has to stub one function.
+  // Tests that need raw WS event semantics can override this.
+  sendMessageViaGateway.mockImplementation(
+    async (
+      sessionKey: string,
+      message: string,
+      _opts?: { onEvent?: (event: unknown) => void },
+    ) => {
+      const text = await sendOpenClawMessage(message, { session: sessionKey });
+      return { text: text ?? "", events: [] };
+    },
+  );
   getConversationMessagesSince.mockReset();
   streamChat.mockReset();
   localHealthCheck.mockReset();

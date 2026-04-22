@@ -1,13 +1,47 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { execFileMock, execFileSyncMock } = vi.hoisted(() => ({
-  execFileMock: vi.fn(),
-  execFileSyncMock: vi.fn(),
-}));
+const {
+  execFileMock,
+  execFileSyncMock,
+  sendMessageViaGatewayMock,
+  MockGatewayPostAckError,
+  mockIsGatewayPostAckError,
+} = vi.hoisted(() => {
+  // Hoisted post-ACK sentinel mirrors the real export. The mocked module
+  // below re-exports these so `isGatewayPostAckError(err)` keeps working in
+  // the openclaw.ts caller after the WS path fails.
+  class _MockGatewayPostAckError extends Error {
+    readonly code = "GATEWAY_POST_ACK_FAILURE" as const;
+    readonly sessionKey: string;
+    constructor(sessionKey: string, message: string, options?: { cause?: unknown }) {
+      super(message, options);
+      this.name = "GatewayPostAckError";
+      this.sessionKey = sessionKey;
+    }
+  }
+  return {
+    execFileMock: vi.fn(),
+    execFileSyncMock: vi.fn(),
+    sendMessageViaGatewayMock: vi.fn(),
+    MockGatewayPostAckError: _MockGatewayPostAckError,
+    mockIsGatewayPostAckError: (err: unknown): err is InstanceType<typeof _MockGatewayPostAckError> =>
+      err instanceof _MockGatewayPostAckError,
+  };
+});
 
 vi.mock("child_process", () => ({
   execFile: execFileMock,
   execFileSync: execFileSyncMock,
+}));
+
+// Force the WS gateway path to fail in unit tests so sendAgentMessage falls
+// back to the CLI assertions below. Without this, sendAgentMessage with a
+// `session` would try to read the local OpenClaw config + open a WS to the
+// real local gateway on the dev machine.
+vi.mock("@/lib/openclaw/gateway-ws-client", () => ({
+  sendMessageViaGateway: sendMessageViaGatewayMock,
+  GatewayPostAckError: MockGatewayPostAckError,
+  isGatewayPostAckError: mockIsGatewayPostAckError,
 }));
 
 import { getConversationMessagesSince, healthCheck, sendAgentMessage } from "@/lib/openclaw";
@@ -167,6 +201,12 @@ describe("sendAgentMessage output sanitization", () => {
     vi.unstubAllEnvs();
     execFileMock.mockReset();
     execFileSyncMock.mockReset();
+    sendMessageViaGatewayMock.mockReset();
+    // Force the WS gateway to fail so sendAgentMessage falls back to the
+    // CLI path the assertions below exercise.
+    sendMessageViaGatewayMock.mockRejectedValue(
+      new Error("mocked: gateway unavailable"),
+    );
   });
 
   it("returns only the user-facing tail after a channel marker", async () => {
@@ -346,6 +386,51 @@ describe("sendAgentMessage output sanitization", () => {
         session: "web:test:sanitize",
       }),
     ).resolves.toBe("Here is the answer.");
+  });
+
+  it("does NOT fall back to the CLI when the gateway accepted the message but the turn failed (post-ACK)", async () => {
+    // Regression for duplicate-delivery: if the gateway already received the
+    // message (sessions.send ACKed) and only the turn-completion wait failed
+    // (timeout, WS drop), running the CLI with the same --session-id would
+    // deliver the user message twice. The post-ACK sentinel must propagate.
+    sendMessageViaGatewayMock.mockReset();
+    sendMessageViaGatewayMock.mockRejectedValueOnce(
+      new MockGatewayPostAckError(
+        "web:test:no-double-deliver",
+        "OpenClaw gateway accepted the message but the turn timed out",
+      ),
+    );
+
+    await expect(
+      sendAgentMessage("Run a long task", {
+        agent: "main",
+        session: "web:test:no-double-deliver",
+      }),
+    ).rejects.toMatchObject({ name: "GatewayPostAckError" });
+
+    // The CLI MUST NOT have been invoked; that's how duplicate delivery
+    // would have happened.
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the CLI on a pre-ACK gateway failure (no duplicate delivery risk)", async () => {
+    // Pre-ACK failures (connect/auth/send-rpc errors) mean the gateway never
+    // received the message, so retrying via the CLI on the same session is
+    // safe. Confirm the existing fallback still works for plain Errors.
+    sendMessageViaGatewayMock.mockReset();
+    sendMessageViaGatewayMock.mockRejectedValueOnce(
+      new Error("mocked: gateway unreachable"),
+    );
+    mockExecFile("<channel|>fallback worked");
+
+    await expect(
+      sendAgentMessage("Hello", {
+        agent: "main",
+        session: "web:test:pre-ack-fallback",
+      }),
+    ).resolves.toBe("fallback worked");
+
+    expect(execFileMock).toHaveBeenCalledTimes(1);
   });
 });
 
