@@ -36,6 +36,7 @@ const QUEUED_PROGRESS_RECOVERY_MESSAGE =
   "Queued in ScienceSwarm's hosted reasoning service. You can leave this page open or reopen the run from Recent Reasoning Analyses later.";
 const DEFAULT_STYLE_PROFILE = "professional";
 const SECTION_LABEL = "text-xs font-medium uppercase tracking-widest text-muted";
+export const SUBMIT_BUTTON_LABEL = "Submit to Reasoning Engine";
 const REASONING_AUDIT_LOADING_AUTH_MESSAGE =
   "Loading your ScienceSwarm account…";
 const SCIENCESWARM_SIGN_IN_URL = getScienceSwarmSignInUrl();
@@ -67,6 +68,9 @@ type BrainArtifactPage = {
 
 type InputMode = "pdf" | "text";
 type FilterKind = "critique" | "fallacy" | "gap";
+type SubmittedReasoningInput =
+  | { kind: "pdf"; name: string; size?: number }
+  | { kind: "text"; charCount?: number; preview: string };
 type BrainSaveStatus =
   | { state: "idle" }
   | { state: "saving" }
@@ -129,6 +133,81 @@ type BrainPageResponse = {
 };
 
 type StructuredCritiqueProgressLike = Record<string, unknown> | null | undefined;
+
+const EXAMPLE_REASONING_JOB: StructuredCritiqueJob = {
+  id: "example-reasoning-report",
+  status: "COMPLETED",
+  pdf_filename: "example-manuscript.pdf",
+  style_profile: DEFAULT_STYLE_PROFILE,
+  result: {
+    title: "Example Reasoning Report",
+    report_markdown:
+      "# Example Reasoning Report\n\nThis sample shows the structure of a completed ScienceSwarm reasoning analysis. Real reports include ranked findings, quoted evidence, impact notes, and suggested revisions.\n\n## Top issues\n\n1. The central claim depends on an unstated sampling assumption.\n2. The causal interpretation is stronger than the reported experiment supports.\n3. A key negative control is mentioned but not tied back to the conclusion.",
+    findings: [
+      {
+        finding_id: "EX-001",
+        severity: "error",
+        finding_kind: "critique",
+        flaw_type: "missing-assumption",
+        description:
+          "The conclusion depends on the sample being representative, but the manuscript never states or defends that assumption.",
+        evidence_quote:
+          "These results demonstrate that the intervention generalizes across the target population.",
+        impact:
+          "If the cohort is biased, the headline generalization may not hold.",
+        suggested_fix:
+          "State the sampling assumption explicitly and add either a representativeness argument or narrower claim language.",
+        confidence: 0.86,
+      },
+      {
+        finding_id: "EX-002",
+        severity: "warning",
+        finding_kind: "gap",
+        flaw_type: "causal-leap",
+        description:
+          "The report moves from correlation to mechanism without ruling out a plausible confound.",
+        evidence_quote:
+          "The observed association indicates that pathway activation drives the phenotype.",
+        impact:
+          "Readers may treat a suggestive association as mechanistic proof.",
+        suggested_fix:
+          "Rephrase the claim as associative unless a control or intervention can distinguish the mechanism.",
+        confidence: 0.78,
+      },
+      {
+        finding_id: "EX-003",
+        severity: "note",
+        finding_kind: "fallacy",
+        flaw_type: "weak-evidence-chain",
+        description:
+          "The negative control appears once in the methods but is not used in the argument that follows.",
+        evidence_quote:
+          "A vehicle-only control was included in each batch.",
+        impact:
+          "A useful control is present, but the reader cannot tell whether it supports the main inference.",
+        suggested_fix:
+          "Add a sentence explaining how the control constrains the interpretation of the main result.",
+        confidence: 0.71,
+      },
+    ],
+    author_feedback: {
+      overall_summary:
+        "The example report shows how ScienceSwarm separates high-impact reasoning breaks from lower-priority revision notes.",
+      top_issues: [
+        {
+          title: "Unstated sampling assumption",
+          summary:
+            "The main claim generalizes beyond the evidence unless the cohort is representative.",
+        },
+        {
+          title: "Mechanism claimed from association",
+          summary:
+            "The manuscript needs stronger evidence or narrower wording for the causal claim.",
+        },
+      ],
+    },
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Helpers (reused from original)
@@ -223,6 +302,110 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function buildSubmittedTextPreview(text: string): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact.length <= 96) return compact || "Pasted text block";
+  return `${compact.slice(0, 96)}...`;
+}
+
+function buildSubmittedInputFromJob(
+  job: StructuredCritiqueJob | null | undefined,
+): SubmittedReasoningInput | null {
+  if (!job) return null;
+  const filename = job.pdf_filename?.trim();
+  if (filename) {
+    return { kind: "pdf", name: filename };
+  }
+  return { kind: "text", preview: "Pasted text submission" };
+}
+
+function formatSubmittedInputTitle(input: SubmittedReasoningInput): string {
+  return input.kind === "pdf" ? input.name : "Pasted text block";
+}
+
+function formatSubmittedInputMeta(input: SubmittedReasoningInput): string {
+  if (input.kind === "pdf") {
+    return typeof input.size === "number" && input.size > 0
+      ? `PDF · ${formatFileSize(input.size)}`
+      : "PDF";
+  }
+  return typeof input.charCount === "number" && input.charCount > 0
+    ? `${input.charCount.toLocaleString()} characters`
+    : "Text submission";
+}
+
+function formatJobSourceName(job: StructuredCritiqueJob): string {
+  return (
+    job.pdf_filename?.trim() ||
+    job.result?.title?.trim() ||
+    "Pasted text submission"
+  );
+}
+
+function buildReasoningWaitEstimate(
+  input: SubmittedReasoningInput | null,
+  job: StructuredCritiqueProgressLike,
+): { label: string; detail: string } {
+  const stage = readJobProgressStage(job);
+  if (stage === "queued") {
+    return {
+      label: "Queued; not started yet",
+      detail:
+        "Hosted reasoning jobs can sit in the queue before compute begins. It is safe to leave this page and reopen the run from Recent Reasoning Analyses.",
+    };
+  }
+
+  if (input?.kind === "text") {
+    if (typeof input.charCount !== "number" || input.charCount <= 0) {
+      return {
+        label: "Often 20-60 minutes for pasted text",
+        detail:
+          "No live ETA is available yet. Longer excerpts may run longer when the hosted queue is busy.",
+      };
+    }
+    if (input.charCount < 12_000) {
+      return {
+        label: "Usually 10-30 minutes for short text",
+        detail:
+          "No live ETA is available yet; this estimate is based only on the submitted input size.",
+      };
+    }
+    return {
+      label: "Often 20-60 minutes for longer pasted text",
+      detail:
+        "Large excerpts may run longer when the hosted queue is busy.",
+    };
+  }
+
+  if (input?.kind === "pdf") {
+    if (typeof input.size !== "number" || input.size <= 0) {
+      return {
+        label: "Often 30-120+ minutes for paper PDFs",
+        detail:
+          "No live ETA is available yet. Large PDFs can take over 1 hour to process, especially when the hosted queue is busy.",
+      };
+    }
+    if (input.size < 5 * 1024 * 1024) {
+      return {
+        label: "Often 30-90 minutes for a paper PDF",
+        detail:
+          "Shorter or text-light PDFs may finish sooner; queue spikes and large papers can take over 1 hour to process.",
+      };
+    }
+    return {
+      label: "Plan for 45-120+ minutes for large PDFs",
+      detail:
+        "Large PDFs can take over 1 hour to process. This is a high-compute run without backend progress percentages yet, so long waits do not necessarily mean failure.",
+    };
+  }
+
+  return {
+    label: "Expect tens of minutes; full papers may exceed an hour",
+    detail:
+      "No live ETA is available yet. Keep this page open or return from Recent Reasoning Analyses later.",
+  };
 }
 
 function loadStoredHistory(): StoredStructuredCritiqueJob[] {
@@ -701,6 +884,58 @@ function ElapsedTimer({ startTime }: { startTime: number }) {
     <span className="font-mono text-sm text-muted">
       {mins}:{secs.toString().padStart(2, "0")}
     </span>
+  );
+}
+
+function SubmittedInputSummary({
+  input,
+  compact = false,
+}: {
+  input: SubmittedReasoningInput;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-lg border border-emerald-200 bg-emerald-50/70 ${
+        compact ? "px-3 py-2" : "px-4 py-3"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium uppercase tracking-widest text-emerald-700">
+            Submitted
+          </p>
+          <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
+            {formatSubmittedInputTitle(input)}
+          </p>
+          {input.kind === "text" ? (
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">
+              {input.preview}
+            </p>
+          ) : null}
+        </div>
+        <span className="shrink-0 rounded-full border border-emerald-200 bg-white px-2 py-1 text-[10px] font-medium text-emerald-700">
+          received
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-slate-600">{formatSubmittedInputMeta(input)}</p>
+    </div>
+  );
+}
+
+function ReasoningWaitGuidance({
+  input,
+  job,
+}: {
+  input: SubmittedReasoningInput | null;
+  job: StructuredCritiqueProgressLike;
+}) {
+  const estimate = buildReasoningWaitEstimate(input, job);
+  return (
+    <div className="max-w-md rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left">
+      <p className="text-xs font-semibold text-amber-900">{estimate.label}</p>
+      <p className="mt-1 text-xs leading-5 text-amber-800">{estimate.detail}</p>
+    </div>
   );
 }
 
@@ -1318,51 +1553,31 @@ function StructuredCritiquePageSkeleton() {
   );
 }
 
-function EmptyWorkspacePanel() {
-  const guidanceCards = [
-    {
-      title: "What It Catches",
-      body:
-        "Missing assumptions, causal overreach, unsupported generalization, hidden confounds, and places where a conclusion outruns its evidence.",
-    },
-    {
-      title: "Good Inputs",
-      body:
-        "Full paper PDFs, pasted excerpts, grant narratives, policy arguments, experiment writeups, and other argument-heavy drafts.",
-    },
-    {
-      title: "What You Get Back",
-      body:
-        "Ranked findings, quoted evidence, impact notes, and suggested fixes you can use to revise the document or stress-test the argument.",
-    },
-  ];
-
+function EmptyWorkspacePanel({
+  onShowExampleReport,
+}: {
+  onShowExampleReport: () => void;
+}) {
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-5xl items-center justify-center px-6 py-10">
-      <section className="w-full rounded-[28px] border border-gray-200 bg-white p-8 shadow-sm">
+    <div className="mx-auto flex min-h-full w-full max-w-3xl items-center justify-center px-6 py-10">
+      <section className="w-full text-center">
         <p className={SECTION_LABEL}>Deep Reasoning</p>
-        <h1 className="mt-2 max-w-3xl text-3xl font-semibold text-foreground">
+        <h1 className="mt-3 text-3xl font-semibold text-foreground">
           Analyze a paper, memo, or argument for reasoning flaws.
         </h1>
-        <p className="mt-4 max-w-3xl text-sm leading-7 text-muted">
+        <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-muted">
           Upload a PDF or paste text to deeply analyze the logic of a piece.
           The API focuses on weak evidence chains, hidden premises, causal
           leaps, and other structural problems that make an argument less
           trustworthy than it first appears.
         </p>
-        <div className="mt-6 grid gap-3 md:grid-cols-3">
-          {guidanceCards.map((card) => (
-            <div
-              key={card.title}
-              className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4"
-            >
-              <p className="text-sm font-semibold text-foreground">
-                {card.title}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-muted">{card.body}</p>
-            </div>
-          ))}
-        </div>
+        <button
+          type="button"
+          onClick={onShowExampleReport}
+          className="mt-5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-gray-300 hover:bg-gray-50"
+        >
+          View example report
+        </button>
       </section>
     </div>
   );
@@ -1406,6 +1621,9 @@ function StructuredCritiquePageContent() {
   const [activeFilters, setActiveFilters] = useState<Set<FilterKind>>(new Set());
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [uploadAccepted, setUploadAccepted] = useState(false);
+  const [submittedInput, setSubmittedInput] =
+    useState<SubmittedReasoningInput | null>(null);
+  const [showExampleReport, setShowExampleReport] = useState(false);
   const [pollStartTime, setPollStartTime] = useState<number | null>(null);
   const [structuredCritiqueAvailable, setStructuredCritiqueAvailable] = useState<boolean | null>(null);
   const [structuredCritiqueStatusDetail, setStructuredCritiqueStatusDetail] =
@@ -1415,7 +1633,6 @@ function StructuredCritiquePageContent() {
   const [isLoadingPersistedCritiques, setIsLoadingPersistedCritiques] = useState(true);
 
   const queueRef = useRef<HTMLDivElement>(null);
-  const autoLoadedPersistedRef = useRef(false);
   const hostedHistoryHydratedRef = useRef(false);
   const autoSavedJobIdsRef = useRef<Set<string>>(new Set());
   const autoSaveAttemptCountsRef = useRef<Map<string, number>>(new Map());
@@ -1491,6 +1708,8 @@ function StructuredCritiquePageContent() {
       const job = brainPageToCritiqueJob(slug, payload);
       if (job) {
         setBrainArtifact(null);
+        setShowExampleReport(false);
+        setSubmittedInput(buildSubmittedInputFromJob(job));
         rememberJob(job);
         setBrainSaveByJobId((previous) => ({
           ...previous,
@@ -1510,7 +1729,6 @@ function StructuredCritiquePageContent() {
     const entries = loadStoredHistory();
     hydratedRef.current = true;
     setHistory(entries);
-    if (entries[0]) setSelectedJobId(entries[0].id);
   }, []);
 
   // Load durable saved-audit history from gbrain. Browser localStorage is only
@@ -1569,14 +1787,6 @@ function StructuredCritiquePageContent() {
         if (cancelled || jobs.length === 0) return;
         mergeHostedHistory(jobs);
         setHistoryExpanded(true);
-        if (
-          !selectedJobId &&
-          !requestedBrainSlug &&
-          !requestedJobId &&
-          persistedCritiques.length === 0
-        ) {
-          setSelectedJobId(jobs[0]?.id ?? null);
-        }
       } catch {
         if (!cancelled) {
           hostedHistoryHydratedRef.current = false;
@@ -1642,37 +1852,6 @@ function StructuredCritiquePageContent() {
     };
   }, [loadBrainSlug, persistedCritiques, requestedBrainSlug]);
 
-  // If browser-local history is empty, open the newest gbrain-saved audit
-  // instead of landing on an empty workspace.
-  useEffect(() => {
-    if (
-      !hydratedRef.current ||
-      autoLoadedPersistedRef.current ||
-      isLoadingPersistedCritiques ||
-      requestedBrainSlug ||
-      requestedJobId ||
-      selectedJobId ||
-      history.length > 0 ||
-      persistedCritiques.length === 0
-    ) {
-      return;
-    }
-
-    const latest = persistedCritiques[0];
-    autoLoadedPersistedRef.current = true;
-    void loadBrainSlug(latest.brain_slug, latest).catch((err) => {
-      setError(err instanceof Error ? err.message : "brain critique load failed");
-    });
-  }, [
-    history.length,
-    isLoadingPersistedCritiques,
-    loadBrainSlug,
-    persistedCritiques,
-    requestedBrainSlug,
-    requestedJobId,
-    selectedJobId,
-  ]);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -1736,7 +1915,10 @@ function StructuredCritiquePageContent() {
     if (entry.descartes_job_id && localJobIds.has(entry.descartes_job_id)) return false;
     return true;
   });
-  const activeJob = selectedJob;
+  const exampleJob = showExampleReport ? EXAMPLE_REASONING_JOB : null;
+  const activeJob = selectedJob ?? exampleJob;
+  const activeSubmittedInput =
+    submittedInput ?? buildSubmittedInputFromJob(activeJob);
 
   // ---------------------------------------------------------------------------
   // Derived data
@@ -1792,9 +1974,11 @@ function StructuredCritiquePageContent() {
   const handleSelectHistoryJob = useCallback(
     (job: StoredStructuredCritiqueJob) => {
       setBrainArtifact(null);
+      setShowExampleReport(false);
       setSelectedJobId(job.id);
       setError(null);
       setUploadAccepted(false);
+      setSubmittedInput(buildSubmittedInputFromJob(job));
       setSelectedFindingIndex(0);
       if (!isTerminalStatus(job.status)) {
         void refreshJob(job.id).catch((err) => {
@@ -1808,7 +1992,13 @@ function StructuredCritiquePageContent() {
   const handleSelectPersistedCritique = useCallback(
     (summary: PersistedCritiqueSummary) => {
       setError(null);
+      setShowExampleReport(false);
       setUploadAccepted(false);
+      setSubmittedInput(
+        summary.source_filename
+          ? { kind: "pdf", name: summary.source_filename, size: 0 }
+          : { kind: "text", charCount: 0, preview: summary.title || "Saved reasoning analysis" },
+      );
       setSelectedFindingIndex(0);
       void loadBrainSlug(summary.brain_slug, summary).catch((err) => {
         setError(err instanceof Error ? err.message : "brain critique load failed");
@@ -1821,6 +2011,8 @@ function StructuredCritiquePageContent() {
     const file = event.target.files?.[0] ?? null;
     if (!file) {
       setSelectedFile(null);
+      setSubmittedInput(null);
+      setUploadAccepted(false);
       return;
     }
     if (!file.name.toLowerCase().endsWith(".pdf")) {
@@ -1831,6 +2023,9 @@ function StructuredCritiquePageContent() {
     }
     setError(null);
     setSelectedFile(file);
+    setSubmittedInput(null);
+    setUploadAccepted(false);
+    setShowExampleReport(false);
   };
 
   const handleAnalyze = async () => {
@@ -1856,9 +2051,20 @@ function StructuredCritiquePageContent() {
     pollTokenRef.current += 1;
     setError(null);
     setBrainArtifact(null);
+    setShowExampleReport(false);
+    setSelectedJobId(null);
     setIsSubmitting(true);
     setUploadAccepted(false);
     setSelectedFindingIndex(0);
+    setSubmittedInput(
+      inputMode === "pdf" && selectedFile
+        ? { kind: "pdf", name: selectedFile.name, size: selectedFile.size }
+        : {
+            kind: "text",
+            charCount: pasteText.trim().length,
+            preview: buildSubmittedTextPreview(pasteText),
+          },
+    );
 
     try {
       const formData = new FormData();
@@ -1901,12 +2107,27 @@ function StructuredCritiquePageContent() {
     void handleAnalyze();
   };
 
+  const handleShowExampleReport = () => {
+    setIsPolling(false);
+    setPollStartTime(null);
+    pollTokenRef.current += 1;
+    setBrainArtifact(null);
+    setSelectedJobId(null);
+    setError(null);
+    setUploadAccepted(false);
+    setSubmittedInput(buildSubmittedInputFromJob(EXAMPLE_REASONING_JOB));
+    setShowExampleReport(true);
+    setSelectedFindingIndex(0);
+  };
+
   const handleClearHistory = () => {
     pollTokenRef.current += 1;
     setIsPolling(false);
     setPollStartTime(null);
     setHistory([]);
     setSelectedJobId(null);
+    setSubmittedInput(null);
+    setShowExampleReport(false);
     saveStoredHistory([]);
   };
 
@@ -2146,7 +2367,10 @@ function StructuredCritiquePageContent() {
             <div className="flex gap-1 mb-3 rounded bg-gray-100 p-0.5">
               <button
                 type="button"
-                onClick={() => setInputMode("pdf")}
+                onClick={() => {
+                  setInputMode("pdf");
+                  setShowExampleReport(false);
+                }}
                 className={`flex-1 text-xs py-1.5 rounded transition-colors ${
                   inputMode === "pdf"
                     ? "bg-white text-foreground font-medium shadow-sm"
@@ -2157,7 +2381,10 @@ function StructuredCritiquePageContent() {
               </button>
               <button
                 type="button"
-                onClick={() => setInputMode("text")}
+                onClick={() => {
+                  setInputMode("text");
+                  setShowExampleReport(false);
+                }}
                 className={`flex-1 text-xs py-1.5 rounded transition-colors ${
                   inputMode === "text"
                     ? "bg-white text-foreground font-medium shadow-sm"
@@ -2173,10 +2400,12 @@ function StructuredCritiquePageContent() {
                 {uploadAccepted && isAnalyzing ? (
                   <>
                     <span className="text-sm font-medium text-emerald-600">
-                      Document received &#10003;
+                      Submitted PDF &#10003;
                     </span>
                     <span className="text-xs text-muted">
-                      {readJobProgressMessage(activeJob) ?? "Analysis in progress"}
+                      {submittedInput?.kind === "pdf"
+                        ? submittedInput.name
+                        : readJobProgressMessage(activeJob) ?? "Analysis in progress"}
                     </span>
                   </>
                 ) : (
@@ -2201,25 +2430,43 @@ function StructuredCritiquePageContent() {
             ) : (
               <textarea
                 value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
+                onChange={(e) => {
+                  setPasteText(e.target.value);
+                  setSubmittedInput(null);
+                  setUploadAccepted(false);
+                  setShowExampleReport(false);
+                }}
                 placeholder="Paste the text you want deeply analyzed..."
                 className="w-full rounded-lg border border-gray-200 bg-gray-50/60 p-3 text-sm resize-none h-24 focus:outline-none focus:border-accent"
               />
             )}
 
-            <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50/70 p-3 text-[11px] leading-5 text-slate-700">
-              <p>
-                <span className="font-semibold text-slate-900">What it does:</span>{" "}
-                Deeply analyze a paper, draft, or argument for reasoning
-                flaws, including missing assumptions, weak evidence chains,
-                causal leaps, and unsupported generalization.
+            {submittedInput && !showExampleReport ? (
+              <div className="mt-3">
+                <SubmittedInputSummary input={submittedInput} compact={true} />
+              </div>
+            ) : null}
+
+            <details className="group mt-3 rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-2 text-[11px] leading-5 text-slate-700">
+              <summary className="cursor-pointer list-none font-semibold text-slate-900">
+                What this checks
+                <span className="float-right text-[10px] text-muted group-open:hidden">
+                  Show
+                </span>
+                <span className="float-right hidden text-[10px] text-muted group-open:inline">
+                  Hide
+                </span>
+              </summary>
+              <p className="mt-2">
+                Deeply analyzes a paper, draft, or argument for missing
+                assumptions, weak evidence chains, causal leaps, and unsupported
+                generalization.
               </p>
               <p className="mt-2">
-                <span className="font-semibold text-slate-900">Best results:</span>{" "}
-                Upload the full paper PDF or paste the exact section you want
-                stress-tested.
+                Best results come from a full paper PDF or the exact pasted
+                section you want stress-tested.
               </p>
-            </div>
+            </details>
 
             {/* Analyze button */}
             {!isAuthLoaded ? (
@@ -2251,7 +2498,7 @@ function StructuredCritiquePageContent() {
                   ? "Submitting..."
                   : isPolling
                     ? "Analyzing..."
-                    : "Analyze"}
+                    : SUBMIT_BUTTON_LABEL}
               </button>
             )}
             {!isAuthLoaded ? (
@@ -2282,18 +2529,26 @@ function StructuredCritiquePageContent() {
             {!isSignedIn && authDetail ? (
               <p className="mt-2 text-xs text-amber-700">{authDetail}</p>
             ) : null}
-            <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50/70 p-3 text-[11px] leading-5 text-slate-700">
-              <p>
-                <span className="font-semibold text-slate-900">Cloud + model notice:</span>{" "}
-                By clicking Analyze, you agree to send the selected PDF or
-                pasted text to ScienceSwarm&apos;s cloud API and frontier LLM
-                providers. {SCIENCESWARM_CRITIQUE_CLOUD_DISCLAIMER}
+            <details className="group mt-3 rounded-lg border border-sky-200 bg-sky-50/70 px-3 py-2 text-[11px] leading-5 text-slate-700">
+              <summary className="cursor-pointer list-none font-semibold text-slate-900">
+                Cloud and model notice
+                <span className="float-right text-[10px] text-muted group-open:hidden">
+                  Show
+                </span>
+                <span className="float-right hidden text-[10px] text-muted group-open:inline">
+                  Hide
+                </span>
+              </summary>
+              <p className="mt-2">
+                By clicking {SUBMIT_BUTTON_LABEL}, you agree to send the
+                selected PDF or pasted text to ScienceSwarm&apos;s cloud API and
+                frontier LLM providers. {SCIENCESWARM_CRITIQUE_CLOUD_DISCLAIMER}
               </p>
               <p className="mt-2">
                 <span className="font-semibold text-slate-900">Free for now:</span>{" "}
                 {SCIENCESWARM_CRITIQUE_FRONTIER_MODELS_DISCLAIMER}
               </p>
-            </div>
+            </details>
           </div>
 
           {/* Issue Queue */}
@@ -2370,7 +2625,9 @@ function StructuredCritiquePageContent() {
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="truncate font-medium">{job.pdf_filename}</span>
+                            <span className="truncate font-medium">
+                              {formatJobSourceName(job)}
+                            </span>
                             <span
                               className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${statusBadgeClasses(job.status)}`}
                             >
@@ -2430,12 +2687,21 @@ function StructuredCritiquePageContent() {
           {/* State: analyzing (no results yet) */}
           {isAnalyzing && !hasCompletedResults && !isPartialFailure ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 px-6">
+              {activeSubmittedInput ? (
+                <div className="w-full max-w-md">
+                  <SubmittedInputSummary input={activeSubmittedInput} />
+                </div>
+              ) : null}
               <div className="w-64 h-2 rounded-full bg-gray-100 overflow-hidden">
                 <div className="h-full w-[60%] bg-accent rounded-full animate-pulse" />
               </div>
               <p className="text-sm text-muted">
                 {activeJobPendingStatusMessage}
               </p>
+              <ReasoningWaitGuidance
+                input={activeSubmittedInput}
+                job={activeJob}
+              />
               {activeJobPendingRecoveryMessage ? (
                 <p className="max-w-md text-center text-xs text-amber-700">
                   {activeJobPendingRecoveryMessage}
@@ -2510,7 +2776,11 @@ function StructuredCritiquePageContent() {
                   brainSaveStatus={
                     brainSaveByJobId[activeJob.id] ?? { state: "idle" }
                   }
-                  onSaveToBrain={() => void handleSaveToBrain(activeJob)}
+                  onSaveToBrain={
+                    activeJob.id === EXAMPLE_REASONING_JOB.id
+                      ? undefined
+                      : () => void handleSaveToBrain(activeJob)
+                  }
                 />
                 <FindingDetail
                   key={`${activeJob.id}:${selectedFinding.finding_id ?? selectedFindingIndex}`}
@@ -2527,7 +2797,7 @@ function StructuredCritiquePageContent() {
 
           {/* State: first visit / no selection */}
           {!activeJob && !isAnalyzing ? (
-            <EmptyWorkspacePanel />
+            <EmptyWorkspacePanel onShowExampleReport={handleShowExampleReport} />
           ) : null}
 
           {/* State: selected a non-terminal job that has no results yet and we are NOT polling */}
@@ -2536,9 +2806,18 @@ function StructuredCritiquePageContent() {
           !isAnalyzing &&
           allFindings.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+              {activeSubmittedInput ? (
+                <div className="w-full max-w-md">
+                  <SubmittedInputSummary input={activeSubmittedInput} />
+                </div>
+              ) : null}
               <p className={`text-sm ${isTimedOutJob ? "text-amber-700" : "text-muted"}`}>
                 {isTimedOutJob ? timedOutMessage : buildPendingStatusMessage(selectedJob)}
               </p>
+              <ReasoningWaitGuidance
+                input={activeSubmittedInput}
+                job={selectedJob}
+              />
               {!isTimedOutJob && buildPendingRecoveryMessage(selectedJob) ? (
                 <p className="max-w-md text-xs text-amber-700">
                   {buildPendingRecoveryMessage(selectedJob)}

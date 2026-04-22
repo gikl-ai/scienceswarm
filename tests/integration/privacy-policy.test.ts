@@ -38,6 +38,7 @@ vi.mock("@/lib/agent-client", () => ({
 
 vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
+  gatewayHealthCheck: openClawHealthCheck,
   sendAgentMessage: sendOpenClawMessage,
 }));
 

@@ -112,6 +112,14 @@ import { ensureProjectShellForProjectSlug } from "@/lib/projects/ensure-project-
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 import { readSavedLlmRuntimeEnv } from "@/lib/runtime-saved-env";
 import {
+  getDefaultRuntimeHostRouter,
+  type RuntimeHostRouter,
+} from "@/lib/runtime-hosts/router";
+import type {
+  RuntimeDataIncluded,
+  RuntimeTurnMode,
+} from "@/lib/runtime-hosts/contracts";
+import {
   artifactSourceWorkspaceKeysForPage,
   buildArtifactSourceSnapshotFromPage,
 } from "@/lib/artifact-source-snapshots";
@@ -148,6 +156,39 @@ interface WorkspaceReferenceMergeResult {
   referenceNotes: WorkspaceReferenceNotes;
 }
 
+function buildOpenClawRuntimeDataIncluded(
+  message: string,
+  files: UploadedFileDescriptor[],
+): RuntimeDataIncluded[] {
+  const parseRuntimeBytes = (size: string | undefined): number | undefined => {
+    const bytes = Number.parseInt(size ?? "", 10);
+    return Number.isNaN(bytes) ? undefined : bytes;
+  };
+
+  return [
+    {
+      kind: "prompt",
+      label: "User prompt",
+      bytes: Buffer.byteLength(message, "utf8"),
+    },
+    ...files.map((file): RuntimeDataIncluded => ({
+      kind: file.source === "gbrain" ? "gbrain-excerpt" : "workspace-file",
+      label: file.workspacePath ?? file.brainSlug ?? file.name ?? "Attached file",
+      bytes: parseRuntimeBytes(file.size),
+    })),
+  ];
+}
+
+function markRuntimeTurn(
+  router: RuntimeHostRouter,
+  sessionId: string | null,
+  status: "completed" | "failed",
+  errorCode?: string,
+): void {
+  if (!sessionId) return;
+  router.finishTurn(sessionId, { status, errorCode });
+}
+
 interface AgentRuntimeStatus {
   type: string;
   status: "connected" | "disconnected";
@@ -155,7 +196,13 @@ interface AgentRuntimeStatus {
 }
 
 type ChatMode = "reasoning" | "openclaw-tools";
-type RequestedBackend = "openclaw" | "agent" | "direct";
+
+const RUNTIME_HANDLER_ERROR_CODE = "RUNTIME_HANDLER_ERROR";
+const RUNTIME_CLIENT_DISCONNECTED_ERROR_CODE = "RUNTIME_CLIENT_DISCONNECTED";
+
+function runtimeTurnModeForChatMode(chatMode: ChatMode): RuntimeTurnMode {
+  return chatMode === "openclaw-tools" ? "mcp-tool" : "chat";
+}
 
 const MAX_CONTEXT_FILES = 10;
 const AUTO_PROJECT_CONTEXT_MAX_FILES = 3;
@@ -283,10 +330,38 @@ function normalizeChatMode(value: unknown): ChatMode {
   return value === "openclaw-tools" ? "openclaw-tools" : "reasoning";
 }
 
-function normalizeRequestedBackend(value: unknown): RequestedBackend | null {
-  return value === "openclaw" || value === "agent" || value === "direct"
-    ? value
-    : null;
+export function shouldPreMaterializeProjectWorkspaceForTurn(params: {
+  projectId: string | null;
+  message: string;
+  chatMode: ChatMode;
+  files: UploadedFileDescriptor[];
+  activeFile: { path: string; content: string } | null;
+}): boolean {
+  if (!params.projectId) {
+    return false;
+  }
+
+  if (params.chatMode === "openclaw-tools") {
+    return true;
+  }
+
+  if (params.files.length > 0 || params.activeFile !== null) {
+    return true;
+  }
+
+  const trimmedMessage = params.message.trim();
+  if (trimmedMessage.length === 0) {
+    return false;
+  }
+
+  return (
+    extractWorkspaceReferenceCandidates(trimmedMessage).length > 0 ||
+    shouldImplicitlyAttachProjectFiles(trimmedMessage) ||
+    shouldForceOpenClawToolExecution(trimmedMessage) ||
+    isRevisionWorkflowRequest(trimmedMessage) ||
+    isPlanChangeRequest(trimmedMessage) ||
+    isRevisionRunRequest(trimmedMessage)
+  );
 }
 
 async function loadOpenClawSlashCommands() {
@@ -1847,7 +1922,7 @@ function buildOpenClawMessage(
   const isClarificationRequest = isExplanatoryClarificationRequest(ruleMessage);
   const guidance = options.forceToolExecution && !isClarificationRequest
     ? `Execute all steps using your tools when real work is required. Prefer canonical gbrain tools such as brain_capture for task/note/decision/hypothesis page creation and brain_project_organize or brain_import_registry for read-only project-state summaries. Use exec/read/write only for ordinary workspace files outside .brain. Use ABSOLUTE paths only when a workspace file path is actually required. For Python, use: ${process.env.PYTHON_PATH || detectPythonPath() || "python3"}. Do not describe steps — do them. Continue until fully complete.`
-    : "Answer the user's latest request directly using the visible project context. Do not create, edit, run, or export files unless the user's latest request explicitly asks for a workspace change or generated artifact. Ignore project brief next-move suggestions unless the user explicitly asks you to act on them in this turn.";
+    : "Answer the user's latest request directly using the visible project context. Keep ordinary conversational replies brief; for greetings, acknowledgements, or short status questions, answer in 1-2 sentences and do not volunteer workspace actions unless asked. Do not create, edit, run, or export files unless the user's latest request explicitly asks for a workspace change or generated artifact. Ignore project brief next-move suggestions unless the user explicitly asks you to act on them in this turn.";
 
   return [...contextParts, "", message, "", guidance].join("\n");
 }
@@ -6923,18 +6998,134 @@ async function importOpenClawOutputsFromMessages(params: {
   };
 }
 
-async function getConfiguredAgentRuntimeStatus(
+const AGENT_RUNTIME_STATUS_CACHE_TTL_MS = 5_000;
+
+type AgentRuntimeStatusCacheEntry = {
+  expiresAt: number;
+  hasChannelInventory: boolean;
+  status: AgentRuntimeStatus;
+};
+
+const configuredAgentRuntimeStatusCache = new Map<string, AgentRuntimeStatusCacheEntry>();
+const configuredAgentRuntimeStatusInflight = new Map<string, Promise<AgentRuntimeStatus>>();
+
+function normalizeConfiguredAgentRuntimeStatusCacheValue(
+  value: unknown,
+  seen = new WeakSet<object>(),
+): unknown {
+  if (
+    value == null
+    || typeof value === "string"
+    || typeof value === "number"
+    || typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      const normalized = normalizeConfiguredAgentRuntimeStatusCacheValue(
+        item,
+        seen,
+      );
+      return normalized === undefined ? null : normalized;
+    });
+  }
+
+  if (typeof value === "object") {
+    if (seen.has(value)) {
+      return "[Circular]";
+    }
+
+    seen.add(value);
+    const normalized = Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .flatMap(([key, nestedValue]) => {
+          const normalizedValue =
+            normalizeConfiguredAgentRuntimeStatusCacheValue(
+              nestedValue,
+              seen,
+            );
+          return normalizedValue === undefined
+            ? []
+            : [[key, normalizedValue]];
+        }),
+    );
+    seen.delete(value);
+    return normalized;
+  }
+
+  return undefined;
+}
+
+function configuredAgentRuntimeStatusCacheKey(
   agentConfig: ReturnType<typeof resolveAgentConfig>,
   strictLocalOnly: boolean,
+): string {
+  return JSON.stringify({
+    strictLocalOnly,
+    agentConfig: normalizeConfiguredAgentRuntimeStatusCacheValue(
+      agentConfig ?? null,
+    ),
+  });
+}
+
+function configuredAgentRuntimeStatusInflightKey(
+  agentConfig: ReturnType<typeof resolveAgentConfig>,
+  strictLocalOnly: boolean,
+  options: { preferFastOpenClawGatewayProbe?: boolean } = {},
+): string {
+  return JSON.stringify({
+    cacheKey: configuredAgentRuntimeStatusCacheKey(
+      agentConfig,
+      strictLocalOnly,
+    ),
+    preferFastOpenClawGatewayProbe:
+      options.preferFastOpenClawGatewayProbe === true,
+  });
+}
+
+function pruneExpiredConfiguredAgentRuntimeStatusCache(now: number): void {
+  for (const [cacheKey, entry] of configuredAgentRuntimeStatusCache.entries()) {
+    if (entry.expiresAt <= now) {
+      configuredAgentRuntimeStatusCache.delete(cacheKey);
+    }
+  }
+}
+
+async function loadConfiguredAgentRuntimeStatus(
+  agentConfig: ReturnType<typeof resolveAgentConfig>,
+  strictLocalOnly: boolean,
+  options: { preferFastOpenClawGatewayProbe?: boolean } = {},
 ): Promise<AgentRuntimeStatus> {
   if (agentConfig?.type === "openclaw") {
     try {
-      const { healthCheck } = await import("@/lib/openclaw");
-      const status = await healthCheck();
+      const openClawModule = await import("@/lib/openclaw");
+      const useFastGatewayProbe =
+        options.preferFastOpenClawGatewayProbe === true &&
+        typeof openClawModule.gatewayHealthCheck === "function";
+      const status = useFastGatewayProbe
+        ? await openClawModule.gatewayHealthCheck()
+        : await openClawModule.healthCheck();
+      const statusWithChannels = status as unknown as {
+        channels?: unknown;
+      };
+      const channels =
+        useFastGatewayProbe ||
+          !Array.isArray(statusWithChannels.channels)
+          ? []
+          : statusWithChannels.channels.filter(
+              (channel): channel is string => typeof channel === "string",
+            );
       return {
         type: "openclaw",
         status: status.status,
-        channels: status.channels,
+        channels,
       };
     } catch {
       return {
@@ -6969,6 +7160,69 @@ async function getConfiguredAgentRuntimeStatus(
   };
 }
 
+async function getConfiguredAgentRuntimeStatus(
+  agentConfig: ReturnType<typeof resolveAgentConfig>,
+  strictLocalOnly: boolean,
+  options: { preferFastOpenClawGatewayProbe?: boolean } = {},
+): Promise<AgentRuntimeStatus> {
+  const cacheKey = configuredAgentRuntimeStatusCacheKey(
+    agentConfig,
+    strictLocalOnly,
+  );
+  const now = Date.now();
+  pruneExpiredConfiguredAgentRuntimeStatusCache(now);
+  const cached = configuredAgentRuntimeStatusCache.get(cacheKey);
+  const canReuseCachedStatus = options.preferFastOpenClawGatewayProbe === true
+    || cached?.hasChannelInventory === true;
+  if (cached && cached.expiresAt > now && canReuseCachedStatus) {
+    return cached.status;
+  }
+
+  const inflightKey = configuredAgentRuntimeStatusInflightKey(
+    agentConfig,
+    strictLocalOnly,
+    options,
+  );
+  const inflight = configuredAgentRuntimeStatusInflight.get(inflightKey);
+  if (inflight) {
+    return inflight;
+  }
+
+  const nextStatusPromise = loadConfiguredAgentRuntimeStatus(
+    agentConfig,
+    strictLocalOnly,
+    options,
+  )
+    .then((status) => {
+      const refreshedAt = Date.now();
+      pruneExpiredConfiguredAgentRuntimeStatusCache(refreshedAt);
+      configuredAgentRuntimeStatusCache.set(cacheKey, {
+        status,
+        hasChannelInventory: !(
+          agentConfig?.type === "openclaw"
+          && options.preferFastOpenClawGatewayProbe === true
+        ),
+        expiresAt: refreshedAt + AGENT_RUNTIME_STATUS_CACHE_TTL_MS,
+      });
+      return status;
+    })
+    .finally(() => {
+      configuredAgentRuntimeStatusInflight.delete(inflightKey);
+    });
+
+  configuredAgentRuntimeStatusInflight.set(inflightKey, nextStatusPromise);
+  return nextStatusPromise;
+}
+
+export function __resetConfiguredAgentRuntimeStatusCacheForTests() {
+  configuredAgentRuntimeStatusCache.clear();
+  configuredAgentRuntimeStatusInflight.clear();
+}
+
+export function __getConfiguredAgentRuntimeStatusCacheSizeForTests(): number {
+  return configuredAgentRuntimeStatusCache.size;
+}
+
 function streamOpenClawResponse(params: {
   message: string;
   userMessage: string;
@@ -6982,6 +7236,8 @@ function streamOpenClawResponse(params: {
   forceToolExecution?: boolean;
   sendToOpenClaw: SendOpenClawMessage;
   enableArtifactRepair?: boolean;
+  onComplete?: () => void;
+  onFail?: (errorCode?: string) => void;
 }): Response {
   const encoder = new TextEncoder();
   let streamClosed = false;
@@ -7155,6 +7411,7 @@ function streamOpenClawResponse(params: {
                   null,
                 ),
               });
+              params.onComplete?.();
               return;
             }
 
@@ -7198,6 +7455,7 @@ function streamOpenClawResponse(params: {
                   completedIds,
                 ),
               });
+              params.onFail?.(RUNTIME_HANDLER_ERROR_CODE);
               return;
             }
 
@@ -7251,6 +7509,7 @@ function streamOpenClawResponse(params: {
                   null,
                 ),
               });
+              params.onComplete?.();
               return;
             }
             if (
@@ -7309,6 +7568,7 @@ function streamOpenClawResponse(params: {
                   completedIds,
                 ),
               });
+              params.onFail?.("RUNTIME_TRANSPORT_ERROR");
               return;
             }
             importedOutputs = {
@@ -7342,6 +7602,7 @@ function streamOpenClawResponse(params: {
                   completedIds,
                 ),
               });
+              params.onFail?.("RUNTIME_TRANSPORT_ERROR");
               return;
             }
             importedOutputs = {
@@ -7365,6 +7626,7 @@ function streamOpenClawResponse(params: {
                 null,
               ),
             });
+            params.onComplete?.();
           } catch (err) {
             console.warn(
               "OpenClaw stream failed during unified response:",
@@ -7382,6 +7644,7 @@ function streamOpenClawResponse(params: {
                 completedIds,
               ),
             });
+            params.onFail?.("RUNTIME_TRANSPORT_ERROR");
           } finally {
             thinkingTraceStreamer.stop();
             closeStream();
@@ -7390,6 +7653,7 @@ function streamOpenClawResponse(params: {
       },
       cancel() {
         streamClosed = true;
+        params.onFail?.(RUNTIME_CLIENT_DISCONNECTED_ERROR_CODE);
       },
     }),
     {
@@ -7610,12 +7874,16 @@ export async function handleUnifiedChatPost(
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const runtimeRouter = getDefaultRuntimeHostRouter();
+  let runtimeTurnSessionId: string | null = null;
+  let responseChatMode: ChatMode = "reasoning";
+  let attemptedOpenClawTurn = false;
+
   try {
     const body = await request.json();
     const {
       message: fallbackMessage = "",
       messages: rawMessages,
-      backend: rawBackend,
       mode: rawMode,
       conversationId,
       files: rawFiles = [],
@@ -7624,7 +7892,7 @@ export async function handleUnifiedChatPost(
       activeFile: rawActiveFile,
     } = body;
     const chatMode = normalizeChatMode(rawMode);
-    const requestedBackend = normalizeRequestedBackend(rawBackend);
+    responseChatMode = chatMode;
     const commandTransport = options.commandTransport === true;
     const messagesRaw = normalizeMessages(rawMessages, fallbackMessage);
     const rawMessage = latestUserMessage(messagesRaw);
@@ -7730,8 +7998,13 @@ export async function handleUnifiedChatPost(
     }
 
     const shouldPreMaterializeProjectWorkspace =
-      Boolean(validatedProjectId) &&
-      (chatMode === "openclaw-tools" || requestedBackend !== "direct");
+      shouldPreMaterializeProjectWorkspaceForTurn({
+        projectId: validatedProjectId,
+        message: userIntentMessage,
+        chatMode,
+        files,
+        activeFile,
+      });
     if (shouldPreMaterializeProjectWorkspace) {
       await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
     }
@@ -7840,6 +8113,7 @@ export async function handleUnifiedChatPost(
     const selectedAgent = await getConfiguredAgentRuntimeStatus(
       agentConfig,
       strictLocalOnly,
+      { preferFastOpenClawGatewayProbe: true },
     );
 
     if (
@@ -7871,15 +8145,39 @@ export async function handleUnifiedChatPost(
       // Preserve the `selectedAgent.type === "openclaw"` block body without
       // reindenting every line below. The outer precondition above has
       // already enforced type === "openclaw" && status === "connected".
-
-      if (validatedProjectId && !shouldPreMaterializeProjectWorkspace) {
-        await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
-      }
-
       const privacyError = await getPrivacyError();
       if (privacyError) {
         return privacyError;
       }
+
+      const preparedRuntimeTurn = runtimeRouter.prepareTurn({
+        hostId: "openclaw",
+        projectPolicy: "local-only",
+        projectId: validatedProjectId,
+        conversationId: typeof conversationId === "string" ? conversationId : null,
+        mode: runtimeTurnModeForChatMode(chatMode),
+        prompt: userIntentMessage,
+        inputFileRefs: mergedFiles
+          .map((file) => file.workspacePath ?? file.brainSlug ?? file.name ?? "")
+          .filter((value) => value.length > 0),
+        dataIncluded: buildOpenClawRuntimeDataIncluded(
+          userIntentMessage,
+          mergedFiles,
+        ),
+        approvalState: "not-required",
+      });
+      runtimeTurnSessionId = preparedRuntimeTurn.session.id;
+      const completeRuntimeTurn = (response: Response): Response => {
+        markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "completed");
+        return response;
+      };
+      const failRuntimeTurn = (
+        response: Response,
+        errorCode = "RUNTIME_TRANSPORT_ERROR",
+      ): Response => {
+        markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "failed", errorCode);
+        return response;
+      };
 
       const { sendAgentMessage: sendToOpenClaw } =
         await import("@/lib/openclaw");
@@ -7926,7 +8224,7 @@ export async function handleUnifiedChatPost(
             importedFiles: [approvalRecord],
           });
         }
-        return await responseWithOpenClawResult({
+        return completeRuntimeTurn(await responseWithOpenClawResult({
           responseText: buildPlanApprovalOnlyResponse({
             workspacePath: approvedWorkspacePath,
             approvalRecordPath: approvalRecord?.workspacePath ?? null,
@@ -7938,7 +8236,7 @@ export async function handleUnifiedChatPost(
           generatedFiles: approvalRecord ? [approvalRecord] : [],
           sourceFiles,
           prompt: userIntentMessage,
-        });
+        }));
       }
       const taskPhases =
         streamPhases === true
@@ -7961,7 +8259,7 @@ export async function handleUnifiedChatPost(
             ? existsSync(path.join(projectRoot, paths.plan))
             : false;
         if (!planExists) {
-          return await responseWithOpenClawResult({
+          return completeRuntimeTurn(await responseWithOpenClawResult({
             responseText: buildMissingRevisionPlanResponse({ paths }),
             conversationId: openClawConversationId,
             mode: chatMode,
@@ -7970,7 +8268,7 @@ export async function handleUnifiedChatPost(
             generatedFiles: [],
             sourceFiles,
             prompt: userIntentMessage,
-          });
+          }));
         }
 
         const requestConfersApproval =
@@ -8002,7 +8300,7 @@ export async function handleUnifiedChatPost(
             : await getPersistentRevisionApprovalState({ projectRoot, paths }),
         );
         if (!approvalState.hasApproval || approvalState.needsFreshApproval) {
-          return await responseWithOpenClawResult({
+          return completeRuntimeTurn(await responseWithOpenClawResult({
             responseText: buildRevisionNeedsApprovalResponse({
               paths,
               hasApproval: approvalState.hasApproval,
@@ -8014,7 +8312,7 @@ export async function handleUnifiedChatPost(
             generatedFiles: [],
             sourceFiles,
             prompt: userIntentMessage,
-          });
+          }));
         }
       }
       const useCompactArtifactContext = shouldUseCompactOpenClawArtifactContext(
@@ -8039,6 +8337,7 @@ export async function handleUnifiedChatPost(
         chatMode === "openclaw-tools" ||
         shouldForceOpenClawToolExecution(userIntentMessage);
       if (streamPhases === true) {
+        attemptedOpenClawTurn = true;
         return streamOpenClawResponse({
           message: contextualOpenClawMessage,
           userMessage: userIntentMessage,
@@ -8051,6 +8350,17 @@ export async function handleUnifiedChatPost(
           taskPhases,
           forceToolExecution,
           sendToOpenClaw,
+          onComplete: () => {
+            markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "completed");
+          },
+          onFail: (errorCode) => {
+            markRuntimeTurn(
+              runtimeRouter,
+              runtimeTurnSessionId,
+              "failed",
+              errorCode,
+            );
+          },
         });
       }
       const workspaceFileContext = useCompactArtifactContext
@@ -8061,6 +8371,9 @@ export async function handleUnifiedChatPost(
             referenceNotes,
           );
       const sourceFiles = extractSourceWorkspacePaths(mergedFiles);
+      if (isRevisionRunRequest(userIntentMessage)) {
+        attemptedOpenClawTurn = true;
+      }
       const fastRevisionOutputs = await runOpenClawRevisionArtifactOnly({
         sendToOpenClaw,
         userMessage: userIntentMessage,
@@ -8070,7 +8383,7 @@ export async function handleUnifiedChatPost(
         sessionId: openClawConversationId,
       });
       if (fastRevisionOutputs) {
-        return Response.json(
+        return completeRuntimeTurn(Response.json(
           {
             response: sanitizeOpenClawUserVisibleResponse(
               fastRevisionOutputs.response,
@@ -8094,8 +8407,9 @@ export async function handleUnifiedChatPost(
               "X-Chat-Mode": chatMode,
             },
           },
-        );
+        ));
       }
+      attemptedOpenClawTurn = true;
       const response = await sendOpenClawMessageWithArtifactRetry({
         sendToOpenClaw,
         message: buildOpenClawMessage(
@@ -8116,7 +8430,7 @@ export async function handleUnifiedChatPost(
         projectId: validatedProjectId,
       });
       if (!response) {
-        return Response.json(
+        return failRuntimeTurn(Response.json(
           {
             error: "OpenClaw returned an empty response. Check the agent logs.",
             backend: "openclaw",
@@ -8130,27 +8444,30 @@ export async function handleUnifiedChatPost(
               "X-Chat-Mode": chatMode,
             },
           },
-        );
+        ));
       }
       if (isOpenClawFailureOutput(response)) {
-        return Response.json(
-          {
-            response:
-              buildOpenClawVisibleFailureResponse(response) ??
-              "ScienceSwarm could not complete this request. Your workspace files are preserved. Check Settings, then retry.",
-            conversationId: openClawConversationId,
-            backend: "openclaw",
-            mode: chatMode,
-            generatedFiles: [],
-            sourceFiles,
-            strictLocalOnly,
-          },
-          {
-            headers: {
-              "X-Chat-Backend": "openclaw",
-              "X-Chat-Mode": chatMode,
+        return failRuntimeTurn(
+          Response.json(
+            {
+              response:
+                buildOpenClawVisibleFailureResponse(response) ??
+                "ScienceSwarm could not complete this request. Your workspace files are preserved. Check Settings, then retry.",
+              conversationId: openClawConversationId,
+              backend: "openclaw",
+              mode: chatMode,
+              generatedFiles: [],
+              sourceFiles,
+              strictLocalOnly,
             },
-          },
+            {
+              headers: {
+                "X-Chat-Backend": "openclaw",
+                "X-Chat-Mode": chatMode,
+              },
+            },
+          ),
+          RUNTIME_HANDLER_ERROR_CODE,
         );
       }
 
@@ -8207,7 +8524,7 @@ export async function handleUnifiedChatPost(
         generatedFiles: requestedArtifactOutputs.generatedFiles,
       };
 
-      return Response.json(
+      return completeRuntimeTurn(Response.json(
         {
           response: sanitizeOpenClawUserVisibleResponse(importedOutputs.response),
           thinking:
@@ -8231,9 +8548,34 @@ export async function handleUnifiedChatPost(
             "X-Chat-Mode": chatMode,
           },
         },
-      );
+      ));
     }
   } catch (err) {
+    markRuntimeTurn(
+      runtimeRouter,
+      runtimeTurnSessionId,
+      "failed",
+      RUNTIME_HANDLER_ERROR_CODE,
+    );
+    if (attemptedOpenClawTurn) {
+      const visibleFailure = buildOpenClawVisibleFailureResponse(err);
+      if (visibleFailure) {
+        return Response.json(
+          {
+            error: visibleFailure,
+            backend: "openclaw",
+            mode: responseChatMode,
+          },
+          {
+            status: 502,
+            headers: {
+              "X-Chat-Backend": "openclaw",
+              "X-Chat-Mode": responseChatMode,
+            },
+          },
+        );
+      }
+    }
     console.error(
       "Chat POST handler failed:",
       err instanceof Error ? `${err.name}: ${err.message}` : String(err),

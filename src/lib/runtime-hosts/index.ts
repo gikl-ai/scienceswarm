@@ -6,4 +6,5 @@ export * from "./events";
 export * from "./policy";
 export * from "./retention";
 export * from "./registry";
+export * from "./router";
 export * from "./sessions";
