@@ -700,19 +700,50 @@ function countMergedWorkspaceFilePaths(
   diskFilePaths: ReadonlySet<string>,
   gbrainEntries: readonly GbrainWorkspaceFileEntry[],
 ): number {
-  const mergedFilePaths = new Set(diskFilePaths);
+  const gbrainFilePaths = new Set<string>();
+  const gbrainAncestorPaths = new Set<string>();
   for (const entry of gbrainEntries) {
-    for (const existingPath of Array.from(mergedFilePaths)) {
-      if (
-        existingPath.startsWith(`${entry.workspacePath}/`)
-        || entry.workspacePath.startsWith(`${existingPath}/`)
-      ) {
-        mergedFilePaths.delete(existingPath);
-      }
-    }
-    mergedFilePaths.add(entry.workspacePath);
+    gbrainFilePaths.add(entry.workspacePath);
+    addWorkspacePathAncestors(entry.workspacePath, gbrainAncestorPaths);
   }
-  return mergedFilePaths.size;
+
+  let diskTotal = 0;
+  for (const diskPath of diskFilePaths) {
+    if (
+      gbrainFilePaths.has(diskPath)
+      || gbrainAncestorPaths.has(diskPath)
+      || hasWorkspacePathAncestor(diskPath, gbrainFilePaths)
+    ) {
+      continue;
+    }
+    diskTotal += 1;
+  }
+  return diskTotal + gbrainEntries.length;
+}
+
+function addWorkspacePathAncestors(
+  workspacePath: string,
+  ancestors: Set<string>,
+): void {
+  let separatorIndex = workspacePath.indexOf("/");
+  while (separatorIndex > 0) {
+    ancestors.add(workspacePath.slice(0, separatorIndex));
+    separatorIndex = workspacePath.indexOf("/", separatorIndex + 1);
+  }
+}
+
+function hasWorkspacePathAncestor(
+  workspacePath: string,
+  ancestorPaths: ReadonlySet<string>,
+): boolean {
+  let separatorIndex = workspacePath.indexOf("/");
+  while (separatorIndex > 0) {
+    if (ancestorPaths.has(workspacePath.slice(0, separatorIndex))) {
+      return true;
+    }
+    separatorIndex = workspacePath.indexOf("/", separatorIndex + 1);
+  }
+  return false;
 }
 
 function newestIsoTimestamp(values: Array<string | null>): string | null {

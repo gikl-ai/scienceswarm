@@ -725,6 +725,65 @@ describe("GET /api/workspace?action=tree", () => {
     expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
   });
 
+  it("counts prefix-conflicting gbrain entries the same way as the merged tree", async () => {
+    const projectId = "test-project";
+    mkdirSync(path.join(ROOT, "projects", projectId), { recursive: true });
+    const firstSha = "1".repeat(64);
+    const secondSha = "2".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "paper") return [];
+      return [
+        {
+          path: "prefix-conflict-page",
+          title: "Prefix Conflict Page",
+          type: "paper",
+          content: "# Prefix Conflict Page",
+          frontmatter: {
+            type: "paper",
+            project: projectId,
+            file_refs: [
+              {
+                role: "source",
+                fileObjectId: `sha256:${firstSha}`,
+                sha256: firstSha,
+                filename: "papers/a",
+                mime: "application/octet-stream",
+                sizeBytes: 12,
+              },
+              {
+                role: "source",
+                fileObjectId: `sha256:${secondSha}`,
+                sha256: secondSha,
+                filename: "papers/a/sub.pdf",
+                mime: "application/pdf",
+                sizeBytes: 34,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+
+    const { GET } = await importRoute();
+    const treeRes = await GET(
+      new Request(`http://localhost/api/workspace?action=tree&projectId=${projectId}`),
+    );
+    const watchRes = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(treeRes.status).toBe(200);
+    expect(watchRes.status).toBe(200);
+    const treeBody = await treeRes.json() as { totalFiles: number };
+    const watchBody = await watchRes.json() as { totalFiles: number };
+    expect(treeBody.totalFiles).toBe(2);
+    expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
+  });
+
   it("reports the newest gbrain timestamp in merged watch state", async () => {
     const projectId = "test-project";
     const projectDir = path.join(ROOT, "projects", projectId);
