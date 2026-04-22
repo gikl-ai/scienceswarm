@@ -196,7 +196,6 @@ interface AgentRuntimeStatus {
 }
 
 type ChatMode = "reasoning" | "openclaw-tools";
-type RequestedBackend = "openclaw" | "agent" | "direct";
 
 const RUNTIME_HANDLER_ERROR_CODE = "RUNTIME_HANDLER_ERROR";
 const RUNTIME_CLIENT_DISCONNECTED_ERROR_CODE = "RUNTIME_CLIENT_DISCONNECTED";
@@ -329,12 +328,6 @@ function matchesLocalModel(
 
 function normalizeChatMode(value: unknown): ChatMode {
   return value === "openclaw-tools" ? "openclaw-tools" : "reasoning";
-}
-
-function normalizeRequestedBackend(value: unknown): RequestedBackend | null {
-  return value === "openclaw" || value === "agent" || value === "direct"
-    ? value
-    : null;
 }
 
 export function shouldPreMaterializeProjectWorkspaceForTurn(params: {
@@ -7891,7 +7884,6 @@ export async function handleUnifiedChatPost(
     const {
       message: fallbackMessage = "",
       messages: rawMessages,
-      backend: rawBackend,
       mode: rawMode,
       conversationId,
       files: rawFiles = [],
@@ -7901,7 +7893,6 @@ export async function handleUnifiedChatPost(
     } = body;
     const chatMode = normalizeChatMode(rawMode);
     responseChatMode = chatMode;
-    const _requestedBackend = normalizeRequestedBackend(rawBackend);
     const commandTransport = options.commandTransport === true;
     const messagesRaw = normalizeMessages(rawMessages, fallbackMessage);
     const rawMessage = latestUserMessage(messagesRaw);
