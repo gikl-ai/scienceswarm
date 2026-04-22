@@ -52,7 +52,7 @@ describe("ChatMessage", () => {
 
     const progressLog = screen.getByRole("log");
     expect(screen.getByText("• Explored")).toBeInTheDocument();
-    expect(progressLog).toHaveTextContent("• Checking the imported files...");
+    expect(progressLog).not.toHaveTextContent("Checking the imported files...");
     expect(screen.getByText(/└ Read docs\/results_table\.csv/)).toBeInTheDocument();
     expect(screen.getByText(/Search activityLog in use-unified-chat\.ts/)).toBeInTheDocument();
     expect(progressLog).toHaveTextContent(/• Working \(\d+s • esc to interrupt\)/);
@@ -61,7 +61,7 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
   });
 
-  it("ticks the working timer every second while the message is streaming", () => {
+  it("shows the streaming spinner while only hidden thinking updates are available", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
 
@@ -77,16 +77,18 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByRole("log")).toHaveTextContent("• Working (5s • esc to interrupt)");
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(1000);
     });
 
-    expect(screen.getByRole("log")).toHaveTextContent("• Working (6s • esc to interrupt)");
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
   });
 
-  it("renders markdown bold inside progress transcript rows", () => {
+  it("keeps raw thinking rows out of the visible assistant progress transcript", () => {
     render(
       <ChatMessage
         role="assistant"
@@ -100,11 +102,10 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Moving forward with embedding", { selector: "strong" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/\*\*Moving forward with embedding\*\*/)).not.toBeInTheDocument();
-    expect(screen.getByText(/I think I'll finalize by saying "Made it"\./)).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.queryByText(/Moving forward with embedding/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/I think I'll finalize by saying "Made it"\./)).not.toBeInTheDocument();
   });
 
   it("normalizes legacy raw tool JSON lines in the visible transcript", () => {
@@ -194,7 +195,7 @@ describe("ChatMessage", () => {
     );
 
     const progressLog = screen.getByRole("log");
-    expect(progressLog).toHaveTextContent("• Planning how to inspect the chart files.");
+    expect(progressLog).not.toHaveTextContent("Planning how to inspect the chart files.");
     expect(progressLog).toHaveTextContent("Read docs/results_table.csv");
     expect(progressLog).not.toHaveTextContent("Turn started");
     expect(progressLog).not.toHaveTextContent("Tool read_file:");
@@ -211,6 +212,10 @@ describe("ChatMessage", () => {
         thinking="Internal planning that should stay hidden."
         activityLog={[
           "Tool read_file: {\"path\":\"docs/results_table.csv\"}",
+        ]}
+        progressLog={[
+          { kind: "thinking", text: "Hidden turn plan" },
+          { kind: "activity", text: "Read docs/results_table.csv" },
         ]}
         timestamp={new Date("2026-04-20T10:03:00.000Z")}
         isStreaming={false}
