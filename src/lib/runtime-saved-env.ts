@@ -4,7 +4,13 @@ import path from "node:path";
 import { parseEnvFile } from "@/lib/setup/env-writer";
 
 const MUTABLE_RUNTIME_KEYS = [
+  "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
+  "GOOGLE_AI_API_KEY",
+  "GOOGLE_API_KEY",
+  "VERTEX_AI_API_KEY",
+  "VERTEX_AI_PROJECT",
+  "VERTEX_AI_LOCATION",
   "SCIENCESWARM_STRICT_LOCAL_ONLY",
   "LLM_PROVIDER",
   "LLM_MODEL",
@@ -26,7 +32,13 @@ export interface SavedLlmRuntimeEnv {
   llmProvider: "local" | "openai";
   llmModel: string | null;
   ollamaModel: string | null;
+  anthropicApiKey: string | null;
   openaiApiKey: string | null;
+  googleAiApiKey: string | null;
+  googleApiKey: string | null;
+  vertexAiApiKey: string | null;
+  vertexAiProject: string | null;
+  vertexAiLocation: string | null;
   agentBackend: string | null;
   agentUrl: string | null;
   agentApiKey: string | null;
@@ -79,7 +91,28 @@ export function resolveSavedLlmRuntimeEnv(
     llmProvider: strictLocalOnly || configuredProvider === "local" ? "local" : "openai",
     llmModel: coalesceTrimmed(savedValues.LLM_MODEL, processEnv.LLM_MODEL),
     ollamaModel: coalesceTrimmed(savedValues.OLLAMA_MODEL, processEnv.OLLAMA_MODEL),
+    anthropicApiKey: coalesceTrimmed(
+      savedValues.ANTHROPIC_API_KEY,
+      processEnv.ANTHROPIC_API_KEY,
+    ),
     openaiApiKey: coalesceTrimmed(savedValues.OPENAI_API_KEY, processEnv.OPENAI_API_KEY),
+    googleAiApiKey: coalesceTrimmed(
+      savedValues.GOOGLE_AI_API_KEY,
+      processEnv.GOOGLE_AI_API_KEY,
+    ),
+    googleApiKey: coalesceTrimmed(savedValues.GOOGLE_API_KEY, processEnv.GOOGLE_API_KEY),
+    vertexAiApiKey: coalesceTrimmed(
+      savedValues.VERTEX_AI_API_KEY,
+      processEnv.VERTEX_AI_API_KEY,
+    ),
+    vertexAiProject: coalesceTrimmed(
+      savedValues.VERTEX_AI_PROJECT,
+      processEnv.VERTEX_AI_PROJECT,
+    ),
+    vertexAiLocation: coalesceTrimmed(
+      savedValues.VERTEX_AI_LOCATION,
+      processEnv.VERTEX_AI_LOCATION,
+    ),
     agentBackend: coalesceTrimmed(savedValues.AGENT_BACKEND, processEnv.AGENT_BACKEND),
     agentUrl: coalesceTrimmed(savedValues.AGENT_URL, processEnv.AGENT_URL),
     agentApiKey: coalesceTrimmed(savedValues.AGENT_API_KEY, processEnv.AGENT_API_KEY),
