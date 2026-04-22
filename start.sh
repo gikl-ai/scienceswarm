@@ -30,7 +30,7 @@ warn_wsl_path() {
 }
 
 is_truthy() {
-  case "${1,,}" in
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
     true|1|yes|on)
       return 0
       ;;

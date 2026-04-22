@@ -647,7 +647,7 @@ export async function POST(request: Request) {
         { status: 502 },
       );
     }
-    if (!parsedJson.parsed) {
+    if (parsedJson.parsed === null) {
       return Response.json(
         { error: "Evidence map model response contained malformed JSON." },
         { status: 502 },
