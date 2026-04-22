@@ -559,7 +559,7 @@ function parseNextExperimentPlanIntent(
     /\b(next experiment|next experiments|experiment plan|best experiment|best next experiment)\b/i.test(normalized)
     || (
       /\b(rank|prioritize|distinguish|separate|what should we do next)\b/i.test(normalized)
-      && /\bexperiment|assay|readout|control\b/i.test(normalized)
+      && /\b(experiment|assay|readout|control)\b/i.test(normalized)
     );
 
   if (!asksForPlanner) {

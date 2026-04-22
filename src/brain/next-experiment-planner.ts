@@ -285,9 +285,9 @@ function tokenize(value: string): Set<string> {
 
 function parsePlannerResponse(content: string): NextExperimentPlan {
   try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
+    const jsonObject = extractFirstJsonObject(content);
+    if (jsonObject) {
+      const parsed = JSON.parse(jsonObject);
       const recommendations = Array.isArray(parsed.recommendations)
         ? parsed.recommendations.map(
             (
@@ -332,6 +332,63 @@ function parsePlannerResponse(content: string): NextExperimentPlan {
     evidence: [],
     recommendations: [],
   };
+}
+
+export function extractFirstJsonObject(content: string): string | null {
+  const fencedCandidates = Array.from(
+    content.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi),
+    (match) => match[1] ?? "",
+  );
+
+  for (const candidate of [...fencedCandidates, content]) {
+    const object = extractBalancedJsonObject(candidate);
+    if (object) return object;
+  }
+
+  return null;
+}
+
+function extractBalancedJsonObject(content: string): string | null {
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+
+    if (start === -1) {
+      if (char === "{") {
+        start = index;
+        depth = 1;
+      }
+      continue;
+    }
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+    } else if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return content.slice(start, index + 1);
+      }
+    }
+  }
+
+  return null;
 }
 
 function fallbackPlan(input: {

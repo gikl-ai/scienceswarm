@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
@@ -36,9 +37,11 @@ export async function persistGeneratedProjectArtifact(
 ): Promise<PersistGeneratedProjectArtifactResult> {
   const now = new Date();
   const stamp = now.toISOString().slice(0, 10);
+  const projectSlug = slugifyWorkspaceSegment(input.projectSlug);
+  const artifactTypeSlug = slugifyWorkspaceSegment(input.artifactType);
   const saveResult = await saveProjectArtifact({
-    project: input.projectSlug,
-    artifactType: input.artifactType,
+    project: projectSlug,
+    artifactType: artifactTypeSlug,
     title: input.title,
     content: input.content,
     fileName: input.workspaceFileName,
@@ -46,21 +49,21 @@ export async function persistGeneratedProjectArtifact(
   });
 
   const artifactBase = slugifyWorkspaceSegment(
-    `${input.projectSlug}-${input.artifactType}-${input.title}`,
+    `${projectSlug}-${artifactTypeSlug}-${input.title}`,
   );
-  const artifactPage = path.join(
+  const artifactPage = path.posix.join(
     "wiki",
     "entities",
     "artifacts",
-    `${stamp}-${artifactBase}-${Math.random().toString(16).slice(2, 8)}.md`,
+    `${stamp}-${artifactBase}-${randomUUID()}.md`,
   );
   const artifactSlug = artifactPage.replace(/\.md$/i, "");
 
   const pageMarkdown = buildArtifactPageMarkdown({
     title: input.title,
     content: input.content,
-    projectSlug: input.projectSlug,
-    artifactType: input.artifactType,
+    projectSlug,
+    artifactType: artifactTypeSlug,
     savePath: saveResult.relativePath,
     sourceRefs: input.sourceRefs ?? [],
     tags: input.tags ?? [],
@@ -69,7 +72,7 @@ export async function persistGeneratedProjectArtifact(
   });
 
   // Keep a disk mirror for project-linked provenance and future disk readers.
-  const artifactAbsolutePath = path.join(input.brainRoot, artifactPage);
+  const artifactAbsolutePath = resolveBrainMirrorPath(input.brainRoot, artifactPage);
   await mkdir(path.dirname(artifactAbsolutePath), { recursive: true });
   await writeFile(artifactAbsolutePath, pageMarkdown, "utf-8");
 
@@ -79,7 +82,7 @@ export async function persistGeneratedProjectArtifact(
 
   await updateProjectPage({
     brainRoot: input.brainRoot,
-    projectPagePath: path.join("wiki", "projects", `${input.projectSlug}.md`),
+    projectPagePath: path.posix.join("wiki", "projects", `${projectSlug}.md`),
     projectTitle: input.projectTitle,
     artifactPage,
     title: input.title,
@@ -87,9 +90,12 @@ export async function persistGeneratedProjectArtifact(
   });
 
   await updateProjectManifest(
-    input.projectSlug,
+    projectSlug,
     (current) => {
-      const manifest = current ?? buildProjectManifestShell(input);
+      const manifest = current ?? buildProjectManifestShell({
+        projectSlug,
+        projectTitle: input.projectTitle,
+      });
 
       return {
         ...manifest,
@@ -130,7 +136,7 @@ function buildProjectManifestShell(
     title: input.projectTitle,
     privacy: "cloud-ok",
     status: "active",
-    projectPagePath: path.join("wiki", "projects", `${input.projectSlug}.md`),
+    projectPagePath: path.posix.join("wiki", "projects", `${slugifyWorkspaceSegment(input.projectSlug)}.md`),
     sourceRefs: [],
     decisionPaths: [],
     taskPaths: [],
@@ -142,7 +148,7 @@ function buildProjectManifestShell(
   };
 }
 
-function buildArtifactPageMarkdown(input: {
+export function buildArtifactPageMarkdown(input: {
   title: string;
   content: string;
   projectSlug: string;
@@ -164,6 +170,7 @@ function buildArtifactPageMarkdown(input: {
   );
 
   const frontmatter = {
+    ...parsed.data,
     date: input.date,
     title: input.title,
     type: "artifact",
@@ -175,7 +182,6 @@ function buildArtifactPageMarkdown(input: {
     workspace_path: input.savePath,
     source_refs: input.sourceRefs,
     uploaded_by: input.uploadedBy,
-    ...parsed.data,
   };
 
   const sections = [
@@ -203,7 +209,7 @@ async function updateProjectPage(input: {
   title: string;
   savePath: string;
 }): Promise<void> {
-  const absolutePath = path.join(input.brainRoot, input.projectPagePath);
+  const absolutePath = resolveBrainMirrorPath(input.brainRoot, input.projectPagePath);
   await mkdir(path.dirname(absolutePath), { recursive: true });
 
   let content = "";
@@ -240,4 +246,26 @@ function upsertSectionEntry(content: string, heading: string, entry: string): st
   const lineBreak = content.indexOf("\n", sectionStart);
   const insertAt = lineBreak === -1 ? content.length : lineBreak + 1;
   return `${content.slice(0, insertAt)}${entry}\n${content.slice(insertAt)}`;
+}
+
+export function resolveBrainMirrorPath(root: string, relativePath: string): string {
+  const normalizedRelativePath = path.normalize(relativePath);
+
+  if (
+    path.isAbsolute(normalizedRelativePath)
+    || normalizedRelativePath === ".."
+    || normalizedRelativePath.startsWith(`..${path.sep}`)
+  ) {
+    throw new Error("Generated artifact paths must stay inside the configured brain root.");
+  }
+
+  const resolvedRoot = path.resolve(root);
+  const resolvedPath = path.resolve(resolvedRoot, normalizedRelativePath);
+  const relativeToRoot = path.relative(resolvedRoot, resolvedPath);
+
+  if (relativeToRoot === "" || relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot)) {
+    throw new Error("Generated artifact paths must stay inside the configured brain root.");
+  }
+
+  return resolvedPath;
 }
