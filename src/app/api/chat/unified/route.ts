@@ -70,7 +70,6 @@ import { isLocalRequest } from "@/lib/local-guard";
 import {
   getScienceSwarmBrainRoot,
   getScienceSwarmProjectRoot,
-  getScienceSwarmStateRoot,
   getScienceSwarmWorkspaceRoot,
   getScienceSwarmOpenClawStateDir,
 } from "@/lib/scienceswarm-paths";
@@ -86,6 +85,10 @@ import { OPENHANDS_URL } from "@/lib/openhands";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { enforceCloudPrivacy } from "@/lib/privacy-policy";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
+import {
+  getProjectBrainRootForBrainRoot,
+  getProjectStateRootForBrainRoot,
+} from "@/lib/state/project-storage";
 import {
   rewriteProjectRootMentions,
   writeBackOpenClawGeneratedFiles,
@@ -3969,9 +3972,10 @@ async function maybeHandleModelSystemApplicability(params: {
       }
     | null = null;
   try {
+    const brainRoot = getScienceSwarmBrainRoot();
     persisted = await persistGeneratedProjectArtifact({
-      brainRoot: getScienceSwarmBrainRoot(),
-      stateRoot: getScienceSwarmStateRoot(),
+      brainRoot: getProjectBrainRootForBrainRoot(params.projectId, brainRoot),
+      stateRoot: getProjectStateRootForBrainRoot(params.projectId, brainRoot),
       projectSlug: params.projectId,
       projectTitle: params.projectId,
       artifactType: "model-applicability",
@@ -4147,9 +4151,10 @@ async function maybeHandleTargetPrioritization(params: {
       }
     | null = null;
   try {
+    const brainRoot = getScienceSwarmBrainRoot();
     persisted = await persistGeneratedProjectArtifact({
-      brainRoot: getScienceSwarmBrainRoot(),
-      stateRoot: getScienceSwarmStateRoot(),
+      brainRoot: getProjectBrainRootForBrainRoot(params.projectId, brainRoot),
+      stateRoot: getProjectStateRootForBrainRoot(params.projectId, brainRoot),
       projectSlug: params.projectId,
       projectTitle: params.projectId,
       artifactType: "target-prioritization",

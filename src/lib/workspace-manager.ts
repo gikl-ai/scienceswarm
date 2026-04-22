@@ -204,6 +204,7 @@ export async function saveProjectArtifact(params: {
   content: string;
   fileName?: string;
   root?: string;
+  returnPathBase?: "workspace" | "project";
   timestamp?: Date;
 }): Promise<SavedArtifactFile> {
   const workspaceRoot = params.root ?? getScienceSwarmWorkspaceRoot();
@@ -244,7 +245,10 @@ export async function saveProjectArtifact(params: {
     }
   }
 
-  const relativePath = path.relative(workspaceRoot, absolutePath);
+  const relativePath = path.relative(
+    params.returnPathBase === "project" ? projectRoot : workspaceRoot,
+    absolutePath,
+  );
 
   return {
     absolutePath,

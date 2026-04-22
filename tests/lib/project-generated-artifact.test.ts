@@ -42,7 +42,7 @@ describe("buildArtifactPageMarkdown", () => {
       ].join("\n"),
       projectSlug: "project-alpha",
       artifactType: "next-experiment-plan",
-      savePath: "project-alpha/artifacts/next-experiment-plan/plan.md",
+      savePath: "artifacts/next-experiment-plan/plan.md",
       sourceRefs: [],
       tags: [],
       date: "2026-04-22",
@@ -55,7 +55,7 @@ describe("buildArtifactPageMarkdown", () => {
       type: "artifact",
       project: "project-alpha",
       artifact_type: "next-experiment-plan",
-      workspace_path: "project-alpha/artifacts/next-experiment-plan/plan.md",
+      workspace_path: "artifacts/next-experiment-plan/plan.md",
     });
   });
 });

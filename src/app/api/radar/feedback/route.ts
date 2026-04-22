@@ -20,10 +20,7 @@ import {
 } from "@/lib/radar/learn"
 import { isLocalRequest } from "@/lib/local-guard"
 import type { RadarFeedback } from "@/lib/radar/types"
-
-function getStateDir(): string {
-  return process.env.RADAR_STATE_DIR || process.env.BRAIN_ROOT || "state"
-}
+import { getRadarStateDir } from "@/lib/radar/state-dir"
 
 function normalizeAction(action: unknown): RadarFeedback["action"] | null {
   if (action === "save") return "save-to-brain"
@@ -66,6 +63,7 @@ export async function POST(request: Request): Promise<Response> {
     const body = await request.json()
     const { briefingId, signalId, action, matchedTopics } = body
     const normalizedAction = normalizeAction(action)
+    const validatedMatchedTopics = validateMatchedTopics(matchedTopics)
 
     if (!briefingId || !signalId || !normalizedAction) {
       return Response.json(
@@ -73,8 +71,14 @@ export async function POST(request: Request): Promise<Response> {
         { status: 400 }
       )
     }
+    if (!validatedMatchedTopics.ok) {
+      return Response.json(
+        { error: "matchedTopics must be an array of non-empty strings when provided" },
+        { status: 400 }
+      )
+    }
 
-    const stateDir = getStateDir()
+    const stateDir = getRadarStateDir()
     const radar = await getActiveRadar(stateDir)
 
     if (!radar) {
@@ -90,12 +94,12 @@ export async function POST(request: Request): Promise<Response> {
 
     await recordFeedback(stateDir, feedback)
 
-    if (matchedTopics && matchedTopics.length > 0) {
+    if (validatedMatchedTopics.topics.length > 0) {
       await applyFeedbackToRadar(
         stateDir,
         radar.id,
         feedback,
-        matchedTopics
+        validatedMatchedTopics.topics
       )
     }
 
@@ -111,10 +115,28 @@ export async function POST(request: Request): Promise<Response> {
       ok: true,
       message: messageForAction(normalizedAction, saved?.savedPath),
       savedPath: saved?.savedPath,
-      preferenceApplied: Boolean(matchedTopics && matchedTopics.length > 0),
+      preferenceApplied: validatedMatchedTopics.topics.length > 0,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     return Response.json({ error: message }, { status: 500 })
   }
+}
+
+function validateMatchedTopics(
+  value: unknown,
+): { ok: true; topics: string[] } | { ok: false } {
+  if (value === undefined || value === null) {
+    return { ok: true, topics: [] }
+  }
+  if (!Array.isArray(value)) {
+    return { ok: false }
+  }
+  const topics = value.map((topic) =>
+    typeof topic === "string" ? topic.trim() : ""
+  )
+  if (topics.some((topic) => topic.length === 0)) {
+    return { ok: false }
+  }
+  return { ok: true, topics }
 }
