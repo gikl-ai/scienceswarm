@@ -1645,6 +1645,12 @@ describe("POST /api/chat/unified", () => {
       "Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
     );
     expect(openClawMessage).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(openClawMessage).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
+    expect(openClawMessage).toContain(
       "Do not run git add, git commit, or git push unless the user explicitly asked",
     );
     expect(openClawMessage).toContain(
@@ -1955,6 +1961,12 @@ describe("POST /api/chat/unified", () => {
     );
     expect(openClawMessage).toContain(
       "Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
+    );
+    expect(openClawMessage).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(openClawMessage).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     );
   });
 
@@ -4437,6 +4449,12 @@ describe("POST /api/chat/unified", () => {
       "Return exactly one complete machine-readable artifact block",
     );
     expect(blockRepairPrompt).toContain("Do not use workspace tools");
+    expect(blockRepairPrompt).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(blockRepairPrompt).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
+    );
     expect(blockRepairPrompt).toContain("Current revised manuscript content");
     expect(sendOpenClawMessage).toHaveBeenCalledTimes(2);
   });
@@ -5511,6 +5529,12 @@ describe("POST /api/chat/unified", () => {
     const retryPrompt = sendOpenClawMessage.mock.calls[1]?.[0] ?? "";
     expect(retryPrompt).toContain(
       "Retry this artifact-writing request with compact context",
+    );
+    expect(retryPrompt).toContain(
+      "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    );
+    expect(retryPrompt).toContain(
+      "Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     );
     expect(retryPrompt).toContain(
       path.join(projectRoot, "docs", "hubble-1929-revised-manuscript.md"),
