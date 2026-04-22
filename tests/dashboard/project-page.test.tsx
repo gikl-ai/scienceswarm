@@ -196,6 +196,130 @@ describe("Project dashboard smoke test", () => {
     });
   });
 
+  it("restores the remembered project's persisted chat after returning without a name param", async () => {
+    searchParamsValue = "";
+    window.localStorage.setItem("scienceswarm.project.lastSlug", "demo-project");
+    window.localStorage.setItem(
+      "scienceswarm.chat.demo-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: "web:demo-project:session-1",
+        conversationBackend: "openclaw",
+        messages: [
+          {
+            id: "remembered-user",
+            role: "user",
+            content: "hi from remembered project",
+            timestamp: "2026-04-22T08:00:00.000Z",
+          },
+          {
+            id: "remembered-assistant",
+            role: "assistant",
+            content: "Persisted answer",
+            timestamp: "2026-04-22T08:00:01.000Z",
+          },
+        ],
+      }),
+    );
+    replaceMock.mockImplementation((href: string) => {
+      const nextUrl = new URL(href, "http://localhost");
+      searchParamsValue = nextUrl.search.startsWith("?")
+        ? nextUrl.search.slice(1)
+        : nextUrl.search;
+    });
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/health") {
+        return Response.json({
+          openclaw: "connected",
+          openhands: "disconnected",
+          openai: "configured",
+          features: {
+            chat: true,
+            codeExecution: false,
+            github: false,
+            multiChannel: false,
+            structuredCritique: false,
+          },
+        });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+          llmProvider: "openai",
+          ollamaModels: [],
+          configuredLocalModel: null,
+        });
+      }
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 0, backend: "filesystem" });
+      }
+
+      if (url.startsWith("/api/brain/brief?project=")) {
+        return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
+      }
+
+      if (url === "/api/projects/demo-project/import-summary") {
+        return Response.json({ project: "demo-project", lastImport: null });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=demo-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/brain/list?project=demo-project") {
+        return Response.json([]);
+      }
+
+      if (url === "/api/chat/thread?project=demo-project") {
+        return Response.json({
+          version: 1,
+          project: "demo-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/projects") {
+        return Response.json({
+          projects: [
+            {
+              id: "demo-project",
+              slug: "demo-project",
+              name: "Demo Project",
+              status: "active",
+            },
+          ],
+        });
+      }
+
+      return Response.json({ status: "disconnected" });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<ProjectPage />);
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/dashboard/project?name=demo-project");
+    });
+
+    view.rerender(<ProjectPage />);
+
+    expect(await screen.findByText("Persisted answer")).toBeInTheDocument();
+    expect(screen.getByText("hi from remembered project")).toBeInTheDocument();
+  });
+
   it("shows an honest no-project state when the workspace URL has no active slug", async () => {
     searchParamsValue = "";
 
@@ -1514,6 +1638,133 @@ describe("Project dashboard smoke test", () => {
         content: "print('selected')",
       },
     });
+  });
+
+  it("restores gbrain-backed chat file cards after refresh", async () => {
+    window.localStorage.setItem(FILE_PREVIEW_LOCATION_STORAGE_KEY, "chat-pane");
+    window.localStorage.setItem(
+      "scienceswarm.chat.demo-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: null,
+        messages: [
+          {
+            id: "gbrain-static-card",
+            role: "system",
+            content: "__FILE_STATIC__:Brain Artifacts/gbrain:wiki/artifacts/cat-image",
+            timestamp: "2026-04-21T18:30:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/health") {
+        return Response.json({
+          openclaw: "connected",
+          openhands: "disconnected",
+          openai: "configured",
+          features: {
+            chat: true,
+            codeExecution: false,
+            github: false,
+            multiChannel: false,
+            structuredCritique: false,
+          },
+        });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+          llmProvider: "openai",
+          ollamaModels: [],
+          configuredLocalModel: null,
+        });
+      }
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 0, backend: "filesystem" });
+      }
+
+      if (url.startsWith("/api/brain/brief?project=")) {
+        return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
+      }
+
+      if (url === "/api/projects/demo-project/import-summary") {
+        return Response.json({ project: "demo-project", lastImport: null });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=demo-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/workspace" && method === "POST") {
+        return Response.json({ added: [], updated: [], missing: [], changed: [] });
+      }
+
+      if (url === "/api/brain/list?project=demo-project") {
+        return Response.json([]);
+      }
+
+      if (url === "/api/chat/thread?project=demo-project") {
+        return Response.json({
+          version: 1,
+          project: "demo-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/brain/read?path=wiki%2Fartifacts%2Fcat-image") {
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
+
+      if (url === "/api/brain/file?slug=wiki%2Fartifacts%2Fcat-image&metadata=1") {
+        return Response.json({
+          mime: "image/png",
+          source_filename: "cat-image.png",
+          size: 2048,
+        });
+      }
+
+      if (url === "/api/projects") {
+        return Response.json({
+          projects: [
+            {
+              id: "demo-project",
+              slug: "demo-project",
+              name: "Demo Project",
+              status: "active",
+            },
+          ],
+        });
+      }
+
+      return Response.json({ status: "disconnected" });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ProjectPage />);
+
+    const visualizer = await screen.findByLabelText("File visualizer");
+    const image = within(visualizer).getByRole("img", {
+      name: "Brain Artifacts/gbrain:wiki/artifacts/cat-image",
+    });
+    expect(image).toHaveAttribute(
+      "src",
+      "/api/brain/file?slug=wiki%2Fartifacts%2Fcat-image",
+    );
+    expect(screen.queryByText("Cannot preview this file type.")).not.toBeInTheDocument();
   });
 
   it("reloads the selected file preview after a streamed chat turn updates it", async () => {
