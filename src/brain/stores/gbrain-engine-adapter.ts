@@ -808,6 +808,10 @@ function inferContentType(type: string, slug: string): ContentType {
     "person",
   ];
 
+  if (knownTypes.includes(normalized)) {
+    return normalized;
+  }
+
   const lower = slug.toLowerCase();
   if (matchesPathSegment(lower, "projects") || matchesPathSegment(lower, "project")) return "project";
   if (matchesPathSegment(lower, "papers")) return "paper";
@@ -829,10 +833,6 @@ function inferContentType(type: string, slug: string): ContentType {
   if (matchesPathSegment(lower, "data") || matchesPathSegment(lower, "datasets")) return "data";
   if (matchesPathSegment(lower, "web")) return "web";
   if (matchesPathSegment(lower, "voice")) return "voice";
-
-  if (knownTypes.includes(normalized)) {
-    return normalized;
-  }
 
   return "concept";
 }

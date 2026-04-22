@@ -231,7 +231,6 @@ export async function* runInstaller(
   env: InstallerEnvironment,
 ): AsyncGenerator<InstallerEvent, void, unknown> {
   const brainPreset = normalizeBrainPreset(options.brainPreset);
-  const preset = loadBrainPreset(brainPreset);
   const brainRoot =
     options.brainRoot ??
     path.join(env.homeDir(), DEFAULT_BRAIN_DIRNAME);
@@ -337,17 +336,15 @@ export async function* runInstaller(
     yield skipStep("seed-resolver", "RESOLVER.md already present");
   } else {
     try {
+      const preset = loadBrainPreset(brainPreset);
       await env.writeFile(resolverPath, preset.resolverTemplate);
       yield succeedStep("seed-resolver", resolverPath);
     } catch (err) {
-      // Non-fatal in spirit, but the spec wants every error visible
-      // and recoverable, so we treat this as a hard fail with a
-      // "you can hand-write the file" recovery hint.
       const error: InstallError = {
-        code: "target-not-writable",
-        message: `Could not write RESOLVER.md to ${brainRoot}.`,
+        code: "internal",
+        message: `Could not seed RESOLVER.md for the ${brainPreset} preset.`,
         recovery:
-          "Check filesystem permissions on the brain directory, or set BRAIN_ROOT to a writable path.",
+          "Confirm the preset assets exist and are readable, then re-run install. If the problem persists, inspect the installer logs for the underlying asset read error.",
         cause: errMessage(err),
       };
       yield failStep("seed-resolver", error);

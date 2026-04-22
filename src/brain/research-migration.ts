@@ -318,7 +318,14 @@ function collectMarkdownPages(brainRoot: string, relativeDir: string): string[] 
     }
     visited.add(currentRealPath);
 
-    for (const entry of readdirSync(current)) {
+    let entries: string[];
+    try {
+      entries = readdirSync(current);
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
       if (entry.startsWith(".")) continue;
       const fullPath = join(current, entry);
       let realPath: string;

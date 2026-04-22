@@ -20,7 +20,7 @@ export async function persistResearchArtifactPage(input: {
   links?: PersistTransactionLinkInput[];
 }): Promise<PersistedResearchArtifact> {
   const relativePath = `${input.slug}.md`;
-  const diskPath = path.join(input.brainRoot, relativePath);
+  const diskPath = resolvePathWithinRoot(input.brainRoot, relativePath);
   const nowIso = input.now.toISOString();
   let mergedFrontmatter: Record<string, unknown> = {};
   let mergedTimeline = input.timelineEntry.trim();
@@ -53,8 +53,7 @@ export async function persistResearchArtifactPage(input: {
   });
 
   await writeDiskMirror(
-    input.brainRoot,
-    relativePath,
+    diskPath,
     {
       type: input.type,
       title: input.title,
@@ -81,13 +80,11 @@ function appendTimeline(existingTimeline: string, entry: string): string {
 }
 
 async function writeDiskMirror(
-  brainRoot: string,
-  relativePath: string,
+  absolutePath: string,
   frontmatter: Record<string, unknown>,
   compiledTruth: string,
   timeline: string,
 ): Promise<void> {
-  const absolutePath = path.join(brainRoot, relativePath);
   await mkdir(path.dirname(absolutePath), { recursive: true });
   const body = timeline.trim()
     ? `${compiledTruth.trim()}\n\n---\n\n${timeline.trim()}\n`
@@ -97,6 +94,24 @@ async function writeDiskMirror(
     matter.stringify(body, cleanUndefined(frontmatter) as Record<string, unknown>),
     "utf-8",
   );
+}
+
+function resolvePathWithinRoot(root: string, relativePath: string): string {
+  if (!relativePath || path.isAbsolute(relativePath)) {
+    throw new Error("Research artifact path must be a relative path within the brain root.");
+  }
+
+  const resolvedRoot = path.resolve(root);
+  const resolvedPath = path.resolve(resolvedRoot, relativePath);
+  const relativeToRoot = path.relative(resolvedRoot, resolvedPath);
+  if (
+    relativeToRoot.startsWith("..")
+    || path.isAbsolute(relativeToRoot)
+  ) {
+    throw new Error("Research artifact path escapes the configured brain root.");
+  }
+
+  return resolvedPath;
 }
 
 function cleanUndefined(value: unknown): unknown {

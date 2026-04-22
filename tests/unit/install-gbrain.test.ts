@@ -27,7 +27,8 @@
  */
 
 import * as path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as brainPresets from "@/brain/presets";
 
 import {
   getCurrentUserHandle,
@@ -513,6 +514,40 @@ describe("install-gbrain error taxonomy", () => {
       expect(summary.error?.cause).toContain("PGLite WASM failed to load");
     }
     expect(handle.calls.envWrites).toHaveLength(0);
+  });
+
+  it("preset asset read failure surfaces as an internal installer error", async () => {
+    const handle = makeFakeEnv();
+    const presetSpy = vi
+      .spyOn(brainPresets, "loadBrainPreset")
+      .mockImplementation(() => {
+        throw new Error("missing preset asset");
+      });
+
+    try {
+      const { events, ok } = await runInstallerToCompletion(
+        { repoRoot: "/repo" },
+        handle.env,
+      );
+
+      expect(ok).toBe(false);
+      const summary = lastEvent(events);
+      if (summary.type === "summary") {
+        expect(summary.status).toBe("failed");
+        expect(summary.error?.code).toBe("internal");
+        expect(summary.error?.cause).toContain("missing preset asset");
+      }
+
+      const seedResolverEvents = eventsByStep(events, "seed-resolver");
+      expect(seedResolverEvents.at(-1)).toMatchObject({
+        type: "step",
+        step: "seed-resolver",
+        status: "failed",
+      });
+      expect(handle.calls.envWrites).toHaveLength(0);
+    } finally {
+      presetSpy.mockRestore();
+    }
   });
 });
 

@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -102,5 +103,27 @@ describe("research layout migration", () => {
     expect(readFileSync(join(root, "topics", "README.md"), "utf-8")).toContain(
       "Use `topics/` for new research-first pages.",
     );
+  });
+
+  it("skips unreadable directories instead of crashing the migration preview", () => {
+    const unreadableDir = join(root, "concepts", "locked");
+    mkdirSync(unreadableDir, { recursive: true });
+    writeFileSync(join(root, "concepts", "rlhf.md"), "# RLHF\n", "utf-8");
+    writeFileSync(join(unreadableDir, "secret.md"), "# Secret\n", "utf-8");
+    chmodSync(unreadableDir, 0o000);
+
+    try {
+      const preview = previewResearchLayoutMigration(root);
+      expect(preview.homes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            canonicalHome: "topics",
+            legacyPageCount: 1,
+          }),
+        ]),
+      );
+    } finally {
+      chmodSync(unreadableDir, 0o755);
+    }
   });
 });

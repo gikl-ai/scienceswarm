@@ -5,6 +5,7 @@ import {
   type ResearchLandscapeSource,
 } from "@/lib/research-packets";
 import type { PaperEntity } from "@/lib/research-packets/contract";
+import { persistResearchArtifactPage } from "@/lib/research-packets/writeback";
 
 function paper(input: {
   source: ResearchLandscapeSource;
@@ -73,6 +74,29 @@ function makeDeps() {
       write_status: "persisted" as const,
     })),
     writeLastRun: vi.fn(() => "/tmp/scienceswarm-test-brain/.research-landscape-last-run.json"),
+  };
+}
+
+function artifactInput(
+  overrides: Partial<Parameters<typeof persistResearchArtifactPage>[0]> = {},
+): Parameters<typeof persistResearchArtifactPage>[0] {
+  return {
+    slug: "packets/2026-04-22-safe-artifact",
+    title: "Safe artifact",
+    type: "research_packet",
+    brainRoot: "/tmp/scienceswarm-test-brain",
+    client: {
+      persistTransaction: vi.fn(async () => ({
+        slug: "packets/2026-04-22-safe-artifact",
+        status: "created_or_updated" as const,
+      })),
+    } as never,
+    userHandle: "@tester",
+    now: new Date("2026-04-22T15:30:00.000Z"),
+    compiledTruth: "Compiled truth",
+    timelineEntry: "- **2026-04-22** | Stored.\n",
+    frontmatter: { query: "safe artifact" },
+    ...overrides,
   };
 }
 
@@ -227,5 +251,17 @@ describe("runResearchLandscape", () => {
 
     expect(first.packet.slug).toBe(second.packet.slug);
     expect(first.journal.slug).toBe(second.journal.slug);
+  });
+});
+
+describe("persistResearchArtifactPage", () => {
+  it("rejects disk paths that escape the brain root", async () => {
+    await expect(
+      persistResearchArtifactPage(
+        artifactInput({
+          slug: "../escape",
+        }),
+      ),
+    ).rejects.toThrow("escapes the configured brain root");
   });
 });
