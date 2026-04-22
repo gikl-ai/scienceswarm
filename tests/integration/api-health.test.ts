@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -72,6 +72,29 @@ describe("GET /api/health", () => {
       expect.arrayContaining([
         expect.objectContaining({ capabilityId: "chat.local" }),
         expect.objectContaining({ capabilityId: "execution.openhands.local" }),
+      ]),
+    );
+  });
+
+  it("reports gbrain ready for RESOLVER-based installs", async () => {
+    const brainRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-brain-"));
+    await writeFile(path.join(brainRoot, "RESOLVER.md"), "# Resolver\n");
+    await mkdir(path.join(brainRoot, "brain.pglite"), { recursive: true });
+    vi.stubEnv("BRAIN_ROOT", brainRoot);
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(body.runtimeContract.capabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          capabilityId: "brain.read",
+          status: "ready",
+        }),
+        expect.objectContaining({
+          capabilityId: "brain.write",
+          status: "ready",
+        }),
       ]),
     );
   });

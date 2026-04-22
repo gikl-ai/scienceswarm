@@ -14,11 +14,11 @@
  */
 
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 
+import { isGbrainRootReady } from "@/lib/brain/readiness";
 import { hasRecommendedOllamaModel } from "@/lib/ollama-models";
 import { getOllamaInstallStatus } from "@/lib/ollama-install";
 import { getOpenClawSetupSummary } from "@/lib/openclaw-status";
@@ -65,10 +65,7 @@ function resolveBrainRootFromStatus(status: ConfigStatusForRuntime): string {
 
 function getGbrainSnapshot(status: ConfigStatusForRuntime) {
   const root = resolveBrainRootFromStatus(status);
-  const ready =
-    existsSync(root)
-    && existsSync(path.join(root, "BRAIN.md"))
-    && existsSync(path.join(root, "brain.pglite"));
+  const ready = isGbrainRootReady(root);
   return {
     read: ready,
     write: ready,
