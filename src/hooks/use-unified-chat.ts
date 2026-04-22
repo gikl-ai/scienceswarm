@@ -2248,6 +2248,16 @@ export function useUnifiedChat(
         return;
       }
       unloadPersistedRef.current = true;
+      // Route changes can interrupt the delayed server sync. Persist the live
+      // thread to local storage first so a return to the project always
+      // rehydrates from the newest in-memory state.
+      persistChat(
+        projectName,
+        liveMessagesRef.current,
+        liveConversationIdRef.current,
+        liveConversationBackendRef.current,
+        liveArtifactProvenanceRef.current,
+      );
       void persistChatToServer(
         projectName,
         liveMessagesRef.current,
