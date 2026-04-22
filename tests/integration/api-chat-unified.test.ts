@@ -1814,6 +1814,9 @@ describe("POST /api/chat/unified", () => {
       "Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
     );
     expect(openClawMessage).toContain(
+      "Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to project-visible relative paths",
+    );
+    expect(openClawMessage).toContain(
       "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
     );
     expect(openClawMessage).toContain(
@@ -1832,6 +1835,59 @@ describe("POST /api/chat/unified", () => {
     );
     expect(sendAgentMessage).not.toHaveBeenCalled();
     expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it("routes sweep/save prompts with explanatory wording through OpenClaw tools", async () => {
+    const projectRoot = createProjectRoot("alpha-project");
+    resolveAgentConfig.mockReturnValue({ type: "openclaw", url: "http://localhost:19002" });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    isLocalProviderConfigured.mockReturnValue(true);
+    localHealthCheck.mockResolvedValueOnce({
+      running: true,
+      models: [],
+      url: "http://localhost:11434",
+    });
+    sendOpenClawMessage.mockResolvedValue(
+      [
+        "```scienceswarm-artifact path=\"docs/sweep-summary.md\"",
+        "# Sweep Summary",
+        "",
+        "Toy smoke sweep complete.",
+        "```",
+        "",
+        "Saved `docs/sweep-summary.md`.",
+      ].join("\n"),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message:
+          "Using docs/benchmark-suite.md, run a tiny deterministic toy sweep, save docs/sweep-summary.md, and explain which result is most trustworthy and why.",
+        projectId: "alpha-project",
+        mode: "reasoning",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const [[openClawMessage, openClawOptions]] = sendOpenClawMessage.mock.calls;
+    expect(openClawOptions.cwd).toBe(projectRoot);
+    expect(openClawMessage).toContain(
+      "Execute all steps using your tools when real work is required.",
+    );
+    expect(openClawMessage).toContain(
+      `The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
+    );
+    expect(openClawMessage).not.toContain("Clarification request rules:");
   });
 
   it("materializes gbrain-backed project inputs before sending OpenClaw executable workspace paths", async () => {
