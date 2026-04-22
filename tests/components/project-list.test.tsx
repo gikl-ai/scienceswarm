@@ -19,6 +19,15 @@ vi.mock("next/link", () => ({
 }));
 
 describe("ProjectList file tree", () => {
+  const projects = [
+    {
+      id: "demo-project",
+      slug: "demo-project",
+      name: "Demo Project",
+      description: "AI for science",
+      status: "active",
+    },
+  ];
   const files: FileNode[] = [
     {
       name: "First Proof",
@@ -48,15 +57,7 @@ describe("ProjectList file tree", () => {
       "fetch",
       vi.fn(async () =>
         Response.json({
-          projects: [
-            {
-              id: "demo-project",
-              slug: "demo-project",
-              name: "Demo Project",
-              description: "AI for science",
-              status: "active",
-            },
-          ],
+          projects,
         }),
       ),
     );
@@ -119,5 +120,44 @@ describe("ProjectList file tree", () => {
     fireEvent.click(screen.getByRole("button", { name: /supplementary/ }));
 
     expect(await screen.findByText("appendix.tex")).toBeInTheDocument();
+  });
+
+  it("does not let an inactive project chevron reopen the active project", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          projects: [
+            ...projects,
+            {
+              id: "other-project",
+              slug: "other-project",
+              name: "Other Project",
+              status: "active",
+            },
+          ],
+        }),
+      ),
+    );
+
+    render(
+      <ProjectList
+        activeSlug="demo-project"
+        files={files}
+        onSelect={vi.fn()}
+        selectedPath={null}
+        onUpload={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("First Proof")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse project" }));
+    expect(screen.queryByText("First Proof")).not.toBeInTheDocument();
+
+    const expandProjectButtons = screen.getAllByRole("button", { name: "Expand project" });
+    fireEvent.click(expandProjectButtons[1]);
+
+    expect(screen.queryByText("First Proof")).not.toBeInTheDocument();
   });
 });

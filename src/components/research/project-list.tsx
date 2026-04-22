@@ -23,6 +23,7 @@ interface ProjectMeta {
 
 type FetchStatus = "loading" | "ready" | "error";
 const EMPTY_EXPANDED_PATHS: string[] = [];
+const NO_ACTIVE_PROJECT_KEY = "__no_active_project__";
 
 export function ProjectList({
   activeSlug,
@@ -51,34 +52,41 @@ export function ProjectList({
   const [status, setStatus] = useState<FetchStatus>("loading");
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [collapsedProjectSlug, setCollapsedProjectSlug] = useState<string | null>(null);
-  const [expandedFilePathsByProject, setExpandedFilePathsByProject] = useState<Record<string, string[]>>({});
+  const [expandedFilePathState, setExpandedFilePathState] = useState<{
+    key: string;
+    paths: string[];
+  }>({ key: activeSlug ?? NO_ACTIVE_PROJECT_KEY, paths: EMPTY_EXPANDED_PATHS });
   const [isDragOver, setIsDragOver] = useState(false);
   const directoryPaths = useMemo(() => collectDirectoryPaths(files), [files]);
   const hasDirectories = directoryPaths.length > 0;
-  const activeExpansionKey = activeSlug ?? "__no_active_project__";
+  const activeExpansionKey = activeSlug ?? NO_ACTIVE_PROJECT_KEY;
   const expandedFilePaths = useMemo(
-    () => new Set(expandedFilePathsByProject[activeExpansionKey] ?? EMPTY_EXPANDED_PATHS),
-    [activeExpansionKey, expandedFilePathsByProject],
+    () =>
+      new Set(
+        expandedFilePathState.key === activeExpansionKey
+          ? expandedFilePathState.paths
+          : EMPTY_EXPANDED_PATHS,
+      ),
+    [activeExpansionKey, expandedFilePathState],
   );
 
   const setExpandedFilePathsForActiveProject = (paths: string[]) => {
-    setExpandedFilePathsByProject((current) => ({
-      ...current,
-      [activeExpansionKey]: paths,
-    }));
+    setExpandedFilePathState({ key: activeExpansionKey, paths });
   };
 
   const toggleDirectory = (path: string) => {
-    setExpandedFilePathsByProject((current) => {
-      const next = new Set(current[activeExpansionKey] ?? EMPTY_EXPANDED_PATHS);
+    setExpandedFilePathState((current) => {
+      const next = new Set(
+        current.key === activeExpansionKey ? current.paths : EMPTY_EXPANDED_PATHS,
+      );
       if (next.has(path)) {
         next.delete(path);
       } else {
         next.add(path);
       }
       return {
-        ...current,
-        [activeExpansionKey]: [...next],
+        key: activeExpansionKey,
+        paths: [...next],
       };
     });
   };
@@ -110,7 +118,7 @@ export function ProjectList({
     return () => {
       controller.abort();
     };
-  }, [activeSlug]);
+  }, []);
 
   const dragHandlers = onDropFiles
     ? {
@@ -282,7 +290,11 @@ export function ProjectList({
                 <div className={`flex items-stretch ${isActive ? "border-l-2 border-accent" : "border-l-2 border-transparent"}`}>
                   <button
                     type="button"
-                    onClick={() => setCollapsedProjectSlug(isExpanded ? project.slug : null)}
+                    onClick={() => {
+                      if (isActive) {
+                        setCollapsedProjectSlug(isExpanded ? project.slug : null);
+                      }
+                    }}
                     className="flex items-center px-1 text-[10px] text-muted hover:text-foreground transition-colors"
                     title={isExpanded ? "Collapse" : "Expand"}
                     aria-label={isExpanded ? "Collapse project" : "Expand project"}
