@@ -2106,6 +2106,10 @@ export function useUnifiedChat(
   const sendQueueProcessingRef = useRef(false);
   const scopedConversationId = getScopedConversationId(conversationId, conversationBackend, backend);
 
+  // These updater callbacks must stay pure. We mirror the computed next value
+  // into live refs so unload persistence can read the latest state
+  // synchronously, and the StrictMode regression tests rely on same prev =>
+  // same next remaining idempotent.
   const setMessages = useCallback((updater: SetStateAction<Message[]>) => {
     setMessagesState((prev) => {
       const next =

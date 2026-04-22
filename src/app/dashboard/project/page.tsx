@@ -813,10 +813,12 @@ function buildSyntheticGbrainFileNode(path: string): FileNode | null {
 
 async function loadGbrainPreviewState(
   target: GbrainPreviewTarget,
+  signal?: AbortSignal,
 ): Promise<FilePreviewState> {
   try {
     const readRes = await fetch(
       `/api/brain/read?path=${encodeURIComponent(target.slug)}`,
+      { signal },
     );
     if (readRes.ok) {
       const compiledPage = (await readRes.json()) as CompiledPageRead;
@@ -842,14 +844,17 @@ async function loadGbrainPreviewState(
         };
       }
     }
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
     // Fall through to file-ref rendering.
   }
 
   const brainFileUrl = `/api/brain/file?slug=${encodeURIComponent(target.slug)}`;
 
   try {
-    const metaRes = await fetch(`${brainFileUrl}&metadata=1`);
+    const metaRes = await fetch(`${brainFileUrl}&metadata=1`, { signal });
     if (metaRes.ok) {
       const meta = (await metaRes.json()) as {
         mime?: string;
@@ -875,7 +880,7 @@ async function loadGbrainPreviewState(
       }
 
       if (shouldLoadAsText(kind)) {
-        const rawRes = await fetch(brainFileUrl);
+        const rawRes = await fetch(brainFileUrl, { signal });
         if (rawRes.ok) {
           return {
             status: "ready",
@@ -890,13 +895,17 @@ async function loadGbrainPreviewState(
         }
       }
     }
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
     // Fall through to page content.
   }
 
   try {
     const pageRes = await fetch(
       `/api/brain/page?slug=${encodeURIComponent(target.slug)}`,
+      { signal },
     );
     if (pageRes.ok) {
       const pageData = (await pageRes.json()) as { content?: string };
@@ -912,7 +921,10 @@ async function loadGbrainPreviewState(
         };
       }
     }
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
     // Fall through.
   }
 
@@ -1075,6 +1087,7 @@ function LazyFileCard({
     }
 
     let cancelled = false;
+    const controller = new AbortController();
     setPreview({
       status: "loading",
       path: filePath,
@@ -1082,12 +1095,20 @@ function LazyFileCard({
     });
 
     if (gbrainTarget) {
-      void loadGbrainPreviewState(gbrainTarget).then((nextPreview) => {
-        if (cancelled) return;
-        setPreview(nextPreview);
-      });
+      void loadGbrainPreviewState(gbrainTarget, controller.signal)
+        .then((nextPreview) => {
+          if (cancelled) return;
+          setPreview(nextPreview);
+        })
+        .catch((error: unknown) => {
+          if (error instanceof Error && error.name === "AbortError") {
+            return;
+          }
+          throw error;
+        });
       return () => {
         cancelled = true;
+        controller.abort();
       };
     }
 
