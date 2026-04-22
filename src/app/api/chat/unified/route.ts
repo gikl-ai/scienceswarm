@@ -50,9 +50,27 @@ import {
 } from "@/brain/setup-flow";
 import { parseFile } from "@/lib/file-parser";
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
+import {
+  buildExperimentDesignCritiqueJob,
+  isExperimentDesignCritiqueRequest,
+  looksLikeExperimentDesignArtifact,
+  summarizeExperimentDesignIteration,
+} from "@/lib/experiment-design-critique";
+import {
+  buildModelSystemApplicabilityAssessment,
+  isModelSystemApplicabilityRequest,
+  looksLikeModelSystemArtifact,
+} from "@/lib/model-system-applicability";
+import {
+  buildTargetPrioritizationAssessment,
+  isTargetPrioritizationRequest,
+  looksLikeTargetPrioritizationArtifact,
+} from "@/lib/target-biomarker-prioritizer";
 import { isLocalRequest } from "@/lib/local-guard";
 import {
+  getScienceSwarmBrainRoot,
   getScienceSwarmProjectRoot,
+  getScienceSwarmStateRoot,
   getScienceSwarmWorkspaceRoot,
   getScienceSwarmOpenClawStateDir,
 } from "@/lib/scienceswarm-paths";
@@ -73,8 +91,8 @@ import {
   writeBackOpenClawGeneratedFiles,
 } from "@/lib/openclaw/gbrain-writeback";
 import { sanitizeOpenClawUserVisibleResponse } from "@/lib/openclaw/response-sanitizer";
-import { listOpenClawSkills } from "@/lib/openclaw/skill-catalog";
 import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
+import { listScienceSwarmOpenClawSlashCommandSkills } from "@/lib/openclaw/skill-registry";
 import {
   buildOpenClawSlashCommands,
   buildOpenClawSlashCommandPrompt,
@@ -93,6 +111,7 @@ import {
   artifactSourceWorkspaceKeysForPage,
   buildArtifactSourceSnapshotFromPage,
 } from "@/lib/artifact-source-snapshots";
+import { persistGeneratedProjectArtifact } from "@/lib/project-generated-artifact";
 
 interface UnifiedChatMessage {
   role: "user" | "assistant" | "system";
@@ -268,7 +287,7 @@ function normalizeRequestedBackend(value: unknown): RequestedBackend | null {
 
 async function loadOpenClawSlashCommands() {
   try {
-    const skills = await listOpenClawSkills();
+    const skills = await listScienceSwarmOpenClawSlashCommandSkills();
     return buildOpenClawSlashCommands(skills);
   } catch {
     return buildOpenClawSlashCommands([]);
@@ -572,11 +591,11 @@ function gbrainSlugFromReference(candidate: string): string | null {
 
 function extractWorkspaceReferenceCandidates(message: string): string[] {
   const gbrainReferencePattern =
-    /(?:^|[\s("'`])@?(gbrain:[A-Za-z0-9][A-Za-z0-9._/-]*(?:\.md)?)(?=$|[\s)"'`,.:;!?])/gi;
+    /(?:^|[\s("'`*])@?(gbrain:[A-Za-z0-9][A-Za-z0-9._/-]*(?:\.md)?)(?=$|[\s)"'`*,.:;!?])/gi;
   const fileReferencePattern =
-    /(?:^|[\s("'`])@?((?:~\/|\/)?[A-Za-z0-9._-][A-Za-z0-9._\-\/]*\.[A-Za-z0-9]{1,8})(?=$|[\s)"'`,.:;!?])/g;
+    /(?:^|[\s("'`*])@?((?:~\/|\/)?[A-Za-z0-9._-][A-Za-z0-9._\-\/]*\.[A-Za-z0-9]{1,8})(?=$|[\s)"'`*,.:;!?])/g;
   const contextualBareReferencePattern =
-    /\b(?:read|open|inspect|preview|summarize|analyze|use|plot|chart|extract)\s+(?:the\s+)?(?:file\s+)?([A-Za-z0-9._/-]{2,})(?=$|[\s)"'`,.:;!?])/gi;
+    /\b(?:read|open|inspect|preview|summarize|analyze|use|plot|chart|extract)\s+(?:the\s+)?(?:file\s+)?([A-Za-z0-9._/-]{2,})(?=$|[\s)"'`*,.:;!?])/gi;
   const matches = new Set<string>();
   let match: RegExpExecArray | null = null;
 
@@ -1529,6 +1548,37 @@ async function readOpenClawThinkingTrace(
   return readOpenClawThinkingTraceFromFile(sessionFile);
 }
 
+async function readOpenClawSessionWorkingDirectory(
+  conversationId: string | null | undefined,
+): Promise<string | undefined> {
+  const sessionFile = getOpenClawSessionFilePath(conversationId);
+  if (!sessionFile) {
+    return undefined;
+  }
+
+  try {
+    const lines = (await readFile(sessionFile, "utf8"))
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      if (
+        parsed.type === "session"
+        && typeof parsed.cwd === "string"
+        && parsed.cwd.trim().length > 0
+      ) {
+        return parsed.cwd;
+      }
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
 function getOpenClawSessionFilePath(
   conversationId: string | null | undefined,
 ): string | null {
@@ -1544,6 +1594,53 @@ function getOpenClawSessionFilePath(
     "sessions",
     `${normalizedConversationId}.jsonl`,
   );
+}
+
+async function findLatestProjectOpenClawConversationId(
+  projectId: string | null,
+): Promise<string | null> {
+  const normalizedProjectId = normalizeOpenClawSessionId(projectId);
+  if (!normalizedProjectId) {
+    return null;
+  }
+
+  const sessionsRoot = path.join(
+    getScienceSwarmOpenClawStateDir(),
+    "agents",
+    "main",
+    "sessions",
+  );
+  const prefix = `web-${normalizedProjectId}-`;
+
+  let names: string[];
+  try {
+    names = await readdir(sessionsRoot);
+  } catch {
+    return null;
+  }
+
+  let latestConversationId: string | null = null;
+  let latestMtimeMs = -Infinity;
+
+  for (const name of names) {
+    if (!name.startsWith(prefix) || !name.endsWith(".jsonl")) {
+      continue;
+    }
+
+    const conversationId = name.slice(0, -".jsonl".length);
+    const sessionFile = path.join(sessionsRoot, name);
+    try {
+      const sessionStat = await stat(sessionFile);
+      if (sessionStat.mtimeMs > latestMtimeMs) {
+        latestMtimeMs = sessionStat.mtimeMs;
+        latestConversationId = conversationId;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return latestConversationId;
 }
 
 async function readOpenClawThinkingTraceFromFile(
@@ -1800,6 +1897,9 @@ function buildCompactOpenClawArtifactRetryMessage(params: {
     "",
     "ScienceSwarm web task rules:",
     "- Produce only scientist-facing output. Do not mention internal tool, gateway, session, model, or subagent mechanics.",
+    "- Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to project-visible relative paths such as `docs/result.md`, not machine-local absolute paths.",
+    "- Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    "- Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     "- Do not spawn subagents, background agents, sessions, or gateway pairing flows. Complete the task in this OpenClaw session.",
     "- Do not run git add, git commit, or git push unless the user explicitly asked for repo version-control work.",
     "- Do not mutate .brain/state or .brain/wiki directly when a canonical gbrain tool exists.",
@@ -1860,6 +1960,9 @@ function buildOpenClawWebTaskGuardrails(
   const rules = [
     "ScienceSwarm web task rules:",
     "- Produce only scientist-facing output. Do not mention internal tool, gateway, session, model, or subagent mechanics.",
+    "- Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to project-visible relative paths such as `docs/result.md`, not machine-local absolute paths.",
+    "- Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    "- Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     "- If an internal tool attempt fails but you recover, do not mention the failed attempt or tool name. Summarize only the final visible result. If you cannot recover, explain the user-visible blocker in plain language without tool names.",
     "- Do not spawn subagents, background agents, sessions, or gateway pairing flows. Complete the task in this OpenClaw session.",
     "- Do not run git add, git commit, or git push unless the user explicitly asked for repo version-control work.",
@@ -2020,10 +2123,27 @@ function isExplanatoryClarificationRequest(message: string): boolean {
     /\b(?:can|could)\s+you\s+(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
       message,
     ) ||
-    /^(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
+    /(?:^|[.!?]\s+)(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
       trimmedMessage,
-  );
-  return !directActionCommand;
+    );
+  if (directActionCommand) {
+    return false;
+  }
+
+  const approvalGateClarification =
+    /\bbefore\s+(?:i|we)\s+approve\b/i.test(message) ||
+    /\b(?:what\s+will|will\s+you|where\s+will|what\s+happens)\b/i.test(
+      message,
+    );
+  if (approvalGateClarification) {
+    return true;
+  }
+
+  if (shouldForceOpenClawToolExecution(message)) {
+    return false;
+  }
+
+  return true;
 }
 
 function hasExplicitPlanApprovalSignal(message: string): boolean {
@@ -3052,6 +3172,66 @@ async function reserveUniqueProjectOutputPath(
   }
 }
 
+async function findExistingImportedProjectOutput(
+  projectRoot: string,
+  sourcePath: string,
+): Promise<string | null> {
+  const fileName = path.basename(sourcePath);
+  const targetDir = path.join(projectRoot, getTargetFolder(fileName));
+
+  let sourceStats;
+  try {
+    sourceStats = await stat(sourcePath);
+  } catch {
+    return null;
+  }
+
+  let sourceBytes: Buffer | null = null;
+  const ext = path.extname(fileName);
+  const baseName = path.basename(fileName, ext);
+  const candidatePattern = new RegExp(
+    `^${baseName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:-\\d+)?${ext.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+    "i",
+  );
+
+  let entries: Array<{ name: string; isFile(): boolean }>;
+  try {
+    entries = await readdir(targetDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !candidatePattern.test(entry.name)) {
+      continue;
+    }
+
+    const candidatePath = path.join(targetDir, entry.name);
+    let candidateStats;
+    try {
+      candidateStats = await stat(candidatePath);
+    } catch {
+      continue;
+    }
+
+    if (candidateStats.size !== sourceStats.size) {
+      continue;
+    }
+
+    try {
+      sourceBytes ??= readFileSync(sourcePath);
+      const candidateBytes = readFileSync(candidatePath);
+      if (sourceBytes.equals(candidateBytes)) {
+        return candidatePath;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 async function relativePathWithinRoot(
   absolutePath: string,
   root: string,
@@ -3127,11 +3307,19 @@ async function importOpenClawGeneratedFile(
       path.relative(normalizedProjectRoot, normalizedSource),
     );
   } else {
-    const targetPath = await reserveUniqueProjectOutputPath(
+    const existingImportedPath = await findExistingImportedProjectOutput(
       projectRoot,
-      path.basename(sourcePath),
+      normalizedSource,
     );
-    await copyFile(sourcePath, targetPath);
+    const targetPath =
+      existingImportedPath
+      ?? (await reserveUniqueProjectOutputPath(
+        projectRoot,
+        path.basename(sourcePath),
+      ));
+    if (!existingImportedPath) {
+      await copyFile(sourcePath, targetPath);
+    }
     workspacePath = normalizeWorkspacePath(
       path.relative(projectRoot, targetPath),
     );
@@ -3418,6 +3606,619 @@ function readWorkspaceArtifactText(
   } catch {
     return null;
   }
+}
+
+const ITERATION_CRITIQUE_HINT_RE =
+  /\b(re-critique|recritique|re-review|re-audit|what improved|what changed|still weak|iteration|revised design)\b/i;
+
+function parsePersistedCritiqueResultFromPageContent(content: string): {
+  findings: Array<{ flaw_type?: string; description: string }>;
+} | null {
+  const match = content.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1]) as {
+      findings?: Array<{ flaw_type?: string; description?: string }>;
+    };
+    if (!Array.isArray(parsed.findings)) return null;
+    return {
+      findings: parsed.findings.filter(
+        (
+          finding,
+        ): finding is { flaw_type?: string; description: string } =>
+          !!finding && typeof finding.description === "string",
+      ),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function findLatestPriorExperimentDesignCritique(params: {
+  projectId: string;
+  sourceFilename: string;
+}): Promise<{
+  findings: Array<{ flaw_type?: string; description: string }>;
+  } | null> {
+  await ensureBrainStoreReady();
+  const pages = await getBrainStore().listPages({ type: "critique", limit: 250 });
+  const matchingPages = pages.filter((page) => {
+    const frontmatter = page.frontmatter ?? {};
+    return (
+      frontmatter.project === params.projectId
+      && frontmatter.source_filename === params.sourceFilename
+    );
+  });
+
+  matchingPages.sort((left, right) => {
+    const leftUploaded = Date.parse(String(left.frontmatter?.uploaded_at ?? ""));
+    const rightUploaded = Date.parse(String(right.frontmatter?.uploaded_at ?? ""));
+    const leftTime = Number.isFinite(leftUploaded) ? leftUploaded : 0;
+    const rightTime = Number.isFinite(rightUploaded) ? rightUploaded : 0;
+    return rightTime - leftTime;
+  });
+
+  for (const page of matchingPages) {
+    const parsed = parsePersistedCritiqueResultFromPageContent(page.content ?? "");
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+async function maybeHandleExperimentDesignCritique(params: {
+  request: Request;
+  chatMode: ChatMode | null;
+  userIntentMessage: string;
+  activeFile: { path: string; content: string } | null;
+  mergedFiles: UploadedFileDescriptor[];
+  projectId: string | null;
+}): Promise<Response | null> {
+  if (!isExperimentDesignCritiqueRequest(params.userIntentMessage)) {
+    return null;
+  }
+
+  if (!params.projectId) {
+    return Response.json(
+      {
+        response:
+          "Open a project and select the design memo or protocol you want critiqued, then ask again. ScienceSwarm only saves this critique loop when it has a project workspace to attach it to.",
+        backend: "openclaw",
+        mode: params.chatMode,
+        generatedFiles: [],
+      },
+      {
+        headers: {
+          "X-Chat-Backend": "openclaw",
+          "X-Chat-Mode": params.chatMode ?? "reasoning",
+        },
+      },
+    );
+  }
+
+  const projectRoot = getScienceSwarmProjectRoot(params.projectId);
+  const activeFilePath = params.activeFile?.path?.trim();
+  let sourceText: string | null = null;
+  let sourcePath: string | null = null;
+
+  if (activeFilePath && params.activeFile?.content.trim()) {
+    sourceText = params.activeFile.content.trim();
+    sourcePath = activeFilePath.replace(/^\/+/, "");
+  } else {
+    const candidates = params.mergedFiles.filter((file) => {
+      const workspacePath =
+        typeof file.workspacePath === "string"
+          ? file.workspacePath.trim().replace(/^\/+/, "")
+          : "";
+      if (!workspacePath) return false;
+      if (!/\.(?:md|markdown|txt|rst)$/i.test(workspacePath)) return false;
+      return looksLikeExperimentDesignArtifact(workspacePath);
+    });
+    const chosen = candidates[0];
+    const chosenPath =
+      typeof chosen?.workspacePath === "string"
+        ? chosen.workspacePath.trim().replace(/^\/+/, "")
+        : "";
+    if (chosenPath) {
+      sourceText = readWorkspaceArtifactText(projectRoot, chosenPath, 16_000);
+      sourcePath = chosenPath;
+    }
+  }
+
+  if (!sourceText || !sourcePath) {
+    return Response.json(
+      {
+        response:
+          "ScienceSwarm could not find a visible text protocol or experiment-plan file to critique. Open the design memo in the project preview, or reference a `.md`/`.txt` plan file in your request, then retry.",
+        backend: "openclaw",
+        mode: params.chatMode,
+        generatedFiles: [],
+      },
+      {
+        headers: {
+          "X-Chat-Backend": "openclaw",
+          "X-Chat-Mode": params.chatMode ?? "reasoning",
+        },
+      },
+    );
+  }
+
+  const sourceFilename = path.basename(sourcePath);
+  const shouldCompareIteration = ITERATION_CRITIQUE_HINT_RE.test(
+    params.userIntentMessage,
+  );
+  const previousCritique = shouldCompareIteration
+    ? await findLatestPriorExperimentDesignCritique({
+        projectId: params.projectId,
+        sourceFilename,
+      }).catch(() => null)
+    : null;
+  const job = buildExperimentDesignCritiqueJob({
+    workspacePath: sourcePath,
+    sourceFilename,
+    title: sourceFilename.replace(/\.[a-z0-9]+$/i, ""),
+    text: sourceText,
+  });
+
+  let persisted:
+    | {
+        brain_slug?: string;
+        project_url?: string;
+      }
+    | null = null;
+  try {
+    const saveResponse = await fetch(
+      new URL("/api/brain/critique", params.request.url),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job,
+          sourceFilename,
+          projectSlug: params.projectId,
+        }),
+      },
+    );
+    persisted = (await saveResponse.json().catch(() => null)) as {
+      brain_slug?: string;
+      project_url?: string;
+    } | null;
+    if (!saveResponse.ok) {
+      persisted = null;
+    }
+  } catch {
+    persisted = null;
+  }
+
+  const result = job.result;
+  const topFindings = result?.findings.slice(0, 4) ?? [];
+  const iterationSummary =
+    previousCritique && result?.findings
+      ? summarizeExperimentDesignIteration(previousCritique.findings, result.findings)
+      : null;
+  const iterationLines =
+    iterationSummary &&
+    (iterationSummary.improved.length > 0
+      || iterationSummary.stillWeak.length > 0
+      || iterationSummary.newRisks.length > 0)
+      ? [
+          "",
+          "What improved since the last critique:",
+          ...(iterationSummary.improved.length > 0
+            ? iterationSummary.improved.map((item) => `- ${item}`)
+            : ["- No previously flagged issue was fully resolved in this revision."]),
+          "",
+          "Still needs attention:",
+          ...(iterationSummary.stillWeak.length > 0
+            ? iterationSummary.stillWeak.map((item) => `- ${item}`)
+            : ["- No prior high-salience weakness remains obvious in the current memo."]),
+          ...(iterationSummary.newRisks.length > 0
+            ? [
+                "",
+                "New or newly emphasized risks:",
+                ...iterationSummary.newRisks.map((item) => `- ${item}`),
+              ]
+            : []),
+        ]
+      : [];
+  const critiqueSummary = [
+    `**Experimental design critique: ${sourceFilename}**`,
+    "",
+    result?.author_feedback?.overall_summary ||
+      "ScienceSwarm reviewed the visible experiment plan and found several design risks.",
+    ...iterationLines,
+    "",
+    "Top issues:",
+    ...topFindings.map((finding) => `- ${finding.description}`),
+    "",
+    persisted?.brain_slug
+      ? `Saved critique artifact: [[${persisted.brain_slug}]]`
+      : "Critique completed, but ScienceSwarm could not save the artifact to gbrain in this pass.",
+  ].join("\n");
+
+  const generatedPath = persisted?.brain_slug
+    ? `gbrain:${persisted.brain_slug}`
+    : null;
+
+  return Response.json(
+    {
+      response: critiqueSummary,
+      backend: "openclaw",
+      mode: params.chatMode,
+      generatedFiles: generatedPath ? [generatedPath] : [],
+      generatedArtifacts: generatedPath
+        ? [
+            {
+              projectPath: generatedPath,
+              artifactSlug: persisted?.brain_slug,
+              sourceFiles: [sourcePath],
+              prompt: params.userIntentMessage,
+              tool: "ScienceSwarm design critique",
+              createdAt: new Date().toISOString(),
+            },
+          ]
+        : [],
+      gbrainArtifacts: persisted?.brain_slug ? [persisted.brain_slug] : [],
+    },
+    {
+      headers: {
+        "X-Chat-Backend": "openclaw",
+        "X-Chat-Mode": params.chatMode ?? "reasoning",
+      },
+    },
+  );
+}
+
+async function maybeHandleModelSystemApplicability(params: {
+  chatMode: ChatMode | null;
+  userIntentMessage: string;
+  activeFile: { path: string; content: string } | null;
+  mergedFiles: UploadedFileDescriptor[];
+  projectId: string | null;
+}): Promise<Response | null> {
+  if (!isModelSystemApplicabilityRequest(params.userIntentMessage)) {
+    return null;
+  }
+
+  if (!params.projectId) {
+    return Response.json(
+      {
+        response:
+          "Open a project before running a model-system applicability assessment so ScienceSwarm can save the result with the visible research context.",
+        backend: "openclaw",
+        mode: params.chatMode,
+        generatedFiles: [],
+      },
+      {
+        headers: {
+          "X-Chat-Backend": "openclaw",
+          "X-Chat-Mode": params.chatMode ?? "reasoning",
+        },
+      },
+    );
+  }
+
+  const projectRoot = getScienceSwarmProjectRoot(params.projectId);
+  const sources: Array<{
+    workspacePath?: string | null;
+    sourceFilename: string;
+    title?: string;
+    text: string;
+  }> = [];
+  const activeFilePath = params.activeFile?.path?.trim().replace(/^\/+/, "");
+  if (activeFilePath && params.activeFile?.content.trim()) {
+    sources.push({
+      workspacePath: activeFilePath,
+      sourceFilename: path.basename(activeFilePath),
+      title: path.basename(activeFilePath).replace(/\.[a-z0-9]+$/i, ""),
+      text: params.activeFile.content.trim(),
+    });
+  }
+
+  for (const file of params.mergedFiles) {
+    if (sources.length >= 4) break;
+    const workspacePath =
+      typeof file.workspacePath === "string"
+        ? file.workspacePath.trim().replace(/^\/+/, "")
+        : "";
+    if (!workspacePath || sources.some((source) => source.workspacePath === workspacePath)) {
+      continue;
+    }
+    if (!/\.(?:csv|md|markdown|rst|tsv|txt)$/i.test(workspacePath)) {
+      continue;
+    }
+    if (
+      !looksLikeModelSystemArtifact(workspacePath)
+      && !looksLikeModelSystemArtifact(String(file.name ?? ""))
+      && !/\b(model|system|organoid|mouse|pdx|patient|cell line)\b/i.test(
+        params.userIntentMessage,
+      )
+    ) {
+      continue;
+    }
+    const text = readWorkspaceArtifactText(projectRoot, workspacePath, 16_000);
+    if (!text?.trim()) continue;
+    sources.push({
+      workspacePath,
+      sourceFilename: path.basename(workspacePath),
+      title: path.basename(workspacePath).replace(/\.[a-z0-9]+$/i, ""),
+      text,
+    });
+  }
+
+  const assessment = buildModelSystemApplicabilityAssessment({
+    prompt: params.userIntentMessage,
+    projectTitle: params.projectId,
+    sources,
+  });
+  const sourceRefs = sources.map((source) => ({
+    kind: "artifact" as const,
+    ref: source.workspacePath ?? source.sourceFilename,
+  }));
+
+  let persisted:
+    | {
+        savePath: string;
+        artifactPage: string;
+      }
+    | null = null;
+  try {
+    persisted = await persistGeneratedProjectArtifact({
+      brainRoot: getScienceSwarmBrainRoot(),
+      stateRoot: getScienceSwarmStateRoot(),
+      projectSlug: params.projectId,
+      projectTitle: params.projectId,
+      artifactType: "model-applicability",
+      title: assessment.title,
+      content: assessment.markdown,
+      workspaceFileName: "model-system-applicability-assessment.md",
+      sourceRefs,
+      tags: ["model-system", "applicability", "translation"],
+      prompt: params.userIntentMessage,
+      tool: "ScienceSwarm model-system applicability",
+    });
+  } catch (error) {
+    console.warn("Model-system applicability artifact persistence failed", error);
+  }
+
+  const responseLines = [
+    `**${assessment.title}**`,
+    "",
+    assessment.summary,
+    "",
+    "Transfer risks:",
+    ...assessment.transferRisks.slice(0, 4).map((risk) => `- ${risk}`),
+    "",
+    "Validation ladder:",
+    ...assessment.validationLadder.slice(0, 4).map((step, index) =>
+      `${index + 1}. ${step}`
+    ),
+  ];
+  if (assessment.comparedSystems.length > 0) {
+    responseLines.push(
+      "",
+      "Candidate-system comparison:",
+      ...assessment.comparedSystems.map(
+        (comparison) =>
+          `- ${comparison.system} (${comparison.fit}): ${comparison.tradeoff}`,
+      ),
+    );
+  }
+  responseLines.push(
+    "",
+    "Missing metadata ScienceSwarm will not assume:",
+    ...(assessment.missingMetadata.length > 0
+      ? assessment.missingMetadata.slice(0, 5).map((item) => `- ${item}`)
+      : ["- No major model, assay, or transfer metadata gap was visible."]),
+    "",
+    persisted
+      ? `Saved applicability artifact: [[${persisted.artifactPage}]]`
+      : "Applicability assessment completed, but ScienceSwarm could not save the artifact to gbrain in this pass.",
+  );
+
+  const generatedPath = persisted?.artifactPage
+    ? `gbrain:${persisted.artifactPage}`
+    : null;
+
+  return Response.json(
+    {
+      response: responseLines.join("\n"),
+      backend: "openclaw",
+      mode: params.chatMode,
+      generatedFiles: generatedPath ? [generatedPath] : [],
+      generatedArtifacts: generatedPath
+        ? [
+            {
+              projectPath: persisted?.savePath,
+              artifactSlug: persisted?.artifactPage,
+              sourceFiles: sources.map((source) =>
+                source.workspacePath ?? source.sourceFilename
+              ),
+              prompt: params.userIntentMessage,
+              tool: "ScienceSwarm model-system applicability",
+              createdAt: new Date().toISOString(),
+            },
+          ]
+        : [],
+      gbrainArtifacts: persisted?.artifactPage ? [persisted.artifactPage] : [],
+    },
+    {
+      headers: {
+        "X-Chat-Backend": "openclaw",
+        "X-Chat-Mode": params.chatMode ?? "reasoning",
+      },
+    },
+  );
+}
+
+async function maybeHandleTargetPrioritization(params: {
+  chatMode: ChatMode | null;
+  userIntentMessage: string;
+  activeFile: { path: string; content: string } | null;
+  mergedFiles: UploadedFileDescriptor[];
+  projectId: string | null;
+}): Promise<Response | null> {
+  if (!isTargetPrioritizationRequest(params.userIntentMessage)) {
+    return null;
+  }
+
+  if (!params.projectId) {
+    return Response.json(
+      {
+        response:
+          "Open a project before prioritizing targets or biomarkers so ScienceSwarm can save the ranking with visible project evidence.",
+        backend: "openclaw",
+        mode: params.chatMode,
+        generatedFiles: [],
+      },
+      {
+        headers: {
+          "X-Chat-Backend": "openclaw",
+          "X-Chat-Mode": params.chatMode ?? "reasoning",
+        },
+      },
+    );
+  }
+
+  const projectRoot = getScienceSwarmProjectRoot(params.projectId);
+  const sources: Array<{
+    workspacePath?: string | null;
+    sourceFilename: string;
+    title?: string;
+    text: string;
+  }> = [];
+  const activeFilePath = params.activeFile?.path?.trim().replace(/^\/+/, "");
+  if (activeFilePath && params.activeFile?.content.trim()) {
+    sources.push({
+      workspacePath: activeFilePath,
+      sourceFilename: path.basename(activeFilePath),
+      title: path.basename(activeFilePath).replace(/\.[a-z0-9]+$/i, ""),
+      text: params.activeFile.content.trim(),
+    });
+  }
+
+  for (const file of params.mergedFiles) {
+    if (sources.length >= 4) break;
+    const workspacePath =
+      typeof file.workspacePath === "string"
+        ? file.workspacePath.trim().replace(/^\/+/, "")
+        : "";
+    if (!workspacePath || sources.some((source) => source.workspacePath === workspacePath)) {
+      continue;
+    }
+    if (!/\.(?:csv|md|markdown|rst|tsv|txt)$/i.test(workspacePath)) {
+      continue;
+    }
+    if (
+      !looksLikeTargetPrioritizationArtifact(workspacePath)
+      && !looksLikeTargetPrioritizationArtifact(String(file.name ?? ""))
+    ) {
+      continue;
+    }
+    const text = readWorkspaceArtifactText(projectRoot, workspacePath, 16_000);
+    if (!text?.trim()) continue;
+    sources.push({
+      workspacePath,
+      sourceFilename: path.basename(workspacePath),
+      title: path.basename(workspacePath).replace(/\.[a-z0-9]+$/i, ""),
+      text,
+    });
+  }
+
+  const assessment = buildTargetPrioritizationAssessment({
+    prompt: params.userIntentMessage,
+    sources,
+  });
+  const sourceRefs = sources.map((source) => ({
+    kind: "artifact" as const,
+    ref: source.workspacePath ?? source.sourceFilename,
+  }));
+
+  let persisted:
+    | {
+        savePath: string;
+        artifactPage: string;
+      }
+    | null = null;
+  try {
+    persisted = await persistGeneratedProjectArtifact({
+      brainRoot: getScienceSwarmBrainRoot(),
+      stateRoot: getScienceSwarmStateRoot(),
+      projectSlug: params.projectId,
+      projectTitle: params.projectId,
+      artifactType: "target-prioritization",
+      title: assessment.title,
+      content: assessment.markdown,
+      workspaceFileName: "target-biomarker-prioritization.md",
+      sourceRefs,
+      tags: ["target-prioritization", "biomarker", "combination"],
+      prompt: params.userIntentMessage,
+      tool: "ScienceSwarm target prioritizer",
+    });
+  } catch (error) {
+    console.warn("Target prioritization artifact persistence failed", error);
+  }
+
+  const responseLines = [
+    `**${assessment.title}**`,
+    "",
+    assessment.summary,
+    "",
+    "Priority ranking:",
+    ...(assessment.candidates.length > 0
+      ? assessment.candidates.slice(0, 6).map((candidate, index) =>
+          `${index + 1}. ${candidate.name} - score ${candidate.score}; ${candidate.rationale}`
+        )
+      : ["No rankable candidates were visible."]),
+    "",
+    "Ranking criteria:",
+    ...assessment.criteria.map((criterion) => `- ${criterion}`),
+    "",
+    "Constraint sensitivity:",
+    ...assessment.constraintNotes.map((note) => `- ${note}`),
+    "",
+    "Thin evidence and missing information:",
+    ...(assessment.thinEvidenceWarnings.length > 0
+      ? assessment.thinEvidenceWarnings.slice(0, 6).map((warning) => `- ${warning}`)
+      : ["- No major evidence-depth warning was visible for the ranked candidates."]),
+    "",
+    persisted
+      ? `Saved prioritization artifact: [[${persisted.artifactPage}]]`
+      : "Prioritization completed, but ScienceSwarm could not save the artifact to gbrain in this pass.",
+  ];
+
+  const generatedPath = persisted?.artifactPage
+    ? `gbrain:${persisted.artifactPage}`
+    : null;
+
+  return Response.json(
+    {
+      response: responseLines.join("\n"),
+      backend: "openclaw",
+      mode: params.chatMode,
+      generatedFiles: generatedPath ? [generatedPath] : [],
+      generatedArtifacts: generatedPath
+        ? [
+            {
+              projectPath: persisted?.savePath,
+              artifactSlug: persisted?.artifactPage,
+              sourceFiles: sources.map((source) =>
+                source.workspacePath ?? source.sourceFilename
+              ),
+              prompt: params.userIntentMessage,
+              tool: "ScienceSwarm target prioritizer",
+              createdAt: new Date().toISOString(),
+            },
+          ]
+        : [],
+      gbrainArtifacts: persisted?.artifactPage ? [persisted.artifactPage] : [],
+    },
+    {
+      headers: {
+        "X-Chat-Backend": "openclaw",
+        "X-Chat-Mode": params.chatMode ?? "reasoning",
+      },
+    },
+  );
 }
 
 function buildRevisionNeedsApprovalResponse(params: {
@@ -4056,6 +4857,8 @@ function buildOpenClawAuthoredArtifactOnlyRepairMessage(params: {
     "ScienceSwarm web task rules:",
     "- Produce only scientist-facing artifact content.",
     "- Do not mention internal tool, gateway, session, model, or subagent mechanics.",
+    "- Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
+    "- Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     "- Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
     "",
     "Revise-and-resubmit artifact rules:",
@@ -4117,27 +4920,46 @@ function buildArtifactVerificationFailureResponse(params: {
 const REQUESTED_ARTIFACT_CREATION_VERB_PATTERN =
   /\b(save|write|create|draft|export|produce|generate|materialize|store)\b/i;
 const REQUESTED_ARTIFACT_PATH_PATTERN =
-  /(?:^|[\s("'`])((?:\.\/)?(?:docs|results|figures|tables|data|analysis|reports|artifacts|manuscripts|papers|outputs)\/[^\s"'`<>]+?\.[A-Za-z0-9]{1,8})(?=$|[\s)"'`,.;!?])/gi;
+  /(?:^|[\s("'`*])((?:\.\/)?(?:docs|results|figures|tables|data|analysis|reports|artifacts|manuscripts|papers|outputs)\/[^\s"'`<>]+?\.[A-Za-z0-9]{1,8})(?=$|[\s)"'`*,.;!?])/gi;
+
+function isSentenceBoundaryCharacter(
+  message: string,
+  index: number,
+): boolean {
+  const char = message[index];
+  if (char === "\n") {
+    return true;
+  }
+  if (char !== "." && char !== "?" && char !== "!") {
+    return false;
+  }
+  if (index === message.length - 1) {
+    return true;
+  }
+  return /\s/.test(message[index + 1] ?? "");
+}
 
 function textSegmentAroundPath(
   message: string,
   pathStart: number,
   pathEnd: number,
 ): string {
-  const beforeBoundaries = [
-    message.lastIndexOf(".", pathStart - 1),
-    message.lastIndexOf("?", pathStart - 1),
-    message.lastIndexOf("!", pathStart - 1),
-    message.lastIndexOf("\n", pathStart - 1),
-  ];
-  const afterBoundaryCandidates = [".", "?", "!", "\n"]
-    .map((boundary) => message.indexOf(boundary, pathEnd))
-    .filter((index) => index >= 0);
-  const segmentStart = Math.max(...beforeBoundaries) + 1;
-  const segmentEnd =
-    afterBoundaryCandidates.length > 0
-      ? Math.min(...afterBoundaryCandidates)
-      : message.length;
+  let segmentStart = 0;
+  for (let index = pathStart - 1; index >= 0; index -= 1) {
+    if (isSentenceBoundaryCharacter(message, index)) {
+      segmentStart = index + 1;
+      break;
+    }
+  }
+
+  let segmentEnd = message.length;
+  for (let index = pathEnd; index < message.length; index += 1) {
+    if (isSentenceBoundaryCharacter(message, index)) {
+      segmentEnd = index;
+      break;
+    }
+  }
+
   return message.slice(segmentStart, segmentEnd);
 }
 
@@ -4206,59 +5028,85 @@ function inferredRequiredWorkspaceArtifactPaths(params: {
   return required;
 }
 
+function visibleWorkspaceCandidatesForRequestedArtifact(
+  workspacePath: string,
+): string[] {
+  const normalizedPath = normalizeWorkspacePath(workspacePath);
+  const fileName = path.posix.basename(normalizedPath);
+  const targetFolder = getTargetFolder(fileName);
+  const mappedPath = normalizeWorkspacePath(
+    path.posix.join(targetFolder, fileName),
+  );
+  return Array.from(new Set([normalizedPath, mappedPath]));
+}
+
+function findGeneratedFileForRequestedPath(
+  generatedFiles: ImportedGeneratedFile[],
+  requestedPath: string,
+): ImportedGeneratedFile | null {
+  const requestedCandidates = new Set(
+    visibleWorkspaceCandidatesForRequestedArtifact(requestedPath),
+  );
+  return (
+    generatedFiles.find((file) =>
+      requestedCandidates.has(normalizeWorkspacePath(file.workspacePath)),
+    ) ?? null
+  );
+}
+
+async function materializeRequestedWorkspaceArtifactImport(params: {
+  projectRoot: string;
+  workspacePath: string;
+  startedAtMs?: number;
+}): Promise<ImportedGeneratedFile | null> {
+  const normalizedRoot = path.resolve(params.projectRoot);
+
+  for (const candidateWorkspacePath of visibleWorkspaceCandidatesForRequestedArtifact(
+    params.workspacePath,
+  )) {
+    const absolutePath = path.resolve(params.projectRoot, candidateWorkspacePath);
+    if (
+      absolutePath !== normalizedRoot &&
+      !absolutePath.startsWith(`${normalizedRoot}${path.sep}`)
+    ) {
+      continue;
+    }
+
+    const fileStats = await stat(absolutePath).catch(() => null);
+    if (!fileStats || !fileStats.isFile() || fileStats.size === 0) {
+      continue;
+    }
+
+    if (
+      typeof params.startedAtMs === "number" &&
+      fileStats.mtimeMs + 1_000 < params.startedAtMs
+    ) {
+      continue;
+    }
+
+    return {
+      sourcePath: normalizeWorkspacePath(absolutePath),
+      workspacePath: candidateWorkspacePath,
+      createdAt: fileStats.mtime.toISOString(),
+    };
+  }
+
+  return null;
+}
+
 async function materializeFreshRequestedWorkspaceArtifactImport(params: {
   projectRoot: string;
   workspacePath: string;
   startedAtMs: number;
 }): Promise<ImportedGeneratedFile | null> {
-  const absolutePath = path.resolve(params.projectRoot, params.workspacePath);
-  const normalizedRoot = path.resolve(params.projectRoot);
-  if (
-    absolutePath !== normalizedRoot &&
-    !absolutePath.startsWith(`${normalizedRoot}${path.sep}`)
-  ) {
-    return null;
-  }
-
-  const fileStats = await stat(absolutePath).catch(() => null);
-  if (!fileStats || !fileStats.isFile() || fileStats.size === 0) {
-    return null;
-  }
-
-  if (fileStats.mtimeMs + 1000 < params.startedAtMs) {
-    return null;
-  }
-
-  return {
-    sourcePath: normalizeWorkspacePath(absolutePath),
-    workspacePath: params.workspacePath,
-    createdAt: fileStats.mtime.toISOString(),
-  };
+  return materializeRequestedWorkspaceArtifactImport(params);
 }
 
 async function materializeExistingWorkspaceArtifactImport(params: {
   projectRoot: string;
   workspacePath: string;
 }): Promise<ImportedGeneratedFile | null> {
-  const absolutePath = path.resolve(params.projectRoot, params.workspacePath);
-  const normalizedRoot = path.resolve(params.projectRoot);
-  if (
-    absolutePath !== normalizedRoot &&
-    !absolutePath.startsWith(`${normalizedRoot}${path.sep}`)
-  ) {
-    return null;
-  }
-
-  const fileStats = await stat(absolutePath).catch(() => null);
-  if (!fileStats || !fileStats.isFile() || fileStats.size === 0) {
-    return null;
-  }
-
-  return {
-    sourcePath: normalizeWorkspacePath(absolutePath),
-    workspacePath: params.workspacePath,
-    createdAt: fileStats.mtime.toISOString(),
-  };
+  return materializeRequestedWorkspaceArtifactImport(params);
 }
 
 function buildMissingRequestedArtifactRepairMessage(params: {
@@ -4453,8 +5301,12 @@ async function maybeRepairMissingRequestedArtifacts(params: {
   const missingPaths: string[] = [];
 
   for (const requestedPath of requestedPaths) {
-    if (generatedFiles.some((file) => file.workspacePath === requestedPath)) {
-      verifiedPaths.push(requestedPath);
+    const matchingGeneratedFile = findGeneratedFileForRequestedPath(
+      generatedFiles,
+      requestedPath,
+    );
+    if (matchingGeneratedFile) {
+      verifiedPaths.push(matchingGeneratedFile.workspacePath);
       continue;
     }
 
@@ -4474,7 +5326,7 @@ async function maybeRepairMissingRequestedArtifacts(params: {
         sessionId: params.sessionId,
         importedFiles: [existingArtifact],
       });
-      verifiedPaths.push(requestedPath);
+      verifiedPaths.push(existingArtifact.workspacePath);
       continue;
     }
 
@@ -4548,7 +5400,7 @@ async function maybeRepairMissingRequestedArtifacts(params: {
 
     const verifiedFile =
       authoredArtifact ??
-      generatedFiles.find((file) => file.workspacePath === requestedPath) ??
+      findGeneratedFileForRequestedPath(generatedFiles, requestedPath) ??
       (await materializeFreshRequestedWorkspaceArtifactImport({
         projectRoot,
         workspacePath: requestedPath,
@@ -4571,7 +5423,7 @@ async function maybeRepairMissingRequestedArtifacts(params: {
           importedFiles: [verifiedFile],
         });
       }
-      repairedPaths.push(requestedPath);
+      repairedPaths.push(verifiedFile.workspacePath);
     } else {
       stillMissing.push(requestedPath);
     }
@@ -5987,6 +6839,7 @@ async function importOpenClawOutputsFromMessages(params: {
   messages: Array<Record<string, unknown>>;
   projectId: string | null;
   workingDirectory: string | undefined;
+  startedAtMs?: number;
 }): Promise<{
   messages: Array<Record<string, unknown>>;
   generatedFiles: string[];
@@ -6016,10 +6869,13 @@ async function importOpenClawOutputsFromMessages(params: {
         projectId: params.projectId,
         workingDirectory: params.workingDirectory,
         startedAtMs:
-          typeof message.timestamp === "string" &&
-          !Number.isNaN(Date.parse(message.timestamp))
-            ? Date.parse(message.timestamp)
-            : Date.now(),
+          params.startedAtMs
+          ?? (
+            typeof message.timestamp === "string" &&
+            !Number.isNaN(Date.parse(message.timestamp))
+              ? Date.parse(message.timestamp)
+              : Date.now()
+          ),
         files: [],
         message: "",
         sessionId:
@@ -6916,6 +7772,43 @@ export async function handleUnifiedChatPost(
       );
     }
 
+    const modelSystemApplicabilityResponse =
+      await maybeHandleModelSystemApplicability({
+        chatMode,
+        userIntentMessage,
+        activeFile,
+        mergedFiles,
+        projectId: validatedProjectId,
+      });
+    if (modelSystemApplicabilityResponse) {
+      return modelSystemApplicabilityResponse;
+    }
+
+    const targetPrioritizationResponse =
+      await maybeHandleTargetPrioritization({
+        chatMode,
+        userIntentMessage,
+        activeFile,
+        mergedFiles,
+        projectId: validatedProjectId,
+      });
+    if (targetPrioritizationResponse) {
+      return targetPrioritizationResponse;
+    }
+
+    const experimentDesignCritiqueResponse =
+      await maybeHandleExperimentDesignCritique({
+        request,
+        chatMode,
+        userIntentMessage,
+        activeFile,
+        mergedFiles,
+        projectId: validatedProjectId,
+      });
+    if (experimentDesignCritiqueResponse) {
+      return experimentDesignCritiqueResponse;
+    }
+
     const agentConfig = resolveAgentConfig();
     const strictLocalOnly = isStrictLocalOnlyEnabled();
     let privacyErrorPromise: Promise<Response | null> | null = null;
@@ -7479,27 +8372,33 @@ export async function GET(request: Request) {
       return Response.json({ messages: [], backend: "none" });
     }
     try {
-      if (openClawConversationId) {
+      const polledConversationId =
+        openClawConversationId
+        ?? (await findLatestProjectOpenClawConversationId(projectId));
+      if (polledConversationId) {
         const { getConversationMessagesSince } = await import("@/lib/openclaw");
         const messages = await getConversationMessagesSince(
-          openClawConversationId,
+          polledConversationId,
           since,
         );
         const workingDirectory =
+          (await readOpenClawSessionWorkingDirectory(polledConversationId))
+          ??
           await resolveOpenClawWorkingDirectory(projectId);
         const imported = await importOpenClawOutputsFromMessages({
           messages: messages as unknown as Array<Record<string, unknown>>,
           projectId,
           workingDirectory,
+          startedAtMs: Date.parse(since),
         });
         return Response.json({
           messages: imported.messages,
           backend: "openclaw",
+          conversationId: polledConversationId,
           generatedFiles: imported.generatedFiles,
           generatedArtifacts: imported.generatedArtifacts,
         });
       }
-
       const { runOpenClaw } = await import("@/lib/openclaw/runner");
       const result = await runOpenClaw(
         ["sessions", "messages", "--json", "--limit", "20"],

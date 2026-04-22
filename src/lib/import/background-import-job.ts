@@ -4,6 +4,7 @@ import { basename, extname, join, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 
 import type { ImportPreview, SourceRef } from "@/brain/types";
+import { ensureBrainStoreReady } from "@/brain/store";
 import { parseFile } from "@/lib/file-parser";
 import { expandHomeDir } from "@/lib/scienceswarm-paths";
 import {
@@ -149,7 +150,9 @@ function resolveBackgroundImportGbrainDeps(): ImportGbrainDeps {
 
 function resolveBackgroundImportUploadedBy(): string {
   try {
-    return getCurrentUserHandle();
+    return getCurrentUserHandle(process.env, {
+      includeSavedEnvFallback: false,
+    });
   } catch {
     throw new Error(
       "Cannot start background folder import because SCIENCESWARM_USER_HANDLE is not configured. " +
@@ -430,6 +433,9 @@ export async function runBackgroundImportJob(jobId: string, brainRoot: string): 
 
     const existingManifest = await readProjectManifest(initialJob.project);
     const title = existingManifest?.title || humanizeSlug(initialJob.project);
+    if (!overrideBackgroundImportGbrainDeps) {
+      await ensureBrainStoreReady();
+    }
     const gbrainDeps = resolveBackgroundImportGbrainDeps();
 
     const duplicatePathsByHash = new Map<string, string[]>();

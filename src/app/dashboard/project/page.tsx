@@ -103,6 +103,7 @@ import {
   buildOpenClawSlashCommands,
   looksLikeSlashCommandInput,
 } from "@/lib/openclaw/slash-commands";
+import { buildMirroredBrainPagePath } from "@/lib/brain-artifact-path";
 
 // ── Types ──────────────────────────────────────────────────────
 interface Message {
@@ -212,6 +213,17 @@ const SCIENCESWARM_SIGN_IN_URL = getScienceSwarmSignInUrl();
 interface ExplicitCaptureIntent {
   content: string;
   kind?: CaptureKind;
+  mode?: "capture" | "decision-update";
+}
+
+interface DecisionPreviewTarget {
+  slug: string;
+  path: string;
+  title: string;
+}
+
+interface NextExperimentPlanIntent {
+  updateExisting: boolean;
 }
 
 type Tab =
@@ -620,7 +632,16 @@ function buildCaptureTitle(content: string): string {
 function parseExplicitCaptureIntent(
   text: string,
 ): ExplicitCaptureIntent | null {
-  const patterns: Array<{ pattern: RegExp; kind?: CaptureKind }> = [
+  const patterns: Array<{
+    pattern: RegExp;
+    kind?: CaptureKind;
+    mode?: "capture" | "decision-update";
+  }> = [
+    {
+      pattern: /^\s*(?:decision\s+update|update\s+decision|amend\s+decision)\s*:\s*([\s\S]+)$/i,
+      kind: "decision",
+      mode: "decision-update",
+    },
     { pattern: /^\s*remember(?:\s+this)?\s*:\s*([\s\S]+)$/i, kind: "note" },
     { pattern: /^\s*note\s*:\s*([\s\S]+)$/i, kind: "note" },
     { pattern: /^\s*observation\s*:\s*([\s\S]+)$/i, kind: "observation" },
@@ -643,15 +664,36 @@ function parseExplicitCaptureIntent(
     },
   ];
 
-  for (const { pattern, kind } of patterns) {
+  for (const { pattern, kind, mode } of patterns) {
     const match = text.match(pattern);
     if (!match) continue;
     const content = match[1]?.trim();
     if (!content) return null;
-    return { content, kind };
+    return { content, kind, mode: mode ?? "capture" };
   }
 
   return null;
+}
+
+function parseNextExperimentPlanIntent(
+  text: string,
+): NextExperimentPlanIntent | null {
+  const normalized = text.trim().toLowerCase();
+  const asksForPlanner =
+    /\b(next experiment|next experiments|experiment plan|best experiment|best next experiment)\b/i.test(normalized)
+    || (
+      /\b(rank|prioritize|distinguish|separate|what should we do next)\b/i.test(normalized)
+      && /\b(experiment|assay|readout|control)\b/i.test(normalized)
+    );
+
+  if (!asksForPlanner) {
+    return null;
+  }
+
+  return {
+    updateExisting:
+      /\b(update|revise|rerank|re-rank|change|after this result|based on the new result|new result)\b/i.test(normalized),
+  };
 }
 
 function formatCaptureKind(kind: CaptureKind): string {
@@ -870,6 +912,36 @@ function normalizeBrainArtifactSlug(
   const trimmed = slug?.trim().replace(/^gbrain:/, "");
   if (!trimmed) return null;
   return trimmed.replace(/\.md$/i, "");
+}
+
+function captureSourceRefFromPath(path: string): SourceRef | null {
+  const trimmed = path.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("gbrain:")) {
+    const slug = normalizeBrainArtifactSlug(trimmed);
+    return slug ? { kind: "artifact", ref: slug } : null;
+  }
+  return { kind: "artifact", ref: trimmed };
+}
+
+function buildDecisionPreviewTarget(
+  node: FileNode | null | undefined,
+): DecisionPreviewTarget | null {
+  const slug = normalizeBrainArtifactSlug(node?.slug);
+  if (!slug || node?.pageType?.trim().toLowerCase() !== "decision") {
+    return null;
+  }
+
+  const path = buildMirroredBrainPagePath(slug, "decision");
+  if (!path) {
+    return null;
+  }
+
+  return {
+    slug,
+    path,
+    title: node?.name ?? slug,
+  };
 }
 
 function buildActiveCompiledPageContext(
@@ -1255,6 +1327,8 @@ function ProjectPageContent() {
   const [selectedFileNode, setSelectedFileNode] = useState<FileNode | null>(
     null,
   );
+  const [lastExperimentPlanSlug, setLastExperimentPlanSlug] = useState<string | null>(null);
+  const [isPlanningExperiments, setIsPlanningExperiments] = useState(false);
   const [filePreview, setFilePreview] = useState<FilePreviewState>({
     status: "idle",
   });
@@ -1307,6 +1381,7 @@ function ProjectPageContent() {
   const gbrainArtifactRefreshControllerRef = useRef<AbortController | null>(
     null,
   );
+  const lastViewedDecisionRef = useRef<DecisionPreviewTarget | null>(null);
   const previewRequestSeqRef = useRef(0);
   const isMountedRef = useRef(true);
   const autoOnboardingHandledRef = useRef(false);
@@ -2366,6 +2441,10 @@ function ProjectPageContent() {
       node?: FileNode,
       options: { forceReload?: boolean; appendPreviewMessage?: boolean } = {},
     ) => {
+      const decisionTarget = buildDecisionPreviewTarget(node);
+      if (decisionTarget) {
+        lastViewedDecisionRef.current = decisionTarget;
+      }
       const source: WorkspacePreviewSource =
         node?.source === "gbrain" ? "gbrain" : "workspace";
       const requestSeq = previewRequestSeqRef.current + 1;
@@ -2450,9 +2529,15 @@ function ProjectPageContent() {
 
       // ── gbrain-sourced nodes: prefer compiled-page read, then raw file refs ──
       if (node?.source === "gbrain" && node.slug) {
+        const mirroredPath = buildMirroredBrainPagePath(
+          node.slug,
+          node.pageType,
+        );
         try {
           const readRes = await fetch(
-            `/api/brain/read?path=${encodeURIComponent(node.slug)}`,
+            `/api/brain/read?path=${encodeURIComponent(
+              mirroredPath ?? node.slug,
+            )}`,
           );
           if (readRes.ok) {
             const compiledPage = (await readRes.json()) as CompiledPageRead;
@@ -2475,6 +2560,21 @@ function ProjectPageContent() {
                 mime: "text/markdown",
                 editable: false,
                 compiledPage,
+              });
+              return;
+            }
+            if (
+              typeof compiledPage.path === "string" &&
+              typeof compiledPage.content === "string"
+            ) {
+              applyPreview({
+                status: "ready",
+                path,
+                source: "gbrain",
+                kind: "markdown",
+                content: compiledPage.content,
+                mime: "text/markdown",
+                editable: false,
               });
               return;
             }
@@ -3002,6 +3102,33 @@ function ProjectPageContent() {
     [setMessages],
   );
 
+  const buildVisibleCaptureSourceRefs = useCallback((): SourceRef[] => {
+    const sourceRefs: SourceRef[] = [];
+    const currentSelection = selectedFileNode?.source === "gbrain" && selectedFileNode.slug
+      ? captureSourceRefFromPath(`gbrain:${selectedFileNode.slug}`)
+      : selectedFile
+        ? captureSourceRefFromPath(selectedFile)
+        : activePreviewFile?.path
+          ? captureSourceRefFromPath(activePreviewFile.path)
+          : null;
+    if (currentSelection) {
+      sourceRefs.push(currentSelection);
+    }
+
+    for (const item of chatContextItems) {
+      const ref = captureSourceRefFromPath(item.path);
+      if (ref) {
+        sourceRefs.push(ref);
+      }
+    }
+
+    const deduped = new Map<string, SourceRef>();
+    for (const ref of sourceRefs) {
+      deduped.set(`${ref.kind}:${ref.ref}:${ref.hash ?? ""}`, ref);
+    }
+    return Array.from(deduped.values());
+  }, [activePreviewFile, chatContextItems, selectedFile, selectedFileNode]);
+
   const handleCaptureIntent = useCallback(
     async (text: string, intent: ExplicitCaptureIntent) => {
       if (isCapturing || isStreaming) return;
@@ -3010,9 +3137,17 @@ function ProjectPageContent() {
       const userMessageId = makeLocalMessageId();
       const replyMessageId = makeLocalMessageId();
       const userId = getWebCaptureUserId();
-      const sourceRefs: SourceRef[] = conversationId
-        ? [{ kind: "conversation", ref: conversationId }]
-        : [];
+      const decisionTarget = lastViewedDecisionRef.current;
+      const sourceRefs: SourceRef[] = [
+        ...(conversationId
+          ? [{ kind: "conversation", ref: conversationId } satisfies SourceRef]
+          : []),
+        ...buildVisibleCaptureSourceRefs(),
+      ].filter((ref) =>
+        intent.mode === "decision-update" && decisionTarget
+          ? !(ref.kind === "artifact" && ref.ref === decisionTarget.slug)
+          : true,
+      );
 
       setMessages((prev) => [
         ...prev,
@@ -3031,28 +3166,64 @@ function ProjectPageContent() {
         },
       ]);
       setInput("");
-      setIsCapturing(true);
       clearError();
 
+      if (intent.mode === "decision-update" && !decisionTarget) {
+        applyCaptureReply(
+          replyMessageId,
+          "No decision selected. Open a decision from Brain Artifacts first, then use `decision update:` to amend it.",
+        );
+        return;
+      }
+
+      setIsCapturing(true);
+
       try {
-        const response = await fetch("/api/brain/capture", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            content: intent.content,
-            kind: intent.kind,
-            channel: "web",
-            userId,
-            project: activeProjectSlug ?? null,
-            sourceRefs,
-          }),
-        });
+        const response = await fetch(
+          intent.mode === "decision-update"
+            ? "/api/brain/decision-update"
+            : "/api/brain/capture",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              intent.mode === "decision-update"
+                ? {
+                    slug: decisionTarget?.slug,
+                    project: activeProjectSlug ?? null,
+                    content: intent.content,
+                    sourceRefs,
+                  }
+                : {
+                    content: intent.content,
+                    kind: intent.kind,
+                    channel: "web",
+                    userId,
+                    project: activeProjectSlug ?? null,
+                    sourceRefs,
+                  },
+            ),
+          },
+        );
 
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
           throw new Error(
             typeof data.error === "string" ? data.error : "Capture failed",
           );
+        }
+
+        if (intent.mode === "decision-update") {
+          applyCaptureReply(
+            replyMessageId,
+            [
+              "**Decision updated**",
+              `Decision: ${decisionTarget?.title ?? "Current decision"}`,
+              `Path: ${typeof data.path === "string" ? data.path : decisionTarget?.path ?? "unknown"}`,
+            ].join("\n"),
+          );
+          await refreshProjectState();
+          return;
         }
 
         const result = data as CaptureResult;
@@ -3088,6 +3259,7 @@ function ProjectPageContent() {
     [
       activeProjectSlug,
       applyCaptureReply,
+      buildVisibleCaptureSourceRefs,
       clearError,
       conversationId,
       getWebCaptureUserId,
@@ -3181,7 +3353,110 @@ function ProjectPageContent() {
     ],
   );
 
-  const isChatBusy = isCapturing;
+  const handleNextExperimentPlannerIntent = useCallback(
+    async (text: string, intent: NextExperimentPlanIntent) => {
+      if (!activeProjectSlug || isPlanningExperiments || isStreaming) return;
+
+      const trimmed = text.trim();
+      const userMessageId = makeLocalMessageId();
+      const replyMessageId = makeLocalMessageId();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: userMessageId,
+          role: "user",
+          content: trimmed,
+          timestamp: new Date(),
+          channel: "web",
+        },
+        {
+          id: replyMessageId,
+          role: "assistant",
+          content: "Planning the next experiments...",
+          timestamp: new Date(),
+        },
+      ]);
+      setInput("");
+      setIsPlanningExperiments(true);
+      clearError();
+
+      try {
+        const response = await fetch("/api/brain/next-experiment-plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project: activeProjectSlug,
+            prompt: trimmed,
+            previousPlanSlug:
+              intent.updateExisting && lastExperimentPlanSlug
+                ? lastExperimentPlanSlug
+                : null,
+            focusBrainSlug:
+              selectedFileNode?.source === "gbrain" && selectedFileNode.slug
+                ? selectedFileNode.slug
+                : null,
+          }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(
+            typeof data.error === "string"
+              ? data.error
+              : "Next experiment planning failed",
+          );
+        }
+
+        const plannerResponse = data as {
+          artifactPage: string;
+          artifactTitle: string;
+          responseMarkdown: string;
+        };
+
+        applyCaptureReply(replyMessageId, plannerResponse.responseMarkdown);
+        setLastExperimentPlanSlug(plannerResponse.artifactPage);
+        await refreshProjectState();
+        void handleFileSelect(
+          `Brain Artifacts/gbrain:${plannerResponse.artifactPage}`,
+          {
+            name: plannerResponse.artifactTitle,
+            type: "file",
+            source: "gbrain",
+            slug: plannerResponse.artifactPage,
+            pageType: "artifact",
+            icon: "🧠",
+          },
+          { appendPreviewMessage: false },
+        );
+      } catch (error) {
+        removeCaptureReply(replyMessageId);
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Next experiment planning failed",
+        );
+      } finally {
+        setIsPlanningExperiments(false);
+      }
+    },
+    [
+      activeProjectSlug,
+      applyCaptureReply,
+      clearError,
+      handleFileSelect,
+      isPlanningExperiments,
+      isStreaming,
+      lastExperimentPlanSlug,
+      refreshProjectState,
+      removeCaptureReply,
+      selectedFileNode,
+      setError,
+      setMessages,
+    ],
+  );
+
+  const isChatBusy = isCapturing || isPlanningExperiments;
   const filesRenderInChat = filePreviewLocation === "chat-pane";
 
   const moveInputCursorToEnd = useCallback((value: string) => {
@@ -3324,6 +3599,12 @@ function ProjectPageContent() {
         return;
       }
 
+      const experimentPlanIntent = parseNextExperimentPlanIntent(trimmed);
+      if (experimentPlanIntent && activeProjectSlug) {
+        void handleNextExperimentPlannerIntent(trimmed, experimentPlanIntent);
+        return;
+      }
+
       // The preview pane is part of the visible scientist workflow. If a user
       // opens a report item and asks "what next?", attach that current view as
       // active-file context without requiring a separate context-chip action.
@@ -3332,7 +3613,9 @@ function ProjectPageContent() {
     },
     [
       activePreviewFile,
+      activeProjectSlug,
       handleCaptureIntent,
+      handleNextExperimentPlannerIntent,
       isChatBusy,
       recordPromptHistory,
       sendMessage,

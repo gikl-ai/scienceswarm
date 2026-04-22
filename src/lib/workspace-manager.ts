@@ -16,6 +16,7 @@ export interface FileReference {
   importedAt: string;
   lastChecked?: string;
   changed?: boolean;
+  localEditedAt?: string;
 }
 
 export interface ReferencesFile {
