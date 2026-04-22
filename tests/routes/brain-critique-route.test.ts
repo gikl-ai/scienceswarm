@@ -320,4 +320,16 @@ describe("/api/brain/critique", () => {
     });
     expect(mocks.listPages).toHaveBeenCalledWith({ limit: 5000 });
   });
+
+  it("rejects non-local critique list requests before reading gbrain", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/brain/critique?limit=1", {
+        headers: { "x-forwarded-for": "203.0.113.10" },
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
+    expect(mocks.listPages).not.toHaveBeenCalled();
+  });
 });

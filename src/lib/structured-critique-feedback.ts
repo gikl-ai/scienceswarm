@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
-import { homedir } from "os";
 import { join } from "path";
+import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 
 export interface StructuredCritiqueFeedbackRecord {
   job_id: string;
@@ -26,10 +26,7 @@ export function getStructuredCritiqueFeedbackDir(): string {
   if (process.env.STRUCTURED_CRITIQUE_FEEDBACK_DIR) {
     return process.env.STRUCTURED_CRITIQUE_FEEDBACK_DIR;
   }
-  if (process.env.SCIENCESWARM_DIR) {
-    return join(process.env.SCIENCESWARM_DIR, "feedback");
-  }
-  return join(homedir(), ".scienceswarm", "feedback");
+  return join(getScienceSwarmBrainRoot(), "state", "feedback");
 }
 
 export function getStructuredCritiqueFeedbackPath(): string {
