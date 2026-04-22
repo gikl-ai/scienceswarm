@@ -649,6 +649,18 @@ function renderContent(content: string, projectId: string) {
           </div>
         );
       }
+      if (ext === "pdf") {
+        return (
+          <div key={i} className="my-2">
+            <iframe
+              src={src}
+              title={filePath}
+              className="w-full min-w-0 h-[80vh] min-h-[600px] rounded-lg border border-border bg-white"
+            />
+            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+          </div>
+        );
+      }
       if (ext === "svg") {
         // SVG rendered as <img> to prevent script execution
         return (
