@@ -291,6 +291,54 @@ describe("GET /api/workspace?action=tree", () => {
     ).toBe(true);
   });
 
+  it("normalizes absolute gbrain file-ref paths into scientist workspace folders", async () => {
+    const sha = "9".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "note") return [];
+      return [
+        {
+          path: "note-page",
+          title: "Absolute Note",
+          type: "note",
+          content: "# Absolute Note",
+          frontmatter: {
+            type: "note",
+            project: "test-project",
+            file_refs: [
+              {
+                role: "source",
+                fileObjectId: `sha256:${sha}`,
+                sha256: sha,
+                filename: "/Users/clawfarm/tmp/uat-lit-hyp-fixtures/non_transformer_notes.md",
+                mime: "text/markdown",
+                sizeBytes: 444,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+
+    const { GET } = await importRoute();
+    const res = await GET(
+      new Request("http://localhost/api/workspace?action=tree&projectId=test-project"),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      totalFiles: number;
+      tree: Array<{ name: string; children?: Array<{ name: string }> }>;
+    };
+    expect(body.totalFiles).toBe(1);
+    expect(body.tree.find((node) => node.name === "docs")?.children).toEqual([
+      expect.objectContaining({ name: "non_transformer_notes.md" }),
+    ]);
+  });
+
   it("builds the workspace tree from the fast metadata query without loading page content", async () => {
     const projectId = "test-project";
     const dbQuery = vi.fn(async (sql: string) => {

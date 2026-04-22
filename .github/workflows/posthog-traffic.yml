@@ -6,8 +6,8 @@ name: PostHog GitHub traffic sync
 #
 # Security: this workflow does not consume any user-controlled event inputs
 # (issue/PR titles/bodies, commit messages, head_ref, etc.). The only
-# expression interpolations are github.repository, secrets, and the
-# auto-provided GITHUB_TOKEN, all of which are trusted.
+# expression interpolations are github.repository and secrets, all of which are
+# trusted.
 
 on:
   schedule:
@@ -28,7 +28,7 @@ jobs:
     steps:
       - name: Forward Traffic API stats to PostHog
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TRAFFIC_TOKEN }}
           POSTHOG_PROJECT_KEY: ${{ secrets.POSTHOG_PROJECT_KEY }}
           REPO: ${{ github.repository }}
         shell: bash
@@ -37,6 +37,11 @@ jobs:
 
           if [ -z "${POSTHOG_PROJECT_KEY:-}" ]; then
             echo "::warning::POSTHOG_PROJECT_KEY secret not set; skipping forward"
+            exit 0
+          fi
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::GH_TRAFFIC_TOKEN secret not set; skipping forward"
             exit 0
           fi
 
