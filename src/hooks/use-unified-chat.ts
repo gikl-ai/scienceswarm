@@ -335,6 +335,35 @@ function inferPolledMessageRole(message: PolledOpenClawMessage): "user" | "assis
   return "user";
 }
 
+function isLikelyDuplicatePolledUserMessage(
+  existingMessages: Message[],
+  candidate: Message,
+): boolean {
+  if (candidate.role !== "user") {
+    return false;
+  }
+
+  const candidateContent = candidate.content.trim();
+  if (candidateContent.length === 0) {
+    return false;
+  }
+
+  const candidateTimestamp = candidate.timestamp.getTime();
+  return existingMessages.some((message) => {
+    if (message.role !== "user") {
+      return false;
+    }
+    const existingContent = message.content.trim();
+    if (existingContent !== candidateContent) {
+      return false;
+    }
+    if (message.channel && message.channel !== "web") {
+      return false;
+    }
+    return Math.abs(message.timestamp.getTime() - candidateTimestamp) <= 30_000;
+  });
+}
+
 function latestTimestampCursor(seed: string, messages: PolledOpenClawMessage[]): string {
   return messages.reduce((latest, message) => {
     if (typeof message.timestamp !== "string") {
@@ -1502,7 +1531,9 @@ export function useUnifiedChat(
           setMessages((prev) => {
             const existingIds = new Set(prev.map((m) => m.id));
             const unique = polledMessages.filter(
-              (message: Message) => !existingIds.has(message.id),
+              (message: Message) =>
+                !existingIds.has(message.id)
+                && !isLikelyDuplicatePolledUserMessage(prev, message),
             );
             return unique.length > 0 ? [...prev, ...unique] : prev;
           });

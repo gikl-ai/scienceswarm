@@ -143,11 +143,25 @@ type ChatMode = "reasoning" | "openclaw-tools";
 type RequestedBackend = "openclaw" | "agent" | "direct";
 
 const MAX_CONTEXT_FILES = 10;
+const AUTO_PROJECT_CONTEXT_MAX_FILES = 3;
 const MAX_CONTEXT_CHARS_PER_FILE = 20_000;
 const OPENCLAW_HISTORY_CONTEXT_MAX_MESSAGES = 6;
 const OPENCLAW_HISTORY_CONTEXT_MAX_CHARS = 12_000;
 const OPENCLAW_HISTORY_CONTEXT_MAX_CHARS_PER_MESSAGE = 3_500;
 const OPENCLAW_ARTIFACT_TASK_TIMEOUT_MS = 180_000;
+const AUTO_PROJECT_CONTEXT_HINT_RE =
+  /\b(imported|uploaded|latest)\b[\s\S]{0,80}\b(paper|note|notes|file|files|material|materials)\b/i;
+const AUTO_PROJECT_CONTEXT_EXTENSIONS = new Set([
+  ".doc",
+  ".docx",
+  ".markdown",
+  ".md",
+  ".pdf",
+  ".rst",
+  ".tex",
+  ".text",
+  ".txt",
+]);
 const OPENCLAW_FAST_ARTIFACT_TIMEOUT_MS = 90_000;
 const ACTIVE_FILE_CONTEXT_PREFIX = "<scienceswarm_current_file_context";
 const IGNORED_WORKSPACE_DIRS = new Set([".brain", ".git", "node_modules"]);
@@ -222,7 +236,12 @@ interface RevisionArtifactWorkspacePaths {
 
 type SendOpenClawMessage = (
   message: string,
-  options?: { session?: string; cwd?: string; timeoutMs?: number },
+  options?: {
+    session?: string;
+    cwd?: string;
+    channel?: string;
+    timeoutMs?: number;
+  },
 ) => Promise<string>;
 
 function isValidTimestamp(value: string | null): value is string {
@@ -426,10 +445,11 @@ function openClawAgentOptions(
   session: string | null | undefined,
   cwd: string | undefined,
   message: string,
-): { session?: string; cwd?: string; timeoutMs?: number } {
+): { session?: string; cwd?: string; channel?: string; timeoutMs?: number } {
   return {
     session: session ?? undefined,
     cwd,
+    channel: "web",
     timeoutMs:
       isRevisionWorkflowRequest(message) ||
       isPlanChangeRequest(message) ||
@@ -442,10 +462,11 @@ function openClawAgentOptions(
 function openClawFastArtifactOptions(
   session: string | null | undefined,
   cwd: string | undefined,
-): { session?: string; cwd?: string; timeoutMs?: number } {
+): { session?: string; cwd?: string; channel?: string; timeoutMs?: number } {
   return {
     session: session ?? undefined,
     cwd,
+    channel: "web",
     timeoutMs: OPENCLAW_FAST_ARTIFACT_TIMEOUT_MS,
   };
 }
@@ -786,6 +807,99 @@ async function listWorkspaceFiles(workspaceRoot: string): Promise<string[]> {
   return files.sort();
 }
 
+function shouldImplicitlyAttachProjectFiles(message: string): boolean {
+  return AUTO_PROJECT_CONTEXT_HINT_RE.test(message);
+}
+
+function scoreImplicitProjectContextFile(
+  workspacePath: string,
+  message: string,
+): number {
+  const lowerPath = workspacePath.toLowerCase();
+  const ext = path.extname(lowerPath);
+  if (!AUTO_PROJECT_CONTEXT_EXTENSIONS.has(ext)) {
+    return 0;
+  }
+
+  const messageLower = message.toLowerCase();
+  let score = 20;
+
+  if (lowerPath.startsWith("docs/")) score += 30;
+  if (lowerPath.startsWith("notes/")) score += 25;
+  if (lowerPath.startsWith("papers/") || lowerPath.startsWith("references/")) {
+    score += 25;
+  }
+  if (messageLower.includes("note") && lowerPath.includes("note")) {
+    score += 40;
+  }
+  if (
+    messageLower.includes("paper")
+    && /paper|manuscript|article/.test(lowerPath)
+  ) {
+    score += 40;
+  }
+  if (/\b(imported|uploaded|latest)\b/.test(messageLower)) {
+    score += 10;
+  }
+
+  return score;
+}
+
+async function selectImplicitProjectContextFiles(
+  message: string,
+  projectId: string | null,
+  files: UploadedFileDescriptor[],
+): Promise<string[]> {
+  if (
+    !projectId
+    || files.length > 0
+    || !shouldImplicitlyAttachProjectFiles(message)
+  ) {
+    return [];
+  }
+
+  const workspaceRoot = getScienceSwarmProjectRoot(projectId);
+  let workspaceFiles: string[] = [];
+  try {
+    workspaceFiles = await listWorkspaceFiles(workspaceRoot);
+  } catch {
+    return [];
+  }
+
+  const ranked = await Promise.all(
+    workspaceFiles.map(async (workspacePath) => {
+      const score = scoreImplicitProjectContextFile(workspacePath, message);
+      if (score <= 0) {
+        return null;
+      }
+      try {
+        const metadata = await stat(path.join(workspaceRoot, workspacePath));
+        return {
+          workspacePath,
+          score,
+          modifiedAtMs: metadata.mtimeMs,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return ranked
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score;
+      }
+      if (right.modifiedAtMs !== left.modifiedAtMs) {
+        return right.modifiedAtMs - left.modifiedAtMs;
+      }
+      return left.workspacePath.localeCompare(right.workspacePath);
+    })
+    .slice(0, AUTO_PROJECT_CONTEXT_MAX_FILES)
+    .map((entry) => entry.workspacePath);
+}
+
 function boundedLevenshteinDistance(
   left: string,
   right: string,
@@ -989,9 +1103,34 @@ async function mergeReferencedWorkspaceFiles(
     : getScienceSwarmWorkspaceRoot();
   const referencedCandidates = extractWorkspaceReferenceCandidates(message);
   if (referencedCandidates.length === 0) {
-    return {
+    const implicitWorkspaceFiles = await selectImplicitProjectContextFiles(
+      message,
+      projectId,
       files,
-      referenceNotes: { resolved: [], ambiguous: [] },
+    );
+    if (implicitWorkspaceFiles.length === 0) {
+      return {
+        files,
+        referenceNotes: { resolved: [], ambiguous: [] },
+      };
+    }
+
+    return {
+      files: [
+        ...files,
+        ...implicitWorkspaceFiles.map((workspacePath) => ({
+          name: path.basename(workspacePath),
+          size: "implicit project context",
+          workspacePath,
+        })),
+      ],
+      referenceNotes: {
+        resolved: implicitWorkspaceFiles.map((workspacePath) => ({
+          requested: "visible imported project context",
+          workspacePath,
+        })),
+        ambiguous: [],
+      },
     };
   }
 

@@ -31,6 +31,7 @@ import type {
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { createIngestService, type IngestService } from "@/brain/ingest/service";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getTargetFolder } from "@/lib/workspace-manager";
 import type {
   BrainConfig,
   ContentType,
@@ -62,6 +63,17 @@ interface ColdstartWriterDeps {
   ingestService: IngestService;
   uploadedBy: string;
   projectSlug?: string;
+}
+
+function getProjectScopedSourceFilename(
+  filePath: string,
+  projectSlug?: string,
+): string {
+  if (!projectSlug) {
+    return filePath;
+  }
+  const baseName = basename(filePath);
+  return `${getTargetFolder(baseName)}/${baseName}`;
 }
 
 // ── Project page ──────────────────────────────────────
@@ -215,7 +227,7 @@ async function attachColdstartSourceFile(
 ): Promise<IngestSuccess> {
   const ingestInput: IngestInputFile = {
     project: deps.projectSlug ?? file.projectCandidates[0] ?? "coldstart",
-    filename: file.path,
+    filename: getProjectScopedSourceFilename(file.path, deps.projectSlug),
     mime: mimeFromPath(file.path),
     sizeBytes: file.size,
     stream: Readable.toWeb(createReadStream(file.path)) as ReadableStream<Uint8Array>,
@@ -242,7 +254,11 @@ async function putGbrainMirrorIfNeeded(
   if (!pagePath || !deps) return pagePath;
   const absPath = join(config.root, pagePath);
   if (!existsSync(absPath)) return pagePath;
-  const content = withSourceFileRef(readFileSync(absPath, "utf-8"), sourceFileRef);
+  const content = withSourceFileRef(
+    readFileSync(absPath, "utf-8"),
+    sourceFileRef,
+    deps.projectSlug,
+  );
   writeFileSync(absPath, content.endsWith("\n") ? content : `${content}\n`);
   await deps.gbrain.putPage(slugFromPagePath(pagePath), content);
   return pagePath;
@@ -251,15 +267,30 @@ async function putGbrainMirrorIfNeeded(
 function withSourceFileRef(
   content: string,
   sourceFileRef: GbrainPageFileRef | undefined,
+  projectSlug?: string,
 ): string {
-  if (!sourceFileRef) return content;
   const parsed = matter(content);
-  const data = {
+  const existingProjects = Array.isArray(parsed.data.projects)
+    ? parsed.data.projects.filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      )
+    : [];
+  const data: Record<string, unknown> = {
     ...parsed.data,
-    file_object_id: sourceFileRef.fileObjectId,
-    source_file_object_id: sourceFileRef.fileObjectId,
-    file_refs: [sourceFileRef],
   };
+
+  if (projectSlug) {
+    data.project = projectSlug;
+    data.projects = Array.from(new Set([...existingProjects, projectSlug]));
+  }
+
+  if (sourceFileRef) {
+    data.file_object_id = sourceFileRef.fileObjectId;
+    data.source_file_object_id = sourceFileRef.fileObjectId;
+    data.file_refs = [sourceFileRef];
+  }
+
   return matter.stringify(parsed.content, data);
 }
 

@@ -994,6 +994,103 @@ describe("useUnifiedChat persistence", () => {
     });
   });
 
+  it("suppresses duplicate polled user echoes that mirror the local web turn", async () => {
+    const scheduledIntervals: Array<() => void | Promise<void>> = [];
+    vi.spyOn(globalThis, "setInterval").mockImplementation(((
+      callback: TimerHandler,
+    ) => {
+      if (typeof callback === "function") {
+        scheduledIntervals.push(callback as () => void | Promise<void>);
+      }
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof setInterval);
+
+    const duplicateTimestamp = new Date().toISOString();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+        });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return Response.json(
+          {
+            response: "Initial assistant response.",
+            conversationId: "web:alpha-project:session-1",
+            messages: [],
+          },
+          { headers: { "X-Chat-Backend": "openclaw", "X-Chat-Mode": "reasoning" } },
+        );
+      }
+
+      if (url.startsWith("/api/chat/unified?action=poll")) {
+        return Response.json({
+          backend: "openclaw",
+          messages: [
+            {
+              id: "remote-echo-user",
+              role: "user",
+              content: "Hello from the browser",
+              timestamp: duplicateTimestamp,
+            },
+          ],
+        });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Initial assistant response.");
+      expect(screen.getByTestId("message-count").textContent).toBe("4");
+    });
+
+    await act(async () => {
+      for (const callback of scheduledIntervals) {
+        await callback?.();
+      }
+    });
+
+    await waitFor(() => {
+      const messageLog = screen.getByTestId("message-log").textContent ?? "";
+      expect(messageLog.match(/user:Hello from the browser/g)?.length ?? 0).toBe(1);
+      expect(screen.getByTestId("message-count").textContent).toBe("4");
+    });
+  });
+
   it("tracks generated files returned directly from a chat turn before the workspace tabs refresh", async () => {
     let treeVersion = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

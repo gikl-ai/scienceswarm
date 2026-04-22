@@ -26,6 +26,8 @@
  *     with the rest of the library (it's exported alongside).
  */
 
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -641,5 +643,30 @@ describe("getCurrentUserHandle", () => {
     expect(() =>
       getCurrentUserHandle({ SCIENCESWARM_USER_HANDLE: "   " }),
     ).toThrowError(/SCIENCESWARM_USER_HANDLE is not set/);
+  });
+
+  it("falls back to the saved .env after setup when process env is stale", async () => {
+    const originalCwd = process.cwd();
+    const originalHandle = process.env.SCIENCESWARM_USER_HANDLE;
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-handle-"));
+    try {
+      await mkdir(repoRoot, { recursive: true });
+      await writeFile(
+        path.join(repoRoot, ".env"),
+        "SCIENCESWARM_USER_HANDLE=@saved-handle\n",
+      );
+      delete process.env.SCIENCESWARM_USER_HANDLE;
+      process.chdir(repoRoot);
+
+      expect(getCurrentUserHandle()).toBe("@saved-handle");
+    } finally {
+      process.chdir(originalCwd);
+      if (typeof originalHandle === "string") {
+        process.env.SCIENCESWARM_USER_HANDLE = originalHandle;
+      } else {
+        delete process.env.SCIENCESWARM_USER_HANDLE;
+      }
+      await rm(repoRoot, { recursive: true, force: true });
+    }
   });
 });

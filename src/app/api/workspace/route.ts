@@ -483,6 +483,13 @@ async function listGbrainWorkspaceFileEntries(
 function getGbrainWorkspacePath(filename: string): string | null {
   const normalizedFilename = normalizeWorkspacePath(filename);
   if (!normalizedFilename) return null;
+  const isAbsolutePath =
+    filename.startsWith("/")
+    || /^[A-Za-z]:[\\/]/.test(filename);
+  if (isAbsolutePath) {
+    const baseName = path.posix.basename(normalizedFilename);
+    return `${getTargetFolder(baseName)}/${baseName}`;
+  }
   // Filenames from OpenHands writeback already carry a relative path (e.g.
   // "figures/plot.png"); applying getTargetFolder on top would double-nest them
   // into "figures/figures/plot.png". Only prepend the target folder for bare
