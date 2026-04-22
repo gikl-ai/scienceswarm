@@ -61,11 +61,16 @@ import {
   isModelSystemApplicabilityRequest,
   looksLikeModelSystemArtifact,
 } from "@/lib/model-system-applicability";
+import {
+  buildTargetPrioritizationAssessment,
+  isTargetPrioritizationRequest,
+  looksLikeTargetPrioritizationArtifact,
+} from "@/lib/target-biomarker-prioritizer";
 import { isLocalRequest } from "@/lib/local-guard";
 import {
   getScienceSwarmBrainRoot,
-  getScienceSwarmStateRoot,
   getScienceSwarmProjectRoot,
+  getScienceSwarmStateRoot,
   getScienceSwarmWorkspaceRoot,
   getScienceSwarmOpenClawStateDir,
 } from "@/lib/scienceswarm-paths";
@@ -4026,6 +4031,177 @@ async function maybeHandleModelSystemApplicability(params: {
   );
 }
 
+async function maybeHandleTargetPrioritization(params: {
+  chatMode: ChatMode | null;
+  userIntentMessage: string;
+  activeFile: { path: string; content: string } | null;
+  mergedFiles: UploadedFileDescriptor[];
+  projectId: string | null;
+}): Promise<Response | null> {
+  if (!isTargetPrioritizationRequest(params.userIntentMessage)) {
+    return null;
+  }
+
+  if (!params.projectId) {
+    return Response.json(
+      {
+        response:
+          "Open a project before prioritizing targets or biomarkers so ScienceSwarm can save the ranking with visible project evidence.",
+        backend: "openclaw",
+        mode: params.chatMode,
+        generatedFiles: [],
+      },
+      {
+        headers: {
+          "X-Chat-Backend": "openclaw",
+          "X-Chat-Mode": params.chatMode ?? "reasoning",
+        },
+      },
+    );
+  }
+
+  const projectRoot = getScienceSwarmProjectRoot(params.projectId);
+  const sources: Array<{
+    workspacePath?: string | null;
+    sourceFilename: string;
+    title?: string;
+    text: string;
+  }> = [];
+  const activeFilePath = params.activeFile?.path?.trim().replace(/^\/+/, "");
+  if (activeFilePath && params.activeFile?.content.trim()) {
+    sources.push({
+      workspacePath: activeFilePath,
+      sourceFilename: path.basename(activeFilePath),
+      title: path.basename(activeFilePath).replace(/\.[a-z0-9]+$/i, ""),
+      text: params.activeFile.content.trim(),
+    });
+  }
+
+  for (const file of params.mergedFiles) {
+    if (sources.length >= 4) break;
+    const workspacePath =
+      typeof file.workspacePath === "string"
+        ? file.workspacePath.trim().replace(/^\/+/, "")
+        : "";
+    if (!workspacePath || sources.some((source) => source.workspacePath === workspacePath)) {
+      continue;
+    }
+    if (!/\.(?:csv|md|markdown|rst|tsv|txt)$/i.test(workspacePath)) {
+      continue;
+    }
+    if (
+      !looksLikeTargetPrioritizationArtifact(workspacePath)
+      && !looksLikeTargetPrioritizationArtifact(String(file.name ?? ""))
+    ) {
+      continue;
+    }
+    const text = readWorkspaceArtifactText(projectRoot, workspacePath, 16_000);
+    if (!text?.trim()) continue;
+    sources.push({
+      workspacePath,
+      sourceFilename: path.basename(workspacePath),
+      title: path.basename(workspacePath).replace(/\.[a-z0-9]+$/i, ""),
+      text,
+    });
+  }
+
+  const assessment = buildTargetPrioritizationAssessment({
+    prompt: params.userIntentMessage,
+    sources,
+  });
+  const sourceRefs = sources.map((source) => ({
+    kind: "artifact" as const,
+    ref: source.workspacePath ?? source.sourceFilename,
+  }));
+
+  let persisted:
+    | {
+        savePath: string;
+        artifactPage: string;
+      }
+    | null = null;
+  try {
+    persisted = await persistGeneratedProjectArtifact({
+      brainRoot: getScienceSwarmBrainRoot(),
+      stateRoot: getScienceSwarmStateRoot(),
+      projectSlug: params.projectId,
+      projectTitle: params.projectId,
+      artifactType: "target-prioritization",
+      title: assessment.title,
+      content: assessment.markdown,
+      workspaceFileName: "target-biomarker-prioritization.md",
+      sourceRefs,
+      tags: ["target-prioritization", "biomarker", "combination"],
+      prompt: params.userIntentMessage,
+      tool: "ScienceSwarm target prioritizer",
+    });
+  } catch (error) {
+    console.warn("Target prioritization artifact persistence failed", error);
+  }
+
+  const responseLines = [
+    `**${assessment.title}**`,
+    "",
+    assessment.summary,
+    "",
+    "Priority ranking:",
+    ...(assessment.candidates.length > 0
+      ? assessment.candidates.slice(0, 6).map((candidate, index) =>
+          `${index + 1}. ${candidate.name} - score ${candidate.score}; ${candidate.rationale}`
+        )
+      : ["No rankable candidates were visible."]),
+    "",
+    "Ranking criteria:",
+    ...assessment.criteria.map((criterion) => `- ${criterion}`),
+    "",
+    "Constraint sensitivity:",
+    ...assessment.constraintNotes.map((note) => `- ${note}`),
+    "",
+    "Thin evidence and missing information:",
+    ...(assessment.thinEvidenceWarnings.length > 0
+      ? assessment.thinEvidenceWarnings.slice(0, 6).map((warning) => `- ${warning}`)
+      : ["- No major evidence-depth warning was visible for the ranked candidates."]),
+    "",
+    persisted
+      ? `Saved prioritization artifact: [[${persisted.artifactPage}]]`
+      : "Prioritization completed, but ScienceSwarm could not save the artifact to gbrain in this pass.",
+  ];
+
+  const generatedPath = persisted?.artifactPage
+    ? `gbrain:${persisted.artifactPage}`
+    : null;
+
+  return Response.json(
+    {
+      response: responseLines.join("\n"),
+      backend: "openclaw",
+      mode: params.chatMode,
+      generatedFiles: generatedPath ? [generatedPath] : [],
+      generatedArtifacts: generatedPath
+        ? [
+            {
+              projectPath: persisted?.savePath,
+              artifactSlug: persisted?.artifactPage,
+              sourceFiles: sources.map((source) =>
+                source.workspacePath ?? source.sourceFilename
+              ),
+              prompt: params.userIntentMessage,
+              tool: "ScienceSwarm target prioritizer",
+              createdAt: new Date().toISOString(),
+            },
+          ]
+        : [],
+      gbrainArtifacts: persisted?.artifactPage ? [persisted.artifactPage] : [],
+    },
+    {
+      headers: {
+        "X-Chat-Backend": "openclaw",
+        "X-Chat-Mode": params.chatMode ?? "reasoning",
+      },
+    },
+  );
+}
+
 function buildRevisionNeedsApprovalResponse(params: {
   paths: RevisionArtifactWorkspacePaths | null;
   hasApproval: boolean;
@@ -7587,6 +7763,18 @@ export async function handleUnifiedChatPost(
       });
     if (modelSystemApplicabilityResponse) {
       return modelSystemApplicabilityResponse;
+    }
+
+    const targetPrioritizationResponse =
+      await maybeHandleTargetPrioritization({
+        chatMode,
+        userIntentMessage,
+        activeFile,
+        mergedFiles,
+        projectId: validatedProjectId,
+      });
+    if (targetPrioritizationResponse) {
+      return targetPrioritizationResponse;
     }
 
     const experimentDesignCritiqueResponse =

@@ -1077,7 +1077,10 @@ describe("POST /api/chat/unified", () => {
     const artifactPath = body.generatedArtifacts?.[0]?.projectPath;
     expect(artifactPath).toBeTruthy();
     expect(
-      readFileSync(path.join(ensureScienceSwarmDir(), "workspace", artifactPath ?? ""), "utf-8"),
+      readFileSync(
+        path.join(ensureScienceSwarmDir(), "workspace", artifactPath ?? ""),
+        "utf-8",
+      ),
     ).toContain("## Missing Metadata ScienceSwarm Will Not Assume");
     expect(sendOpenClawMessage).not.toHaveBeenCalled();
   });
@@ -1108,6 +1111,93 @@ describe("POST /api/chat/unified", () => {
     expect(body.response).toContain("Missing metadata ScienceSwarm will not assume:");
     expect(body.response).toContain("model identity");
     expect(body.response).toContain("assay or readout");
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
+  });
+
+  it("answers target-prioritization requests from the visible active file and saves an artifact", async () => {
+    createProjectRoot("alpha-project");
+    readFile.mockRejectedValue(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "target-prioritization-active-file",
+      },
+      body: JSON.stringify({
+        message:
+          "Rank these target and biomarker candidates for the next validation wave and show the ranking criteria.",
+        projectId: "alpha-project",
+        activeFile: {
+          path: "docs/target-candidates.md",
+          content: [
+            "# Target candidates",
+            "- EGFR + MEK: patient-derived organoid response replicated in n=4 wells with viability assay, KRAS feedback mechanism, existing inhibitors, and western readout.",
+            "- AXL: resistance marker enriched after treatment, but only one RNA-seq observation and no perturbation assay yet.",
+            "- ERBB3: plausible bypass pathway with antibody reagent available, but evidence is weaker and timeline is longer.",
+          ].join("\n"),
+        },
+      }),
+    });
+
+    const response = await POST(request);
+    const body = (await response.json()) as {
+      response?: string;
+      generatedArtifacts?: Array<{ projectPath?: string; tool?: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
+    expect(body.response).toContain("Priority ranking:");
+    expect(body.response).toContain("Ranking criteria:");
+    expect(body.response).toContain("EGFR");
+    expect(body.generatedArtifacts?.[0]?.tool).toBe(
+      "ScienceSwarm target prioritizer",
+    );
+    const artifactPath = body.generatedArtifacts?.[0]?.projectPath;
+    expect(artifactPath).toBeTruthy();
+    expect(
+      readFileSync(
+        path.join(ensureScienceSwarmDir(), "workspace", artifactPath ?? ""),
+        "utf-8",
+      ),
+    ).toContain("## Thin Evidence and Missing Information");
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
+  });
+
+  it("reprioritizes under visible practical constraints and names thin evidence", async () => {
+    createProjectRoot("alpha-project");
+    readFile.mockRejectedValue(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "target-prioritization-constraints",
+      },
+      body: JSON.stringify({
+        message:
+          "Reprioritize AXL, MET, and YAP1 biomarkers for a short two-week lab window with limited assay support and be honest about thin evidence.",
+        projectId: "alpha-project",
+        activeFile: {
+          path: "docs/thin-biomarker-list.txt",
+          content:
+            "AXL, MET, and YAP1 are tempting resistance biomarkers, but no cohort, replication, or perturbation readout is available yet.",
+        },
+      }),
+    });
+
+    const response = await POST(request);
+    const body = (await response.json()) as { response?: string };
+
+    expect(response.status).toBe(200);
+    expect(body.response).toContain("Constraint sensitivity:");
+    expect(body.response).toMatch(/Short-window|Limited assay/i);
+    expect(body.response).toContain("Thin evidence and missing information:");
     expect(sendOpenClawMessage).not.toHaveBeenCalled();
   });
 
