@@ -5,8 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, useState } from "react";
 import { useUnifiedChat } from "@/hooks/use-unified-chat";
 
-const LOCAL_MESSAGE_SIZE_TEST_CAP_EXCEEDED = 12_001;
-
 function ChatHarness({ projectName }: { projectName: string }) {
   const [lastAddResult, setLastAddResult] = useState("");
   const {
@@ -55,7 +53,6 @@ function ChatHarness({ projectName }: { projectName: string }) {
       </button>
       <button onClick={() => void sendMessage("/audit-revise draft a revision checklist")}>Send slash</button>
       <button onClick={() => setBackend("openclaw")}>Switch OpenClaw</button>
-      <button onClick={() => setBackend("direct")}>Switch Direct</button>
       <button onClick={() => setChatMode("openclaw-tools")}>Use OpenClaw tools</button>
       <button onClick={() => setChatMode("reasoning")}>Use Reasoning</button>
       <button onClick={() => void checkChanges()}>Check changes</button>
@@ -172,7 +169,7 @@ describe("useUnifiedChat persistence", () => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "disconnected",
           openhands: "disconnected",
         });
@@ -217,7 +214,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
         });
@@ -266,7 +263,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "disconnected",
           openhands: "disconnected",
           llmProvider: "local",
@@ -400,7 +397,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
         });
@@ -433,285 +430,13 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
-  it("only sends chat-context files when the user explicitly references them", async () => {
-    const capturedBodies: Array<Record<string, unknown>> = [];
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      const method = init?.method ?? "GET";
-
-      if (url === "/api/chat/unified?action=health") {
-        return Response.json({
-          agent: { type: "openclaw", status: "connected" },
-          openclaw: "connected",
-          nanoclaw: "disconnected",
-          openhands: "connected",
-          ollama: "connected",
-          ollamaModels: ["gemma4:26b"],
-          configuredLocalModel: "gemma4:26b",
-          llmProvider: "local",
-        });
-      }
-
-      if (url === "/api/chat/thread?project=alpha-project") {
-        return Response.json({
-          version: 1,
-          project: "alpha-project",
-          conversationId: null,
-          messages: [],
-        });
-      }
-
-      if (url === "/api/chat/thread" && method === "POST") {
-        return Response.json({ ok: true });
-      }
-
-      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
-        return Response.json({ tree: [] });
-      }
-
-      if (url === "/api/chat/unified" && method === "POST") {
-        capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-        return createSseResponse([{ text: "ok" }], "direct");
-      }
-
-      throw new Error(`Unhandled fetch: ${url}`);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-    render(<ChatHarness projectName="alpha-project" />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Add valid gbrain context" }));
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-
-    await waitFor(() => {
-      expect(capturedBodies).toHaveLength(1);
-    });
-    expect(capturedBodies[0]?.files).toEqual([]);
-    expect(capturedBodies[0]?.activeFile).toBeUndefined();
-
-    fireEvent.click(screen.getByRole("button", { name: "Send explicit file" }));
-
-    await waitFor(() => {
-      expect(capturedBodies).toHaveLength(2);
-    });
-    expect(capturedBodies[1]?.files).toEqual([
-      expect.objectContaining({
-        workspacePath: "gbrain:wiki/papers/example.md",
-        brainSlug: "wiki/papers/example.md",
-      }),
-    ]);
-  });
-
-  it("only sends active-file context when the user explicitly asks for the current file", async () => {
-    const capturedBodies: Array<Record<string, unknown>> = [];
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      const method = init?.method ?? "GET";
-
-      if (url === "/api/chat/unified?action=health") {
-        return Response.json({
-          agent: { type: "openclaw", status: "connected" },
-          openclaw: "connected",
-          nanoclaw: "disconnected",
-          openhands: "connected",
-          ollama: "connected",
-          ollamaModels: ["gemma4:26b"],
-          configuredLocalModel: "gemma4:26b",
-          llmProvider: "local",
-        });
-      }
-
-      if (url === "/api/chat/thread?project=alpha-project") {
-        return Response.json({
-          version: 1,
-          project: "alpha-project",
-          conversationId: null,
-          messages: [],
-        });
-      }
-
-      if (url === "/api/chat/thread" && method === "POST") {
-        return Response.json({ ok: true });
-      }
-
-      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
-        return Response.json({ tree: [] });
-      }
-
-      if (url === "/api/chat/unified" && method === "POST") {
-        capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-        return createSseResponse([{ text: "ok" }], "direct");
-      }
-
-      throw new Error(`Unhandled fetch: ${url}`);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-    render(<ChatHarness projectName="alpha-project" />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Send implicit current file" }));
-
-    await waitFor(() => {
-      expect(capturedBodies).toHaveLength(1);
-    });
-    expect(capturedBodies[0]?.activeFile).toBeUndefined();
-
-    fireEvent.click(screen.getByRole("button", { name: "Send current file" }));
-
-    await waitFor(() => {
-      expect(capturedBodies).toHaveLength(2);
-    });
-    expect(capturedBodies[1]?.activeFile).toEqual({
-      path: "notes/current.md",
-      content: "Current file contents",
-    });
-  });
-
-  it("does not treat a generic 'all files' phrase as an explicit attachment request", async () => {
-    const capturedBodies: Array<Record<string, unknown>> = [];
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      const method = init?.method ?? "GET";
-
-      if (url === "/api/chat/unified?action=health") {
-        return Response.json({
-          agent: { type: "openclaw", status: "connected" },
-          openclaw: "connected",
-          nanoclaw: "disconnected",
-          openhands: "connected",
-          ollama: "connected",
-          ollamaModels: ["gemma4:26b"],
-          configuredLocalModel: "gemma4:26b",
-          llmProvider: "local",
-        });
-      }
-
-      if (url === "/api/chat/thread?project=alpha-project") {
-        return Response.json({
-          version: 1,
-          project: "alpha-project",
-          conversationId: null,
-          messages: [],
-        });
-      }
-
-      if (url === "/api/chat/thread" && method === "POST") {
-        return Response.json({ ok: true });
-      }
-
-      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
-        return Response.json({ tree: [] });
-      }
-
-      if (url === "/api/chat/unified" && method === "POST") {
-        capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-        return createSseResponse([{ text: "ok" }], "direct");
-      }
-
-      throw new Error(`Unhandled fetch: ${url}`);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-    render(<ChatHarness projectName="alpha-project" />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Add valid gbrain context" }));
-    fireEvent.click(screen.getByRole("button", { name: "Send broad all files" }));
-
-    await waitFor(() => {
-      expect(capturedBodies).toHaveLength(1);
-    });
-    expect(capturedBodies[0]?.files).toEqual([]);
-  });
-
-  it("caps local direct chat history before sending", async () => {
-    window.localStorage.setItem(
-      "scienceswarm.chat.alpha-project",
-      JSON.stringify({
-        version: 1,
-        conversationId: null,
-        messages: Array.from({ length: 20 }, (_, index) => ({
-          id: `m-${index}`,
-          role: index % 2 === 0 ? "user" : "assistant",
-          content: `Historical message ${index}`,
-          timestamp: new Date(2026, 0, 1, 0, index).toISOString(),
-        })),
-      }),
-    );
-
-    const capturedBodies: Array<Record<string, unknown>> = [];
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      const method = init?.method ?? "GET";
-
-      if (url === "/api/chat/unified?action=health") {
-        return Response.json({
-          agent: { type: "openclaw", status: "connected" },
-          openclaw: "connected",
-          nanoclaw: "disconnected",
-          openhands: "connected",
-          ollama: "connected",
-          ollamaModels: ["gemma4:26b"],
-          configuredLocalModel: "gemma4:26b",
-          llmProvider: "local",
-        });
-      }
-
-      if (url === "/api/chat/thread?project=alpha-project") {
-        return Response.json({
-          version: 1,
-          project: "alpha-project",
-          conversationId: null,
-          messages: [],
-        });
-      }
-
-      if (url === "/api/chat/thread" && method === "POST") {
-        return Response.json({ ok: true });
-      }
-
-      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
-        return Response.json({ tree: [] });
-      }
-
-      if (url === "/api/chat/unified" && method === "POST") {
-        capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-        return createSseResponse([{ text: "ok" }], "direct");
-      }
-
-      throw new Error(`Unhandled fetch: ${url}`);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-    render(<ChatHarness projectName="alpha-project" />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-
-    await waitFor(() => {
-      expect(capturedBodies).toHaveLength(1);
-    });
-
-    expect(Array.isArray(capturedBodies[0]?.messages)).toBe(true);
-    expect((capturedBodies[0]?.messages as unknown[]).length).toBeLessThanOrEqual(13);
-    expect(
-      (capturedBodies[0]?.messages as Array<{ role: string }>).filter((message) => message.role === "assistant").length,
-    ).toBeLessThanOrEqual(1);
-  });
+  // The three file-filtering tests and the local-direct history-cap tests
+  // that used to live here covered `isLocalDirectContext()` — an
+  // optimization that only fired when `backend === "direct"` to shrink the
+  // prompt for raw local models. That branch is unreachable now that every
+  // chat turn goes through OpenClaw (which receives file references and
+  // decides itself which ones to open), so the optimization was removed
+  // along with the tests.
 
   it("preserves full history and uploaded files for non-local direct fallback chats", async () => {
     window.localStorage.setItem(
@@ -735,7 +460,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "disconnected",
           openhands: "disconnected",
           llmProvider: "openai",
@@ -771,7 +496,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Add valid gbrain context" }));
@@ -790,84 +515,6 @@ describe("useUnifiedChat persistence", () => {
         workspacePath: "gbrain:wiki/papers/example.md",
         brainSlug: "wiki/papers/example.md",
       }),
-    ]);
-  });
-
-  it("drops oversized recent history entries from local direct requests once the char cap is exceeded", async () => {
-    window.localStorage.setItem(
-      "scienceswarm.chat.alpha-project",
-      JSON.stringify({
-        version: 1,
-        conversationId: null,
-        messages: [
-          {
-            id: "huge-assistant",
-            role: "assistant",
-            content: "A".repeat(LOCAL_MESSAGE_SIZE_TEST_CAP_EXCEEDED),
-            timestamp: new Date(2026, 0, 1, 0, 0).toISOString(),
-          },
-        ],
-      }),
-    );
-
-    const capturedBodies: Array<Record<string, unknown>> = [];
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      const method = init?.method ?? "GET";
-
-      if (url === "/api/chat/unified?action=health") {
-        return Response.json({
-          agent: { type: "openclaw", status: "connected" },
-          openclaw: "connected",
-          nanoclaw: "disconnected",
-          openhands: "connected",
-          ollama: "connected",
-          ollamaModels: ["gemma4:26b"],
-          configuredLocalModel: "gemma4:26b",
-          llmProvider: "local",
-        });
-      }
-
-      if (url === "/api/chat/thread?project=alpha-project") {
-        return Response.json({
-          version: 1,
-          project: "alpha-project",
-          conversationId: null,
-          messages: [],
-        });
-      }
-
-      if (url === "/api/chat/thread" && method === "POST") {
-        return Response.json({ ok: true });
-      }
-
-      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
-        return Response.json({ tree: [] });
-      }
-
-      if (url === "/api/chat/unified" && method === "POST") {
-        capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-        return createSseResponse([{ text: "ok" }], "direct");
-      }
-
-      throw new Error(`Unhandled fetch: ${url}`);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-    render(<ChatHarness projectName="alpha-project" />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-
-    await waitFor(() => {
-      expect(capturedBodies).toHaveLength(1);
-    });
-
-    expect(capturedBodies[0]?.messages).toEqual([
-      { role: "user", content: "Hello from the browser" },
     ]);
   });
 
@@ -925,7 +572,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "disconnected",
           openhands: "disconnected",
         });
@@ -973,7 +620,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "disconnected",
           openhands: "disconnected",
         });
@@ -1045,7 +692,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Promise.resolve(Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "disconnected",
           openhands: "disconnected",
         }));
@@ -1077,7 +724,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -1316,7 +963,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
       expect(screen.getByTestId("workspace-root-count").textContent).toBe("0");
     });
 
@@ -1545,7 +1192,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
         });
@@ -1635,7 +1282,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
         });
@@ -1721,7 +1368,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
         });
@@ -1801,7 +1448,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
         });
@@ -1845,7 +1492,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
         });
@@ -1973,7 +1620,7 @@ describe("useUnifiedChat persistence", () => {
     const view = render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Use OpenClaw tools" }));
@@ -2074,7 +1721,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
         });
@@ -2159,7 +1806,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
       expect(screen.getByTestId("chat-mode").textContent).toBe("reasoning");
     });
 
@@ -2231,7 +1878,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Use OpenClaw tools" }));
@@ -2308,7 +1955,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Use OpenClaw tools" }));
@@ -2351,7 +1998,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
           llmProvider: "openai",
@@ -2400,7 +2047,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -2465,7 +2112,7 @@ describe("useUnifiedChat persistence", () => {
     const firstRender = render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -2485,7 +2132,7 @@ describe("useUnifiedChat persistence", () => {
     );
     expect(directPost).toBeTruthy();
     expect(JSON.parse(String((directPost?.[1] as RequestInit | undefined)?.body))).toMatchObject({
-      backend: "direct",
+      backend: "openclaw",
     });
 
     firstRender.unmount();
@@ -2551,7 +2198,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -2588,7 +2235,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
           llmProvider: "openai",
@@ -2657,7 +2304,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "connected",
           openhands: "disconnected",
           llmProvider: "openai",
@@ -2730,164 +2377,12 @@ describe("useUnifiedChat persistence", () => {
     ).toBe(true);
   });
 
-  it("clears streaming after a backend switch while a request is still in flight", async () => {
-    let firstRequestPending = false;
-    let resolveFirstResponse: (value: Response) => void = () => {
-      throw new Error("Expected the first chat request to be pending");
-    };
-
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      const method = init?.method ?? "GET";
-
-      if (url === "/api/chat/unified?action=health") {
-        return Promise.resolve(Response.json({
-          agent: { type: "openclaw", status: "connected" },
-          openclaw: "connected",
-          nanoclaw: "disconnected",
-          openhands: "disconnected",
-          llmProvider: "openai",
-          ollamaModels: [],
-          configuredLocalModel: null,
-        }));
-      }
-
-      if (url === "/api/chat/thread?project=alpha-project") {
-        return Promise.resolve(Response.json({
-          version: 1,
-          project: "alpha-project",
-          conversationId: null,
-          messages: [],
-        }));
-      }
-
-      if (url === "/api/chat/thread" && method === "POST") {
-        return Promise.resolve(Response.json({ ok: true }));
-      }
-
-      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
-        return Promise.resolve(Response.json({ tree: [] }));
-      }
-
-      if (url === "/api/chat/unified" && method === "POST") {
-        return new Promise<Response>((resolve) => {
-          firstRequestPending = true;
-          resolveFirstResponse = resolve;
-        });
-      }
-
-      throw new Error(`Unhandled fetch: ${url}`);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-    render(<ChatHarness projectName="alpha-project" />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Use OpenClaw tools" }));
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("is-streaming").textContent).toBe("true");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Switch Direct" }));
-
-    if (!firstRequestPending) {
-      throw new Error("Expected the first chat request to be pending");
-    }
-
-    resolveFirstResponse(Response.json(
-      {
-        response: "Delayed OpenClaw answer",
-        conversationId: "web:alpha-project:session-1",
-        messages: [],
-      },
-      { headers: { "X-Chat-Backend": "openclaw" } },
-    ));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("is-streaming").textContent).toBe("false");
-    });
-
-    expect(screen.getByTestId("message-count").textContent).toBe("3");
-  });
-
-  it("removes the empty assistant placeholder after a backend switch if the inflight request errors", async () => {
-    let rejectFirstResponse: ((reason?: unknown) => void) = () => {
-      throw new Error("Expected the first chat request to be pending");
-    };
-
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      const method = init?.method ?? "GET";
-
-      if (url === "/api/chat/unified?action=health") {
-        return Promise.resolve(Response.json({
-          agent: { type: "openclaw", status: "connected" },
-          openclaw: "connected",
-          nanoclaw: "disconnected",
-          openhands: "disconnected",
-          llmProvider: "openai",
-          ollamaModels: [],
-          configuredLocalModel: null,
-        }));
-      }
-
-      if (url === "/api/chat/thread?project=alpha-project") {
-        return Promise.resolve(Response.json({
-          version: 1,
-          project: "alpha-project",
-          conversationId: null,
-          messages: [],
-        }));
-      }
-
-      if (url === "/api/chat/thread" && method === "POST") {
-        return Promise.resolve(Response.json({ ok: true }));
-      }
-
-      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
-        return Promise.resolve(Response.json({ tree: [] }));
-      }
-
-      if (url === "/api/chat/unified" && method === "POST") {
-        return new Promise<Response>((_, reject) => {
-          rejectFirstResponse = reject;
-        });
-      }
-
-      throw new Error(`Unhandled fetch: ${url}`);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-    render(<ChatHarness projectName="alpha-project" />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Use OpenClaw tools" }));
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("is-streaming").textContent).toBe("true");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Switch Direct" }));
-    rejectFirstResponse(new Error("Gateway unavailable"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("is-streaming").textContent).toBe("false");
-    });
-
-    const messageLog = screen.getByTestId("message-log").textContent || "";
-    expect(messageLog).toContain("user:Hello from the browser");
-    expect(screen.getByTestId("message-count").textContent).toBe("3");
-    expect(screen.getByTestId("error").textContent).toBe("");
-  });
+  // The two "backend switch" tests that used to live here exercised the
+  // user-triggered "Switch Direct" flow that invalidated in-flight OpenClaw
+  // requests by bumping `userBackendOverrideVersionRef`. The Backend union
+  // has been narrowed to `"openclaw"` so the UI no longer exposes any
+  // direction to switch to; the tests lose their meaning along with the
+  // "Switch Direct" harness button.
 
   it("times out a slash command that never starts and removes the empty placeholder", async () => {
     vi.useFakeTimers();
@@ -2978,7 +2473,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         return Response.json({
-          openclaw: "disconnected",
+          openclaw: "connected",
           nanoclaw: "disconnected",
           openhands: "disconnected",
           llmProvider: "local",
@@ -3008,7 +2503,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -3071,7 +2566,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Send slash" }));
@@ -3134,7 +2629,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Send slash" }));
@@ -3223,7 +2718,7 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Send slash" }));
@@ -3295,14 +2790,75 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("backend").textContent).toBe("direct");
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Use OpenClaw tools" }));
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("error").textContent).toContain("OpenClaw tools mode is selected but OpenClaw is not ready");
+      expect(screen.getByTestId("error").textContent).toContain("OpenClaw is not reachable");
+    });
+  });
+
+  it("blocks reasoning-mode send and surfaces an error when OpenClaw is disconnected even if OpenHands is up", async () => {
+    // This is the new guarantee introduced by the chat-only-through-OpenClaw
+    // cut: previously a reasoning-mode turn would silently fall through to
+    // OpenHands or the local-direct path when OpenClaw was unreachable, which
+    // surfaced hallucinated tool calls in the UI. Now reasoning mode errors
+    // out exactly the same way openclaw-tools mode does.
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "disconnected" },
+          openclaw: "disconnected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:latest"],
+          configuredLocalModel: "gemma4",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        throw new Error("Chat must not POST when OpenClaw is disconnected (reasoning mode)");
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("error").textContent).toContain("OpenClaw is not reachable");
     });
   });
 

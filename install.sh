@@ -10,6 +10,33 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 CLI_BIN_DIR="${SCIENCESWARM_BIN_DIR:-$HOME/.local/bin}"
 
+is_wsl() {
+  [ -n "${WSL_INTEROP:-}" ] || [ -n "${WSL_DISTRO_NAME:-}" ] || \
+    grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null
+}
+
+is_mounted_windows_path() {
+  case "${1:-}" in
+    /mnt/[A-Za-z]|/mnt/[A-Za-z]/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+warn_wsl_path() {
+  local label="$1"
+  local path_value="$2"
+  if ! is_wsl || [ -z "$path_value" ] || ! is_mounted_windows_path "$path_value"; then
+    return 0
+  fi
+  echo -e "  ${YELLOW}⚠${NC}  WSL detected: $label is under $path_value"
+  echo "     ScienceSwarm is faster when the repo and data live in the Linux filesystem"
+  echo "     (for example ~/scienceswarm and ~/.scienceswarm) instead of /mnt/c/..."
+}
+
 is_scienceswarm_checkout() {
   local dir="$1"
   [ -f "$dir/package.json" ] \
@@ -61,6 +88,12 @@ if [ ! -d "$INSTALL_DIR" ]; then
   git clone https://github.com/gikl-ai/scienceswarm.git "$INSTALL_DIR"
 fi
 cd "$INSTALL_DIR"
+
+if is_wsl; then
+  warn_wsl_path "Install directory" "$INSTALL_DIR"
+  warn_wsl_path "SCIENCESWARM_DIR" "${SCIENCESWARM_DIR:-}"
+  warn_wsl_path "BRAIN_ROOT" "${BRAIN_ROOT:-}"
+fi
 
 install_scienceswarm_cli() {
   if ! mkdir -p "$CLI_BIN_DIR" || ! ln -sf "$INSTALL_DIR/scienceswarm" "$CLI_BIN_DIR/scienceswarm"; then

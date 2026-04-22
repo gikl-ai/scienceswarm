@@ -47,8 +47,10 @@ body.scienceswarm-resizing-y {
   user-select: none;
 }
 
-/* Make text selection visible on colored chat bubbles (white-on-blue) */
-[data-chat-selectable] ::selection {
+/* Make text selection visible on colored chat bubbles (white-on-blue).
+   Applied only to dark bubbles via data-chat-selectable on user messages;
+   assistant/system bubbles fall back to the default accent selection. */
+[data-chat-selectable="true"] ::selection {
   background: rgba(255, 255, 255, 0.35);
   color: inherit;
 }
