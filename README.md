@@ -31,10 +31,17 @@ The core system is:
 ## Key Features
 
 - Project-scoped imports for papers, notes, code, and datasets
+- Research-first brain setup that defaults new installs to the
+  `scientific_research` preset while still offering a
+  `generic_scientist` preset for broader workflows
 - A searchable `gbrain`-backed research memory that enriches chat with project
   context
+- Deterministic literature-packet runs across PubMed, arXiv, OpenAlex, and
+  Crossref, with durable `research_packet` and `overnight_journal` artifacts
 - Direct chat plus OpenClaw-routed chat when the agent runtime is available
 - OpenHands-backed execution for code and longer-running agent tasks
+- Dream Cycle and Research Radar overnight runs that leave auditable journal
+  artifacts in the brain
 - A reasoning workspace for critique, review, and structured audit flows
 - Local-first setup with optional integrations for OpenAI, GitHub, Google,
   Slack, Jira, and Telegram
@@ -71,8 +78,10 @@ checkout path. Runtime state is separate: `SCIENCESWARM_DIR` is the local app-da
 Then open <http://localhost:3001/setup>.
 
 The setup flow initializes the local research store, verifies local runtimes,
-and can connect OpenClaw, OpenHands, Ollama, and Telegram when you want the
-full agent path.
+defaults new installs to the `scientific_research` brain preset, and can
+connect OpenClaw, OpenHands, Ollama, and Telegram when you want the full agent
+path. If you want the broader legacy-oriented layout instead, the setup UI also
+offers a `generic_scientist` preset.
 
 ### Windows via WSL2
 
@@ -98,10 +107,13 @@ Important:
 
 ### First Use
 
-1. Complete `/setup`
+1. Complete `/setup` and keep the default `scientific_research` preset unless
+   you specifically want the broader `generic_scientist` layout
 2. Open `/dashboard/project`
 3. Import a folder of papers, notes, code, or datasets
 4. Start chatting with a project that already has context
+5. Run a literature packet from chat or MCP when you want a deterministic
+   multi-source landscape review with durable packet/journal outputs
 
 ### Frontend-Only Development
 
