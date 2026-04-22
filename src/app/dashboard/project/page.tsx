@@ -1104,7 +1104,14 @@ function LazyFileCard({
           if (error instanceof Error && error.name === "AbortError") {
             return;
           }
-          throw error;
+          if (cancelled) return;
+          setPreview({
+            status: "error",
+            path: filePath,
+            source: "gbrain",
+            message: "Unexpected error loading preview.",
+            retryable: true,
+          });
         });
       return () => {
         cancelled = true;

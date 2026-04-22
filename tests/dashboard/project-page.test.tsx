@@ -1898,6 +1898,135 @@ describe("Project dashboard smoke test", () => {
     });
   });
 
+  it("shows a retryable error when restored gbrain previews cannot be loaded", async () => {
+    window.localStorage.setItem(FILE_PREVIEW_LOCATION_STORAGE_KEY, "chat-pane");
+    window.localStorage.setItem(
+      "scienceswarm.chat.demo-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: null,
+        messages: [
+          {
+            id: "gbrain-static-card",
+            role: "system",
+            content: "__FILE_STATIC__:Brain Artifacts/gbrain:wiki/artifacts/cat-image",
+            timestamp: "2026-04-21T18:30:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/health") {
+        return Promise.resolve(
+          Response.json({
+            openclaw: "connected",
+            openhands: "disconnected",
+            openai: "configured",
+            features: {
+              chat: true,
+              codeExecution: false,
+              github: false,
+              multiChannel: false,
+              structuredCritique: false,
+            },
+          }),
+        );
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Promise.resolve(
+          Response.json({
+            openclaw: "connected",
+            nanoclaw: "disconnected",
+            openhands: "disconnected",
+            llmProvider: "openai",
+            ollamaModels: [],
+            configuredLocalModel: null,
+          }),
+        );
+      }
+
+      if (url === "/api/brain/status") {
+        return Promise.resolve(Response.json({ pageCount: 0, backend: "filesystem" }));
+      }
+
+      if (url.startsWith("/api/brain/brief?project=")) {
+        return Promise.resolve(Response.json({ project: "demo-project", dueTasks: [], frontier: [] }));
+      }
+
+      if (url === "/api/projects/demo-project/import-summary") {
+        return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=demo-project") {
+        return Promise.resolve(Response.json({ tree: [] }));
+      }
+
+      if (url === "/api/workspace" && method === "POST") {
+        return Promise.resolve(Response.json({ added: [], updated: [], missing: [], changed: [] }));
+      }
+
+      if (url === "/api/brain/list?project=demo-project") {
+        return Promise.resolve(Response.json([]));
+      }
+
+      if (url === "/api/chat/thread?project=demo-project") {
+        return Promise.resolve(
+          Response.json({
+            version: 1,
+            project: "demo-project",
+            conversationId: null,
+            messages: [],
+          }),
+        );
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Promise.resolve(Response.json({ ok: true }));
+      }
+
+      if (url === "/api/brain/read?path=wiki%2Fartifacts%2Fcat-image") {
+        return Promise.reject(new Error("read failed"));
+      }
+
+      if (url === "/api/brain/file?slug=wiki%2Fartifacts%2Fcat-image&metadata=1") {
+        return Promise.reject(new Error("metadata failed"));
+      }
+
+      if (url === "/api/brain/page?slug=wiki%2Fartifacts%2Fcat-image") {
+        return Promise.reject(new Error("page failed"));
+      }
+
+      if (url === "/api/projects") {
+        return Promise.resolve(
+          Response.json({
+            projects: [
+              {
+                id: "demo-project",
+                slug: "demo-project",
+                name: "Demo Project",
+                status: "active",
+              },
+            ],
+          }),
+        );
+      }
+
+      return Promise.resolve(Response.json({ status: "disconnected" }));
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ProjectPage />);
+
+    const visualizer = await screen.findByLabelText("File visualizer");
+    expect(await within(visualizer).findByText("Failed to load wiki/artifacts/cat-image.")).toBeInTheDocument();
+    expect(within(visualizer).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
   it("reloads the selected file preview after a streamed chat turn updates it", async () => {
     let fileReads = 0;
     const encoder = new TextEncoder();
