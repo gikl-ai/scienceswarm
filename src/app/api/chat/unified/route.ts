@@ -5451,7 +5451,7 @@ async function responseWithOpenClawResult(params: {
   const generatedFilePaths = params.generatedFiles.map(
     (file) => file.workspacePath,
   );
-  if (params.streamPhases && params.taskPhases.length > 0) {
+  if (params.streamPhases) {
     const encoder = new TextEncoder();
     return new Response(
       new ReadableStream({
@@ -5957,6 +5957,7 @@ function streamOpenClawResponse(params: {
   workingDirectory: string | undefined;
   startedAtMs: number;
   taskPhases: OpenClawTaskPhase[];
+  forceToolExecution?: boolean;
   sendToOpenClaw: SendOpenClawMessage;
   enableArtifactRepair?: boolean;
 }): Response {
@@ -6132,7 +6133,7 @@ function streamOpenClawResponse(params: {
                 params.projectId,
                 workspaceFileContext,
                 params.userMessage,
-                { forceToolExecution: true },
+                { forceToolExecution: params.forceToolExecution === true },
               ),
               options: {
                 ...openClawAgentOptions(
@@ -6575,6 +6576,7 @@ async function handleExplicitOpenClawSlashCommand(params: {
         params.rawMessage,
         params.mergedFiles,
       ),
+      forceToolExecution: true,
       sendToOpenClaw,
       enableArtifactRepair: false,
     });
@@ -7080,7 +7082,7 @@ export async function handleUnifiedChatPost(
             messages,
             rawMessage ?? "",
           );
-      if (taskPhases.length > 0) {
+      if (streamPhases === true) {
         return streamOpenClawResponse({
           message: contextualOpenClawMessage,
           userMessage: userIntentMessage,
@@ -7091,6 +7093,7 @@ export async function handleUnifiedChatPost(
           workingDirectory: openClawWorkingDirectory,
           startedAtMs: openClawTurnStartedAtMs,
           taskPhases,
+          forceToolExecution: chatMode === "openclaw-tools",
           sendToOpenClaw,
         });
       }

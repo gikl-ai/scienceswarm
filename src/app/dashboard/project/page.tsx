@@ -1224,6 +1224,9 @@ function ProjectPageContent() {
     conversationId,
     artifactProvenance,
   } = useUnifiedChat(projectName);
+  const activeAssistantMessageId = isStreaming
+    ? [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null
+    : null;
   // Merge workspace files with gbrain-backed artifact nodes.
   const mergedFileTree: FileNode[] = useMemo(() => {
     if (gbrainNodes.length === 0) return workspaceTree as FileNode[];
@@ -3799,10 +3802,25 @@ function ProjectPageContent() {
                                     ? msg.thinking
                                     : undefined
                                 }
+                                activityLog={
+                                  firstRenderedBubbleIndex === i
+                                    ? msg.activityLog
+                                    : undefined
+                                }
+                                progressLog={
+                                  firstRenderedBubbleIndex === i
+                                    ? msg.progressLog
+                                    : undefined
+                                }
                                 channel={msg.channel}
                                 userName={msg.userName}
                                 timestamp={msg.timestamp}
-                                isStreaming={false}
+                                isStreaming={
+                                  msg.role === "assistant"
+                                  && msg.id === activeAssistantMessageId
+                                  && firstRenderedBubbleIndex === i
+                                }
+                                projectId={projectName}
                                 taskPhases={
                                   firstRenderedBubbleIndex === i
                                     ? msg.taskPhases
@@ -3823,14 +3841,15 @@ function ProjectPageContent() {
                             role={msg.role}
                             content={msg.content}
                             thinking={msg.thinking}
+                            activityLog={msg.activityLog}
+                            progressLog={msg.progressLog}
                             channel={msg.channel}
                             userName={msg.userName}
                             timestamp={msg.timestamp}
-                            isStreaming={
-                              msg.role === "assistant" && msg.content === ""
-                            }
+                            isStreaming={msg.role === "assistant" && msg.id === activeAssistantMessageId}
                             steps={msg.steps}
                             taskPhases={msg.taskPhases}
+                            projectId={projectName}
                           />
                           {voiceSupported &&
                             msg.role === "assistant" &&

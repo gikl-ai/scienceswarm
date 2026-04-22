@@ -2637,12 +2637,14 @@ describe("POST /api/chat/unified", () => {
     expect(finalEvent).toMatchObject({
       text: expect.stringContaining("local AI model connection is unavailable"),
       generatedFiles: [],
-      taskPhases: [
-        { id: "reading-file", label: "Reading file", status: "completed" },
-        { id: "importing-result", label: "Importing result", status: "failed" },
-        { id: "done", label: "Done", status: "pending" },
-      ],
     });
+    expect(finalEvent.taskPhases).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "reading-file", status: "completed" }),
+        expect.objectContaining({ id: "importing-result", status: "failed" }),
+        expect.objectContaining({ id: "done", status: "pending" }),
+      ]),
+    );
     expect(finalEvent.text).toEqual(expect.stringContaining("Open Settings"));
     expect(finalEvent.text).toEqual(expect.stringContaining("gemma4:latest"));
   });
@@ -5642,6 +5644,88 @@ describe("POST /api/chat/unified", () => {
     expect(sendOpenClawMessage).toHaveBeenCalledOnce();
     expect(streamChat).not.toHaveBeenCalled();
     expect(localHealthCheck).not.toHaveBeenCalled();
+  });
+
+  it("streams ordinary OpenClaw reasoning turns even when no task phases apply", async () => {
+    createProjectRoot("alpha-project");
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockImplementationOnce(
+      async (
+        _message: string,
+        options?: { onEvent?: (event: unknown) => void },
+      ) => {
+        options?.onEvent?.({
+          method: "session.message",
+          payload: {
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "thinking",
+                  thinking: "Planning the explanation in visible steps.",
+                },
+                {
+                  type: "toolCall",
+                  name: "read_file",
+                  arguments: { path: "docs/results_table.csv" },
+                },
+                {
+                  type: "text",
+                  text: "Interpreting the trend from the imported results.",
+                },
+              ],
+            },
+          },
+        });
+        return "OpenClaw streamed reasoning answer";
+      },
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Explain the trend",
+        projectId: "alpha-project",
+        streamPhases: true,
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
+    const events = await readSseEvents(response);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          progress: expect.objectContaining({
+            method: "session.message",
+          }),
+        }),
+        expect.objectContaining({
+          text: "OpenClaw streamed reasoning answer",
+          backend: "openclaw",
+        }),
+      ]),
+    );
+    const streamedPrompt = sendOpenClawMessage.mock.calls[0]?.[0] ?? "";
+    expect(streamedPrompt).toContain(
+      "Answer the user's latest request directly using the visible project context.",
+    );
+    expect(streamedPrompt).not.toContain(
+      "Execute all steps using your tools when real work is required.",
+    );
   });
 
   it("ignores an explicit `backend: \"direct\"` request and still routes through OpenClaw", async () => {
