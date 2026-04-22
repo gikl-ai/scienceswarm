@@ -107,12 +107,6 @@ function getAudioMimeType(ext: string): string | undefined {
       return "audio/ogg";
     case "m4a":
       return "audio/mp4";
-    case "flac":
-      return "audio/flac";
-    case "opus":
-      return "audio/ogg";
-    case "aac":
-      return "audio/aac";
     default:
       return undefined;
   }
@@ -655,18 +649,6 @@ function renderContent(content: string, projectId: string) {
           </div>
         );
       }
-      if (ext === "pdf") {
-        return (
-          <div key={i} className="my-2">
-            <iframe
-              src={src}
-              title={filePath}
-              className="w-full min-w-0 h-[80vh] min-h-[600px] rounded-lg border border-border bg-white"
-            />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
-          </div>
-        );
-      }
       if (ext === "svg") {
         // SVG rendered as <img> to prevent script execution
         return (
@@ -687,7 +669,7 @@ function renderContent(content: string, projectId: string) {
           </div>
         );
       }
-      if (["mp3", "wav", "ogg", "m4a", "flac", "opus", "aac"].includes(ext)) {
+      if (["mp3", "wav", "ogg", "m4a"].includes(ext)) {
         return (
           <div key={i} className="my-2">
             <audio controls className="w-full">
