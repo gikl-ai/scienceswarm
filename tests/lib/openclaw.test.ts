@@ -597,18 +597,20 @@ describe("sendAgentMessage output sanitization", () => {
     );
     vi.stubEnv("SCIENCESWARM_DIR", root);
     sendMessageViaGatewayMock.mockReset();
-    sendMessageViaGatewayMock.mockResolvedValueOnce({
+    sendMessageViaGatewayMock.mockResolvedValue({
       text: "ws web ok",
       events: [],
     });
 
-    await expect(
-      sendAgentMessage("Explain", {
-        session: "../escape",
-        channel: "web",
-        cwd: path.join(root, "projects", "project-alpha"),
-      }),
-    ).resolves.toBe("ws web ok");
+    for (const session of ["../escape", "web:test/../../escape", "web:test\\escape"]) {
+      await expect(
+        sendAgentMessage("Explain", {
+          session,
+          channel: "web",
+          cwd: path.join(root, "projects", "project-alpha"),
+        }),
+      ).resolves.toBe("ws web ok");
+    }
 
     expect(
       existsSync(

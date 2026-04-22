@@ -73,6 +73,15 @@ function normalizeOpenClawSessionFileId(value: string): string | null {
   return trimmed;
 }
 
+function openClawSessionDirectory(): string {
+  return path.resolve(
+    getScienceSwarmOpenClawStateDir(),
+    "agents",
+    "main",
+    "sessions",
+  );
+}
+
 function gatewayHealthUrl(): string {
   return gatewayBaseUrl().replace(/^ws:/, "http:").replace(/^wss:/, "https:");
 }
@@ -392,13 +401,32 @@ function openClawSessionFilePath(conversationId: string): string | null {
     return null;
   }
 
-  return path.join(
-    getScienceSwarmOpenClawStateDir(),
-    "agents",
-    "main",
-    "sessions",
-    `${sessionFileId}.jsonl`,
-  );
+  const sessionDir = openClawSessionDirectory();
+  const relativeSessionFile = path.normalize(`${sessionFileId}.jsonl`);
+  if (
+    path.isAbsolute(relativeSessionFile) ||
+    relativeSessionFile !== path.basename(relativeSessionFile)
+  ) {
+    return null;
+  }
+
+  const sessionFile = path.resolve(sessionDir, relativeSessionFile);
+  const sessionDirPrefix = sessionDir.endsWith(path.sep)
+    ? sessionDir
+    : `${sessionDir}${path.sep}`;
+  if (!sessionFile.startsWith(sessionDirPrefix)) {
+    return null;
+  }
+  const relativeToSessionDir = path.relative(sessionDir, sessionFile);
+  if (
+    relativeToSessionDir.length === 0 ||
+    relativeToSessionDir.startsWith("..") ||
+    path.isAbsolute(relativeToSessionDir)
+  ) {
+    return null;
+  }
+
+  return sessionFile;
 }
 
 function shouldUseGatewayForWebSession(options?: {
@@ -462,9 +490,10 @@ async function persistWebSessionMetadata(
     persistedWebSessionMetadata.clear();
   }
 
+  const sessionDir = openClawSessionDirectory();
   persistedWebSessionMetadata.add(cacheKey);
   try {
-    await mkdir(path.dirname(sessionFile), { recursive: true });
+    await mkdir(sessionDir, { recursive: true });
     await writeFile(
       sessionFile,
       `${JSON.stringify({ type: "session", id: session, cwd })}\n`,
