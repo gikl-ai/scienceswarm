@@ -2116,6 +2116,20 @@ function isExplanatoryClarificationRequest(message: string): boolean {
     return false;
   }
 
+  const directActionCommand =
+    /\bplease\s+(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
+      message,
+    ) ||
+    /\b(?:can|could)\s+you\s+(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
+      message,
+    ) ||
+    /(?:^|[.!?]\s+)(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
+      trimmedMessage,
+    );
+  if (directActionCommand) {
+    return false;
+  }
+
   const approvalGateClarification =
     /\bbefore\s+(?:i|we)\s+approve\b/i.test(message) ||
     /\b(?:what\s+will|will\s+you|where\s+will|what\s+happens)\b/i.test(
@@ -2129,17 +2143,7 @@ function isExplanatoryClarificationRequest(message: string): boolean {
     return false;
   }
 
-  const directActionCommand =
-    /\bplease\s+(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
-      message,
-    ) ||
-    /\b(?:can|could)\s+you\s+(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
-      message,
-    ) ||
-    /^(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
-      trimmedMessage,
-  );
-  return !directActionCommand;
+  return true;
 }
 
 function hasExplicitPlanApprovalSignal(message: string): boolean {
