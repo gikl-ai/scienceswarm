@@ -1409,20 +1409,6 @@ async function buildWorkspaceFileContext(
   };
 }
 
-function withWorkspaceFileContext(
-  messages: UnifiedChatMessage[],
-  workspaceFileContext?: WorkspaceFileContext | null,
-): UnifiedChatMessage[] {
-  if (!workspaceFileContext?.contextMessage) {
-    return messages;
-  }
-
-  return [
-    { role: "user", content: workspaceFileContext.contextMessage },
-    ...messages,
-  ];
-}
-
 /**
  * Inject the "currently selected file" context into the message list.
  *
@@ -1473,21 +1459,6 @@ async function prependScienceSwarmProjectPrompt(params: {
     return params.message;
   }
   return `${promptContext}\n\nCurrent user request:\n${params.message}`;
-}
-
-function appendWorkspaceContextToUserMessage(
-  message: string,
-  workspaceFileContext?: WorkspaceFileContext | null,
-): string {
-  if (!workspaceFileContext?.contextMessage) {
-    return message;
-  }
-
-  return [
-    workspaceFileContext.contextMessage,
-    "User request:",
-    message,
-  ].join("\n\n");
 }
 
 function buildOpenClawSessionId(
