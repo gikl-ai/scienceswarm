@@ -1,11 +1,11 @@
-import { listOpenClawSkills } from "@/lib/openclaw/skill-catalog";
+import { listScienceSwarmOpenClawSlashCommandSkills } from "@/lib/openclaw/skill-registry";
 import { buildOpenClawSlashCommands } from "@/lib/openclaw/slash-commands";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
   try {
-    const skills = await listOpenClawSkills();
+    const skills = await listScienceSwarmOpenClawSlashCommandSkills();
     const commands = buildOpenClawSlashCommands(skills);
     return Response.json({ commands });
   } catch {
