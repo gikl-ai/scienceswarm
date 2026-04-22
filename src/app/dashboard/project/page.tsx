@@ -190,6 +190,10 @@ interface ExplicitCaptureIntent {
   kind?: CaptureKind;
 }
 
+interface NextExperimentPlanIntent {
+  updateExisting: boolean;
+}
+
 type Tab =
   | "chat"
   | "papers"
@@ -529,6 +533,27 @@ function parseExplicitCaptureIntent(
   }
 
   return null;
+}
+
+function parseNextExperimentPlanIntent(
+  text: string,
+): NextExperimentPlanIntent | null {
+  const normalized = text.trim().toLowerCase();
+  const asksForPlanner =
+    /\b(next experiment|next experiments|experiment plan|best experiment|best next experiment)\b/i.test(normalized)
+    || (
+      /\b(rank|prioritize|distinguish|separate|what should we do next)\b/i.test(normalized)
+      && /\bexperiment|assay|readout|control\b/i.test(normalized)
+    );
+
+  if (!asksForPlanner) {
+    return null;
+  }
+
+  return {
+    updateExisting:
+      /\b(update|revise|rerank|re-rank|change|after this result|based on the new result|new result)\b/i.test(normalized),
+  };
 }
 
 function formatCaptureKind(kind: CaptureKind): string {
@@ -1119,6 +1144,8 @@ function ProjectPageContent() {
   const [selectedFileNode, setSelectedFileNode] = useState<FileNode | null>(
     null,
   );
+  const [lastExperimentPlanSlug, setLastExperimentPlanSlug] = useState<string | null>(null);
+  const [isPlanningExperiments, setIsPlanningExperiments] = useState(false);
   const [filePreview, setFilePreview] = useState<FilePreviewState>({
     status: "idle",
   });
@@ -3000,7 +3027,110 @@ function ProjectPageContent() {
     ],
   );
 
-  const isChatBusy = isCapturing;
+  const handleNextExperimentPlannerIntent = useCallback(
+    async (text: string, intent: NextExperimentPlanIntent) => {
+      if (!activeProjectSlug || isPlanningExperiments || isStreaming) return;
+
+      const trimmed = text.trim();
+      const userMessageId = makeLocalMessageId();
+      const replyMessageId = makeLocalMessageId();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: userMessageId,
+          role: "user",
+          content: trimmed,
+          timestamp: new Date(),
+          channel: "web",
+        },
+        {
+          id: replyMessageId,
+          role: "assistant",
+          content: "Planning the next experiments...",
+          timestamp: new Date(),
+        },
+      ]);
+      setInput("");
+      setIsPlanningExperiments(true);
+      clearError();
+
+      try {
+        const response = await fetch("/api/brain/next-experiment-plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project: activeProjectSlug,
+            prompt: trimmed,
+            previousPlanSlug:
+              intent.updateExisting && lastExperimentPlanSlug
+                ? lastExperimentPlanSlug
+                : null,
+            focusBrainSlug:
+              selectedFileNode?.source === "gbrain" && selectedFileNode.slug
+                ? selectedFileNode.slug
+                : null,
+          }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(
+            typeof data.error === "string"
+              ? data.error
+              : "Next experiment planning failed",
+          );
+        }
+
+        const plannerResponse = data as {
+          artifactPage: string;
+          artifactTitle: string;
+          responseMarkdown: string;
+        };
+
+        applyCaptureReply(replyMessageId, plannerResponse.responseMarkdown);
+        setLastExperimentPlanSlug(plannerResponse.artifactPage);
+        await refreshProjectState();
+        void handleFileSelect(
+          `Brain Artifacts/gbrain:${plannerResponse.artifactPage}`,
+          {
+            name: plannerResponse.artifactTitle,
+            type: "file",
+            source: "gbrain",
+            slug: plannerResponse.artifactPage,
+            pageType: "artifact",
+            icon: "🧠",
+          },
+          { appendPreviewMessage: false },
+        );
+      } catch (error) {
+        removeCaptureReply(replyMessageId);
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Next experiment planning failed",
+        );
+      } finally {
+        setIsPlanningExperiments(false);
+      }
+    },
+    [
+      activeProjectSlug,
+      applyCaptureReply,
+      clearError,
+      handleFileSelect,
+      isPlanningExperiments,
+      isStreaming,
+      lastExperimentPlanSlug,
+      refreshProjectState,
+      removeCaptureReply,
+      selectedFileNode,
+      setError,
+      setMessages,
+    ],
+  );
+
+  const isChatBusy = isCapturing || isPlanningExperiments;
   const filesRenderInChat = filePreviewLocation === "chat-pane";
 
   const moveInputCursorToEnd = useCallback((value: string) => {
@@ -3143,6 +3273,12 @@ function ProjectPageContent() {
         return;
       }
 
+      const experimentPlanIntent = parseNextExperimentPlanIntent(trimmed);
+      if (experimentPlanIntent && activeProjectSlug) {
+        void handleNextExperimentPlannerIntent(trimmed, experimentPlanIntent);
+        return;
+      }
+
       // The preview pane is part of the visible scientist workflow. If a user
       // opens a report item and asks "what next?", attach that current view as
       // active-file context without requiring a separate context-chip action.
@@ -3151,7 +3287,9 @@ function ProjectPageContent() {
     },
     [
       activePreviewFile,
+      activeProjectSlug,
       handleCaptureIntent,
+      handleNextExperimentPlannerIntent,
       isChatBusy,
       recordPromptHistory,
       sendMessage,
