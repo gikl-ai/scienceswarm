@@ -1927,6 +1927,9 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).toContain(
       "Execute all steps using your tools when real work is required.",
     );
+    expect(openClawMessage).toContain(
+      `The only valid location for created files, scripts, outputs, artifacts, and exec targets in this turn is inside ${projectRoot}.`,
+    );
     expect(openClawMessage).not.toContain("Clarification request rules:");
   });
 

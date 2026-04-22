@@ -2123,7 +2123,7 @@ function isExplanatoryClarificationRequest(message: string): boolean {
     /\b(?:can|could)\s+you\s+(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
       message,
     ) ||
-    /(?:^|[.!?]\s*)(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
+    /(?:^|[.!?]\s+)(?:run|retry|execute|perform|start|proceed|write|draft|generate|create|revise|rewrite)\b/i.test(
       trimmedMessage,
     );
   if (directActionCommand) {
