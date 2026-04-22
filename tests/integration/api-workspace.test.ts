@@ -1,5 +1,4 @@
-import path from "node:path";
-import {
+import fs, {
   closeSync,
   existsSync,
   ftruncateSync,
@@ -12,6 +11,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
+import path from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
@@ -617,6 +617,170 @@ describe("GET /api/workspace?action=tree", () => {
     const treeBody = await treeRes.json() as { totalFiles: number };
     const watchBody = await watchRes.json() as { totalFiles: number };
     expect(treeBody.totalFiles).toBe(1);
+    expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
+  });
+
+  it("computes gbrain watch totals without rebuilding the disk tree", async () => {
+    const projectId = "test-project";
+    const projectDir = path.join(ROOT, "projects", projectId);
+    const papersDir = path.join(projectDir, "papers");
+    mkdirSync(papersDir, { recursive: true });
+    writeFileSync(path.join(papersDir, "duplicate.pdf"), "%PDF-1.4 legacy");
+    writeFileSync(path.join(papersDir, "legacy.pdf"), "%PDF-1.4 legacy-only");
+    const sha = "e".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "paper") return [];
+      return [
+        {
+          path: "duplicate-paper-page",
+          title: "Duplicate Paper Page",
+          type: "paper",
+          content: "# Duplicate Paper Page",
+          frontmatter: {
+            type: "paper",
+            project: projectId,
+            file_refs: [
+              {
+                role: "source",
+                fileObjectId: `sha256:${sha}`,
+                sha256: sha,
+                filename: "duplicate.pdf",
+                mime: "application/pdf",
+                sizeBytes: 123,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+    const readdirSpy = vi.spyOn(fs, "readdirSync");
+
+    const { GET } = await importRoute();
+    const res = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { totalFiles: number };
+    expect(body.totalFiles).toBe(2);
+    const projectReads = readdirSpy.mock.calls
+      .map(([dir]) => String(dir))
+      .filter((dir) => dir === projectDir || dir.startsWith(`${projectDir}${path.sep}`));
+    expect(projectReads).toEqual([projectDir, papersDir]);
+  });
+
+  it("keeps watch totals aligned when gbrain replaces a legacy file with a directory", async () => {
+    const projectId = "test-project";
+    const projectDir = path.join(ROOT, "projects", projectId);
+    mkdirSync(projectDir, { recursive: true });
+    writeFileSync(path.join(projectDir, "papers"), "legacy non-directory entry");
+    const sha = "f".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "paper") return [];
+      return [
+        {
+          path: "nested-paper-page",
+          title: "Nested Paper Page",
+          type: "paper",
+          content: "# Nested Paper Page",
+          frontmatter: {
+            type: "paper",
+            project: projectId,
+            file_refs: [
+              {
+                role: "source",
+                fileObjectId: `sha256:${sha}`,
+                sha256: sha,
+                filename: "papers/nested.pdf",
+                mime: "application/pdf",
+                sizeBytes: 789,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+
+    const { GET } = await importRoute();
+    const treeRes = await GET(
+      new Request(`http://localhost/api/workspace?action=tree&projectId=${projectId}`),
+    );
+    const watchRes = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(treeRes.status).toBe(200);
+    expect(watchRes.status).toBe(200);
+    const treeBody = await treeRes.json() as { totalFiles: number };
+    const watchBody = await watchRes.json() as { totalFiles: number };
+    expect(treeBody.totalFiles).toBe(1);
+    expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
+  });
+
+  it("counts prefix-conflicting gbrain entries the same way as the merged tree", async () => {
+    const projectId = "test-project";
+    mkdirSync(path.join(ROOT, "projects", projectId), { recursive: true });
+    const firstSha = "1".repeat(64);
+    const secondSha = "2".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "paper") return [];
+      return [
+        {
+          path: "prefix-conflict-page",
+          title: "Prefix Conflict Page",
+          type: "paper",
+          content: "# Prefix Conflict Page",
+          frontmatter: {
+            type: "paper",
+            project: projectId,
+            file_refs: [
+              {
+                role: "source",
+                fileObjectId: `sha256:${firstSha}`,
+                sha256: firstSha,
+                filename: "papers/a",
+                mime: "application/octet-stream",
+                sizeBytes: 12,
+              },
+              {
+                role: "source",
+                fileObjectId: `sha256:${secondSha}`,
+                sha256: secondSha,
+                filename: "papers/a/sub.pdf",
+                mime: "application/pdf",
+                sizeBytes: 34,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+
+    const { GET } = await importRoute();
+    const treeRes = await GET(
+      new Request(`http://localhost/api/workspace?action=tree&projectId=${projectId}`),
+    );
+    const watchRes = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(treeRes.status).toBe(200);
+    expect(watchRes.status).toBe(200);
+    const treeBody = await treeRes.json() as { totalFiles: number };
+    const watchBody = await watchRes.json() as { totalFiles: number };
+    expect(treeBody.totalFiles).toBe(2);
     expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
   });
 
