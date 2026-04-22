@@ -134,3 +134,9 @@ and [SECURITY.md](SECURITY.md).
 ## License
 
 [MIT](LICENSE)
+
+<!-- PostHog 1x1 tracking pixel: counts impressions of this README rendered on github.com.
+     Served via PostHog's Tracking pixel CDP source (no per-visitor data — GitHub proxies
+     images through camo.githubusercontent.com which strips IPs/UAs). Disable by removing
+     this <img> tag and the corresponding source webhook in PostHog. -->
+<img src="https://webhooks.us.posthog.com/public/webhooks/019db2b1-39dd-0000-a893-6b1a69f9e643" width="1" height="1" alt="" />

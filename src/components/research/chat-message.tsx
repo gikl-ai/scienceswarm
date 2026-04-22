@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 import type {
   ChatTaskPhase,
   MessageProgressEntry,
@@ -616,7 +616,7 @@ function renderContent(content: string, projectId: string) {
             <iframe
               src={src}
               title={filePath}
-              className="w-full min-w-[800px] h-[80vh] min-h-[700px] rounded-lg border border-border bg-white"
+              className="w-full min-w-0 h-[80vh] min-h-[700px] rounded-lg border border-border bg-white"
               sandbox="allow-scripts"
             />
             <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
@@ -697,7 +697,7 @@ function renderContent(content: string, projectId: string) {
             <iframe
               src={embedUrl}
               title={embedTitle}
-              className="w-full min-w-[800px] min-h-[700px] rounded-lg border border-border bg-white"
+              className="w-full min-w-0 min-h-[700px] rounded-lg border border-border bg-white"
               style={{ height: embedHeight }}
               sandbox="allow-scripts"
             />
@@ -747,23 +747,15 @@ export function ChatMessage({
   steps,
   projectId = "",
 }: ChatMessageProps) {
-  const [liveElapsedMs, setLiveElapsedMs] = useState<number | null>(() =>
-    getProgressElapsedMs(timestamp, isStreaming),
-  );
+  const [, bumpElapsedTick] = useReducer((value: number) => value + 1, 0);
 
   useEffect(() => {
     if (!isStreaming) {
-      setLiveElapsedMs(null);
       return undefined;
     }
 
-    const updateElapsed = () => {
-      setLiveElapsedMs(getProgressElapsedMs(timestamp, true));
-    };
-
-    updateElapsed();
     const timerId = window.setInterval(() => {
-      updateElapsed();
+      bumpElapsedTick();
     }, 1000);
 
     return () => {
@@ -788,6 +780,7 @@ export function ChatMessage({
       : buildFallbackProgressLog(thinking, visibleActivityLog)
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
+  const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
   const isOpenClawToolsTurn = chatMode === "openclaw-tools" && role !== "system";
@@ -799,7 +792,9 @@ export function ChatMessage({
       <div
         data-testid="chat-bubble"
         data-chat-selectable={role === "user" ? "true" : undefined}
-        className={`max-w-2xl rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text ${
+        className={`${
+          role === "user" ? "max-w-2xl" : "w-full max-w-[min(92vw,72rem)]"
+        } rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text ${
           role === "user"
             ? isOpenClawToolsTurn
               ? "bg-green-600 text-white border-2 border-green-600"

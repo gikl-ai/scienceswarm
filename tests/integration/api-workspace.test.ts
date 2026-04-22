@@ -1835,7 +1835,7 @@ describe("GET /api/workspace?action=tree", () => {
     expect(res.headers.get("Content-Disposition")).toContain("filename*=");
   });
 
-  it("rejects inline raw preview for SVG uploads", async () => {
+  it("serves sandboxed raw preview for SVG uploads", async () => {
     const projectId = "test-project";
     const projectDir = path.join(ROOT, "projects", projectId, "figures");
     mkdirSync(projectDir, { recursive: true });
@@ -1851,8 +1851,10 @@ describe("GET /api/workspace?action=tree", () => {
       ),
     );
 
-    expect(res.status).toBe(415);
-    await expect(res.text()).resolves.toContain("File type not allowed for raw preview");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("image/svg+xml");
+    expect(res.headers.get("Content-Security-Policy")).toContain("sandbox");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
   });
 
   it("serves raw OpenClaw canvas documents from the managed canvas state dir", async () => {

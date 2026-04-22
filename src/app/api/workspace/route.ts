@@ -1134,7 +1134,26 @@ async function handleGetMeta(filePath: string, projectId: string | null) {
 const MAX_READ_BYTES = 1_000_000;
 const MAX_RAW_BYTES = 50 * 1024 * 1024;
 const PARSEABLE_EXTENSIONS = new Set(["pdf", "xlsx", "xlsm", "ipynb"]);
-const RAW_RENDERABLE_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp", "html", "htm"]);
+const RAW_RENDERABLE_EXTENSIONS = new Set([
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "svg",
+  "html",
+  "htm",
+  "mp4",
+  "webm",
+  "mov",
+  "m4v",
+  "mp3",
+  "wav",
+  "ogg",
+  "m4a",
+]);
+const SANDBOXED_PREVIEW_EXTENSIONS = new Set(["html", "htm", "svg"]);
 
 const RAW_CONTENT_TYPES: Record<string, string> = {
   pdf: "application/pdf",
@@ -1143,8 +1162,17 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
+  svg: "image/svg+xml",
   html: "text/html; charset=utf-8",
   htm: "text/html; charset=utf-8",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  m4v: "video/mp4",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  m4a: "audio/mp4",
 };
 
 const HTML_PREVIEW_SHIM_MARKER = "data-scienceswarm-html-preview-shim";
@@ -1194,6 +1222,31 @@ const HTML_PREVIEW_STORAGE_SHIM = `<script ${HTML_PREVIEW_SHIM_MARKER}>
 })();
 </script>`;
 
+function buildSandboxedPreviewHeaders(
+  ext: string,
+  base: Record<string, string>,
+): Record<string, string> {
+  if (ext === "html" || ext === "htm") {
+    return {
+      ...base,
+      "Content-Security-Policy":
+        "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+      "X-Content-Type-Options": "nosniff",
+    };
+  }
+
+  if (ext === "svg") {
+    return {
+      ...base,
+      "Content-Security-Policy":
+        "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+      "X-Content-Type-Options": "nosniff",
+    };
+  }
+
+  return base;
+}
+
 function buildInlineContentDisposition(filename: string): string {
   const encodedName = encodeURIComponent(filename);
   const asciiFallback = filename
@@ -1241,12 +1294,12 @@ function buildBufferedRawPreviewResponse(params: {
 
   return new Response(body, {
     status: 200,
-    headers: {
+    headers: buildSandboxedPreviewHeaders(params.ext, {
       "Content-Type": params.contentType,
       "Content-Length": String(contentLength),
       "Cache-Control": "private, max-age=60",
       "Content-Disposition": buildInlineContentDisposition(params.fileName),
-    },
+    }),
   });
 }
 
@@ -1449,7 +1502,9 @@ async function handleRead(filePath: string, projectId: string | null) {
         file: filePath,
         binary: true,
         size: opened.size,
-        rawAvailable: RAW_RENDERABLE_EXTENSIONS.has(ext),
+        rawAvailable:
+          RAW_RENDERABLE_EXTENSIONS.has(ext) ||
+          SANDBOXED_PREVIEW_EXTENSIONS.has(ext),
         source: "gbrain",
       });
     }
@@ -1519,7 +1574,9 @@ async function handleRead(filePath: string, projectId: string | null) {
       file: filePath,
       binary: true,
       size: stat.size,
-      rawAvailable: RAW_RENDERABLE_EXTENSIONS.has(ext),
+      rawAvailable:
+        RAW_RENDERABLE_EXTENSIONS.has(ext) ||
+        SANDBOXED_PREVIEW_EXTENSIONS.has(ext),
     });
   }
 
@@ -1539,7 +1596,10 @@ async function handleRaw(filePath: string, projectId: string | null) {
 
     const { realFile, stat } = openClawCanvasResolved;
     const ext = path.extname(realFile).slice(1).toLowerCase();
-    if (!RAW_RENDERABLE_EXTENSIONS.has(ext)) {
+    if (
+      !RAW_RENDERABLE_EXTENSIONS.has(ext) &&
+      !SANDBOXED_PREVIEW_EXTENSIONS.has(ext)
+    ) {
       return new Response("File type not allowed for raw preview", { status: 415 });
     }
 
@@ -1565,7 +1625,10 @@ async function handleRaw(filePath: string, projectId: string | null) {
 
     const { realFile, stat } = openClawMediaResolved;
     const ext = path.extname(realFile).slice(1).toLowerCase();
-    if (!RAW_RENDERABLE_EXTENSIONS.has(ext)) {
+    if (
+      !RAW_RENDERABLE_EXTENSIONS.has(ext) &&
+      !SANDBOXED_PREVIEW_EXTENSIONS.has(ext)
+    ) {
       return new Response("File type not allowed for raw preview", { status: 415 });
     }
 
@@ -1586,7 +1649,10 @@ async function handleRaw(filePath: string, projectId: string | null) {
   const gbrainEntry = await findGbrainWorkspaceEntry(filePath, projectId);
   if (gbrainEntry) {
     const ext = path.extname(gbrainEntry.workspacePath).slice(1).toLowerCase();
-    if (!RAW_RENDERABLE_EXTENSIONS.has(ext)) {
+    if (
+      !RAW_RENDERABLE_EXTENSIONS.has(ext) &&
+      !SANDBOXED_PREVIEW_EXTENSIONS.has(ext)
+    ) {
       return new Response("File type not allowed for raw preview", { status: 415 });
     }
 
@@ -1613,12 +1679,12 @@ async function handleRaw(filePath: string, projectId: string | null) {
 
     return new Response(opened.stream, {
       status: 200,
-      headers: {
+      headers: buildSandboxedPreviewHeaders(ext, {
         "Content-Type": contentType,
         "Content-Length": String(opened.size),
         "Cache-Control": "private, max-age=60",
         "Content-Disposition": buildInlineContentDisposition(path.posix.basename(gbrainEntry.ref.filename)),
-      },
+      }),
     });
   }
 
@@ -1629,7 +1695,10 @@ async function handleRaw(filePath: string, projectId: string | null) {
   const { realFile, stat } = resolved;
 
   const ext = path.extname(realFile).slice(1).toLowerCase();
-  if (!RAW_RENDERABLE_EXTENSIONS.has(ext)) {
+  if (
+    !RAW_RENDERABLE_EXTENSIONS.has(ext) &&
+    !SANDBOXED_PREVIEW_EXTENSIONS.has(ext)
+  ) {
     return new Response("File type not allowed for raw preview", { status: 415 });
   }
 

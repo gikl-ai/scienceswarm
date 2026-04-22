@@ -329,8 +329,6 @@ export async function sendAgentMessage(
 ): Promise<string> {
   // WS gateway is only used for in-process chat turns. Channel delivery
   // and unsessioned calls keep the CLI path so we don't change semantics.
-  // Calls that pass `cwd` also keep the CLI transport because the gateway
-  // fast-path has no working-directory parameter today.
   if (
     options?.session &&
     !options?.channel &&
@@ -346,10 +344,27 @@ export async function sendAgentMessage(
         onEvent: options.onEvent,
       });
       return result.text;
-    } catch {
-      // Gateway unavailable (no token, gateway not running, auth failed,
-      // turn timed out, etc.) — fall through to the CLI path so the caller
-      // still gets a response.
+    } catch (err) {
+      // Distinguish two failure regimes from the gateway:
+      //
+      //   (a) Pre-ACK failure (connect/auth/send-rpc never landed): safe to
+      //       retry on the same session via the CLI — the gateway never had
+      //       the message. Fall through to the CLI path below.
+      //
+      //   (b) Post-ACK failure (turn timeout, WS drop after sessions.send
+      //       succeeded): the gateway already has the message and may be
+      //       dispatching it. Re-running the CLI with the SAME --session-id
+      //       would deliver the user message twice and trigger duplicate
+      //       tool executions. Surface the error to the caller instead.
+      const { isGatewayPostAckError } = await import(
+        "@/lib/openclaw/gateway-ws-client"
+      );
+      if (isGatewayPostAckError(err)) {
+        throw err;
+      }
+      // Pre-ACK gateway failure (no token, gateway not running, auth failed,
+      // pre-send transport error, etc.) — fall through to the CLI path so
+      // the caller still gets a response.
     }
   }
 

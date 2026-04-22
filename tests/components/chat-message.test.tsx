@@ -372,4 +372,61 @@ describe("ChatMessage", () => {
 
     expect(screen.queryByTestId("chat-streaming-spinner")).not.toBeInTheDocument();
   });
+
+  it("adds explicit MIME hints for rendered media sources", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:clips/demo.m4v\nMEDIA:audio/demo.m4a"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:05:00.000Z")}
+      />,
+    );
+
+    expect(container.querySelector("video source")).toHaveAttribute("type", "video/mp4");
+    expect(container.querySelector("audio source")).toHaveAttribute("type", "audio/mp4");
+  });
+
+  it("keeps saved html filename hints scoped to each embed", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "Saved `alpha.html`\n[embed url=\"__openclaw__/canvas\" title=\"Alpha\"]\n" +
+          "Saved `beta.html`\n[embed url=\"__openclaw__/canvas\" title=\"Beta\"]"
+        }
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:10:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByTitle("Alpha")).toHaveAttribute(
+      "src",
+      "/api/workspace?action=raw&file=alpha.html&projectId=project-alpha",
+    );
+    expect(screen.getByTitle("Beta")).toHaveAttribute(
+      "src",
+      "/api/workspace?action=raw&file=beta.html&projectId=project-alpha",
+    );
+  });
+
+  it("reuses the latest saved html filename across intervening text", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "Saved `alpha.html`\n[embed url=\"__openclaw__/canvas\" title=\"Alpha\"]\n" +
+          "Use the chart above as context before opening the follow-up embed.\n" +
+          "[embed url=\"__openclaw__/canvas\" title=\"Alpha Again\"]"
+        }
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:15:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByTitle("Alpha Again")).toHaveAttribute(
+      "src",
+      "/api/workspace?action=raw&file=alpha.html&projectId=project-alpha",
+    );
+  });
 });

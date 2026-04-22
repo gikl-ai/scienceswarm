@@ -42,6 +42,34 @@ import { resolveOpenClawMode } from "@/lib/openclaw/runner";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/**
+ * Thrown when a turn fails AFTER the gateway has already accepted the message
+ * (`sessions.send` ACKed). Examples: turn timeout, WebSocket drop while the
+ * agent is still processing, listener reject after-the-fact.
+ *
+ * The defining property: the gateway has the message and may already be
+ * dispatching it to the agent. Callers MUST NOT retry the same message on the
+ * same session via a different transport, or the agent will see the user
+ * message twice (with potential duplicate tool executions).
+ */
+export class GatewayPostAckError extends Error {
+  readonly code = "GATEWAY_POST_ACK_FAILURE" as const;
+  readonly sessionKey: string;
+  constructor(sessionKey: string, message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "GatewayPostAckError";
+    this.sessionKey = sessionKey;
+  }
+}
+
+/**
+ * Returns true if `err` is a post-ACK failure where the gateway already
+ * received the message. See {@link GatewayPostAckError} for why this matters.
+ */
+export function isGatewayPostAckError(err: unknown): err is GatewayPostAckError {
+  return err instanceof GatewayPostAckError;
+}
+
 export interface SendMessageResult {
   /** Final assistant response text (empty string if no text response received). */
   text: string;
@@ -118,6 +146,38 @@ const TURN_COMPLETE_SIGNALS = new Set([
   "turn.complete",
   "done",
 ]);
+
+function getFrameSessionKey(frame: GatewayFrame): string {
+  return (
+    (frame.params?.key as string | undefined) ??
+    (frame.payload?.key as string | undefined) ??
+    (frame.payload?.session_key as string | undefined) ??
+    ""
+  );
+}
+
+function isTurnTerminalFrame(frame: GatewayFrame): boolean {
+  const method = frame.event ?? frame.method ?? "";
+  if (TURN_COMPLETE_SIGNALS.has(method)) return true;
+
+  if (method === "agent" && frame.payload) {
+    const payload = frame.payload as {
+      stream?: string;
+      data?: { phase?: string };
+    };
+    return payload.stream === "lifecycle" && payload.data?.phase === "end";
+  }
+
+  if (
+    (method === "sessions.message" || method === "sessions.messages.new") &&
+    frame.payload
+  ) {
+    const payload = frame.payload as { role?: string };
+    return payload.role === "assistant";
+  }
+
+  return false;
+}
 
 function debugLog(message: string, ...args: unknown[]): void {
   if (process.env.DEBUG_GATEWAY_WS) {
@@ -254,16 +314,13 @@ const _pendingRequests = new Map<
     reject: (err: Error) => void;
   }
 >();
-let _eventListeners: Array<{
-  sessionKey: string;
-  handler: (event: GatewayFrame) => void;
-}> = [];
-let _requestIdCounter = 0;
-
 interface GatewayEventListenerEntry {
   sessionKey: string;
   handler: (event: GatewayFrame) => void;
+  reject: (err: Error) => void;
 }
+let _eventListeners: GatewayEventListenerEntry[] = [];
+let _requestIdCounter = 0;
 
 function nextRequestId(): string {
   _requestIdCounter += 1;
@@ -280,30 +337,38 @@ function getGatewayOrigin(): string {
   return `http://127.0.0.1:${getOpenClawPort()}`;
 }
 
-function getFrameSessionKey(frame: GatewayFrame): string | null {
-  const sessionKey =
-    (frame.params?.key as string | undefined) ??
-    (frame.payload?.key as string | undefined) ??
-    (frame.payload?.session_key as string | undefined);
-  return typeof sessionKey === "string" && sessionKey.length > 0
-    ? sessionKey
-    : null;
-}
-
 function dispatchGatewayFrame(
   frame: GatewayFrame,
   listeners: GatewayEventListenerEntry[],
 ): void {
   const frameSessionKey = getFrameSessionKey(frame);
+
   if (!frameSessionKey) {
-    debugLog("dropping untagged gateway event", frame.event ?? frame.method ?? frame.type);
+    if (listeners.length === 1) {
+      const [listener] = [...listeners];
+      if (!listener) return;
+      try {
+        listener.handler(frame);
+      } catch {
+        // Don't let a bad listener break the connection
+      }
+      return;
+    }
+
+    if (listeners.length > 1) {
+      debugLog(
+        `dropping untagged ${
+          isTurnTerminalFrame(frame) ? "terminal" : "ambiguous"
+        } frame while ${listeners.length} turns are active`,
+        JSON.stringify(frame).slice(0, 150),
+      );
+    }
     return;
   }
 
   for (const entry of [...listeners]) {
-    if (entry.sessionKey !== frameSessionKey) {
-      continue;
-    }
+    if (entry.sessionKey !== frameSessionKey) continue;
+
     try {
       entry.handler(frame);
     } catch {
@@ -383,6 +448,11 @@ async function connectAndAuth(): Promise<void> {
         rej(new Error("WebSocket connection closed"));
       }
       _pendingRequests.clear();
+      const staleListeners = _eventListeners;
+      _eventListeners = [];
+      for (const entry of staleListeners) {
+        entry.reject(new Error("WebSocket connection closed"));
+      }
     });
 
     ws.on("open", () => {
@@ -769,23 +839,51 @@ export async function sendMessageViaGateway(
       }
     };
 
-    listenerEntry = { sessionKey, handler: listener };
+    listenerEntry = {
+      sessionKey,
+      handler: listener,
+      reject: (err: Error) => {
+        cleanupListener();
+        reject(err);
+      },
+    };
     _eventListeners.push(listenerEntry);
   });
 
   // 4. Send the message and wait for turn to complete.
-  // If sessions.send fails, clean up the listener and timeout to prevent leaks.
+  //
+  // Two failure regimes are intentionally distinguished here:
+  //
+  //   (a) sessions.send itself fails → the gateway never accepted the
+  //       message. Safe for the caller to retry on the same session via a
+  //       different transport. Surface the raw error.
+  //
+  //   (b) sessions.send succeeds, then turnPromise fails (timeout, WS drop,
+  //       listener reject) → the gateway has the message and may already be
+  //       dispatching it. Wrap in GatewayPostAckError so the caller knows
+  //       NOT to retry on the same session (would cause duplicate delivery).
+  let sendAcked = false;
   try {
     await sendRequest(
       "sessions.send",
       { key: sessionKey, message, timeoutMs },
       30_000,
     );
+    sendAcked = true;
 
     // 5. Wait for turn to complete
     await turnPromise;
   } catch (err) {
     cleanupListener();
+    if (sendAcked) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new GatewayPostAckError(
+        sessionKey,
+        `OpenClaw gateway accepted the message for session "${sessionKey}" but ` +
+          `the turn failed before completion: ${detail}`,
+        { cause: err },
+      );
+    }
     throw err;
   }
 
