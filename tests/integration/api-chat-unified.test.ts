@@ -1895,6 +1895,84 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).not.toContain("Execute all steps using your tools");
   });
 
+  it("forces tool execution for scaffold requests from the default chat mode and imports the authored artifacts", async () => {
+    const projectRoot = createProjectRoot("adaptive-memory-scaffold");
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 1,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce(
+      [
+        "```scienceswarm-artifact path=\"README.md\"",
+        "# Adaptive Memory Scaffold",
+        "",
+        "Run `python3 train.py --config configs/experiment.yaml` after installing dependencies.",
+        "```",
+        "",
+        "```scienceswarm-artifact path=\"configs/experiment.yaml\"",
+        "model: adaptive-memory",
+        "context_length: 32768",
+        "```",
+        "",
+        "The scaffold is ready in the workspace.",
+      ].join("\n"),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "reasoning-scaffold-artifacts",
+      },
+      body: JSON.stringify({
+        message:
+          "Scaffold a runnable experiment for a non-transformer long-context model with adaptive memory. I need starter code, configs, dataset entry points, a training script, an evaluation script, and a README that explains what remains to do.",
+        projectId: "adaptive-memory-scaffold",
+        streamPhases: true,
+      }),
+    });
+
+    const response = await POST(request);
+    const events = await readSseEvents(response);
+    const finalEvent = events.at(-1);
+    const [[openClawMessage, openClawOptions]] = sendOpenClawMessage.mock.calls;
+
+    expect(response.status).toBe(200);
+    expect(openClawMessage).toContain("Execute all steps using your tools");
+    expect(openClawMessage).toContain("Do not describe steps — do them.");
+    expect(openClawMessage).toContain("Continue until fully complete.");
+    expect(openClawOptions).toEqual(
+      expect.objectContaining({
+        cwd: projectRoot,
+        timeoutMs: 180000,
+      }),
+    );
+    expect(finalEvent).toMatchObject({
+      text: expect.stringContaining("scaffold is ready"),
+      generatedFiles: expect.arrayContaining([
+        "README.md",
+        "configs/experiment.yaml",
+      ]),
+      taskPhases: expect.arrayContaining([
+        expect.objectContaining({ id: "importing-result", status: "completed" }),
+      ]),
+    });
+    expect(existsSync(path.join(projectRoot, "README.md"))).toBe(true);
+    expect(existsSync(path.join(projectRoot, "configs", "experiment.yaml"))).toBe(
+      true,
+    );
+    expect(readFileSync(path.join(projectRoot, "README.md"), "utf-8")).toContain(
+      "Adaptive Memory Scaffold",
+    );
+  });
+
   it("resolves @ project file references from the message for OpenClaw requests", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeFileSync(

@@ -194,6 +194,77 @@ describe("OpenClaw healthCheck", () => {
       gateway: "ws://127.0.0.1:19002",
     });
   });
+
+  it("reports connected when status probes fail but embedded turns are ready", async () => {
+    vi.stubEnv("OPENCLAW_URL", "ws://127.0.0.1:19002/ws");
+    execFileMock
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("status unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("health unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(null, {
+          stdout: JSON.stringify({
+            resolvedDefault: "ollama/gemma4:latest",
+            auth: { missingProvidersInUse: [] },
+          }),
+          stderr: "",
+        });
+      });
+
+    await expect(healthCheck()).resolves.toEqual({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 0,
+      sessions: 0,
+    });
+  });
+
+  it("accepts prefixed JSON noise in the embedded-turn readiness probe", async () => {
+    vi.stubEnv("OPENCLAW_URL", "ws://127.0.0.1:19002/ws");
+    execFileMock
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("status unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("health unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(null, {
+          stdout: [
+            "[agents/auth-profiles] synced openai-codex credentials from external cli",
+            JSON.stringify({
+              resolvedDefault: "ollama/gemma4:latest",
+              auth: { missingProvidersInUse: [] },
+            }),
+          ].join("\n"),
+          stderr: "",
+        });
+      });
+
+    await expect(healthCheck()).resolves.toEqual({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 0,
+      sessions: 0,
+    });
+  });
 });
 
 describe("sendAgentMessage output sanitization", () => {
