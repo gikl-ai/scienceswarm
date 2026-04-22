@@ -673,6 +673,58 @@ describe("GET /api/workspace?action=tree", () => {
     expect(projectReads).toEqual([projectDir, papersDir]);
   });
 
+  it("keeps watch totals aligned when gbrain replaces a legacy file with a directory", async () => {
+    const projectId = "test-project";
+    const projectDir = path.join(ROOT, "projects", projectId);
+    mkdirSync(projectDir, { recursive: true });
+    writeFileSync(path.join(projectDir, "papers"), "legacy non-directory entry");
+    const sha = "f".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "paper") return [];
+      return [
+        {
+          path: "nested-paper-page",
+          title: "Nested Paper Page",
+          type: "paper",
+          content: "# Nested Paper Page",
+          frontmatter: {
+            type: "paper",
+            project: projectId,
+            file_refs: [
+              {
+                role: "source",
+                fileObjectId: `sha256:${sha}`,
+                sha256: sha,
+                filename: "papers/nested.pdf",
+                mime: "application/pdf",
+                sizeBytes: 789,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+
+    const { GET } = await importRoute();
+    const treeRes = await GET(
+      new Request(`http://localhost/api/workspace?action=tree&projectId=${projectId}`),
+    );
+    const watchRes = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(treeRes.status).toBe(200);
+    expect(watchRes.status).toBe(200);
+    const treeBody = await treeRes.json() as { totalFiles: number };
+    const watchBody = await watchRes.json() as { totalFiles: number };
+    expect(treeBody.totalFiles).toBe(1);
+    expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
+  });
+
   it("reports the newest gbrain timestamp in merged watch state", async () => {
     const projectId = "test-project";
     const projectDir = path.join(ROOT, "projects", projectId);

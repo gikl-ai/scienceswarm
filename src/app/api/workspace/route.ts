@@ -702,6 +702,14 @@ function countMergedWorkspaceFilePaths(
 ): number {
   const mergedFilePaths = new Set(diskFilePaths);
   for (const entry of gbrainEntries) {
+    for (const existingPath of Array.from(mergedFilePaths)) {
+      if (
+        existingPath.startsWith(`${entry.workspacePath}/`)
+        || entry.workspacePath.startsWith(`${existingPath}/`)
+      ) {
+        mergedFilePaths.delete(existingPath);
+      }
+    }
     mergedFilePaths.add(entry.workspacePath);
   }
   return mergedFilePaths.size;
