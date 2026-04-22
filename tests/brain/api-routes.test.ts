@@ -981,6 +981,18 @@ describe("GET /api/brain/search", () => {
     expect(data.error).toContain("Invalid detail");
   });
 
+  it("returns 400 for invalid profile", async () => {
+    const { GET } = await import("@/app/api/brain/search/route");
+
+    const request = new Request(
+      "http://localhost/api/brain/search?query=test&profile=slow",
+    );
+    const response = await GET(request);
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.error).toContain("Invalid profile");
+  });
+
   it("returns 400 for empty detail", async () => {
     const { GET } = await import("@/app/api/brain/search/route");
 
@@ -1027,6 +1039,25 @@ describe("GET /api/brain/search", () => {
       chunkId: 123,
       chunkIndex: 2,
     });
+  });
+
+  it("passes valid search profiles through to brain search", async () => {
+    const searchSpy = vi.spyOn(brainSearchModule, "search").mockResolvedValue([]);
+
+    const { GET } = await import("@/app/api/brain/search/route");
+    const request = new Request(
+      "http://localhost/api/brain/search?query=CRISPR&mode=qmd&profile=synthesis",
+    );
+    const response = await GET(request);
+    expect(response.status).toBe(200);
+    expect(searchSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        query: "CRISPR",
+        mode: "qmd",
+        profile: "synthesis",
+      }),
+    );
   });
 
   it("normalizes compiled search view paths to public brain slugs", async () => {

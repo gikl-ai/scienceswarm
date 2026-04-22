@@ -452,6 +452,7 @@ async function updateCitationGraph(
       query: slug,
       mode: "grep",
       limit: 50,
+      profile: "synthesis",
     });
     // Exclude self-references
     const incomingRefs = results.filter(

@@ -35,6 +35,11 @@ import { join, relative, basename, resolve } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { getScienceSwarmBrainRoot, resolveConfiguredPath } from "@/lib/scienceswarm-paths";
+import {
+  getSearchProfileSettings,
+  resolveSearchProfile,
+  shouldAllowDegradedSearchResults,
+} from "./search-profiles";
 import type { BrainPage } from "./store";
 import type { BrainConfig, SearchInput, SearchResult, ContentType } from "./types";
 
@@ -88,8 +93,16 @@ export async function search(
   input: SearchInput,
 ): Promise<SearchResult[]> {
   const mode = input.mode ?? "grep";
-  const limit = input.limit ?? 10;
+  const settings = getSearchProfileSettings(input);
+  const profile = resolveSearchProfile(input);
+  const allowDegradedResults = shouldAllowDegradedSearchResults(input);
+  const limit = input.limit ?? settings.defaultLimit;
   const requestBrainRoot = resolve(config.root);
+  const normalizedInput: SearchInput = {
+    ...input,
+    limit,
+    profile,
+  };
 
   // Dynamic import so `vi.spyOn(brainStoreModule, "searchStoreWithTimeout")`
   // in the api-routes tests still intercepts the call.
@@ -111,7 +124,7 @@ export async function search(
     try {
       const pages = await withDeadline(
         listStorePages(input.query, limit),
-        2000,
+        settings.searchTimeoutMs,
       );
       if (pages.length > 0 || input.query.trim()) {
         return pages;
@@ -148,12 +161,15 @@ export async function search(
   let gbrainResults: SearchResult[] = [];
   if (useConfiguredGbrainStore) {
     try {
-      gbrainResults = await withDeadline(
-        searchStoreWithTimeout({ ...input, limit }),
-        2000,
+      gbrainResults = await searchStoreWithTimeout(
+        normalizedInput,
+        settings.searchTimeoutMs,
       );
     } catch (error) {
       if (error instanceof BrainSearchTimeoutError || isBrainBackendUnavailableError(error)) {
+        throw error;
+      }
+      if (!allowDegradedResults) {
         throw error;
       }
       gbrainResults = [];

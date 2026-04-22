@@ -538,12 +538,15 @@ export interface ColdstartBriefing {
 
 export type SearchMode = "index" | "grep" | "qmd" | "list";
 export type SearchDetail = "low" | "medium" | "high";
+export type SearchProfile = "interactive" | "synthesis";
 
 export interface SearchInput {
   query: string;
   mode?: SearchMode;
   limit?: number;
   detail?: SearchDetail;
+  profile?: SearchProfile;
+  allowDegradedResults?: boolean;
 }
 
 export interface SearchResult {
