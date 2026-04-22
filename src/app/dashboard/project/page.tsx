@@ -301,11 +301,15 @@ function buildProjectUnderstandingDelta(
   const previousRecommendation =
     normalizeProjectBriefRecommendation(previousBrief);
   const nextRecommendation = normalizeProjectBriefRecommendation(nextBrief);
-  const previousTopMatter = previousBrief.topMatters[0]?.summary?.trim() ?? "";
-  const nextTopMatter = nextBrief.topMatters[0]?.summary?.trim() ?? "";
+  const previousTopMatters = previousBrief.topMatters ?? [];
+  const nextTopMatters = nextBrief.topMatters ?? [];
+  const previousUnresolvedRisks = previousBrief.unresolvedRisks ?? [];
+  const nextUnresolvedRisks = nextBrief.unresolvedRisks ?? [];
+  const previousTopMatter = previousTopMatters[0]?.summary?.trim() ?? "";
+  const nextTopMatter = nextTopMatters[0]?.summary?.trim() ?? "";
   const previousTopRisk =
-    previousBrief.unresolvedRisks[0]?.risk?.trim() ?? "";
-  const nextTopRisk = nextBrief.unresolvedRisks[0]?.risk?.trim() ?? "";
+    previousUnresolvedRisks[0]?.risk?.trim() ?? "";
+  const nextTopRisk = nextUnresolvedRisks[0]?.risk?.trim() ?? "";
   const previousFrontier = previousBrief.frontier?.[0]?.title?.trim() ?? "";
   const nextFrontier = nextBrief.frontier?.[0]?.title?.trim() ?? "";
 
@@ -327,15 +331,19 @@ function buildProjectUnderstandingDelta(
     return null;
   }
 
-  const whyItChanged = [
-    ...nextBrief.topMatters.slice(0, 2).map((item) => item.summary.trim()),
-    ...nextBrief.unresolvedRisks.slice(0, 1).map((item) => item.risk.trim()),
-  ].filter(Boolean);
+  const whyItChanged = Array.from(
+    new Set(
+      [
+        ...nextTopMatters.slice(0, 2).map((item) => item.summary.trim()),
+        ...nextUnresolvedRisks.slice(0, 1).map((item) => item.risk.trim()),
+      ].filter(Boolean),
+    ),
+  );
   const evidence = Array.from(
     new Set(
       [
-        ...nextBrief.topMatters.flatMap((item) => item.evidence ?? []),
-        ...nextBrief.unresolvedRisks.flatMap((item) => item.evidence ?? []),
+        ...nextTopMatters.flatMap((item) => item.evidence ?? []),
+        ...nextUnresolvedRisks.flatMap((item) => item.evidence ?? []),
         ...(nextBrief.nextMove?.missingEvidence ?? []),
       ].filter(Boolean),
     ),
@@ -1647,6 +1655,9 @@ function ProjectPageContent() {
         }
 
         const data = (await res.json()) as DashboardProjectBrief;
+        if (signal?.aborted || (data.project && data.project !== activeProjectSlug)) {
+          return;
+        }
         const delta = buildProjectUnderstandingDelta(
           lastProjectBriefRef.current,
           data,
@@ -4198,6 +4209,23 @@ function ProjectPageContent() {
                         </div>
                       ) : null}
 
+                      {!projectUnderstandingDelta &&
+                      projectBrief &&
+                      (projectBrief.nextMove?.missingEvidence?.length ||
+                        (projectBrief.unresolvedRisks?.length ?? 0) > 0) ? (
+                        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">
+                            No Meaningful Belief Change Detected
+                          </p>
+                          <p className="mt-2 text-sm font-medium text-amber-950">
+                            ScienceSwarm is keeping the current project view in place because the linked evidence does not yet justify a confident update.
+                          </p>
+                          <p className="mt-2 text-sm text-amber-900">
+                            Treat downstream guidance as low confidence until the missing evidence or leading risk is resolved.
+                          </p>
+                        </div>
+                      ) : null}
+
                       {projectBrief ? (
                         <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
                           <div className="rounded-2xl border border-border bg-surface/40 p-4">
@@ -4248,8 +4276,8 @@ function ProjectPageContent() {
                                 Top Matters
                               </p>
                               <ul className="mt-2 space-y-2 text-sm text-foreground">
-                                {projectBrief.topMatters.length > 0 ? (
-                                  projectBrief.topMatters.slice(0, 3).map((item) => (
+                                {(projectBrief.topMatters?.length ?? 0) > 0 ? (
+                                  projectBrief.topMatters?.slice(0, 3).map((item) => (
                                     <li key={item.summary} className="rounded-xl bg-white px-3 py-2">
                                       <div>{item.summary}</div>
                                       {item.evidence[0] ? (
@@ -4289,7 +4317,7 @@ function ProjectPageContent() {
                                 ) : null}
                                 {(projectBrief.dueTasks?.length ?? 0) === 0 &&
                                 (projectBrief.frontier?.length ?? 0) === 0 &&
-                                projectBrief.unresolvedRisks.length === 0 ? (
+                                (projectBrief.unresolvedRisks?.length ?? 0) === 0 ? (
                                   <li className="rounded-xl bg-white px-3 py-2 text-muted">
                                     ScienceSwarm does not have enough linked evidence yet to push confident downstream guidance.
                                   </li>
