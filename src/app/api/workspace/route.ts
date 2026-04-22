@@ -1133,7 +1133,7 @@ async function handleGetMeta(filePath: string, projectId: string | null) {
 const MAX_READ_BYTES = 1_000_000;
 const MAX_RAW_BYTES = 50 * 1024 * 1024;
 const PARSEABLE_EXTENSIONS = new Set(["pdf", "xlsx", "xlsm", "ipynb"]);
-const RAW_RENDERABLE_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp", "mp4", "webm", "mov", "mp3", "wav", "ogg"]);
+const RAW_RENDERABLE_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp", "mp4", "webm", "mov", "m4v", "mp3", "wav", "ogg", "m4a"]);
 /** Extensions that can be previewed in a sandboxed iframe but must NOT be served
  *  inline without script-blocking headers (stored XSS risk). */
 const SANDBOXED_PREVIEW_EXTENSIONS = new Set(["html", "htm", "svg"]);
@@ -1151,9 +1151,11 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   mp4: "video/mp4",
   webm: "video/webm",
   mov: "video/quicktime",
+  m4v: "video/mp4",
   mp3: "audio/mpeg",
   wav: "audio/wav",
   ogg: "audio/ogg",
+  m4a: "audio/mp4",
 };
 
 /** Build security headers for sandboxed HTML/SVG preview responses. */

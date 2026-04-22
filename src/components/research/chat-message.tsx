@@ -34,7 +34,12 @@ export interface ChatMessageProps {
 
 /** Only allow same-origin or workspace-relative image URLs. */
 function isSafeImageUrl(url: string): boolean {
-  // Relative paths (starts with / or ./) are safe — served from our own origin
+  // Reject protocol-relative URLs ("//host/path") — browsers resolve those
+  // against the current origin's scheme and load external content.
+  if (url.startsWith("//")) {
+    return false;
+  }
+  // Relative paths (starts with /, ./ or ../) are safe — served from our own origin
   if (url.startsWith("/") || url.startsWith("./") || url.startsWith("../")) {
     return true;
   }
@@ -45,6 +50,28 @@ function isSafeImageUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Cap iframe height so an assistant-controlled value cannot force the embed
+ * to cover the entire viewport. Accepts a small set of CSS length units and
+ * clamps the numeric portion; everything else falls back to the default.
+ */
+function sanitizeEmbedHeight(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  // Allow integer or decimal value followed by px, vh, em, or rem.
+  const match = value.match(/^(\d+(?:\.\d+)?)(px|vh|em|rem)$/);
+  if (!match) return fallback;
+  const n = Number.parseFloat(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  // Clamp to limits per unit so the iframe cannot exceed the viewport.
+  const max =
+    unit === "vh" ? 100
+    : unit === "px" ? 2000
+    : /* em / rem */ 200;
+  const clamped = Math.min(n, max);
+  return `${clamped}${unit}`;
 }
 
 // ── Render markdown-lite ───────────────────────────────────────
@@ -131,10 +158,13 @@ function renderContent(content: string, projectId: string) {
           const fileName = savedMatch?.[1] ?? (urlPathMatch ? `${urlPathMatch[1]}.html` : "index.html");
           embedUrl = `/api/workspace?action=raw&file=${encodeURIComponent(fileName)}&projectId=${encodeURIComponent(projectId)}`;
         } else {
-          embedUrl = embedUrl.startsWith("/") ? embedUrl : `/${embedUrl}`;
+          // Strip every leading slash and re-add a single one so protocol-
+          // relative URLs ("//external.host/...") collapse to a same-origin
+          // path instead of loading third-party content into the iframe.
+          embedUrl = `/${embedUrl.replace(/^\/+/, "")}`;
         }
         const embedTitle = titleMatch?.[1] ?? "Embedded content";
-        const embedHeight = heightMatch?.[1] ?? "60vh";
+        const embedHeight = sanitizeEmbedHeight(heightMatch?.[1], "60vh");
         return (
           <div key={i} className="my-2">
             <iframe
