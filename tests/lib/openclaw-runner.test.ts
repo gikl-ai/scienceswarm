@@ -198,6 +198,23 @@ describe("buildOpenClawEnv", () => {
     });
     expect(env.MY_OTHER_VAR).toBe("keep-me");
   });
+
+  it("removes cloud OpenAI credentials when saved runtime mode is local", () => {
+    process.env.LLM_PROVIDER = "local";
+    process.env.OLLAMA_MODEL = "gemma4:latest";
+    process.env.OPENAI_API_KEY = "sk-should-not-leak";
+
+    const env = buildOpenClawEnv({
+      kind: "state-dir",
+      stateDir: "/s",
+      configPath: "/s/openclaw.json",
+    });
+
+    expect(env.LLM_PROVIDER).toBe("local");
+    expect(env.OLLAMA_MODEL).toBe("gemma4:latest");
+    expect(env.OLLAMA_API_KEY).toBe("ollama-local");
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+  });
 });
 
 describe("legacy state-dir healing", () => {
