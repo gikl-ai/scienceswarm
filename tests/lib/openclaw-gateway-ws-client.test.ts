@@ -325,4 +325,35 @@ describe("gateway-ws-client", () => {
     expect(firstStatus).toBe("resolved");
     expect(secondStatus).toBe("resolved");
   });
+
+  it("iterates over a snapshot so listener removal does not skip later listeners", async () => {
+    const { __testOnly } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const listeners: Array<{
+      sessionKey: string;
+      handler: (frame: unknown) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    const secondHandler = vi.fn();
+    const firstHandler = vi.fn(() => {
+      listeners.splice(0, 1);
+    });
+
+    listeners.push(
+      { sessionKey: "session-alpha", handler: firstHandler, reject: vi.fn() },
+      { sessionKey: "session-alpha", handler: secondHandler, reject: vi.fn() },
+    );
+
+    __testOnly.dispatchGatewayFrame(
+      {
+        type: "event",
+        method: "sessions.message",
+        payload: { key: "session-alpha" },
+      },
+      listeners as never,
+    );
+
+    expect(firstHandler).toHaveBeenCalledTimes(1);
+    expect(secondHandler).toHaveBeenCalledTimes(1);
+  });
 });

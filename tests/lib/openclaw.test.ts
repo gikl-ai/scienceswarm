@@ -361,6 +361,7 @@ describe("sendAgentMessage output sanitization", () => {
     const options = execFileMock.mock.calls[0]?.[2] as
       | { cwd?: string; env?: NodeJS.ProcessEnv }
       | undefined;
+    expect(sendMessageViaGatewayMock).not.toHaveBeenCalled();
     expect(options?.cwd).toBe(`${root}/projects/project-alpha`);
     expect(options?.env?.OPENCLAW_STATE_DIR).toBe(`${root}/openclaw`);
     expect(options?.env?.OPENCLAW_CONFIG_PATH).toBe(`${root}/openclaw/openclaw.json`);
