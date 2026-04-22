@@ -7,6 +7,7 @@ import type { ProjectRecord } from "@/brain/gbrain-data-contracts";
 import { __setProjectRepositoryOverride } from "@/lib/testing/projects-route-overrides";
 
 let dataRoot: string;
+const originalCwd = process.cwd();
 
 function buildCreateRequest(body: Record<string, unknown>): Request {
   return new Request("http://localhost/api/projects", {
@@ -25,6 +26,7 @@ describe("POST /api/projects", () => {
 
   afterEach(async () => {
     __setProjectRepositoryOverride(null);
+    process.chdir(originalCwd);
     delete process.env.SCIENCESWARM_DIR;
     delete process.env.SCIENCESWARM_USER_HANDLE;
     await rm(dataRoot, { recursive: true, force: true });
@@ -115,6 +117,54 @@ describe("POST /api/projects", () => {
     expect(await readFile(manifestPath, "utf-8")).toContain('"slug": "my-first-test-project"');
     expect(await readFile(projectPagePath, "utf-8")).toContain("Track frontier AI updates.");
     __setProjectRepositoryOverride(null);
+  });
+
+  it("creates a project from the handle persisted by setup without requiring a restart", async () => {
+    const { POST } = await import("@/app/api/projects/route");
+    const createdRecords: Array<ProjectRecord & { createdBy?: string }> = [];
+    const fakeRepository: ProjectRepository = {
+      async list() {
+        return createdRecords;
+      },
+      async get(slug) {
+        return createdRecords.find((record) => record.slug === slug) ?? null;
+      },
+      async create(input) {
+        const now = "2026-04-16T00:00:00.000Z";
+        const record: ProjectRecord & { createdBy?: string } = {
+          slug: "saved-env-project",
+          name: input.name,
+          description: input.description ?? "New project",
+          createdAt: now,
+          lastActive: now,
+          status: "active",
+          projectPageSlug: "saved-env-project",
+          createdBy: input.createdBy,
+        };
+        createdRecords.push(record);
+        return record;
+      },
+      async delete() {
+        return { ok: true, existed: true };
+      },
+      async touch() {},
+    };
+    __setProjectRepositoryOverride(fakeRepository);
+    delete process.env.SCIENCESWARM_USER_HANDLE;
+    await writeFile(
+      path.join(dataRoot, ".env"),
+      "SCIENCESWARM_USER_HANDLE=@persisted-after-setup\n",
+    );
+    process.chdir(dataRoot);
+
+    const response = await POST(buildCreateRequest({
+      action: "create",
+      name: "Saved Env Project",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(createdRecords).toHaveLength(1);
+    expect(createdRecords[0]?.createdBy).toBe("@persisted-after-setup");
   });
 
   it("returns the project-specific path when materialization fails", async () => {
@@ -208,6 +258,7 @@ describe("GET /api/projects", () => {
 
   afterEach(async () => {
     __setProjectRepositoryOverride(null);
+    process.chdir(originalCwd);
     delete process.env.SCIENCESWARM_DIR;
     delete process.env.SCIENCESWARM_USER_HANDLE;
     await rm(dataRoot, { recursive: true, force: true });

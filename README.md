@@ -126,6 +126,18 @@ This first public release intentionally keeps the repo surface small. The
 README and the shipped code are the primary references for now; the internal
 planning, acceptance, and launch-process docs are not part of this release.
 
+## Telemetry
+
+- The README includes a PostHog tracking pixel for coarse github.com impression
+  trends.
+- The `.github/workflows/posthog-traffic.yml` workflow forwards GitHub Traffic
+  API snapshots to PostHog so history survives beyond GitHub's 14-day window.
+- To enable that workflow, add two repository secrets:
+  `POSTHOG_PROJECT_KEY` with your PostHog project API key, and
+  `GH_TRAFFIC_TOKEN` with a fine-grained PAT that has repository
+  `Administration: Read` for this repo. GitHub's built-in workflow
+  `GITHUB_TOKEN` cannot request that permission scope.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),

@@ -10,6 +10,8 @@ interface QueryableDb {
   query(sql: string, params?: unknown[]): Promise<{ rows: QueryResultRow[] }>;
 }
 
+const unsupportedWorkspaceFilesTables = new WeakSet<QueryableDb>();
+
 export interface ProjectPageSummary {
   path: string;
   type: string;
@@ -57,6 +59,18 @@ function getQueryableDb(): QueryableDb | null {
   } catch {
     return null;
   }
+}
+
+function isMissingFilesRelationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown };
+  if (candidate.code === "42P01") {
+    return true;
+  }
+  return (
+    typeof candidate.message === "string"
+    && /relation "files" does not exist/i.test(candidate.message)
+  );
 }
 
 function projectMatchSql(alias: string): string {
@@ -107,28 +121,37 @@ export async function listProjectWorkspaceFileEntriesFast(
 ): Promise<ProjectWorkspaceFileEntry[] | null> {
   await ensureBrainStoreReady();
   const db = getQueryableDb();
-  if (!db) return null;
+  if (!db || unsupportedWorkspaceFilesTables.has(db)) return null;
 
   // The workspace tree only needs file metadata plus the owning page slug; keep
   // the heavy page body fetch deferred until a specific companion page is opened.
-  const { rows } = await db.query(
-    `SELECT
-       p.slug AS page_slug,
-       p.type AS page_type,
-       p.title AS page_title,
-       p.frontmatter AS page_frontmatter,
-       p.updated_at AS updated_at,
-       f.filename AS filename,
-       f.mime_type AS mime_type,
-       f.size_bytes AS size_bytes,
-       f.content_hash AS content_hash
-     FROM files f
-     JOIN pages p ON p.slug = f.page_slug
-     WHERE ${projectMatchSql("p")}
-     ORDER BY p.updated_at DESC, p.slug ASC, f.filename ASC
-     LIMIT $2`,
-    [project, WORKSPACE_FILE_LIMIT],
-  );
+  let rows: QueryResultRow[];
+  try {
+    ({ rows } = await db.query(
+      `SELECT
+         p.slug AS page_slug,
+         p.type AS page_type,
+         p.title AS page_title,
+         p.frontmatter AS page_frontmatter,
+         p.updated_at AS updated_at,
+         f.filename AS filename,
+         f.mime_type AS mime_type,
+         f.size_bytes AS size_bytes,
+         f.content_hash AS content_hash
+       FROM files f
+       JOIN pages p ON p.slug = f.page_slug
+       WHERE ${projectMatchSql("p")}
+       ORDER BY p.updated_at DESC, p.slug ASC, f.filename ASC
+       LIMIT $2`,
+      [project, WORKSPACE_FILE_LIMIT],
+    ));
+  } catch (error) {
+    if (isMissingFilesRelationError(error)) {
+      unsupportedWorkspaceFilesTables.add(db);
+      return null;
+    }
+    throw error;
+  }
 
   const entries: ProjectWorkspaceFileEntry[] = [];
   for (const row of rows) {

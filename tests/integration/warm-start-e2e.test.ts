@@ -9,11 +9,12 @@
  * If this test fails the pivot cannot proceed.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   cpSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   rmSync,
 } from "fs";
@@ -23,11 +24,13 @@ import { tmpdir } from "os";
 import { scanCorpus, approveAndImport } from "@/brain/coldstart";
 import type { BrainConfig, ImportPreview } from "@/brain/types";
 import type { LLMClient, LLMResponse } from "@/brain/llm";
+import { getProjectLocalImportSummaryPath, getProjectRootPath } from "@/lib/state/project-storage";
 
 const FIXTURES = join(__dirname, "..", "fixtures", "coldstart");
 
 let corpusDir: string;
 let brainRoot: string;
+let scienceswarmDir: string | null = null;
 
 function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -37,6 +40,7 @@ beforeEach(() => {
   const id = newId();
   corpusDir = join(tmpdir(), `warmstart-corpus-${id}`);
   brainRoot = join(tmpdir(), `warmstart-brain-${id}`);
+  scienceswarmDir = null;
   mkdirSync(corpusDir, { recursive: true });
   mkdirSync(brainRoot, { recursive: true });
   // Copy the shared coldstart fixtures into a fresh corpus dir so the test
@@ -45,9 +49,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  for (const d of [corpusDir, brainRoot]) {
-    if (existsSync(d)) rmSync(d, { recursive: true, force: true });
+  for (const d of [corpusDir, brainRoot, scienceswarmDir]) {
+    if (d && existsSync(d)) rmSync(d, { recursive: true, force: true });
   }
+  vi.unstubAllEnvs();
 });
 
 function makeConfig(): BrainConfig {
@@ -202,6 +207,39 @@ describe("warm-start E2E", () => {
     // The dispatcher returns null for already-existing pages, so they end up
     // counted as skipped on the second run.
     expect(second.imported).toBeLessThanOrEqual(first.imported);
+  });
+
+  it("mirrors project-targeted imports into the active workspace and persists a project summary", async () => {
+    scienceswarmDir = join(tmpdir(), `warmstart-project-data-${newId()}`);
+    mkdirSync(scienceswarmDir, { recursive: true });
+    vi.stubEnv("SCIENCESWARM_DIR", scienceswarmDir);
+
+    const scan = await scanCorpus([corpusDir]);
+    const preview: ImportPreview = {
+      analysis: scan.analysis,
+      backend: scan.backend,
+      files: scan.files,
+      projects: scan.projects,
+      duplicateGroups: scan.duplicateGroups,
+      warnings: scan.warnings,
+    };
+
+    const result = await approveAndImport(makeConfig(), makeMockLLM(), preview, {
+      projectSlug: "project-alpha",
+    });
+
+    expect(result.errors).toEqual([]);
+
+    const importSummaryPath = getProjectLocalImportSummaryPath("project-alpha");
+    expect(existsSync(importSummaryPath)).toBe(true);
+    expect(readFileSync(importSummaryPath, "utf-8")).toContain('"source": "coldstart-project-import"');
+
+    const projectRoot = getProjectRootPath("project-alpha");
+    expect(existsSync(join(projectRoot, "papers", "attention.pdf"))).toBe(true);
+    expect(existsSync(join(projectRoot, "papers", "2301.12345.pdf"))).toBe(true);
+    expect(existsSync(join(projectRoot, "code", "experiment.ipynb"))).toBe(true);
+    expect(existsSync(join(projectRoot, "data", "results.csv"))).toBe(true);
+
   });
 
   it("partial failure: a missing file in the preview does not abort the batch", async () => {
