@@ -1897,6 +1897,7 @@ function buildCompactOpenClawArtifactRetryMessage(params: {
     "",
     "ScienceSwarm web task rules:",
     "- Produce only scientist-facing output. Do not mention internal tool, gateway, session, model, or subagent mechanics.",
+    "- Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to project-visible relative paths such as `docs/result.md`, not machine-local absolute paths.",
     "- Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
     "- Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     "- Do not spawn subagents, background agents, sessions, or gateway pairing flows. Complete the task in this OpenClaw session.",
@@ -1959,6 +1960,7 @@ function buildOpenClawWebTaskGuardrails(
   const rules = [
     "ScienceSwarm web task rules:",
     "- Produce only scientist-facing output. Do not mention internal tool, gateway, session, model, or subagent mechanics.",
+    "- Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to project-visible relative paths such as `docs/result.md`, not machine-local absolute paths.",
     "- Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
     "- Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     "- If an internal tool attempt fails but you recover, do not mention the failed attempt or tool name. Summarize only the final visible result. If you cannot recover, explain the user-visible blocker in plain language without tool names.",
@@ -2111,6 +2113,19 @@ function isExplanatoryClarificationRequest(message: string): boolean {
     /^(?:what|which|who|when|where|why|how)\b/i.test(trimmedMessage) ||
     /\?$/.test(trimmedMessage);
   if (!asksForExplanation) {
+    return false;
+  }
+
+  const approvalGateClarification =
+    /\bbefore\s+(?:i|we)\s+approve\b/i.test(message) ||
+    /\b(?:what\s+will|will\s+you|where\s+will|what\s+happens)\b/i.test(
+      message,
+    );
+  if (approvalGateClarification) {
+    return true;
+  }
+
+  if (shouldForceOpenClawToolExecution(message)) {
     return false;
   }
 

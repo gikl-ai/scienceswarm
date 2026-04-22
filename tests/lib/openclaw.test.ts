@@ -57,6 +57,19 @@ function mockExecFile(stdout: unknown, stderr = "") {
   });
 }
 
+function mockExecFileError(stderr: string, stdout = "") {
+  execFileMock.mockImplementationOnce((...args: unknown[]) => {
+    const callback = args.at(-1);
+    if (typeof callback !== "function") throw new Error("expected callback");
+    const err = Object.assign(new Error(stderr), {
+      code: 1,
+      stderr,
+      stdout,
+    });
+    callback(err);
+  });
+}
+
 describe("OpenClaw healthCheck", () => {
   const originalFetch = globalThis.fetch;
 
@@ -506,6 +519,23 @@ describe("sendAgentMessage output sanitization", () => {
     ).resolves.toBe("fallback worked");
 
     expect(execFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits and retries transient session-file locks on the CLI path", async () => {
+    vi.stubEnv("OPENCLAW_SESSION_LOCK_RETRY_DELAY_MS", "0");
+    mockExecFileError(
+      "FailoverError: session file locked (timeout 10000ms): pid=38781 /tmp/openclaw/sessions/web-alpha.jsonl.lock",
+    );
+    mockExecFile("<channel|>analysis saved");
+
+    await expect(
+      sendAgentMessage("Save the analysis", {
+        session: "web-alpha",
+        cwd: "/tmp/project-alpha",
+      }),
+    ).resolves.toBe("analysis saved");
+
+    expect(execFileMock).toHaveBeenCalledTimes(2);
   });
 });
 
