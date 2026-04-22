@@ -34,10 +34,12 @@ import {
   runInstaller,
   type InstallerEvent,
 } from "@/lib/setup/gbrain-installer";
+import { type BrainPresetId, isBrainPresetId } from "@/brain/presets/types";
 import { isLocalRequest } from "@/lib/local-guard";
 
 interface RequestBody {
   brainRoot?: string;
+  brainPreset?: BrainPresetId;
   skipNetworkCheck?: boolean;
 }
 
@@ -58,6 +60,12 @@ function parseBody(raw: unknown): RequestBody | { error: string } {
       return { error: "brainRoot must be non-empty" };
     }
     result.brainRoot = obj.brainRoot;
+  }
+  if ("brainPreset" in obj) {
+    if (!isBrainPresetId(obj.brainPreset)) {
+      return { error: "brainPreset must be a valid ScienceSwarm brain preset" };
+    }
+    result.brainPreset = obj.brainPreset;
   }
   if ("skipNetworkCheck" in obj) {
     if (typeof obj.skipNetworkCheck !== "boolean") {
@@ -131,6 +139,7 @@ export async function POST(request: Request): Promise<Response> {
           {
             repoRoot: process.cwd(),
             brainRoot: parsed.brainRoot,
+            brainPreset: parsed.brainPreset,
             skipNetworkCheck: parsed.skipNetworkCheck,
           },
           env,

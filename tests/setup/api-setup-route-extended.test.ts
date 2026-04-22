@@ -101,6 +101,20 @@ describe("POST /api/setup — extended schema (PR B stage B1)", () => {
     );
   });
 
+  it("writes BRAIN_PRESET when brainPreset is provided", async () => {
+    const { POST } = await import("@/app/api/setup/route");
+    const res = await POST(
+      jsonRequest("http://localhost/api/setup", {
+        brainPreset: "generic_scientist",
+      }),
+    );
+
+    expect(res.status).toBe(200);
+
+    const map = entriesMap(await readEnv(repoRoot));
+    expect(map.get("BRAIN_PRESET")).toBe("generic_scientist");
+  });
+
   it("writes LLM_PROVIDER=local when llmProvider is 'local'", async () => {
     const { POST } = await import("@/app/api/setup/route");
     const res = await POST(

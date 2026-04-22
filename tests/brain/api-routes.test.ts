@@ -265,6 +265,31 @@ describe("POST /api/brain/capture", () => {
     expect(data.materializedPath).toMatch(/^wiki\/decisions\//);
   });
 
+  it("accepts research-native capture kinds", async () => {
+    await writeProjectManifest(makeManifest("alpha"), join(TEST_ROOT, "state"));
+    const { POST } = await import("@/app/api/brain/capture/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/brain/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Landscape review of candidate assays and failure modes.",
+          userId: "web-user-2",
+          project: "alpha",
+          channel: "web",
+          kind: "survey",
+        }),
+      }),
+    );
+
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.status).toBe("saved");
+    expect(data.kind).toBe("survey");
+    expect(data.materializedPath).toMatch(/^wiki\/surveys\//);
+  });
+
   it("preserves materialized path context for compilation source slugs", async () => {
     const { sourceSlugFromMaterializedPath } = await import("@/lib/brain-capture-paths");
 
@@ -981,6 +1006,18 @@ describe("GET /api/brain/search", () => {
     expect(data.error).toContain("Invalid detail");
   });
 
+  it("returns 400 for invalid profile", async () => {
+    const { GET } = await import("@/app/api/brain/search/route");
+
+    const request = new Request(
+      "http://localhost/api/brain/search?query=test&profile=slow",
+    );
+    const response = await GET(request);
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.error).toContain("Invalid profile");
+  });
+
   it("returns 400 for empty detail", async () => {
     const { GET } = await import("@/app/api/brain/search/route");
 
@@ -1027,6 +1064,25 @@ describe("GET /api/brain/search", () => {
       chunkId: 123,
       chunkIndex: 2,
     });
+  });
+
+  it("passes valid search profiles through to brain search", async () => {
+    const searchSpy = vi.spyOn(brainSearchModule, "search").mockResolvedValue([]);
+
+    const { GET } = await import("@/app/api/brain/search/route");
+    const request = new Request(
+      "http://localhost/api/brain/search?query=CRISPR&mode=qmd&profile=synthesis",
+    );
+    const response = await GET(request);
+    expect(response.status).toBe(200);
+    expect(searchSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        query: "CRISPR",
+        mode: "qmd",
+        profile: "synthesis",
+      }),
+    );
   });
 
   it("normalizes compiled search view paths to public brain slugs", async () => {
@@ -1233,6 +1289,8 @@ describe("GET /api/brain/status", () => {
         concepts_processed: 3,
         errors_count: 0,
         schedule_interval_ms: 30 * 60_000,
+        briefing_slug: "briefings/2026-04-22-radar-1",
+        journal_slug: "journals/2026-04-22-research-radar-radar-1",
       }),
     );
 
@@ -1248,6 +1306,8 @@ describe("GET /api/brain/status", () => {
     expect(data.radar.age_ms).toBeGreaterThan(-1);
     expect(data.radar.age_ms).toBeLessThan(60 * 60_000);
     expect(data.radar.schedule_interval_ms).toBe(30 * 60_000);
+    expect(data.radar.briefing_slug).toBe("briefings/2026-04-22-radar-1");
+    expect(data.radar.journal_slug).toBe("journals/2026-04-22-research-radar-radar-1");
   });
 
   it("reports stale: true when the last run is older than 2x the interval", async () => {
@@ -1311,6 +1371,7 @@ describe("GET /api/brain/dream", () => {
       JSON.stringify({
         timestamp: "2026-04-18T08:30:00.000Z",
         mode: "full",
+        journal_slug: "journals/2026-04-18-dream-cycle",
         pages_compiled: 1,
         contradictions_found: 1,
         backlinks_added: 2,
@@ -1353,6 +1414,7 @@ describe("GET /api/brain/dream", () => {
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(data.lastRun).toMatchObject({
+      journal_slug: "journals/2026-04-18-dream-cycle",
       pages_compiled: 1,
       contradictions_found: 1,
       backlinks_added: 2,
@@ -2328,5 +2390,97 @@ describe("GET /api/brain/brief", () => {
 
     if (originalScienceSwarmDir) process.env.SCIENCESWARM_DIR = originalScienceSwarmDir;
     else delete process.env.SCIENCESWARM_DIR;
+  });
+});
+
+describe("/api/brain/research-landscape", () => {
+  beforeEach(setupBrain);
+  afterEach(teardownBrain);
+
+  it("returns the last-run pointer on GET", async () => {
+    const researchPacketsModule = await import("@/lib/research-packets");
+    vi.spyOn(researchPacketsModule, "readResearchLandscapeLastRun")
+      .mockResolvedValue({
+        timestamp: "2026-04-22T15:30:00.000Z",
+        status: "completed",
+        query: "graph neural networks",
+        packet_slug: "packets/2026-04-22-graph-neural-networks-abcd1234",
+        journal_slug: "journals/2026-04-22-graph-neural-networks-abcd1234",
+        collected_candidates: 8,
+        retained_candidates: 4,
+        duplicates_dropped: 2,
+        partial: false,
+        source_failures: [],
+      });
+    const { GET } = await import("@/app/api/brain/research-landscape/route");
+
+    const response = await GET();
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.lastRun).toEqual(
+      expect.objectContaining({
+        query: "graph neural networks",
+        packet_slug: expect.stringContaining("packets/"),
+      }),
+    );
+  });
+
+  it("runs the deterministic packet workflow on POST", async () => {
+    const researchPacketsModule = await import("@/lib/research-packets");
+    vi.spyOn(researchPacketsModule, "runResearchLandscape")
+      .mockResolvedValue({
+        status: "completed",
+        query: "graph neural networks",
+        exactTitle: undefined,
+        project: "alpha",
+        packet: {
+          slug: "packets/2026-04-22-graph-neural-networks-abcd1234",
+          diskPath: `${TEST_ROOT}/packets/2026-04-22-graph-neural-networks-abcd1234.md`,
+          title: "Research Packet: graph neural networks",
+          write_status: "persisted",
+        },
+        journal: {
+          slug: "journals/2026-04-22-graph-neural-networks-abcd1234",
+          diskPath: `${TEST_ROOT}/journals/2026-04-22-graph-neural-networks-abcd1234.md`,
+          title: "Research Landscape Journal: graph neural networks",
+          write_status: "persisted",
+        },
+        pointerPath: `${TEST_ROOT}/.research-landscape-last-run.json`,
+        sourceRuns: [],
+        collectedCandidates: 0,
+        retainedCandidates: 0,
+        duplicatesDropped: 0,
+        retainedWrites: [],
+        failures: [],
+      });
+    const { POST } = await import("@/app/api/brain/research-landscape/route");
+
+    const request = new Request("http://localhost/api/brain/research-landscape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: "graph neural networks",
+        project: "alpha",
+        sources: ["pubmed", "openalex"],
+        per_source_limit: 5,
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.status).toBe("completed");
+    expect(data.packet.slug).toContain("packets/");
+    expect(researchPacketsModule.runResearchLandscape).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "graph neural networks",
+        project: "alpha",
+        sources: ["pubmed", "openalex"],
+        perSourceLimit: 5,
+      }),
+      expect.objectContaining({
+        brainRoot: TEST_ROOT,
+      }),
+    );
   });
 });

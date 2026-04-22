@@ -169,6 +169,8 @@ type BrainRadarStatus = {
   age_ms: number;
   stale: boolean;
   schedule_interval_ms: number;
+  briefing_slug?: string;
+  journal_slug?: string;
 };
 
 type BrainBootstrapState =
@@ -518,6 +520,20 @@ function parseExplicitCaptureIntent(
     { pattern: /^\s*decision\s*:\s*([\s\S]+)$/i, kind: "decision" },
     { pattern: /^\s*hypothesis\s*:\s*([\s\S]+)$/i, kind: "hypothesis" },
     { pattern: /^\s*(?:task|todo)\s*:\s*([\s\S]+)$/i, kind: "task" },
+    { pattern: /^\s*survey\s*:\s*([\s\S]+)$/i, kind: "survey" },
+    { pattern: /^\s*method\s*:\s*([\s\S]+)$/i, kind: "method" },
+    {
+      pattern: /^\s*(?:original\s+synthesis|synthesis)\s*:\s*([\s\S]+)$/i,
+      kind: "original_synthesis",
+    },
+    {
+      pattern: /^\s*(?:research\s+packet|packet)\s*:\s*([\s\S]+)$/i,
+      kind: "research_packet",
+    },
+    {
+      pattern: /^\s*(?:overnight\s+journal|journal)\s*:\s*([\s\S]+)$/i,
+      kind: "overnight_journal",
+    },
   ];
 
   for (const { pattern, kind } of patterns) {
@@ -532,7 +548,20 @@ function parseExplicitCaptureIntent(
 }
 
 function formatCaptureKind(kind: CaptureKind): string {
-  return kind.slice(0, 1).toUpperCase() + kind.slice(1);
+  const labels: Record<CaptureKind, string> = {
+    note: "Note",
+    observation: "Observation",
+    decision: "Decision",
+    hypothesis: "Hypothesis",
+    task: "Task",
+    survey: "Survey",
+    method: "Method",
+    original_synthesis: "Original synthesis",
+    research_packet: "Research packet",
+    overnight_journal: "Overnight journal",
+  };
+
+  return labels[kind];
 }
 
 function isCaretOnFirstLine(element: HTMLTextAreaElement): boolean {
@@ -1224,6 +1253,9 @@ function ProjectPageContent() {
     conversationId,
     artifactProvenance,
   } = useUnifiedChat(projectName);
+  const activeAssistantMessageId = isStreaming
+    ? [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null
+    : null;
   // Merge workspace files with gbrain-backed artifact nodes.
   const mergedFileTree: FileNode[] = useMemo(() => {
     if (gbrainNodes.length === 0) return workspaceTree as FileNode[];
@@ -3799,10 +3831,25 @@ function ProjectPageContent() {
                                     ? msg.thinking
                                     : undefined
                                 }
+                                activityLog={
+                                  firstRenderedBubbleIndex === i
+                                    ? msg.activityLog
+                                    : undefined
+                                }
+                                progressLog={
+                                  firstRenderedBubbleIndex === i
+                                    ? msg.progressLog
+                                    : undefined
+                                }
                                 channel={msg.channel}
                                 userName={msg.userName}
                                 timestamp={msg.timestamp}
-                                isStreaming={false}
+                                isStreaming={
+                                  msg.role === "assistant"
+                                  && msg.id === activeAssistantMessageId
+                                  && firstRenderedBubbleIndex === i
+                                }
+                                projectId={projectName}
                                 taskPhases={
                                   firstRenderedBubbleIndex === i
                                     ? msg.taskPhases
@@ -3823,14 +3870,15 @@ function ProjectPageContent() {
                             role={msg.role}
                             content={msg.content}
                             thinking={msg.thinking}
+                            activityLog={msg.activityLog}
+                            progressLog={msg.progressLog}
                             channel={msg.channel}
                             userName={msg.userName}
                             timestamp={msg.timestamp}
-                            isStreaming={
-                              msg.role === "assistant" && msg.content === ""
-                            }
+                            isStreaming={msg.role === "assistant" && msg.id === activeAssistantMessageId}
                             steps={msg.steps}
                             taskPhases={msg.taskPhases}
+                            projectId={projectName}
                           />
                           {voiceSupported &&
                             msg.role === "assistant" &&

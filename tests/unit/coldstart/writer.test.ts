@@ -213,6 +213,29 @@ describe("createWikiPageFromText", () => {
     const second = await createWikiPageFromText(config, makeMockLLM(), file, "note");
     expect(second).toBeNull();
   });
+
+  it("threads the active project slug into mirrored page frontmatter", async () => {
+    const config = makeConfig();
+    const file = makeFile("notes/project-memory.md", "# Memory\nbody", "note");
+    const gbrainCalls: Array<{ slug: string; content: string }> = [];
+    const attached: IngestInputFile[] = [];
+
+    const pagePath = await importSingleFile(config, makeMockLLM(), file, {
+      enableGbrain: true,
+      gbrain: fakeGbrain(gbrainCalls),
+      ingestService: fakeIngestService(attached),
+      uploadedBy: "@writer-test",
+      projectSlug: "project-alpha",
+    });
+
+    expect(pagePath).toBeTruthy();
+    const pageContent = readFileSync(join(brainRoot, pagePath!), "utf-8");
+    expect(pageContent).toContain("project: project-alpha");
+    expect(pageContent).toContain("- project-alpha");
+    expect(gbrainCalls[0]?.content).toContain("project: project-alpha");
+    expect(attached[0]?.project).toBe("project-alpha");
+    expect(attached[0]?.filename).toBe("docs/project-memory.md");
+  });
 });
 
 // ── createPaperPageFromPdf ────────────────────────────

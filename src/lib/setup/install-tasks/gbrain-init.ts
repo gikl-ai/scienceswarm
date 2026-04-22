@@ -8,6 +8,7 @@ import {
   defaultInstallerEnvironment,
   type InstallError,
 } from "@/lib/setup/gbrain-installer";
+import { normalizeBrainPreset } from "@/brain/presets/types";
 import { initBrain } from "@/brain/init";
 import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import type { InstallTask, TaskYield } from "./types";
@@ -25,7 +26,12 @@ export const gbrainInitTask: InstallTask = {
     const brainRoot = getScienceSwarmBrainRoot();
     let failure: TaskYield | null = null;
     for await (const event of runInstaller(
-      { repoRoot: input.repoRoot, brainRoot, skipNetworkCheck: true },
+      {
+        repoRoot: input.repoRoot,
+        brainRoot,
+        brainPreset: normalizeBrainPreset(input.brainPreset),
+        skipNetworkCheck: true,
+      },
       env,
     )) {
       if (event.type === "step" && event.status === "failed" && event.error) {
@@ -48,6 +54,7 @@ export const gbrainInitTask: InstallTask = {
       initBrain({
         root: brainRoot,
         name: input.handle,
+        brainPreset: normalizeBrainPreset(input.brainPreset),
       });
     } catch (err) {
       yield {

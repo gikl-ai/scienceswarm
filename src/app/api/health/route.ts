@@ -21,6 +21,7 @@ import {
 import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import { getStructuredCritiqueConfigStatus } from "@/lib/structured-critique-config";
 import { getCurrentLlmRuntimeEnv } from "@/lib/runtime-saved-env";
+import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 
 interface UserHandleStatus {
   configured: boolean;
@@ -421,14 +422,19 @@ export async function GET(): Promise<Response> {
     };
   })();
 
-  const handleValue = process.env.SCIENCESWARM_USER_HANDLE?.trim() ?? "";
-  const scienceswarmUserHandle: UserHandleStatus = handleValue
-    ? { configured: true, value: handleValue }
-    : {
-        configured: false,
-        message:
-          "SCIENCESWARM_USER_HANDLE is not set. Every gbrain write needs an author handle; export it in your shell or .env (e.g. @scienceswarm-demo) before running an audit-revise session.",
-      };
+  let scienceswarmUserHandle: UserHandleStatus;
+  try {
+    scienceswarmUserHandle = {
+      configured: true,
+      value: getCurrentUserHandle(),
+    };
+  } catch {
+    scienceswarmUserHandle = {
+      configured: false,
+      message:
+        "SCIENCESWARM_USER_HANDLE is not set. Every gbrain write needs an author handle; export it in your shell or .env (e.g. @scienceswarm-demo) before running an audit-revise session.",
+    };
+  }
 
   const body: HealthResponse = {
     agent,

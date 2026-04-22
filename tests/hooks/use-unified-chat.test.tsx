@@ -28,6 +28,9 @@ function ChatHarness({ projectName }: { projectName: string }) {
   return (
     <div>
       <button onClick={() => void sendMessage("Hello from the browser")}>Send</button>
+      <button onClick={() => void sendMessage("Run the training experiment and save the report in the workspace")}>
+        Send execution request
+      </button>
       <button onClick={() => void sendMessage("Second queued message")}>Send second</button>
       <button onClick={() => void sendMessage("Review @Example Paper for me")}>Send explicit file</button>
       <button onClick={() => void sendMessage("Describe how all files are synchronized")}>Send broad all files</button>
@@ -103,6 +106,14 @@ function ChatHarness({ projectName }: { projectName: string }) {
       </div>
       <div data-testid="thinking-log">
         {messages.map((message) => `${message.role}:${message.thinking || ""}`).join("\n")}
+      </div>
+      <div data-testid="activity-log">
+        {messages.map((message) => `${message.role}:${(message.activityLog || []).join(" | ")}`).join("\n")}
+      </div>
+      <div data-testid="progress-log">
+        {messages.map((message) =>
+          `${message.role}:${(message.progressLog || []).map((entry) => `${entry.kind}:${entry.text}`).join(" | ")}`
+        ).join("\n")}
       </div>
       <div data-testid="phase-log">
         {messages.map((message) =>
@@ -991,6 +1002,103 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("artifact-log").textContent).toContain("figures/r3-chart.jpg:Hello from the browser:OpenClaw CLI");
       expect(screen.getByTestId("generated-artifact-log").textContent).toContain("figures/r3-chart.jpg");
       expect(screen.getByTestId("generated-artifact-log").textContent).toContain("figures/r3-chart.jpg");
+    });
+  });
+
+  it("suppresses duplicate polled user echoes that mirror the local web turn", async () => {
+    const scheduledIntervals: Array<() => void | Promise<void>> = [];
+    vi.spyOn(globalThis, "setInterval").mockImplementation(((
+      callback: TimerHandler,
+    ) => {
+      if (typeof callback === "function") {
+        scheduledIntervals.push(callback as () => void | Promise<void>);
+      }
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof setInterval);
+
+    const duplicateTimestamp = new Date().toISOString();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+        });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return Response.json(
+          {
+            response: "Initial assistant response.",
+            conversationId: "web:alpha-project:session-1",
+            messages: [],
+          },
+          { headers: { "X-Chat-Backend": "openclaw", "X-Chat-Mode": "reasoning" } },
+        );
+      }
+
+      if (url.startsWith("/api/chat/unified?action=poll")) {
+        return Response.json({
+          backend: "openclaw",
+          messages: [
+            {
+              id: "remote-echo-user",
+              role: "user",
+              content: "Hello from the browser",
+              timestamp: duplicateTimestamp,
+            },
+          ],
+        });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Initial assistant response.");
+      expect(screen.getByTestId("message-count").textContent).toBe("4");
+    });
+
+    await act(async () => {
+      for (const callback of scheduledIntervals) {
+        await callback?.();
+      }
+    });
+
+    await waitFor(() => {
+      const messageLog = screen.getByTestId("message-log").textContent ?? "";
+      expect(messageLog.match(/user:Hello from the browser/g)?.length ?? 0).toBe(1);
+      expect(screen.getByTestId("message-count").textContent).toBe("4");
     });
   });
 
@@ -1990,6 +2098,92 @@ describe("useUnifiedChat persistence", () => {
     expect(secondBody.mode).toBe("reasoning");
   });
 
+  it("reuses the live OpenClaw conversationId for execution-style reasoning turns", async () => {
+    let chatRequestCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:latest"],
+          configuredLocalModel: "gemma4",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        const body = JSON.parse(String(init?.body));
+        chatRequestCount += 1;
+        return Response.json({
+          response: chatRequestCount === 1 ? "OpenClaw answer" : "Follow-up answer",
+          conversationId: body.conversationId ?? "conv-openclaw",
+          messages: [],
+        }, { headers: { "X-Chat-Backend": "openclaw" } });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Use OpenClaw tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("conv-openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Use Reasoning" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-mode").textContent).toBe("reasoning");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send execution request" }));
+
+    await waitFor(() => {
+      const chatPosts = fetchMock.mock.calls.filter(([url, init]) =>
+        url === "/api/chat/unified" && (init as RequestInit | undefined)?.method === "POST",
+      );
+      expect(chatPosts).toHaveLength(2);
+    });
+
+    const chatPosts = fetchMock.mock.calls.filter(([url, init]) =>
+      url === "/api/chat/unified" && (init as RequestInit | undefined)?.method === "POST",
+    );
+    const secondBody = JSON.parse(String((chatPosts[1]?.[1] as RequestInit | undefined)?.body));
+    expect(secondBody.mode).toBe("reasoning");
+    expect(secondBody.message).toBe("Run the training experiment and save the report in the workspace");
+    expect(secondBody.conversationId).toBe("conv-openclaw");
+  });
+
   it("refreshes the workspace tree after a direct SSE fallback completes", async () => {
     const encoder = new TextEncoder();
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -2143,6 +2337,9 @@ describe("useUnifiedChat persistence", () => {
         "assistant:Scanning the import manifest...",
       );
     });
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:thinking:Scanning the import manifest... | thinking:Counting PDF entries by committed file ref.",
+    );
     expect(screen.getByTestId("message-log").textContent).toContain(
       "assistant:I found 12 imported PDFs.",
     );
@@ -2212,6 +2409,657 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("thinking-log").textContent).not.toContain(
       "Inspecting uploaded files...\nInspecting uploaded files...",
     );
+  });
+
+  it("captures OpenClaw gateway session.message thinking and activity details", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "session.message",
+              payload: {
+                message: {
+                  role: "assistant",
+                  content: [
+                    { type: "thinking", thinking: "Planning how to inspect the chart files." },
+                    { type: "tool_call", name: "read_file", input: { path: "docs/results_table.csv" } },
+                    { type: "tool_result", name: "read_file", output: "Loaded 42 rows." },
+                    { type: "text", text: "Draft answer in progress." },
+                  ],
+                },
+              },
+            },
+          },
+          { text: "Final answer" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Final answer");
+    });
+    expect(screen.getByTestId("thinking-log").textContent).toContain(
+      "assistant:Planning how to inspect the chart files.",
+    );
+    expect(screen.getByTestId("activity-log").textContent).toContain("Tool read_file:");
+    expect(screen.getByTestId("activity-log").textContent).toContain(
+      "Tool read_file result: Loaded 42 rows.",
+    );
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:thinking:Planning how to inspect the chart files. | activity:Read docs/results_table.csv",
+    );
+    expect(screen.getByTestId("progress-log").textContent).not.toContain(
+      "Read file result: Loaded 42 rows.",
+    );
+  });
+
+  it("maps structured read tool calls from the OpenClaw canvas runtime to project-facing paths", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "session.message",
+              payload: {
+                message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      type: "tool_call",
+                      name: "read",
+                      input: {
+                        path: "/Users/vajdap/.scienceswarm/openclaw/canvas/documents/cat-svg-preview/index.html",
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          { text: "Preview opened" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Preview opened");
+    });
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:activity:Read figures/cat-svg-preview/index.html",
+    );
+    expect(screen.getByTestId("activity-log").textContent).toContain(
+      "Tool read: figures/cat-svg-preview/index.html",
+    );
+  });
+
+  it("formats structured image generation tool calls without dumping raw JSON into progress", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "session.message",
+              payload: {
+                message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      type: "tool_call",
+                      name: "image_generate",
+                      input: {
+                        prompt: "A charming cat sitting and looking at the viewer, warm soft lighting.",
+                        filename: "cat-image.png",
+                        size: "1024x1024",
+                        count: 1,
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          { text: "Done" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:activity:Generate image cat-image.png (1024x1024)",
+    );
+    expect(screen.getByTestId("progress-log").textContent).not.toContain(
+      "{\"prompt\":\"A charming cat sitting and looking at the viewer, warm soft lighting.",
+    );
+    expect(screen.getByTestId("activity-log").textContent).toContain(
+      "Tool image_generate: cat-image.png (1024x1024)",
+    );
+  });
+
+  it("formats write tool calls as file actions instead of raw JSON", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "session.message",
+              payload: {
+                message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      type: "toolCall",
+                      name: "write",
+                      arguments: {
+                        path: "/Users/vajdap/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
+                        content: "#!/usr/bin/env python3\nprint('hello')\n",
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          { text: "Done" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:activity:Write scripts/generate_mouse_chasing_cat_gif.py",
+    );
+    expect(screen.getByTestId("progress-log").textContent).not.toContain(
+      "\"content\":\"#!/usr/bin/env python3",
+    );
+  });
+
+  it("formats exec tool calls with normalized project-relative commands", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "session.message",
+              payload: {
+                message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      type: "toolCall",
+                      name: "exec",
+                      arguments: {
+                        cmd:
+                          "/usr/local/Caskroom/miniforge/base/bin/python3 " +
+                          "/Users/vajdap/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          { text: "Done" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:activity:Run python3 scripts/generate_mouse_chasing_cat_gif.py",
+    );
+    expect(screen.getByTestId("progress-log").textContent).not.toContain(
+      "/usr/local/Caskroom/miniforge/base/bin/python3",
+    );
+    expect(screen.getByTestId("progress-log").textContent).not.toContain(
+      "/Users/vajdap/.scienceswarm/projects/alpha-project/scripts/generate_mouse_chasing_cat_gif.py",
+    );
+  });
+
+  it("surfaces update_plan steps as readable progress entries", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "session.message",
+              payload: {
+                message: {
+                  role: "toolResult",
+                  toolName: "update_plan",
+                  content: [],
+                  details: {
+                    status: "updated",
+                    plan: [
+                      { step: "Inspect the imported markdown table", status: "in_progress" },
+                      { step: "Generate the output chart", status: "pending" },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+          { text: "Done" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:activity:Plan: Inspect the imported markdown table -> Generate the output chart",
+    );
+  });
+
+  it("captures gateway thinking snapshots sent through agent progress events", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "agent",
+              payload: {
+                stream: "thinking",
+                data: {
+                  text: "Inspecting the imported project manifest.",
+                },
+              },
+            },
+          },
+          { text: "Done" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+    expect(screen.getByTestId("thinking-log").textContent).toContain(
+      "assistant:Inspecting the imported project manifest.",
+    );
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:thinking:Inspecting the imported project manifest.",
+    );
+  });
+
+  it("captures lifecycle-only gateway progress as assistant activity", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "agent",
+              payload: {
+                stream: "lifecycle",
+                data: {
+                  phase: "start",
+                },
+              },
+            },
+          },
+          {
+            progress: {
+              method: "agent",
+              payload: {
+                stream: "assistant",
+                data: {
+                  text: "Working on it",
+                  delta: "Working on it",
+                },
+              },
+            },
+          },
+          {
+            progress: {
+              method: "agent",
+              payload: {
+                stream: "lifecycle",
+                data: {
+                  phase: "end",
+                },
+              },
+            },
+          },
+          { text: "Done" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+    expect(screen.getByTestId("activity-log").textContent).toContain(
+      "assistant:Turn started | Turn finished",
+    );
+    expect(screen.getByTestId("progress-log").textContent).not.toContain("Turn started");
+    expect(screen.getByTestId("progress-log").textContent).not.toContain("Turn finished");
   });
 
   it("automatically refreshes the workspace tree while the project view stays open", async () => {

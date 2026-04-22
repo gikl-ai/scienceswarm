@@ -771,6 +771,14 @@ function inferTitle(filePath: string, compiledTruth: string): string {
   return basename(filePath, ".md").replace(/[-_]/g, " ");
 }
 
+function matchesPathSegment(path: string, segment: string): boolean {
+  return (
+    path === segment ||
+    path.startsWith(`${segment}/`) ||
+    path.includes(`/${segment}/`)
+  );
+}
+
 function inferContentType(type: string, slug: string): ContentType {
   const normalized = type as ContentType;
   const knownTypes: ContentType[] = [
@@ -785,10 +793,17 @@ function inferContentType(type: string, slug: string): ContentType {
     "web",
     "voice",
     "concept",
+    "topic",
+    "survey",
+    "method",
     "project",
     "decision",
     "task",
     "artifact",
+    "original_synthesis",
+    "research_packet",
+    "overnight_journal",
+    "job_run",
     "frontier_item",
     "person",
   ];
@@ -798,18 +813,26 @@ function inferContentType(type: string, slug: string): ContentType {
   }
 
   const lower = slug.toLowerCase();
-  if (lower.includes("/projects/") || lower.includes("/project/")) return "project";
-  if (lower.includes("/papers/")) return "paper";
-  if (lower.includes("/experiments/")) return "experiment";
-  if (lower.includes("/hypotheses/")) return "hypothesis";
-  if (lower.includes("/decisions/")) return "decision";
-  if (lower.includes("/tasks/")) return "task";
-  if (lower.includes("/artifacts/")) return "artifact";
-  if (lower.includes("/frontier/")) return "frontier_item";
-  if (lower.includes("/observations/")) return "observation";
-  if (lower.includes("/people/")) return "person";
-  if (lower.includes("/data/") || lower.includes("/datasets/")) return "data";
-  if (lower.includes("/web/")) return "web";
-  if (lower.includes("/voice/")) return "voice";
+  if (matchesPathSegment(lower, "projects") || matchesPathSegment(lower, "project")) return "project";
+  if (matchesPathSegment(lower, "papers")) return "paper";
+  if (matchesPathSegment(lower, "experiments")) return "experiment";
+  if (matchesPathSegment(lower, "hypotheses")) return "hypothesis";
+  if (matchesPathSegment(lower, "topics")) return "topic";
+  if (matchesPathSegment(lower, "decisions")) return "decision";
+  if (matchesPathSegment(lower, "tasks")) return "task";
+  if (matchesPathSegment(lower, "surveys")) return "survey";
+  if (matchesPathSegment(lower, "methods")) return "method";
+  if (matchesPathSegment(lower, "originals")) return "original_synthesis";
+  if (matchesPathSegment(lower, "packets")) return "research_packet";
+  if (matchesPathSegment(lower, "journals")) return "overnight_journal";
+  if (matchesPathSegment(lower, "jobs")) return "job_run";
+  if (matchesPathSegment(lower, "artifacts")) return "artifact";
+  if (matchesPathSegment(lower, "frontier")) return "frontier_item";
+  if (matchesPathSegment(lower, "observations")) return "observation";
+  if (matchesPathSegment(lower, "people")) return "person";
+  if (matchesPathSegment(lower, "data") || matchesPathSegment(lower, "datasets")) return "data";
+  if (matchesPathSegment(lower, "web")) return "web";
+  if (matchesPathSegment(lower, "voice")) return "voice";
+
   return "concept";
 }

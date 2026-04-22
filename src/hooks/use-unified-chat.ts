@@ -6,6 +6,7 @@ import {
   normalizeArtifactProvenanceEntries,
   type ArtifactProvenanceEntry,
 } from "@/lib/artifact-provenance";
+import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
 import { looksLikeSlashCommandInput } from "@/lib/openclaw/slash-commands";
 
 import type { Step } from "@/components/research/step-cards";
@@ -17,6 +18,8 @@ export interface Message {
   role: "user" | "assistant" | "system";
   content: string;
   thinking?: string;
+  activityLog?: string[];
+  progressLog?: MessageProgressEntry[];
   timestamp: Date;
   chatMode?: ChatMode;
   channel?: string;
@@ -39,6 +42,11 @@ export interface ChatTaskPhase {
   id: string;
   label: string;
   status: "pending" | "active" | "completed" | "failed";
+}
+
+export interface MessageProgressEntry {
+  kind: "thinking" | "activity";
+  text: string;
 }
 
 export interface GeneratedArtifact {
@@ -98,6 +106,8 @@ interface StoredMessage {
   role: Message["role"];
   content: string;
   thinking?: string;
+  activityLog?: string[];
+  progressLog?: MessageProgressEntry[];
   timestamp: string;
   chatMode?: ChatMode;
   channel?: string;
@@ -267,7 +277,14 @@ function normalizeProjectChatError(message: string, projectName: string): string
 
 function removeEmptyAssistantPlaceholder(messages: Message[], assistantId: string): Message[] {
   const msg = messages.find((m) => m.id === assistantId);
-  if (msg && !msg.content && !msg.thinking && !msg.taskPhases?.length) {
+  if (
+    msg
+    && !msg.content
+    && !msg.thinking
+    && !msg.activityLog?.length
+    && !msg.progressLog?.length
+    && !msg.taskPhases?.length
+  ) {
     return messages.filter((m) => m.id !== assistantId);
   }
   return messages;
@@ -335,6 +352,35 @@ function inferPolledMessageRole(message: PolledOpenClawMessage): "user" | "assis
   return "user";
 }
 
+function isLikelyDuplicatePolledUserMessage(
+  existingMessages: Message[],
+  candidate: Message,
+): boolean {
+  if (candidate.role !== "user") {
+    return false;
+  }
+
+  const candidateContent = candidate.content.trim();
+  if (candidateContent.length === 0) {
+    return false;
+  }
+
+  const candidateTimestamp = candidate.timestamp.getTime();
+  return existingMessages.some((message) => {
+    if (message.role !== "user") {
+      return false;
+    }
+    const existingContent = message.content.trim();
+    if (existingContent !== candidateContent) {
+      return false;
+    }
+    if (message.channel && message.channel !== "web") {
+      return false;
+    }
+    return Math.abs(message.timestamp.getTime() - candidateTimestamp) <= 30_000;
+  });
+}
+
 function latestTimestampCursor(seed: string, messages: PolledOpenClawMessage[]): string {
   return messages.reduce((latest, message) => {
     if (typeof message.timestamp !== "string") {
@@ -350,6 +396,315 @@ function latestTimestampCursor(seed: string, messages: PolledOpenClawMessage[]):
     }
     return latest;
   }, seed);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function firstNonEmptyString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function collapseProgressWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function summarizeProgressValue(value: unknown, maxChars = 240): string {
+  let raw = "";
+  if (typeof value === "string") {
+    raw = value;
+  } else if (typeof value === "number" || typeof value === "boolean") {
+    raw = String(value);
+  } else if (value !== undefined) {
+    try {
+      raw = JSON.stringify(value);
+    } catch {
+      raw = String(value);
+    }
+  }
+
+  const normalized = collapseProgressWhitespace(raw);
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxChars - 1)}…`;
+}
+
+function summarizeProgressText(value: string, maxChars = 96): string {
+  const normalized = collapseProgressWhitespace(value);
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxChars - 1)}…`;
+}
+
+function inferOpenClawDisplayWorkspacePath(value: string): string | null {
+  const normalized = collapseProgressWhitespace(value.replaceAll("\\", "/"));
+  const canvasMatch = normalized.match(
+    /\/(?:\.scienceswarm\/openclaw|\.openclaw)\/canvas\/documents\/(.+)$/,
+  );
+  if (canvasMatch?.[1]) {
+    return `figures/${canvasMatch[1]}`;
+  }
+
+  const mediaMatch = normalized.match(
+    /\/(?:\.scienceswarm\/openclaw|\.openclaw)\/media\/[^/]+\/([^/]+)$/,
+  );
+  if (mediaMatch?.[1]) {
+    return `figures/${mediaMatch[1]}`;
+  }
+
+  return null;
+}
+
+function normalizeProgressCommandText(value: string, maxChars = 160): string {
+  let normalized = collapseProgressWhitespace(value);
+  normalized = normalized.replace(
+    /(^|\s)\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3(?=\s|$)/g,
+    "$1python3",
+  );
+  normalized = normalized.replace(
+    /\/(?:Users|home)\/[^/\s]+\/\.scienceswarm\/projects\/[^/\s]+\/[^\s"'`]+/g,
+    (match) => formatProgressPath(match),
+  );
+  normalized = normalized.replace(
+    /\/(?:Users|home)\/[^/\s]+\/(?:\.scienceswarm\/openclaw|\.openclaw)\/(?:media|canvas\/documents)\/[^\s"'`]+/g,
+    (match) => formatProgressPath(match),
+  );
+  return summarizeProgressText(normalized, maxChars);
+}
+
+function formatProgressPath(value: string): string {
+  const normalized = collapseProgressWhitespace(value.replaceAll("\\", "/"));
+  const openClawDisplayPath = inferOpenClawDisplayWorkspacePath(normalized);
+  if (openClawDisplayPath) {
+    return openClawDisplayPath;
+  }
+
+  const projectMatch = normalized.match(/\/\.scienceswarm\/projects\/[^/]+\/(.+)$/);
+  if (projectMatch?.[1]) {
+    return projectMatch[1];
+  }
+
+  const homeMatch = normalized.match(/^\/(?:Users|home)\/[^/]+(\/.*)$/);
+  if (homeMatch?.[1]) {
+    return `~${homeMatch[1]}`;
+  }
+
+  if (normalized.length <= 96) {
+    return normalized;
+  }
+
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length <= 4) {
+    return normalized;
+  }
+  return `…/${parts.slice(-4).join("/")}`;
+}
+
+function parsePositiveInteger(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function formatImageGenerateLabel(detail: unknown): string {
+  const detailRecord = asRecord(detail);
+  const filename = firstNonEmptyString(
+    detailRecord?.filename,
+    detailRecord?.fileName,
+    detailRecord?.output,
+    detailRecord?.path,
+  );
+  const size = firstNonEmptyString(
+    detailRecord?.size,
+    detailRecord?.dimensions,
+    detailRecord?.resolution,
+  );
+  const prompt = firstNonEmptyString(
+    detailRecord?.prompt,
+    detailRecord?.description,
+    detailRecord?.caption,
+  );
+  const count = parsePositiveInteger(detailRecord?.count);
+
+  let label = filename ? `Generate image ${filename}` : "Generate image";
+  const qualifiers: string[] = [];
+
+  if (size) {
+    qualifiers.push(size);
+  }
+  if (count !== null && count > 1) {
+    qualifiers.push(`${count} images`);
+  }
+
+  if (qualifiers.length > 0) {
+    label += ` (${qualifiers.join(", ")})`;
+  }
+
+  if (!filename && prompt) {
+    label += `: ${summarizeProgressText(prompt, 96)}`;
+  }
+
+  return label;
+}
+
+function formatWriteLabel(detail: unknown): string {
+  const detailRecord = asRecord(detail);
+  const path = firstNonEmptyString(
+    detailRecord?.path,
+    detailRecord?.file,
+    detailRecord?.filepath,
+    detailRecord?.target,
+  );
+  return path ? `Write ${formatProgressPath(path)}` : "Write file";
+}
+
+function formatEditLabel(detail: unknown): string {
+  const detailRecord = asRecord(detail);
+  const path = firstNonEmptyString(
+    detailRecord?.path,
+    detailRecord?.file,
+    detailRecord?.filepath,
+    detailRecord?.target,
+  );
+  return path ? `Edit ${formatProgressPath(path)}` : "Edit file";
+}
+
+function formatUpdatePlanLabel(detail: unknown): string {
+  const detailRecord = asRecord(detail);
+  const rawPlan = Array.isArray(detailRecord?.plan)
+    ? detailRecord.plan
+    : Array.isArray(detail)
+      ? detail
+      : null;
+
+  if (!rawPlan) {
+    return "Update plan";
+  }
+
+  const steps = rawPlan
+    .map((entry) => {
+      const record = asRecord(entry);
+      return firstNonEmptyString(record?.step, record?.label, record?.title);
+    })
+    .filter((step): step is string => typeof step === "string" && step.trim().length > 0);
+
+  if (steps.length === 0) {
+    return "Update plan";
+  }
+
+  return `Plan: ${steps.join(" -> ")}`;
+}
+
+function formatExecLabel(detail: unknown): string {
+  const detailRecord = asRecord(detail);
+  const cmd = firstNonEmptyString(
+    detailRecord?.cmd,
+    detailRecord?.command,
+    detailRecord?.name,
+  );
+  return cmd ? `Run ${normalizeProgressCommandText(cmd)}` : "Run command";
+}
+
+function formatToolActivitySummary(
+  name: string | undefined,
+  detail: unknown,
+): string | null {
+  const normalizedToolName = name?.trim().toLowerCase();
+  const summary = summarizeProgressValue(detail);
+  const detailRecord = asRecord(detail);
+  const path = firstNonEmptyString(
+    detailRecord?.path,
+    detailRecord?.file,
+    detailRecord?.filepath,
+    detailRecord?.target,
+  );
+  switch (normalizedToolName) {
+    case "read":
+    case "read_file":
+    case "open_file":
+      return path ? formatProgressPath(path) : summary || "file";
+    case "write":
+    case "write_file":
+    case "create_file":
+      return formatWriteLabel(detail).replace(/^Write\s*/i, "").trim() || "file";
+    case "edit":
+    case "apply_patch":
+    case "replace_in_file":
+      return formatEditLabel(detail).replace(/^Edit\s*/i, "").trim() || "file";
+    case "image_generate":
+    case "generate_image":
+    case "image_generation":
+    case "tool-image-generation": {
+      const label = formatImageGenerateLabel(detail);
+      return label.replace(/^Generate image\s*/i, "").trim() || "image request";
+    }
+    case "exec":
+    case "exec_command":
+    case "process": {
+      const label = formatExecLabel(detail);
+      return label.replace(/^Run\s*/i, "").trim() || "command";
+    }
+    case "update_plan": {
+      const label = formatUpdatePlanLabel(detail);
+      return label.replace(/^Plan:\s*/i, "").trim() || "plan updated";
+    }
+    default:
+      return null;
+  }
+}
+
+function mergeStreamingText(existing: string | undefined, next: string): string {
+  const current = existing ?? "";
+  if (!next) return current;
+  if (!current) return next;
+  if (next.startsWith(current)) return next;
+  if (current.endsWith(next)) return current;
+  if (next.length > 8 && current.includes(next)) return current;
+  return current + next;
+}
+
+function extractOpenClawThinkingTextFromPart(value: unknown): string | null {
+  const candidate = asRecord(value);
+  if (!candidate) {
+    return null;
+  }
+
+  if (candidate.type === "thinking" && typeof candidate.thinking === "string") {
+    return candidate.thinking;
+  }
+
+  if (
+    (candidate.type === "reasoning" || candidate.type === "reasoning_text")
+    && typeof candidate.text === "string"
+  ) {
+    return candidate.text;
+  }
+
+  if (
+    (candidate.type === "reasoning" || candidate.type === "reasoning_text")
+    && typeof candidate.reasoning === "string"
+  ) {
+    return candidate.reasoning;
+  }
+
+  return null;
 }
 
 function inferConversationBackend(
@@ -390,6 +745,8 @@ const MAX_KEEPALIVE_MESSAGES = 50;
 const WORKSPACE_TREE_REFRESH_MS = 15000;
 const WORKSPACE_WATCH_POLL_MS = 5000;
 const MAX_GENERATED_ARTIFACTS = 50;
+const MAX_ACTIVITY_LOG_LINES = 48;
+const MAX_PROGRESS_LOG_ENTRIES = 64;
 const LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES = 8;
 const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 8_000;
 const SLASH_COMMAND_START_TIMEOUT_MS = 15_000;
@@ -422,6 +779,489 @@ const PERSISTABLE_NOISE_PREFIXES = [
   "__FILE_PREVIEW__:",
   "__FILE_STATIC__:",
 ];
+
+function appendActivityLog(
+  existing: string[] | undefined,
+  nextLines: string[],
+): string[] | undefined {
+  const merged = existing ? [...existing] : [];
+  for (const rawLine of nextLines) {
+    const line = collapseProgressWhitespace(rawLine);
+    if (!line) continue;
+    if (merged.at(-1) === line) continue;
+    merged.push(line);
+  }
+  return merged.length > 0 ? merged.slice(-MAX_ACTIVITY_LOG_LINES) : existing;
+}
+
+function splitProgressText(value: string): string[] {
+  return value
+    .replace(/\r\n/g, "\n")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function appendProgressLog(
+  existing: MessageProgressEntry[] | undefined,
+  nextEntries: MessageProgressEntry[],
+): MessageProgressEntry[] | undefined {
+  const merged = existing ? [...existing] : [];
+
+  for (const entry of nextEntries) {
+    const text = entry.text.trim();
+    if (!text) continue;
+    const normalizedEntry: MessageProgressEntry = {
+      kind: entry.kind,
+      text,
+    };
+    const last = merged.at(-1);
+    if (shouldSuppressProgressEntry(last, normalizedEntry)) {
+      continue;
+    }
+    if (last && last.kind === normalizedEntry.kind && last.text === normalizedEntry.text) {
+      continue;
+    }
+    merged.push(normalizedEntry);
+  }
+
+  return merged.length > 0 ? merged.slice(-MAX_PROGRESS_LOG_ENTRIES) : existing;
+}
+
+function buildThinkingProgressEntries(value: string): MessageProgressEntry[] {
+  return splitProgressText(value).map((text) => ({
+    kind: "thinking" as const,
+    text,
+  }));
+}
+
+function buildThinkingProgressDeltaEntries(
+  previousThinking: string | undefined,
+  nextThinking: string,
+  replaceThinking: boolean,
+): MessageProgressEntry[] {
+  const previous = previousThinking ?? "";
+  if (!nextThinking.trim()) {
+    return [];
+  }
+
+  if (!replaceThinking) {
+    return buildThinkingProgressEntries(nextThinking);
+  }
+
+  if (!previous) {
+    return buildThinkingProgressEntries(nextThinking);
+  }
+
+  if (nextThinking === previous) {
+    return [];
+  }
+
+  if (nextThinking.startsWith(previous)) {
+    return buildThinkingProgressEntries(nextThinking.slice(previous.length));
+  }
+
+  return buildThinkingProgressEntries(nextThinking);
+}
+
+function buildActivityProgressEntries(lines: string[]): MessageProgressEntry[] {
+  return lines
+    .map((line) => collapseProgressWhitespace(line))
+    .filter((line) => line.length > 0)
+    .map((text) => ({
+      kind: "activity" as const,
+      text,
+    }));
+}
+
+function buildOptionalActivityProgressEntries(
+  lines: Array<string | null | undefined>,
+): MessageProgressEntry[] {
+  return buildActivityProgressEntries(
+    lines.filter((line): line is string => typeof line === "string" && line.trim().length > 0),
+  );
+}
+
+function isConcreteActionWithPrefix(text: string, prefix: string, generic: string): boolean {
+  return text.startsWith(prefix) && text !== generic;
+}
+
+function shouldSuppressProgressEntry(
+  previous: MessageProgressEntry | undefined,
+  next: MessageProgressEntry,
+): boolean {
+  if (next.kind !== "activity") {
+    return false;
+  }
+
+  if (next.text === "Turn started" || next.text === "Turn finished") {
+    return true;
+  }
+
+  const previousText = previous?.kind === "activity" ? previous.text : undefined;
+  if (!previousText) {
+    return false;
+  }
+
+  return (
+    (next.text === "Run command" && isConcreteActionWithPrefix(previousText, "Run ", "Run command")) ||
+    (next.text === "Write file" && isConcreteActionWithPrefix(previousText, "Write ", "Write file")) ||
+    (next.text === "Edit file" && isConcreteActionWithPrefix(previousText, "Edit ", "Edit file")) ||
+    (next.text === "List files" && isConcreteActionWithPrefix(previousText, "List ", "List files")) ||
+    (next.text === "Search code" && isConcreteActionWithPrefix(previousText, "Search ", "Search code"))
+  );
+}
+
+function formatToolActivityLine(
+  phase: string | undefined,
+  name: string | undefined,
+  detail: unknown,
+): string {
+  const toolName = name?.trim() || "tool";
+  const summary = formatToolActivitySummary(name, detail) ?? summarizeProgressValue(detail);
+
+  if (phase === "result" || phase === "done" || phase === "end") {
+    return summary
+      ? `Tool ${toolName} result: ${summary}`
+      : `Tool ${toolName} finished`;
+  }
+
+  if (phase === "error" || phase === "failed") {
+    return summary
+      ? `Tool ${toolName} failed: ${summary}`
+      : `Tool ${toolName} failed`;
+  }
+
+  return summary
+    ? `Tool ${toolName}: ${summary}`
+    : `Tool ${toolName} started`;
+}
+
+function formatToolProgressEntry(
+  phase: string | undefined,
+  name: string | undefined,
+  detail: unknown,
+): string | null {
+  const toolName = name?.trim() || "tool";
+  const normalizedToolName = toolName.toLowerCase();
+  const detailRecord = asRecord(detail);
+  const path = firstNonEmptyString(
+    detailRecord?.path,
+    detailRecord?.file,
+    detailRecord?.filepath,
+    detailRecord?.target,
+  );
+  const pattern = firstNonEmptyString(
+    detailRecord?.pattern,
+    detailRecord?.query,
+    detailRecord?.q,
+    detailRecord?.search,
+  );
+  const summary = summarizeProgressValue(detail, 320);
+
+  let action: string;
+  switch (normalizedToolName) {
+    case "read":
+    case "read_file":
+    case "open_file":
+      action = path ? `Read ${formatProgressPath(path)}` : "Read file";
+      break;
+    case "write":
+    case "write_file":
+    case "create_file":
+      action = formatWriteLabel(detail);
+      break;
+    case "edit":
+    case "apply_patch":
+    case "replace_in_file":
+      action = formatEditLabel(detail);
+      break;
+    case "image_generate":
+    case "generate_image":
+    case "image_generation":
+    case "tool-image-generation":
+      action = formatImageGenerateLabel(detail);
+      break;
+    case "search":
+    case "grep":
+    case "rg":
+    case "search_code":
+      action = path && pattern
+        ? `Search ${pattern} in ${formatProgressPath(path)}`
+        : pattern
+          ? `Search ${pattern}`
+          : path
+            ? `Search in ${formatProgressPath(path)}`
+            : "Search code";
+      break;
+    case "exec":
+    case "exec_command":
+    case "process":
+      action = formatExecLabel(detail);
+      break;
+    case "list_dir":
+    case "ls":
+      action = path ? `List ${formatProgressPath(path)}` : "List files";
+      break;
+    case "update_plan":
+      action = formatUpdatePlanLabel(detail);
+      break;
+    default:
+      action = summary
+        ? `Use ${toolName}: ${summary}`
+        : `Use ${toolName}`;
+      break;
+  }
+
+  if (normalizedToolName === "update_plan") {
+    if (phase === "error" || phase === "failed") {
+      return summary && !action.includes(summary)
+        ? `${action} failed: ${summary}`
+        : `${action} failed`;
+    }
+    return action === "Update plan" ? null : action;
+  }
+
+  if (phase === "result" || phase === "done" || phase === "end") {
+    return null;
+  }
+
+  if (phase === "error" || phase === "failed") {
+    return summary && !action.includes(summary)
+      ? `${action} failed: ${summary}`
+      : `${action} failed`;
+  }
+
+  return action;
+}
+
+function formatLifecycleActivityLine(
+  phase: string | undefined,
+  detail: unknown,
+): string | null {
+  const summary = summarizeProgressValue(detail);
+  switch (phase) {
+    case "start":
+      return summary ? `Turn started: ${summary}` : "Turn started";
+    case "end":
+      return summary ? `Turn finished: ${summary}` : "Turn finished";
+    case "error":
+    case "failed":
+      return summary ? `Turn failed: ${summary}` : "Turn failed";
+    default:
+      return summary ? `Lifecycle ${phase || "update"}: ${summary}` : null;
+  }
+}
+
+function formatLifecycleProgressLine(
+  phase: string | undefined,
+  detail: unknown,
+): string | null {
+  const summary = summarizeProgressValue(detail);
+  switch (phase) {
+    case "error":
+    case "failed":
+      return summary ? `Turn failed: ${summary}` : "Turn failed";
+    default:
+      return null;
+  }
+}
+
+type OpenClawProgressUpdate = {
+  thinking?: string;
+  assistantText?: string;
+  activityLines: string[];
+  progressEntries: MessageProgressEntry[];
+};
+
+function mergeOpenClawProgressUpdate(
+  left: OpenClawProgressUpdate,
+  right: OpenClawProgressUpdate,
+): OpenClawProgressUpdate {
+  return {
+    thinking: right.thinking
+      ? mergeStreamingText(left.thinking, right.thinking)
+      : left.thinking,
+    assistantText: right.assistantText
+      ? mergeStreamingText(left.assistantText, right.assistantText)
+      : left.assistantText,
+    activityLines: [...left.activityLines, ...right.activityLines],
+    progressEntries: [...left.progressEntries, ...right.progressEntries],
+  };
+}
+
+function extractSessionMessageProgressUpdate(
+  payload: Record<string, unknown>,
+): OpenClawProgressUpdate {
+  const message = asRecord(payload.message);
+  const content = Array.isArray(message?.content) ? message.content : null;
+  const messageRole = typeof message?.role === "string" ? message.role.toLowerCase() : "";
+  if (!content || messageRole === "user" || messageRole === "system") {
+    return { activityLines: [], progressEntries: [] };
+  }
+
+  const update: OpenClawProgressUpdate = { activityLines: [], progressEntries: [] };
+
+  if (messageRole === "toolresult" || messageRole === "tool_result") {
+    const toolName = firstNonEmptyString(message?.toolName, message?.tool_name, message?.name);
+    const textParts = content
+      .map((entry) => {
+        const part = asRecord(entry);
+        return firstNonEmptyString(part?.text, part?.message, part?.content);
+      })
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+    const detail = textParts.length > 0 ? textParts.join("\n") : (message?.details ?? undefined);
+
+    if (detail || toolName) {
+      update.activityLines.push(
+        formatToolActivityLine("result", toolName, detail),
+      );
+      update.progressEntries.push(
+        ...buildOptionalActivityProgressEntries([
+          formatToolProgressEntry("result", toolName, detail),
+        ]),
+      );
+    }
+
+    return update;
+  }
+
+  for (const entry of content) {
+    const part = asRecord(entry);
+    if (!part) {
+      continue;
+    }
+
+    const thinkingText = extractOpenClawThinkingTextFromPart(part);
+    if (thinkingText) {
+      update.thinking = mergeStreamingText(update.thinking, thinkingText);
+      update.progressEntries.push(...buildThinkingProgressEntries(thinkingText));
+      continue;
+    }
+
+    const type = typeof part.type === "string" ? part.type : "";
+    if (type === "text" && typeof part.text === "string") {
+      update.assistantText = mergeStreamingText(update.assistantText, part.text);
+      continue;
+    }
+
+    if (/tool/i.test(type)) {
+      const toolPhase = /result|output/i.test(type) ? "result" : undefined;
+      const toolName = firstNonEmptyString(part.name, part.tool, part.tool_name);
+      const detail =
+        /result|output/i.test(type)
+          ? (part.output ?? part.result ?? part.content ?? part.text)
+          : (part.input ?? part.args ?? part.arguments ?? part.text ?? part.content);
+      update.activityLines.push(
+        formatToolActivityLine(
+          toolPhase,
+          toolName,
+          detail,
+        ),
+      );
+      update.progressEntries.push(
+        ...buildOptionalActivityProgressEntries([
+          formatToolProgressEntry(toolPhase, toolName, detail),
+        ]),
+      );
+      continue;
+    }
+
+    const genericText = firstNonEmptyString(part.text, part.message, part.content);
+    if (genericText) {
+      const activityLine = type ? `${type}: ${genericText}` : genericText;
+      update.activityLines.push(activityLine);
+      update.progressEntries.push(...buildActivityProgressEntries([activityLine]));
+    }
+  }
+
+  return update;
+}
+
+function extractOpenClawProgressUpdate(progress: {
+  method?: string;
+  payload?: unknown;
+}): OpenClawProgressUpdate {
+  const payload = asRecord(progress.payload);
+  if (!payload) {
+    return { activityLines: [], progressEntries: [] };
+  }
+
+  let update: OpenClawProgressUpdate = {
+    activityLines: [],
+    progressEntries: [],
+  };
+
+  if (progress.method === "session.message") {
+    update = mergeOpenClawProgressUpdate(
+      update,
+      extractSessionMessageProgressUpdate(payload),
+    );
+  }
+
+  const stream = firstNonEmptyString(payload.stream);
+  const data = asRecord(payload.data);
+
+  if (stream === "thinking" || stream === "reasoning" || stream === "reasoning_text") {
+    const nextThinking = firstNonEmptyString(data?.delta, data?.text, data?.reasoning);
+    if (nextThinking) {
+      update.thinking = mergeStreamingText(update.thinking, nextThinking);
+      update.progressEntries.push(...buildThinkingProgressEntries(nextThinking));
+    }
+  } else if (stream === "assistant") {
+    const nextAssistantText = firstNonEmptyString(data?.delta, data?.text);
+    if (nextAssistantText) {
+      update.assistantText = mergeStreamingText(update.assistantText, nextAssistantText);
+    }
+  } else if (stream === "tool") {
+    const toolPhase = firstNonEmptyString(data?.phase);
+    const toolName = firstNonEmptyString(data?.name);
+    const toolDetail =
+      data?.phase === "result" || data?.phase === "done"
+        ? (data?.output ?? data?.result ?? data?.text)
+        : (data?.args ?? data?.input ?? data?.text);
+    const activityLine = formatToolActivityLine(
+      toolPhase,
+      toolName,
+      toolDetail,
+    );
+    update.activityLines.push(activityLine);
+    update.progressEntries.push(
+      ...buildOptionalActivityProgressEntries([
+        formatToolProgressEntry(toolPhase, toolName, toolDetail),
+      ]),
+    );
+  } else if (stream === "lifecycle") {
+    const lifecyclePhase = firstNonEmptyString(data?.phase);
+    const lifecycleDetail = firstNonEmptyString(data?.text, data?.message, payload.text, payload.content);
+    const lifecycleLine = formatLifecycleActivityLine(
+      lifecyclePhase,
+      lifecycleDetail,
+    );
+    if (lifecycleLine) {
+      update.activityLines.push(lifecycleLine);
+    }
+    const lifecycleProgressLine = formatLifecycleProgressLine(
+      lifecyclePhase,
+      lifecycleDetail,
+    );
+    if (lifecycleProgressLine) {
+      update.progressEntries.push(...buildActivityProgressEntries([lifecycleProgressLine]));
+    }
+  }
+
+  const payloadNarration = firstNonEmptyString(
+    payload.text,
+    payload.content,
+    typeof payload.message === "string" ? payload.message : undefined,
+  );
+  if (payloadNarration) {
+    update.activityLines.push(payloadNarration);
+    update.progressEntries.push(...buildActivityProgressEntries([payloadNarration]));
+  }
+
+  return update;
+}
 
 type RestoredChatState = {
   messages: Message[];
@@ -500,6 +1340,8 @@ function isPersistableMessage(message: Message): boolean {
     message.role === "assistant"
     && message.content.trim().length === 0
     && !message.thinking?.trim().length
+    && !message.activityLog?.length
+    && !message.progressLog?.length
     && !message.taskPhases?.length
   ) {
     return false;
@@ -589,6 +1431,11 @@ function restoreMessage(value: unknown): Message | null {
     || (candidate.role !== "system" && candidate.role !== "assistant" && candidate.role !== "user")
     || typeof candidate.content !== "string"
     || (candidate.thinking !== undefined && typeof candidate.thinking !== "string")
+    || (candidate.activityLog !== undefined && !Array.isArray(candidate.activityLog))
+    || (
+      candidate.progressLog !== undefined
+      && !Array.isArray(candidate.progressLog)
+    )
     || typeof candidate.timestamp !== "string"
   ) {
     return null;
@@ -604,6 +1451,8 @@ function restoreMessage(value: unknown): Message | null {
     role: candidate.role,
     content: candidate.content,
     thinking: typeof candidate.thinking === "string" ? candidate.thinking : undefined,
+    activityLog: restoreActivityLog(candidate.activityLog),
+    progressLog: restoreProgressLog(candidate.progressLog),
     timestamp,
     chatMode: normalizeChatMode(candidate.chatMode) ?? undefined,
     channel: typeof candidate.channel === "string" ? candidate.channel : undefined,
@@ -634,6 +1483,52 @@ function restoreCaptureClarification(value: unknown): CaptureClarification | und
     choices: candidate.choices,
     capturedContent: candidate.capturedContent,
   };
+}
+
+function restoreActivityLog(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const lines = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => collapseProgressWhitespace(entry))
+    .filter(Boolean);
+
+  return lines.length > 0 ? lines : undefined;
+}
+
+function restoreProgressLog(value: unknown): MessageProgressEntry[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const entries = value
+    .filter(
+      (entry): entry is Partial<MessageProgressEntry> =>
+        Boolean(entry && typeof entry === "object"),
+    )
+    .map((entry) => {
+      if (
+        (entry.kind !== "thinking" && entry.kind !== "activity")
+        || typeof entry.text !== "string"
+      ) {
+        return null;
+      }
+
+      const text = entry.text.trim();
+      if (!text) {
+        return null;
+      }
+
+      return {
+        kind: entry.kind,
+        text,
+      } satisfies MessageProgressEntry;
+    })
+    .filter((entry): entry is MessageProgressEntry => entry !== null);
+
+  return entries.length > 0 ? entries : undefined;
 }
 
 function restoreTaskPhases(value: unknown): ChatTaskPhase[] | undefined {
@@ -766,6 +1661,8 @@ function persistChat(
         role: message.role,
         content: message.content,
         thinking: message.thinking,
+        activityLog: message.activityLog,
+        progressLog: message.progressLog,
         timestamp: message.timestamp.toISOString(),
         chatMode: message.chatMode,
         channel: message.channel,
@@ -1502,7 +2399,9 @@ export function useUnifiedChat(
           setMessages((prev) => {
             const existingIds = new Set(prev.map((m) => m.id));
             const unique = polledMessages.filter(
-              (message: Message) => !existingIds.has(message.id),
+              (message: Message) =>
+                !existingIds.has(message.id)
+                && !isLikelyDuplicatePolledUserMessage(prev, message),
             );
             return unique.length > 0 ? [...prev, ...unique] : prev;
           });
@@ -1594,6 +2493,13 @@ export function useUnifiedChat(
     const decoder = new TextDecoder();
     let buffer = "";
     let streamDone = false;
+    // When the WS gateway streams progress events, the assistant content is
+    // built up incrementally from text deltas + tool/lifecycle progress
+    // lines. The final `text` payload then carries the complete response, so
+    // we replace the streamed scratchpad with the canonical text. Without
+    // any progress (CLI fallback path), we keep the existing append-only
+    // semantics so older tests / clients keep working.
+    let sawProgressEvent = false;
 
     while (!streamDone) {
       const { done, value } = await reader.read();
@@ -1620,6 +2526,68 @@ export function useUnifiedChat(
           if (typeof parsed.error === "string" && parsed.error.trim().length > 0) {
             await reader.cancel().catch(() => undefined);
             throw new Error(parsed.error);
+          }
+
+          // Handle gateway WebSocket progress events — intermediate agent
+          // activity forwarded as { progress: { type, method, payload } }.
+          // The CLI fallback never emits these, so older clients keep the
+          // existing append-only behaviour below.
+          if (
+            parsed.progress
+            && typeof parsed.progress === "object"
+            && !Array.isArray(parsed.progress)
+            && isSendContextCurrent(context)
+          ) {
+            const progress = parsed.progress as {
+              type?: string;
+              method?: string;
+              payload?: {
+                stream?: string;
+                data?: {
+                  text?: string;
+                  delta?: string;
+                  phase?: string;
+                  name?: string;
+                  toolCallId?: string;
+                  args?: string;
+                  input?: unknown;
+                  output?: string;
+                };
+                text?: string;
+                content?: string;
+                message?: string;
+              };
+            };
+            sawProgressEvent = true;
+            const progressUpdate = extractOpenClawProgressUpdate(progress);
+            if (
+              progressUpdate.thinking
+              || progressUpdate.assistantText
+              || progressUpdate.activityLines.length > 0
+              || progressUpdate.progressEntries.length > 0
+            ) {
+              applyMessagesUpdate((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        thinking: progressUpdate.thinking
+                          ? mergeStreamingText(m.thinking, progressUpdate.thinking)
+                          : m.thinking,
+                        content: progressUpdate.assistantText
+                          ? mergeStreamingText(m.content, progressUpdate.assistantText)
+                          : m.content,
+                        activityLog: progressUpdate.activityLines.length > 0
+                          ? appendActivityLog(m.activityLog, progressUpdate.activityLines)
+                          : m.activityLog,
+                        progressLog: progressUpdate.progressEntries.length > 0
+                          ? appendProgressLog(m.progressLog, progressUpdate.progressEntries)
+                          : m.progressLog,
+                      }
+                    : m,
+                ),
+              );
+            }
           }
 
           const taskPhases = restoreTaskPhases(parsed.taskPhases);
@@ -1668,21 +2636,42 @@ export function useUnifiedChat(
               || (typeof parsed.thinking === "string" && parsed.thinking.length > 0)
             )
           ) {
+            const finalText =
+              typeof parsed.text === "string" && parsed.text.length > 0
+                ? parsed.text
+                : null;
+            const replaceThinking = parsed.replaceThinking === true;
             applyMessagesUpdate((prev) =>
               prev.map((m) =>
                 m.id === assistantId
                   ? {
                       ...m,
                       content:
-                        typeof parsed.text === "string" && parsed.text.length > 0
-                          ? m.content + parsed.text
+                        finalText !== null
+                          ? sawProgressEvent
+                            // The WS gateway has been streaming deltas + tool
+                            // progress into m.content; replace the scratchpad
+                            // with the canonical sanitized response.
+                            ? finalText
+                            : m.content + finalText
                           : m.content,
                       thinking:
                         typeof parsed.thinking === "string" && parsed.thinking.length > 0
-                          ? parsed.replaceThinking === true
+                          ? replaceThinking
                             ? parsed.thinking
                             : (m.thinking || "") + parsed.thinking
                           : m.thinking,
+                      progressLog:
+                        typeof parsed.thinking === "string" && parsed.thinking.length > 0
+                          ? appendProgressLog(
+                            m.progressLog,
+                            buildThinkingProgressDeltaEntries(
+                              m.thinking,
+                              parsed.thinking,
+                              replaceThinking,
+                            ),
+                          )
+                          : m.progressLog,
                     }
                   : m
               )
@@ -1975,7 +2964,10 @@ export function useUnifiedChat(
         );
 
         try {
-          const activeConversationId = queued.context.chatMode === "openclaw-tools"
+          const shouldReuseOpenClawConversation =
+            queued.context.chatMode === "openclaw-tools" ||
+            shouldForceOpenClawToolExecution(queued.content);
+          const activeConversationId = shouldReuseOpenClawConversation
             ? getScopedConversationId(
               liveConversationIdRef.current,
               liveConversationBackendRef.current,

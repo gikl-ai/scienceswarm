@@ -1,13 +1,47 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { execFileMock, execFileSyncMock } = vi.hoisted(() => ({
-  execFileMock: vi.fn(),
-  execFileSyncMock: vi.fn(),
-}));
+const {
+  execFileMock,
+  execFileSyncMock,
+  sendMessageViaGatewayMock,
+  MockGatewayPostAckError,
+  mockIsGatewayPostAckError,
+} = vi.hoisted(() => {
+  // Hoisted post-ACK sentinel mirrors the real export. The mocked module
+  // below re-exports these so `isGatewayPostAckError(err)` keeps working in
+  // the openclaw.ts caller after the WS path fails.
+  class _MockGatewayPostAckError extends Error {
+    readonly code = "GATEWAY_POST_ACK_FAILURE" as const;
+    readonly sessionKey: string;
+    constructor(sessionKey: string, message: string, options?: { cause?: unknown }) {
+      super(message, options);
+      this.name = "GatewayPostAckError";
+      this.sessionKey = sessionKey;
+    }
+  }
+  return {
+    execFileMock: vi.fn(),
+    execFileSyncMock: vi.fn(),
+    sendMessageViaGatewayMock: vi.fn(),
+    MockGatewayPostAckError: _MockGatewayPostAckError,
+    mockIsGatewayPostAckError: (err: unknown): err is InstanceType<typeof _MockGatewayPostAckError> =>
+      err instanceof _MockGatewayPostAckError,
+  };
+});
 
 vi.mock("child_process", () => ({
   execFile: execFileMock,
   execFileSync: execFileSyncMock,
+}));
+
+// Force the WS gateway path to fail in unit tests so sendAgentMessage falls
+// back to the CLI assertions below. Without this, sendAgentMessage with a
+// `session` would try to read the local OpenClaw config + open a WS to the
+// real local gateway on the dev machine.
+vi.mock("@/lib/openclaw/gateway-ws-client", () => ({
+  sendMessageViaGateway: sendMessageViaGatewayMock,
+  GatewayPostAckError: MockGatewayPostAckError,
+  isGatewayPostAckError: mockIsGatewayPostAckError,
 }));
 
 import { getConversationMessagesSince, healthCheck, sendAgentMessage } from "@/lib/openclaw";
@@ -160,6 +194,77 @@ describe("OpenClaw healthCheck", () => {
       gateway: "ws://127.0.0.1:19002",
     });
   });
+
+  it("reports connected when status probes fail but embedded turns are ready", async () => {
+    vi.stubEnv("OPENCLAW_URL", "ws://127.0.0.1:19002/ws");
+    execFileMock
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("status unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("health unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(null, {
+          stdout: JSON.stringify({
+            resolvedDefault: "ollama/gemma4:latest",
+            auth: { missingProvidersInUse: [] },
+          }),
+          stderr: "",
+        });
+      });
+
+    await expect(healthCheck()).resolves.toEqual({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 0,
+      sessions: 0,
+    });
+  });
+
+  it("accepts prefixed JSON noise in the embedded-turn readiness probe", async () => {
+    vi.stubEnv("OPENCLAW_URL", "ws://127.0.0.1:19002/ws");
+    execFileMock
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("status unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("health unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(null, {
+          stdout: [
+            "[agents/auth-profiles] synced openai-codex credentials from external cli",
+            JSON.stringify({
+              resolvedDefault: "ollama/gemma4:latest",
+              auth: { missingProvidersInUse: [] },
+            }),
+          ].join("\n"),
+          stderr: "",
+        });
+      });
+
+    await expect(healthCheck()).resolves.toEqual({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 0,
+      sessions: 0,
+    });
+  });
 });
 
 describe("sendAgentMessage output sanitization", () => {
@@ -167,6 +272,12 @@ describe("sendAgentMessage output sanitization", () => {
     vi.unstubAllEnvs();
     execFileMock.mockReset();
     execFileSyncMock.mockReset();
+    sendMessageViaGatewayMock.mockReset();
+    // Force the WS gateway to fail so sendAgentMessage falls back to the
+    // CLI path the assertions below exercise.
+    sendMessageViaGatewayMock.mockRejectedValue(
+      new Error("mocked: gateway unavailable"),
+    );
   });
 
   it("returns only the user-facing tail after a channel marker", async () => {
@@ -321,6 +432,7 @@ describe("sendAgentMessage output sanitization", () => {
     const options = execFileMock.mock.calls[0]?.[2] as
       | { cwd?: string; env?: NodeJS.ProcessEnv }
       | undefined;
+    expect(sendMessageViaGatewayMock).not.toHaveBeenCalled();
     expect(options?.cwd).toBe(`${root}/projects/project-alpha`);
     expect(options?.env?.OPENCLAW_STATE_DIR).toBe(`${root}/openclaw`);
     expect(options?.env?.OPENCLAW_CONFIG_PATH).toBe(`${root}/openclaw/openclaw.json`);
@@ -346,6 +458,51 @@ describe("sendAgentMessage output sanitization", () => {
         session: "web:test:sanitize",
       }),
     ).resolves.toBe("Here is the answer.");
+  });
+
+  it("does NOT fall back to the CLI when the gateway accepted the message but the turn failed (post-ACK)", async () => {
+    // Regression for duplicate-delivery: if the gateway already received the
+    // message (sessions.send ACKed) and only the turn-completion wait failed
+    // (timeout, WS drop), running the CLI with the same --session-id would
+    // deliver the user message twice. The post-ACK sentinel must propagate.
+    sendMessageViaGatewayMock.mockReset();
+    sendMessageViaGatewayMock.mockRejectedValueOnce(
+      new MockGatewayPostAckError(
+        "web:test:no-double-deliver",
+        "OpenClaw gateway accepted the message but the turn timed out",
+      ),
+    );
+
+    await expect(
+      sendAgentMessage("Run a long task", {
+        agent: "main",
+        session: "web:test:no-double-deliver",
+      }),
+    ).rejects.toMatchObject({ name: "GatewayPostAckError" });
+
+    // The CLI MUST NOT have been invoked; that's how duplicate delivery
+    // would have happened.
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the CLI on a pre-ACK gateway failure (no duplicate delivery risk)", async () => {
+    // Pre-ACK failures (connect/auth/send-rpc errors) mean the gateway never
+    // received the message, so retrying via the CLI on the same session is
+    // safe. Confirm the existing fallback still works for plain Errors.
+    sendMessageViaGatewayMock.mockReset();
+    sendMessageViaGatewayMock.mockRejectedValueOnce(
+      new Error("mocked: gateway unreachable"),
+    );
+    mockExecFile("<channel|>fallback worked");
+
+    await expect(
+      sendAgentMessage("Hello", {
+        agent: "main",
+        session: "web:test:pre-ack-fallback",
+      }),
+    ).resolves.toBe("fallback worked");
+
+    expect(execFileMock).toHaveBeenCalledTimes(1);
   });
 });
 
