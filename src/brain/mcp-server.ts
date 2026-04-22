@@ -69,6 +69,10 @@ import {
   assertSafeProjectSlug,
   InvalidSlugError,
 } from "@/lib/state/project-manifests";
+import {
+  runResearchLandscape,
+  type ResearchLandscapeSource,
+} from "@/lib/research-packets";
 import { arxivFetch, arxivSearch } from "@/lib/skills/db-arxiv";
 import { biorxivFetch, biorxivSearch } from "@/lib/skills/db-biorxiv";
 import { chemblFetch, chemblSearch } from "@/lib/skills/db-chembl";
@@ -285,6 +289,66 @@ export async function handleBrainImportRegistry(
   return {
     content: [{ type: "text", text: JSON.stringify(registry, null, 2) }],
   };
+}
+
+export async function handleResearchLandscape(
+  config: BrainConfig,
+  params: {
+    query: string;
+    exact_title?: string;
+    project?: string;
+    sources?: ResearchLandscapeSource[];
+    per_source_limit?: number;
+    retained_limit?: number;
+    start_year?: number;
+    end_year?: number;
+    retry_count?: number;
+  },
+): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
+  const query = params.query?.trim();
+  if (!query) {
+    return {
+      content: [{ type: "text", text: "Error: query is required and cannot be empty." }],
+      isError: true,
+    };
+  }
+
+  let safeProject: string | undefined;
+  if (params.project?.trim()) {
+    const validated = validateProjectSlug(params.project);
+    if (typeof validated !== "string") {
+      return validated;
+    }
+    safeProject = validated;
+  }
+
+  try {
+    const result = await runResearchLandscape({
+      query,
+      exactTitle: params.exact_title,
+      project: safeProject,
+      sources: params.sources,
+      perSourceLimit: params.per_source_limit,
+      retainedLimit: params.retained_limit,
+      startYear: params.start_year,
+      endYear: params.end_year,
+      retryCount: params.retry_count,
+    }, {
+      brainRoot: config.root,
+    });
+
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+    };
+  } catch (error) {
+    return {
+      isError: true,
+      content: [{
+        type: "text",
+        text: error instanceof Error ? error.message : String(error),
+      }],
+    };
+  }
 }
 
 export async function handleBrainGuide(
@@ -1033,6 +1097,42 @@ export function createBrainMcpServer(): McpServer {
         return formatDatabaseError(error);
       }
     },
+  );
+
+  server.tool(
+    "research_landscape",
+    "Build a deterministic multi-source literature packet and journaled run artifact",
+    {
+      query: z.string().describe("Landscape query or exact paper title query"),
+      exact_title: z.string().optional().describe("Optional exact paper title to resolve deterministically"),
+      project: z.string().optional().describe("Optional project slug to link"),
+      sources: z.array(z.enum(["pubmed", "arxiv", "openalex", "crossref"])).optional()
+        .describe("Optional source allowlist"),
+      per_source_limit: z.number().optional().describe("Candidates fetched per source, max 50"),
+      retained_limit: z.number().optional().describe("Final retained papers, max 50"),
+      start_year: z.number().optional().describe("Optional inclusive lower year bound"),
+      end_year: z.number().optional().describe("Optional inclusive upper year bound"),
+      retry_count: z.number().optional().describe("Per-source retry count after the first attempt"),
+    },
+    async (params) => handleResearchLandscape(getConfig(), params),
+  );
+
+  server.tool(
+    "literature_packet",
+    "Alias for research_landscape",
+    {
+      query: z.string().describe("Landscape query or exact paper title query"),
+      exact_title: z.string().optional().describe("Optional exact paper title to resolve deterministically"),
+      project: z.string().optional().describe("Optional project slug to link"),
+      sources: z.array(z.enum(["pubmed", "arxiv", "openalex", "crossref"])).optional()
+        .describe("Optional source allowlist"),
+      per_source_limit: z.number().optional().describe("Candidates fetched per source, max 50"),
+      retained_limit: z.number().optional().describe("Final retained papers, max 50"),
+      start_year: z.number().optional().describe("Optional inclusive lower year bound"),
+      end_year: z.number().optional().describe("Optional inclusive upper year bound"),
+      retry_count: z.number().optional().describe("Per-source retry count after the first attempt"),
+    },
+    async (params) => handleResearchLandscape(getConfig(), params),
   );
 
   // ── 33-39. Audit-and-revise capability tools ───────

@@ -4,6 +4,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import * as brainInitModule from "@/brain/init";
 import * as projectOrganizerModule from "@/brain/project-organizer";
+import * as researchPacketsModule from "@/lib/research-packets";
 import type { BrainConfig } from "@/brain/types";
 import type { LLMClient, LLMResponse } from "@/brain/llm";
 import {
@@ -14,6 +15,7 @@ import {
   handleBrainStatus,
   handleBrainMaintenance,
   handleBrainProjectOrganize,
+  handleResearchLandscape,
   handleBrainGuide,
   handleBrainRipple,
 } from "@/brain/mcp-server";
@@ -325,7 +327,7 @@ describe("brain_read", () => {
     const result = await handleBrainRead(config, { path: "BRAIN.md" });
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Second Brain");
+    expect(result.content[0].text).toContain("ScienceSwarm Research Brain");
   });
 
   it("returns error for non-existent file", async () => {
@@ -578,5 +580,65 @@ describe("brain_ripple", () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(Array.isArray(parsed.updates)).toBe(true);
     expect(Array.isArray(parsed.contradictions)).toBe(true);
+  });
+});
+
+describe("research_landscape", () => {
+  it("rejects an empty query", async () => {
+    const config = makeConfig();
+
+    const result = await handleResearchLandscape(config, { query: "" });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("query is required");
+  });
+
+  it("returns the deterministic packet result", async () => {
+    const config = makeConfig();
+    const runResearchLandscapeSpy = vi.spyOn(researchPacketsModule, "runResearchLandscape")
+      .mockResolvedValue({
+        status: "completed",
+        query: "graph neural networks",
+        packet: {
+          slug: "packets/2026-04-22-graph-neural-networks-abcd1234",
+          diskPath: `${TEST_ROOT}/packets/2026-04-22-graph-neural-networks-abcd1234.md`,
+          title: "Research Packet: graph neural networks",
+          write_status: "persisted",
+        },
+        journal: {
+          slug: "journals/2026-04-22-graph-neural-networks-abcd1234",
+          diskPath: `${TEST_ROOT}/journals/2026-04-22-graph-neural-networks-abcd1234.md`,
+          title: "Research Landscape Journal: graph neural networks",
+          write_status: "persisted",
+        },
+        pointerPath: `${TEST_ROOT}/.research-landscape-last-run.json`,
+        sourceRuns: [],
+        collectedCandidates: 0,
+        retainedCandidates: 0,
+        duplicatesDropped: 0,
+        retainedWrites: [],
+        failures: [],
+      });
+
+    const result = await handleResearchLandscape(config, {
+      query: "graph neural networks",
+      project: "alpha",
+      sources: ["pubmed"],
+    });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.status).toBe("completed");
+    expect(parsed.packet.slug).toContain("packets/");
+    expect(runResearchLandscapeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "graph neural networks",
+        project: "alpha",
+        sources: ["pubmed"],
+      }),
+      expect.objectContaining({
+        brainRoot: TEST_ROOT,
+      }),
+    );
   });
 });

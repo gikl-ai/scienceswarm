@@ -2361,3 +2361,95 @@ describe("GET /api/brain/brief", () => {
     else delete process.env.SCIENCESWARM_DIR;
   });
 });
+
+describe("/api/brain/research-landscape", () => {
+  beforeEach(setupBrain);
+  afterEach(teardownBrain);
+
+  it("returns the last-run pointer on GET", async () => {
+    const researchPacketsModule = await import("@/lib/research-packets");
+    vi.spyOn(researchPacketsModule, "readResearchLandscapeLastRun")
+      .mockResolvedValue({
+        timestamp: "2026-04-22T15:30:00.000Z",
+        status: "completed",
+        query: "graph neural networks",
+        packet_slug: "packets/2026-04-22-graph-neural-networks-abcd1234",
+        journal_slug: "journals/2026-04-22-graph-neural-networks-abcd1234",
+        collected_candidates: 8,
+        retained_candidates: 4,
+        duplicates_dropped: 2,
+        partial: false,
+        source_failures: [],
+      });
+    const { GET } = await import("@/app/api/brain/research-landscape/route");
+
+    const response = await GET();
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.lastRun).toEqual(
+      expect.objectContaining({
+        query: "graph neural networks",
+        packet_slug: expect.stringContaining("packets/"),
+      }),
+    );
+  });
+
+  it("runs the deterministic packet workflow on POST", async () => {
+    const researchPacketsModule = await import("@/lib/research-packets");
+    vi.spyOn(researchPacketsModule, "runResearchLandscape")
+      .mockResolvedValue({
+        status: "completed",
+        query: "graph neural networks",
+        exactTitle: undefined,
+        project: "alpha",
+        packet: {
+          slug: "packets/2026-04-22-graph-neural-networks-abcd1234",
+          diskPath: `${TEST_ROOT}/packets/2026-04-22-graph-neural-networks-abcd1234.md`,
+          title: "Research Packet: graph neural networks",
+          write_status: "persisted",
+        },
+        journal: {
+          slug: "journals/2026-04-22-graph-neural-networks-abcd1234",
+          diskPath: `${TEST_ROOT}/journals/2026-04-22-graph-neural-networks-abcd1234.md`,
+          title: "Research Landscape Journal: graph neural networks",
+          write_status: "persisted",
+        },
+        pointerPath: `${TEST_ROOT}/.research-landscape-last-run.json`,
+        sourceRuns: [],
+        collectedCandidates: 0,
+        retainedCandidates: 0,
+        duplicatesDropped: 0,
+        retainedWrites: [],
+        failures: [],
+      });
+    const { POST } = await import("@/app/api/brain/research-landscape/route");
+
+    const request = new Request("http://localhost/api/brain/research-landscape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: "graph neural networks",
+        project: "alpha",
+        sources: ["pubmed", "openalex"],
+        per_source_limit: 5,
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.status).toBe("completed");
+    expect(data.packet.slug).toContain("packets/");
+    expect(researchPacketsModule.runResearchLandscape).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "graph neural networks",
+        project: "alpha",
+        sources: ["pubmed", "openalex"],
+        perSourceLimit: 5,
+      }),
+      expect.objectContaining({
+        brainRoot: TEST_ROOT,
+      }),
+    );
+  });
+});
