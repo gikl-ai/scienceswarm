@@ -60,10 +60,30 @@ describe("Project dashboard smoke test", () => {
 
   function stubDashboardFetch(options?: {
     brainReady?: boolean;
+    projectBrief?: Record<string, unknown>;
     importSummary?: LatestImportSummary | null;
     importSummaryStatus?: number;
   }) {
     const brainReady = options?.brainReady ?? true;
+    const projectBrief = options?.projectBrief ?? {
+      project: "demo-project",
+      nextMove: {
+        recommendation: "Review the imported sequencing notes before asking for a summary.",
+      },
+      topMatters: [],
+      unresolvedRisks: [],
+      dueTasks: [
+        { path: "wiki/tasks/task-1.md", title: "Review notes", status: "open" },
+      ],
+      frontier: [
+        {
+          path: "wiki/entities/frontier/item-1.md",
+          title: "CRISPR sequencing progress",
+          status: "promoted",
+          whyItMatters: "Directly relevant to the imported assay work.",
+        },
+      ],
+    };
     const importSummary = options?.importSummary ?? null;
     const importSummaryStatus = options?.importSummaryStatus ?? 200;
 
@@ -136,25 +156,7 @@ describe("Project dashboard smoke test", () => {
           );
         }
 
-        return Promise.resolve(
-          Response.json({
-            project: "demo-project",
-            nextMove: {
-              recommendation: "Review the imported sequencing notes before asking for a summary.",
-            },
-            dueTasks: [
-              { path: "wiki/tasks/task-1.md", title: "Review notes", status: "open" },
-            ],
-            frontier: [
-              {
-                path: "wiki/entities/frontier/item-1.md",
-                title: "CRISPR sequencing progress",
-                status: "promoted",
-                whyItMatters: "Directly relevant to the imported assay work.",
-              },
-            ],
-          }),
-        );
+        return Promise.resolve(Response.json(projectBrief));
       }
 
       if (url === "/api/projects/demo-project/import-summary") {
@@ -180,6 +182,41 @@ describe("Project dashboard smoke test", () => {
       );
     });
   }
+
+  it("shows an honest low-confidence state when evidence does not justify a belief change", async () => {
+    const fetchMock = stubDashboardFetch({
+      projectBrief: {
+        project: "demo-project",
+        generatedAt: "2026-04-22T20:00:00.000Z",
+        nextMove: {
+          recommendation: "Keep the current EGFR resistance plan unchanged until validation arrives.",
+          missingEvidence: ["A replicated washout result tied to the resistant cohort."],
+        },
+        topMatters: [],
+        unresolvedRisks: [
+          {
+            risk: "The new note is too thin to justify changing the working model.",
+            evidence: ["wiki/entities/artifacts/weak-follow-up.md"],
+          },
+        ],
+        dueTasks: [],
+        frontier: [],
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    expect(
+      await screen.findByText("No Meaningful Belief Change Detected"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not yet justify a confident update/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Treat downstream guidance as low confidence/i),
+    ).toBeInTheDocument();
+  });
 
 
   it("restores the last project slug when the workspace URL is missing name", async () => {

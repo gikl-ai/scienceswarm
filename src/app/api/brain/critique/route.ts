@@ -15,6 +15,7 @@ import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 type PersistCritiqueRequest = {
   job?: unknown;
   parentSlug?: unknown;
+  projectSlug?: unknown;
   sourceFilename?: unknown;
 };
 
@@ -113,6 +114,17 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  const explicitProjectSlug =
+    typeof body.projectSlug === "string" && body.projectSlug.trim().length > 0
+      ? body.projectSlug.trim()
+      : undefined;
+  if (explicitProjectSlug && !isValidCritiqueSlug(explicitProjectSlug)) {
+    return Response.json(
+      { error: "projectSlug must be a safe audit-revise slug" },
+      { status: 400 },
+    );
+  }
+
   try {
     await ensureBrainStoreReady();
     const store = getBrainStore();
@@ -124,10 +136,13 @@ export async function POST(request: Request): Promise<Response> {
         ? parentFrontmatter.type
         : parentPage?.type;
     const parentProject =
-      typeof parentFrontmatter.project === "string" &&
-      isValidCritiqueSlug(parentFrontmatter.project)
-        ? parentFrontmatter.project
-        : parentSlug;
+      explicitProjectSlug ||
+      (
+        typeof parentFrontmatter.project === "string" &&
+        isValidCritiqueSlug(parentFrontmatter.project)
+          ? parentFrontmatter.project
+          : parentSlug
+      );
 
     const persisted = await withCritiquePersistenceLock(parentSlug, async () => {
       const critiqueSlug = await allocateCritiqueSlug(parentSlug, job.id);

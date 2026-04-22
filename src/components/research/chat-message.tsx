@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from "react";
+import { Check, CopySimple, WarningCircle } from "@phosphor-icons/react";
 import type {
   ChatTaskPhase,
   MessageProgressEntry,
@@ -219,7 +220,7 @@ function formatProgressDisplayPath(value: string): string {
 function normalizeProgressDisplayCommand(value: string, maxChars = 160): string {
   let normalized = value.trim().replaceAll("\\", "/").replace(/\s+/g, " ");
   normalized = normalized.replace(
-    /(^|\s)\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3(?=\s|$)/g,
+    /(^|\s)(?:\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3|\/usr\/bin\/python3)(?=\s|$)/g,
     "$1python3",
   );
   normalized = normalized.replace(
@@ -773,7 +774,6 @@ function renderContent(content: string, projectId: string) {
 export function ChatMessage({
   role,
   content,
-  thinking,
   activityLog,
   progressLog,
   chatMode,
@@ -811,13 +811,15 @@ export function ChatMessage({
     role === "assistant" && Array.isArray(activityLog) && activityLog.length > 0
       ? activityLog
       : [];
+  const visibleStreamProgressLog =
+    role === "assistant" && isStreaming
+      ? Array.isArray(progressLog) && progressLog.length > 0
+        ? progressLog.filter((entry) => entry.kind === "activity")
+        : buildFallbackProgressLog(undefined, visibleActivityLog)
+      : [];
   const visibleProgressLog =
     role === "assistant"
-      ? isStreaming && Array.isArray(progressLog) && progressLog.length > 0
-        ? progressLog
-        : isStreaming
-          ? buildFallbackProgressLog(thinking, visibleActivityLog)
-          : []
+      ? visibleStreamProgressLog
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
@@ -840,10 +842,30 @@ export function ChatMessage({
   const selectionClass = role === "user"
     ? "selection:bg-white/45 selection:text-slate-900"
     : "selection:bg-accent/25 selection:text-slate-900";
+  const CopyStatusIcon =
+    copyState === "copied"
+      ? Check
+      : copyState === "error"
+        ? WarningCircle
+        : CopySimple;
+  const copyButtonLabel =
+    copyState === "copied"
+      ? "Copied message"
+      : copyState === "error"
+        ? "Copy failed"
+        : "Copy message";
   const copyButtonClass =
     role === "user"
-      ? "rounded border border-white/35 bg-transparent px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:border-white/70 hover:text-white"
-      : "rounded border border-border bg-white px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-accent hover:text-accent";
+      ? copyState === "copied"
+        ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/15 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
+        : copyState === "error"
+          ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/15 text-rose-100 transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
+          : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-white/70 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
+      : copyState === "copied"
+        ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
+        : copyState === "error"
+          ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rose-200 bg-rose-50 text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
+          : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-slate-50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
 
   useEffect(() => () => {
     if (copyFeedbackTimerRef.current !== null) {
@@ -997,22 +1019,17 @@ export function ChatMessage({
           {renderContent(content, projectId)}
         </div>
 
-        <div className="mt-2 flex items-center justify-between gap-3">
-          {hasCopyableText ? (
+        <div className="mt-3 flex items-center justify-end gap-3">
+          {hasCopyableText && (
             <button
               type="button"
               onClick={copyToClipboard}
               className={copyButtonClass}
-              title={copyState === "error" ? "Copy failed" : "Copy message to clipboard"}
+              aria-label={copyButtonLabel}
+              title={copyButtonLabel}
             >
-              {copyState === "copied"
-                ? "Copied"
-                : copyState === "error"
-                  ? "Copy failed"
-                  : "Copy"}
+              <CopyStatusIcon size={18} weight="regular" aria-hidden="true" />
             </button>
-          ) : (
-            <div />
           )}
           <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
         </div>

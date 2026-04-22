@@ -8,9 +8,9 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import matter from "gray-matter";
+import { getScienceSwarmCacheRoot } from "@/lib/scienceswarm-paths";
 import {
   defaultSyncTargetForHost,
   type SkillHost,
@@ -29,7 +29,7 @@ import {
   WORKSPACE_SKILLS_DIR,
 } from "@/lib/skills/schema";
 
-const CACHE_ROOT = path.join(os.homedir(), ".scienceswarm", "cache", "skills", "repos");
+const CACHE_ROOT = path.join(getScienceSwarmCacheRoot(), "skills", "repos");
 
 type ManifestUpdate = Partial<
   Pick<

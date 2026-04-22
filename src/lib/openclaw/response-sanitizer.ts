@@ -1,9 +1,18 @@
+import { formatOpenClawContextOverflowMessage } from "@/lib/openclaw/error-messages";
+
 export function sanitizeOpenClawUserVisibleResponse(
   response: string,
   options?: { trimEnd?: boolean },
 ): string {
-  const sanitized = response
-    .replace(/\r\n/g, "\n")
+  const normalized = response.replace(/\r\n/g, "\n");
+  if (
+    /^Context overflow:/im.test(normalized) ||
+    /\bprompt too large for the model\b/i.test(normalized)
+  ) {
+    return formatOpenClawContextOverflowMessage();
+  }
+
+  const sanitized = normalized
     .split("\n")
     .filter((line) => {
       const trimmed = line.trim();
@@ -11,7 +20,7 @@ export function sanitizeOpenClawUserVisibleResponse(
         return true;
       }
       if (
-        /^\[(?:agents\/[^\]]+|auth(?:-profiles)?|gateway|session|model|subagent|tool(?:s)?)[^\]]*\].*$/i.test(
+        /^\[(?:(?:agent|agents)\/[^\]]+|auth(?:-profiles)?|gateway|session|model|subagent|tool(?:s)?)[^\]]*\].*$/i.test(
           trimmed,
         )
       ) {

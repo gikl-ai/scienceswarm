@@ -71,6 +71,88 @@ description: ${input.description ?? `Description for ${slug}`}
   };
 }
 
+function buildInstalledMarketPlugin(input: {
+  id: string;
+  displayName?: string;
+  description?: string;
+  skillSlugs?: string[];
+  status?: "installed" | "partial" | "missing";
+}) {
+  const status = input.status ?? "installed";
+  return {
+    id: input.id,
+    name: input.id,
+    displayName: input.displayName ?? input.id,
+    description: input.description ?? `Description for ${input.id}`,
+    pluginVersion: "0.1.0",
+    bundleFormat: "codex" as const,
+    license: "Proprietary",
+    skillsPath: "skills",
+    skills: (input.skillSlugs ?? ["opentargets-skill"]).map((slug) => ({
+      slug,
+      description: `Description for ${slug}`,
+      runtime: null,
+      emoji: null,
+    })),
+    installedAt: "2026-04-22T00:00:00.000Z",
+    source: {
+      kind: "github" as const,
+      repo: "openai/plugins",
+      requestedRef: "main",
+      resolvedCommit: "27651a43bf55185d924f7a1fc49043a0a8be65a0",
+      path: "plugins/life-science-research",
+    },
+    bundlePath: "/tmp/.scienceswarm/market/plugins/life-science-research/bundle",
+    pluginManifestPath: "/tmp/.scienceswarm/market/plugins/life-science-research/bundle/.codex-plugin/plugin.json",
+    updatedAt: "2026-04-22T12:00:00.000Z",
+    trust: {
+      totalFiles: 9,
+      scriptFileCount: 2,
+      executableFileCount: 1,
+      agentFileCount: 1,
+      referenceFileCount: 3,
+      assetFileCount: 1,
+      scriptFiles: [
+        "skills/opentargets-skill/scripts/query.py",
+        "skills/research-router-skill/scripts/router.py",
+      ],
+      detectedRuntimes: ["python"],
+    },
+    hosts: {
+      openclaw: {
+        status,
+        installRoot: "/tmp/.scienceswarm/openclaw/extensions/life-science-research",
+        projectedSkills: (input.skillSlugs ?? ["opentargets-skill"]).map((slug) => ({
+          sourceSlug: slug,
+          hostSlug: slug,
+          installPath: `/tmp/.scienceswarm/openclaw/extensions/life-science-research/skills/${slug}`,
+          mode: "direct" as const,
+        })),
+      },
+      codex: {
+        status,
+        installRoot: "/tmp/repo/.codex/skills",
+        projectedSkills: (input.skillSlugs ?? ["opentargets-skill"]).map((slug) => ({
+          sourceSlug: slug,
+          hostSlug: slug,
+          installPath: `/tmp/repo/.codex/skills/${slug}`,
+          mode: "direct" as const,
+        })),
+      },
+      "claude-code": {
+        status,
+        installRoot: "/tmp/repo/.claude/skills",
+        projectedSkills: (input.skillSlugs ?? ["opentargets-skill"]).map((slug) => ({
+          sourceSlug: slug,
+          hostSlug: slug,
+          installPath: `/tmp/repo/.claude/skills/${slug}`,
+          mode: "direct" as const,
+        })),
+      },
+    },
+  };
+}
+
 describe("gbrain page", () => {
   beforeAll(() => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -392,6 +474,40 @@ description: Run the radar
     expect(screen.queryByText("No project selected")).not.toBeInTheDocument();
   });
 
+  it("renders private market installs in the installed skills catalog", async () => {
+    searchParamsValue = "view=skills&skills_catalog=installed&skill=life-science-research";
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 4, backend: "gbrain" });
+      }
+
+      if (url === "/api/market/plugins") {
+        return Response.json({
+          plugins: [
+            buildInstalledMarketPlugin({
+              id: "life-science-research",
+              displayName: "Life Science Research",
+              description: "General life-sciences research workflows.",
+            }),
+          ],
+        });
+      }
+
+      return Response.json({});
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GbrainPage />);
+
+    expect(await screen.findByText("Private Market Installs")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Life Science Research" })).toBeInTheDocument();
+    expect(screen.getByText(/resolved commit/i)).toBeInTheDocument();
+  });
+
   it("saves a workspace skill and shows host sync guidance", async () => {
     searchParamsValue = "view=skills&skills_catalog=workspace&skill=db-pubmed";
 
@@ -596,6 +712,156 @@ description: Updated PubMed description
     expect(replaceMock).toHaveBeenCalledWith(
       "/dashboard/gbrain?view=skills&skills_catalog=workspace&skill=project-alpha-revision-qa",
     );
+  });
+
+  it("installs a private market plugin from the installed catalog flow", async () => {
+    searchParamsValue = "name=demo-project&view=skills&skills_catalog=installed";
+    replaceMock.mockImplementation((nextUrl: string) => {
+      searchParamsValue = nextUrl.split("?")[1] ?? "";
+    });
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 4, backend: "gbrain" });
+      }
+
+      if (url === "/api/market/plugins" && !init?.method) {
+        return Response.json({ plugins: [] });
+      }
+
+      if (url === "/api/market/plugins/inspect" && init?.method === "POST") {
+        return Response.json({
+          preview: {
+            id: "life-science-research",
+            name: "life-science-research",
+            displayName: "Life Science Research",
+            description: "General life-sciences research workflows.",
+            pluginVersion: "0.1.0",
+            bundleFormat: "codex",
+            license: "Proprietary",
+            skillsPath: "skills",
+            skills: [
+              {
+                slug: "research-router-skill",
+                description: "Route research tasks.",
+                runtime: null,
+                emoji: null,
+              },
+              {
+                slug: "opentargets-skill",
+                description: "Query Open Targets.",
+                runtime: null,
+                emoji: null,
+              },
+            ],
+            source: {
+              kind: "github",
+              repo: "openai/plugins",
+              requestedRef: "main",
+              resolvedCommit: "27651a43bf55185d924f7a1fc49043a0a8be65a0",
+              path: "plugins/life-science-research",
+            },
+            trust: {
+              totalFiles: 12,
+              scriptFileCount: 2,
+              executableFileCount: 1,
+              agentFileCount: 1,
+              referenceFileCount: 3,
+              assetFileCount: 1,
+              scriptFiles: ["skills/opentargets-skill/scripts/query.py"],
+              detectedRuntimes: ["python"],
+            },
+            hosts: {
+              openclaw: {
+                installRoot: "/tmp/.scienceswarm/openclaw/extensions/life-science-research",
+                projectedSkills: [
+                  {
+                    sourceSlug: "research-router-skill",
+                    hostSlug: "research-router-skill",
+                    installPath: "/tmp/.scienceswarm/openclaw/extensions/life-science-research/skills/research-router-skill",
+                    mode: "direct",
+                  },
+                ],
+              },
+              codex: {
+                installRoot: "/tmp/repo/.codex/skills",
+                projectedSkills: [
+                  {
+                    sourceSlug: "research-router-skill",
+                    hostSlug: "research-router-skill",
+                    installPath: "/tmp/repo/.codex/skills/research-router-skill",
+                    mode: "direct",
+                  },
+                ],
+              },
+              "claude-code": {
+                installRoot: "/tmp/repo/.claude/skills",
+                projectedSkills: [
+                  {
+                    sourceSlug: "research-router-skill",
+                    hostSlug: "research-router-skill",
+                    installPath: "/tmp/repo/.claude/skills/research-router-skill",
+                    mode: "direct",
+                  },
+                ],
+              },
+            },
+          },
+        });
+      }
+
+      if (url === "/api/market/plugins" && init?.method === "POST") {
+        return Response.json({
+          plugin: buildInstalledMarketPlugin({
+            id: "life-science-research",
+            displayName: "Life Science Research",
+            description: "General life-sciences research workflows.",
+            skillSlugs: ["research-router-skill", "opentargets-skill"],
+          }),
+          message: "Installed privately into local OpenClaw, Codex, and Claude Code surfaces.",
+        });
+      }
+
+      return Response.json({});
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GbrainPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Install plugin" }));
+    fireEvent.change(screen.getByLabelText("Repo"), {
+      target: { value: "openai/plugins" },
+    });
+    fireEvent.change(screen.getByLabelText("Bundle path"), {
+      target: { value: "plugins/life-science-research" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect bundle" }));
+    expect(await screen.findByText("Install Preview")).toBeInTheDocument();
+    expect(screen.getByText(/Detected runtimes/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Install privately" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/market/plugins/inspect",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/market/plugins",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith(
+        "/dashboard/gbrain?name=demo-project&view=skills&skills_catalog=installed&skill=life-science-research",
+      );
+    });
   });
 
   it("preserves newer edits entered while a workspace skill save is in flight", async () => {

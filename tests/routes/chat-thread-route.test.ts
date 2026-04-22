@@ -172,6 +172,7 @@ describe("chat thread route", () => {
           role: "assistant",
           content: [
             "[agents/auth-profiles] synced openai-codex credentials from external cli",
+            "[agent/embedded] auto-compaction succeeded for openai/gpt-5.4; retrying prompt",
             "",
             "Visible answer",
           ].join("\n"),
@@ -221,6 +222,39 @@ describe("chat thread route", () => {
         },
       ],
     });
+  });
+
+  it("maps persisted OpenClaw context overflow to a recoverable message", async () => {
+    await writeChatThread({
+      version: 1,
+      project: "alpha-project",
+      conversationId: "conv-alpha",
+      conversationBackend: "openclaw",
+      messages: [
+        {
+          id: "m1",
+          role: "assistant",
+          content: [
+            "[agent/embedded] auto-compaction succeeded for openai/gpt-5.4; retrying prompt",
+            "Context overflow: prompt too large for the model. Try /reset (or /new) to start a fresh session, or use a larger-context model.",
+          ].join("\n"),
+          timestamp: "2026-04-11T10:00:01.000Z",
+        },
+      ],
+      artifactProvenance: [],
+    });
+
+    const { GET } = await import("@/app/api/chat/thread/route");
+    const response = await GET(
+      new Request("http://localhost/api/chat/thread?project=alpha-project"),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages[0].content).toContain("context became too large");
+    expect(body.messages[0].content).toContain("preserved in the workspace");
+    expect(body.messages[0].content).not.toContain("[agent/embedded]");
+    expect(body.messages[0].content).not.toContain("gpt-5.4");
   });
 
   it("keeps valid artifact provenance entries even when one entry is malformed", async () => {

@@ -40,6 +40,7 @@ import {
   getScienceSwarmOpenClawConfigPath,
   getScienceSwarmOpenClawStateDir,
 } from "@/lib/scienceswarm-paths";
+import { OPENCLAW_OLLAMA_PROVIDER_KEY } from "@/lib/openclaw/ollama-provider";
 import {
   readSavedLlmRuntimeEnv,
   resolveSavedLlmRuntimeEnv,
@@ -193,7 +194,10 @@ export function buildOpenClawEnv(
   } else {
     delete env.OLLAMA_MODEL;
   }
-  if (savedRuntime.openaiApiKey) {
+  if (savedRuntime.llmProvider === "local") {
+    delete env.OPENAI_API_KEY;
+    env.OLLAMA_API_KEY = env.OLLAMA_API_KEY || OPENCLAW_OLLAMA_PROVIDER_KEY;
+  } else if (savedRuntime.openaiApiKey) {
     env.OPENAI_API_KEY = savedRuntime.openaiApiKey;
   } else {
     delete env.OPENAI_API_KEY;
