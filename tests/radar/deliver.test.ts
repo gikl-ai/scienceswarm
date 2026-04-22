@@ -46,9 +46,15 @@ describe("formatTelegramBriefing", () => {
 
   it("formats nothingToday briefing", () => {
     const text = formatTelegramBriefing(
-      makeBriefing({ nothingToday: true, matters: [], horizon: [] })
+      makeBriefing({
+        nothingToday: true,
+        matters: [],
+        horizon: [],
+        quietReason: "Checked 12 signals; none changed the plan.",
+      })
     )
     expect(text).toContain("Quiet day")
+    expect(text).toContain("none changed the plan")
     expect(text.length).toBeLessThan(200)
   })
 
@@ -90,11 +96,33 @@ describe("formatTelegramBriefing", () => {
 
 describe("formatDashboardBriefing", () => {
   it("returns structured data for dashboard rendering", () => {
-    const result = formatDashboardBriefing(makeBriefing())
+    const result = formatDashboardBriefing(
+      makeBriefing({
+        matters: [
+          {
+            signal: makeBriefing().matters[0].signal,
+            whyItMatters: "Extends your circuit work on attention heads.",
+            programMatches: [
+              {
+                area: "hypothesis",
+                reference: "mechanistic interpretability: Circuit analysis",
+                whyThisMatters: "Affects the current circuit hypothesis.",
+                recommendedAction: "Re-check the active hypothesis.",
+                evidence: ["matched topic: mechanistic interpretability"],
+                confidence: "high",
+              },
+            ],
+          },
+        ],
+      })
+    )
     expect(result.matters).toHaveLength(1)
     expect(result.matters[0].title).toBe("Circuit Discovery in GPT-4")
     expect(result.matters[0].url).toBe("https://arxiv.org/abs/2401.00001")
     expect(result.matters[0].whyItMatters).toBeDefined()
+    expect(result.matters[0].programMatches[0].reference).toContain(
+      "mechanistic interpretability"
+    )
     expect(result.matters[0].actions).toContain("save-to-brain")
     expect(result.matters[0].actions).toContain("dismiss")
   })
