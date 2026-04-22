@@ -48,7 +48,6 @@ import {
   getSetupSteps,
   processSetupResponse,
 } from "@/brain/setup-flow";
-import { streamChat } from "@/lib/message-handler";
 import { parseFile } from "@/lib/file-parser";
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
 import { isLocalRequest } from "@/lib/local-guard";
@@ -122,15 +121,6 @@ const OPENCLAW_THINKING_POLL_INTERVAL_MS = 100;
 interface WorkspaceReferenceMergeResult {
   files: UploadedFileDescriptor[];
   referenceNotes: WorkspaceReferenceNotes;
-}
-
-interface LocalProviderStatus {
-  configured: boolean;
-  model: string | null;
-  ollamaModels: string[];
-  url: string | null;
-  trustedLocalUrl: boolean;
-  response: Response | null;
 }
 
 interface AgentRuntimeStatus {
@@ -237,23 +227,6 @@ function matchesLocalModel(
     availableModel === targetModel ||
     availableModel.startsWith(`${targetModel}:`)
   );
-}
-
-function isTrustedLocalRuntimeUrl(rawUrl: string | null | undefined): boolean {
-  if (!rawUrl) return false;
-  try {
-    const { hostname } = new URL(rawUrl);
-    return (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "0.0.0.0" ||
-      hostname === "::1" ||
-      hostname === "[::1]" ||
-      hostname === "host.docker.internal"
-    );
-  } catch {
-    return false;
-  }
 }
 
 function normalizeChatMode(value: unknown): ChatMode {
@@ -1474,12 +1447,43 @@ async function readOpenClawThinkingTraceFromFile(
         continue;
       }
       const messageRecord = message as Record<string, unknown>;
-      if (messageRecord.role !== "assistant" || !Array.isArray(messageRecord.content)) {
+      if (messageRecord.role !== "assistant") {
         continue;
       }
-      const thinkingParts = messageRecord.content
-        .map(extractOpenClawThinkingText)
-        .filter((part): part is string => typeof part === "string" && part.trim().length > 0);
+      const hasTopLevelThinking =
+        typeof messageRecord.thinking === "string"
+        && messageRecord.thinking.trim().length > 0;
+      const hasContentArray = Array.isArray(messageRecord.content);
+      // Skip assistant messages that carry no thinking payload at all so
+      // they do not clear previously extracted reasoning from earlier turns.
+      if (!hasTopLevelThinking && !hasContentArray) {
+        continue;
+      }
+      const thinkingParts: string[] = [];
+      // Recent OpenClaw versions emit the OpenAI Responses API reasoning
+      // summary at the session.message level (message.thinking) rather than
+      // as an entry in message.content. Pick that up first so the chat
+      // <details> panel fills even when content-array thinking is absent.
+      if (hasTopLevelThinking) {
+        thinkingParts.push(messageRecord.thinking as string);
+      }
+      if (hasContentArray) {
+        for (const part of messageRecord.content as unknown[]) {
+          const extracted = extractOpenClawThinkingText(part);
+          if (typeof extracted === "string" && extracted.trim().length > 0) {
+            // When the top-level thinking is already present, skip any
+            // content-array entry whose text duplicates it so a transitional
+            // backend that emits both does not double-render the panel.
+            if (
+              hasTopLevelThinking
+              && extracted.trim() === (messageRecord.thinking as string).trim()
+            ) {
+              continue;
+            }
+            thinkingParts.push(extracted);
+          }
+        }
+      }
       latestThinking =
         thinkingParts.length > 0 ? thinkingParts.join("\n\n") : null;
     }
@@ -5891,52 +5895,6 @@ async function getConfiguredAgentRuntimeStatus(
   };
 }
 
-async function streamDirectResponse(
-  messages: UnifiedChatMessage[],
-  files: Array<{ name: string; size: string }>,
-  mode: ChatMode,
-  projectId?: string | null,
-) {
-  const stream = await streamChat({
-    messages,
-    files,
-    channel: "web",
-    projectId,
-    backend: "direct",
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Chat-Backend": "direct",
-      "X-Chat-Mode": mode,
-    },
-  });
-}
-
-async function streamLocalDirectResponse(params: {
-  messages: UnifiedChatMessage[];
-  files: UploadedFileDescriptor[];
-  projectId: string | null;
-  referenceNotes?: WorkspaceReferenceNotes;
-  chatMode: ChatMode;
-}) {
-  const workspaceFileContext = await buildWorkspaceFileContext(
-    params.files,
-    params.projectId,
-    params.referenceNotes,
-  );
-
-  return streamDirectResponse(
-    withWorkspaceFileContext(params.messages, workspaceFileContext),
-    workspaceFileContext?.files ?? [],
-    params.chatMode,
-    params.projectId,
-  );
-}
-
 function streamOpenClawResponse(params: {
   message: string;
   userMessage: string;
@@ -6362,106 +6320,6 @@ function streamOpenClawResponse(params: {
   );
 }
 
-function localProviderError(error: string, mode: ChatMode): Response {
-  return Response.json(
-    {
-      error,
-      backend: "none",
-      mode,
-      strictLocalOnly: isStrictLocalOnlyEnabled(),
-    },
-    {
-      status: 503,
-      headers: {
-        "X-Chat-Backend": "none",
-        "X-Chat-Mode": mode,
-      },
-    },
-  );
-}
-
-async function getLocalProviderStatus(
-  mode: ChatMode,
-): Promise<LocalProviderStatus> {
-  const {
-    isLocalProviderConfigured,
-    healthCheck: localHealth,
-    getLocalModel,
-  } = await import("@/lib/local-llm");
-
-  if (!isLocalProviderConfigured()) {
-    return {
-      configured: false,
-      model: null,
-      ollamaModels: [],
-      url: null,
-      trustedLocalUrl: false,
-      response: null,
-    };
-  }
-
-  const status = await localHealth();
-  if (!status.running) {
-    return {
-      configured: true,
-      model: getLocalModel(),
-      ollamaModels: status.models,
-      url: status.url,
-      trustedLocalUrl: isTrustedLocalRuntimeUrl(status.url),
-      response: localProviderError(
-        isStrictLocalOnlyEnabled()
-          ? "Strict local-only mode is enabled, but Ollama is not reachable. Start Ollama in Settings before chatting."
-          : "Local LLM provider is configured but Ollama is not reachable. Start Ollama or switch LLM_PROVIDER to openai.",
-        mode,
-      ),
-    };
-  }
-
-  const configuredLocalModel = getLocalModel();
-  if (
-    !status.models.some((availableModel) =>
-      matchesLocalModel(availableModel, configuredLocalModel),
-    )
-  ) {
-    return {
-      configured: true,
-      model: configuredLocalModel,
-      ollamaModels: status.models,
-      url: status.url,
-      trustedLocalUrl: isTrustedLocalRuntimeUrl(status.url),
-      response: localProviderError(
-        isStrictLocalOnlyEnabled()
-          ? `Strict local-only mode is enabled, but local model ${configuredLocalModel} is not downloaded. Open Settings -> Local Model via Ollama and pull it first.`
-          : `Local model ${configuredLocalModel} is configured but not downloaded. Open Settings -> Local Model via Ollama and pull it first, or switch LLM_PROVIDER to openai.`,
-        mode,
-      ),
-    };
-  }
-
-  return {
-    configured: true,
-    model: configuredLocalModel,
-    ollamaModels: status.models,
-    url: status.url,
-    trustedLocalUrl: isTrustedLocalRuntimeUrl(status.url),
-    response: null,
-  };
-}
-
-async function maybeEnforceCloudPrivacyForLocalProvider(
-  localProvider: LocalProviderStatus,
-  projectId?: string | null,
-): Promise<Response | null> {
-  if (
-    !projectId ||
-    !localProvider.configured ||
-    localProvider.trustedLocalUrl
-  ) {
-    return null;
-  }
-  return enforceCloudPrivacy(projectId);
-}
-
 interface HandleUnifiedChatPostOptions {
   commandTransport?: boolean;
 }
@@ -6848,11 +6706,6 @@ export async function handleUnifiedChatPost(
     const getPrivacyError = (): Promise<Response | null> => {
       privacyErrorPromise ??= enforceCloudPrivacy(validatedProjectId);
       return privacyErrorPromise;
-    };
-    let localProviderPromise: Promise<LocalProviderStatus> | null = null;
-    const getLocalProvider = (): Promise<LocalProviderStatus> => {
-      localProviderPromise ??= getLocalProviderStatus(chatMode);
-      return localProviderPromise;
     };
 
     // Chat routes exclusively through OpenClaw. OpenClaw itself may delegate
