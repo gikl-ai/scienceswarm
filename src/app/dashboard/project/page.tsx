@@ -183,6 +183,19 @@ interface SlashCommandCatalogResponse {
   error?: string;
 }
 
+interface EvidenceMapResponse {
+  brain_slug?: string;
+  project_url?: string;
+  error?: string;
+  summary?: {
+    question?: string;
+    claimCount?: number;
+    tensionCount?: number;
+    sourcePageCount?: number;
+    honestyNote?: string;
+  };
+}
+
 type SlashCommandStatus = "idle" | "loading" | "ready" | "error";
 
 const DEFAULT_CHAT_SLASH_COMMANDS: SlashCommandOption[] =
@@ -214,6 +227,18 @@ type BrainBootstrapState =
       radar?: BrainRadarStatus | null;
     }
   | { status: "error"; message: string };
+
+type EvidenceMapStatus =
+  | { state: "idle" }
+  | { state: "running" }
+  | {
+      state: "saved";
+      slug: string;
+      question: string;
+      claimCount?: number;
+      tensionCount?: number;
+    }
+  | { state: "error"; error: string };
 
 type ImportSummaryState = "loading" | "ready" | "empty" | "error";
 const SCIENCESWARM_SIGN_IN_URL = getScienceSwarmSignInUrl();
@@ -1389,6 +1414,9 @@ function ProjectPageContent() {
   const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
   const [projectBrief, setProjectBrief] =
     useState<DashboardProjectBrief | null>(null);
+  const [evidenceMapQuestion, setEvidenceMapQuestion] = useState("");
+  const [evidenceMapStatus, setEvidenceMapStatus] =
+    useState<EvidenceMapStatus>({ state: "idle" });
   const [projectUnderstandingStatus, setProjectUnderstandingStatus] =
     useState<ProjectUnderstandingStatus>("idle");
   const [projectUnderstandingError, setProjectUnderstandingError] = useState<
@@ -1447,6 +1475,11 @@ function ProjectPageContent() {
 
   useEffect(() => {
     setMobileProjectListOpen(false);
+  }, [activeProjectSlug]);
+
+  useEffect(() => {
+    setEvidenceMapQuestion("");
+    setEvidenceMapStatus({ state: "idle" });
   }, [activeProjectSlug]);
 
   useEffect(() => {
@@ -3078,6 +3111,85 @@ function ProjectPageContent() {
     ],
   );
 
+  const openBrainArtifactInWorkspace = useCallback(
+    (brainSlug: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (activeProjectSlug) {
+        params.set("name", activeProjectSlug);
+      }
+      params.set("brain_slug", brainSlug);
+      router.replace(`${pathname}?${params.toString()}`);
+    },
+    [activeProjectSlug, pathname, router, searchParams],
+  );
+
+  const handleBuildEvidenceMap = useCallback(async () => {
+    if (!activeProjectSlug) return;
+
+    const question =
+      evidenceMapQuestion.trim() ||
+      projectBrief?.nextMove?.recommendation?.trim() ||
+      "What does the current project evidence support, and where does it disagree?";
+
+    setEvidenceMapStatus({ state: "running" });
+    setPaneMode("both");
+
+    try {
+      const res = await fetch("/api/brain/evidence-map", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: activeProjectSlug,
+          question,
+          focusBrainSlug:
+            selectedFileNode?.source === "gbrain" && selectedFileNode.slug
+              ? selectedFileNode.slug
+              : undefined,
+        }),
+      });
+
+      const payload = (await res.json().catch(() => ({}))) as EvidenceMapResponse;
+      if (!res.ok || !payload.brain_slug) {
+        throw new Error(
+          payload.error ?? `Evidence map request failed (${res.status})`,
+        );
+      }
+
+      await refreshProjectState();
+      openBrainArtifactInWorkspace(payload.brain_slug);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-evidence-map`,
+          role: "system",
+          content: `Saved evidence map: [[${payload.brain_slug}]]`,
+          timestamp: new Date(),
+        },
+      ]);
+      setEvidenceMapQuestion(question);
+      setEvidenceMapStatus({
+        state: "saved",
+        slug: payload.brain_slug,
+        question: payload.summary?.question ?? question,
+        claimCount: payload.summary?.claimCount,
+        tensionCount: payload.summary?.tensionCount,
+      });
+    } catch (error) {
+      setEvidenceMapStatus({
+        state: "error",
+        error: error instanceof Error ? error.message : "Evidence map failed",
+      });
+    }
+  }, [
+    activeProjectSlug,
+    evidenceMapQuestion,
+    openBrainArtifactInWorkspace,
+    projectBrief?.nextMove?.recommendation,
+    refreshProjectState,
+    selectedFileNode,
+    setMessages,
+  ]);
+
   const getWebCaptureUserId = useCallback((): string => {
     if (typeof window === "undefined") {
       return "dashboard-web";
@@ -4074,6 +4186,12 @@ function ProjectPageContent() {
                     : "Thinking..."}
               </div>
             )}
+            {evidenceMapStatus.state === "running" && (
+              <div className="flex items-center gap-2 text-xs font-medium text-accent">
+                <Spinner size="h-3.5 w-3.5" testId="evidence-map-spinner" />
+                Analyzing evidence...
+              </div>
+            )}
             {latestPdfFile ? (
               !isAuthLoaded ? (
                 <button
@@ -4232,6 +4350,75 @@ function ProjectPageContent() {
                     <X size={14} />
                   </button>
                 </div>
+                {activeProjectSlug && (
+                  <div className="shrink-0 border-b border-border bg-white px-3 py-3">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+                          Evidence Map
+                        </p>
+                        <p className="mt-1 text-xs text-muted">
+                          Extract core claims, source provenance, tensions, and
+                          uncertainty from imported project evidence.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleBuildEvidenceMap()}
+                        disabled={evidenceMapStatus.state === "running"}
+                        className="inline-flex h-9 items-center justify-center rounded border border-border bg-white px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {evidenceMapStatus.state === "running"
+                          ? "Analyzing..."
+                          : "Analyze evidence"}
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-col gap-2 md:flex-row">
+                      <input
+                        type="text"
+                        value={evidenceMapQuestion}
+                        onChange={(event) =>
+                          setEvidenceMapQuestion(event.target.value)
+                        }
+                        placeholder="Question or active disagreement to focus on"
+                        disabled={evidenceMapStatus.state === "running"}
+                        className="h-10 flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
+                      />
+                    </div>
+                    {selectedFileNode?.source === "gbrain" && selectedFileNode.slug && (
+                      <p className="mt-2 text-[11px] text-muted">
+                        Including the open artifact{" "}
+                        <span className="font-semibold text-foreground">
+                          {selectedFileNode.name}
+                        </span>{" "}
+                        in this run.
+                      </p>
+                    )}
+                    {evidenceMapStatus.state === "saved" && (
+                      <p className="mt-2 text-[11px] text-muted">
+                        Saved {evidenceMapStatus.claimCount ?? 0} claims and{" "}
+                        {evidenceMapStatus.tensionCount ?? 0} tensions to{" "}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openBrainArtifactInWorkspace(
+                              evidenceMapStatus.slug,
+                            )
+                          }
+                          className="font-semibold text-foreground underline underline-offset-2"
+                        >
+                          {evidenceMapStatus.slug}
+                        </button>
+                        .
+                      </p>
+                    )}
+                    {evidenceMapStatus.state === "error" && (
+                      <p className="mt-2 text-[11px] text-red-700">
+                        {evidenceMapStatus.error}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-surface/30 select-text">
                   {!activeProjectSlug && messages.length === 0 && (
                     <section className="rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">

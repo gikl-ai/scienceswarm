@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { FileTreeNode, getNodePath, type FileNode } from "./file-tree";
 import { clearLastProjectSlug, readLastProjectSlug } from "@/lib/project-navigation";
@@ -47,34 +47,44 @@ export function ProjectList({
   const [expandedSlug, setExpandedSlug] = useState<string | null>(activeSlug);
   const [isDragOver, setIsDragOver] = useState(false);
 
+  const loadProjects = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const res = await fetch("/api/projects", { signal });
+        if (signal?.aborted) {
+          return;
+        }
+        if (!res.ok) {
+          setStatus("error");
+          return;
+        }
+        const body = (await res.json()) as { projects?: ProjectMeta[] };
+        if (signal?.aborted) return;
+        setProjects(Array.isArray(body.projects) ? body.projects : []);
+        setStatus("ready");
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+        setStatus("error");
+      }
+    },
+    [],
+  );
+
   // Keep expansion in sync with the active project when it changes.
   useEffect(() => {
     setExpandedSlug(activeSlug);
   }, [activeSlug]);
 
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      try {
-        const res = await fetch("/api/projects");
-        if (cancelled) return;
-        if (!res.ok) {
-          setStatus("error");
-          return;
-        }
-        const body = (await res.json()) as { projects?: ProjectMeta[] };
-        if (cancelled) return;
-        setProjects(Array.isArray(body.projects) ? body.projects : []);
-        setStatus("ready");
-      } catch {
-        if (!cancelled) setStatus("error");
-      }
-    };
-    void run();
+    const controller = new AbortController();
+    setStatus("loading");
+    void loadProjects(controller.signal);
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, []);
+  }, [activeSlug, loadProjects]);
 
   const dragHandlers = onDropFiles
     ? {
