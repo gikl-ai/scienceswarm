@@ -96,10 +96,15 @@ function normalizeChatMode(value: unknown): PersistedChatThreadMessage["chatMode
   return value === "reasoning" || value === "openclaw-tools" ? value : undefined;
 }
 
-function normalizeConversationBackend(
-  value: unknown,
-): "openclaw" | "agent" | "direct" | null {
-  return value === "openclaw" || value === "agent" || value === "direct" ? value : null;
+// The persisted schema is now openclaw-only (PR #13 follow-up). Legacy
+// "agent"/"direct" values from older API clients collapse to "openclaw" so
+// in-flight requests from cached UIs migrate cleanly; everything else
+// (unknown strings, null, missing) becomes null.
+function normalizeConversationBackend(value: unknown): "openclaw" | null {
+  if (value === "openclaw" || value === "agent" || value === "direct") {
+    return "openclaw";
+  }
+  return null;
 }
 
 function normalizeTaskPhases(value: unknown): PersistedChatTaskPhase[] | undefined {
@@ -143,17 +148,17 @@ export async function GET(request: Request) {
   if (!stored) {
     return Response.json(emptyThread(project));
   }
-  const sanitizedMessages = stored.messages.map((message) => ({
-    ...message,
-    content: sanitizeOpenClawUserVisibleResponse(message.content),
-    thinking:
-      typeof message.thinking === "string"
-        ? sanitizeOpenClawUserVisibleResponse(message.thinking)
-        : undefined,
-  }));
+
   return Response.json({
     ...stored,
-    messages: sanitizedMessages,
+    messages: stored.messages.map((message) => ({
+      ...message,
+      content: sanitizeOpenClawUserVisibleResponse(message.content),
+      thinking:
+        typeof message.thinking === "string"
+          ? sanitizeOpenClawUserVisibleResponse(message.thinking)
+          : undefined,
+    })),
   });
 }
 

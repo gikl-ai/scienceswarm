@@ -154,6 +154,63 @@ describe("chat thread route", () => {
     });
   });
 
+  it("sanitizes internal OpenClaw noise when reading a persisted thread", async () => {
+    await writeChatThread({
+      version: 1,
+      project: "alpha-project",
+      conversationId: "conv-alpha",
+      conversationBackend: "openclaw",
+      messages: [
+        {
+          id: "m1",
+          role: "assistant",
+          content: [
+            "[agents/auth-profiles] synced openai-codex credentials from external cli",
+            "",
+            "Visible answer",
+          ].join("\n"),
+          thinking: [
+            "[session] paired gateway transport",
+            "",
+            "Reasoning that should remain visible.",
+          ].join("\n"),
+          timestamp: "2026-04-11T10:00:01.000Z",
+        },
+      ],
+      artifactProvenance: [],
+    });
+
+    const persistedPath = path.join(
+      dataRoot,
+      "projects",
+      "alpha-project",
+      ".brain",
+      "state",
+      "chat.json",
+    );
+    await expect(readFile(persistedPath, "utf-8")).resolves.toContain(
+      "[agents/auth-profiles] synced openai-codex credentials from external cli",
+    );
+
+    const { GET } = await import("@/app/api/chat/thread/route");
+    const response = await GET(
+      new Request("http://localhost/api/chat/thread?project=alpha-project"),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      messages: [
+        {
+          id: "m1",
+          role: "assistant",
+          content: "Visible answer",
+          thinking: "Reasoning that should remain visible.",
+          timestamp: "2026-04-11T10:00:01.000Z",
+        },
+      ],
+    });
+  });
+
   it("keeps valid artifact provenance entries even when one entry is malformed", async () => {
     const { GET, POST } = await import("@/app/api/chat/thread/route");
 

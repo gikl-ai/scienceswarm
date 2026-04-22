@@ -557,7 +557,11 @@ describe("useUnifiedChat persistence", () => {
           {
             id: "assistant",
             role: "assistant",
-            content: "Keep this useful response.",
+            content: [
+              "[agents/auth-profiles] synced openai-codex credentials from external cli",
+              "",
+              "Keep this useful response.",
+            ].join("\n"),
             timestamp: "2026-04-14T20:00:03.000Z",
           },
         ],
@@ -608,6 +612,7 @@ describe("useUnifiedChat persistence", () => {
     expect(messageLog).not.toContain("[User opened file:");
     expect(messageLog).not.toContain("new files synced:");
     expect(messageLog).not.toContain("updated since import:");
+    expect(messageLog).not.toContain("[agents/auth-profiles]");
   });
 
   it("keeps workspace change checks out of the visible chat pane", async () => {
