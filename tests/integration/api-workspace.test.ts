@@ -1278,7 +1278,9 @@ describe("GET /api/workspace?action=tree", () => {
     );
     expect(rawRes.status).toBe(200);
     expect(rawRes.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
-    await expect(rawRes.text()).resolves.toContain("<script>window.bad=true</script>");
+    const rawHtml = await rawRes.text();
+    expect(rawHtml).toContain("data-scienceswarm-html-preview-shim");
+    expect(rawHtml).toContain("<script>window.bad=true</script>");
   });
 
   it("serves file, read, raw, and meta from gbrain file refs when no project folder exists", async () => {
@@ -1867,7 +1869,9 @@ describe("GET /api/workspace?action=tree", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
-    await expect(res.text()).resolves.toContain("Cat SVG");
+    const html = await res.text();
+    expect(html).toContain("Cat SVG");
+    expect(html).toContain("data-scienceswarm-html-preview-shim");
   });
 
   it("serves raw OpenClaw generated media from the managed state dir", async () => {

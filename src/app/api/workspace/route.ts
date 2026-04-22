@@ -1147,12 +1147,107 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   htm: "text/html; charset=utf-8",
 };
 
+const HTML_PREVIEW_SHIM_MARKER = "data-scienceswarm-html-preview-shim";
+const HTML_PREVIEW_STORAGE_SHIM = `<script ${HTML_PREVIEW_SHIM_MARKER}>
+(() => {
+  const createMemoryStorage = () => {
+    const store = new Map();
+    return {
+      getItem(key) {
+        const normalizedKey = String(key);
+        return store.has(normalizedKey) ? store.get(normalizedKey) : null;
+      },
+      setItem(key, value) {
+        store.set(String(key), String(value));
+      },
+      removeItem(key) {
+        store.delete(String(key));
+      },
+      clear() {
+        store.clear();
+      },
+      key(index) {
+        return Array.from(store.keys())[index] ?? null;
+      },
+      get length() {
+        return store.size;
+      },
+    };
+  };
+
+  const ensureStorage = (name) => {
+    try {
+      const storage = window[name];
+      const probeKey = "__scienceswarm_preview_probe__";
+      storage.setItem(probeKey, "1");
+      storage.removeItem(probeKey);
+    } catch {
+      Object.defineProperty(window, name, {
+        configurable: true,
+        value: createMemoryStorage(),
+      });
+    }
+  };
+
+  ensureStorage("localStorage");
+  ensureStorage("sessionStorage");
+})();
+</script>`;
+
 function buildInlineContentDisposition(filename: string): string {
   const encodedName = encodeURIComponent(filename);
   const asciiFallback = filename
     .replace(/[^\x20-\x7E]/g, "_")
     .replace(/["\\]/g, "_") || "download";
   return `inline; filename="${asciiFallback}"; filename*=UTF-8''${encodedName}`;
+}
+
+function isHtmlRawExtension(ext: string): boolean {
+  return ext === "html" || ext === "htm";
+}
+
+function injectHtmlPreviewShim(html: string): string {
+  if (html.includes(HTML_PREVIEW_SHIM_MARKER)) {
+    return html;
+  }
+
+  if (/<head(?:\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<head(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
+  }
+
+  if (/<body(?:\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<body(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
+  }
+
+  if (/<!doctype html[^>]*>/i.test(html)) {
+    return html.replace(/<!doctype html[^>]*>/i, (match) => `${match}\n${HTML_PREVIEW_STORAGE_SHIM}`);
+  }
+
+  return `${HTML_PREVIEW_STORAGE_SHIM}${html}`;
+}
+
+function buildBufferedRawPreviewResponse(params: {
+  ext: string;
+  fileName: string;
+  buffer: Buffer;
+  contentType: string;
+}): Response {
+  const body = isHtmlRawExtension(params.ext)
+    ? injectHtmlPreviewShim(params.buffer.toString("utf-8"))
+    : new Uint8Array(params.buffer);
+  const contentLength = typeof body === "string"
+    ? Buffer.byteLength(body)
+    : params.buffer.byteLength;
+
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "Content-Type": params.contentType,
+      "Content-Length": String(contentLength),
+      "Cache-Control": "private, max-age=60",
+      "Content-Disposition": buildInlineContentDisposition(params.fileName),
+    },
+  });
 }
 
 async function findGbrainWorkspaceEntry(
@@ -1454,15 +1549,11 @@ async function handleRaw(filePath: string, projectId: string | null) {
 
     const buf = await fs.promises.readFile(realFile);
     const contentType = RAW_CONTENT_TYPES[ext] || "application/octet-stream";
-
-    return new Response(new Uint8Array(buf), {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Content-Length": String(stat.size),
-        "Cache-Control": "private, max-age=60",
-        "Content-Disposition": buildInlineContentDisposition(path.basename(realFile)),
-      },
+    return buildBufferedRawPreviewResponse({
+      ext,
+      fileName: path.basename(realFile),
+      buffer: buf,
+      contentType,
     });
   }
 
@@ -1484,15 +1575,11 @@ async function handleRaw(filePath: string, projectId: string | null) {
 
     const buf = await fs.promises.readFile(realFile);
     const contentType = RAW_CONTENT_TYPES[ext] || "application/octet-stream";
-
-    return new Response(new Uint8Array(buf), {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Content-Length": String(stat.size),
-        "Cache-Control": "private, max-age=60",
-        "Content-Disposition": buildInlineContentDisposition(path.basename(realFile)),
-      },
+    return buildBufferedRawPreviewResponse({
+      ext,
+      fileName: path.basename(realFile),
+      buffer: buf,
+      contentType,
     });
   }
 
@@ -1514,6 +1601,16 @@ async function handleRaw(filePath: string, projectId: string | null) {
     }
 
     const contentType = RAW_CONTENT_TYPES[ext] || opened.mime || "application/octet-stream";
+    if (isHtmlRawExtension(ext)) {
+      const buf = await readStreamToBufferCapped(opened.stream, MAX_RAW_BYTES);
+      return buildBufferedRawPreviewResponse({
+        ext,
+        fileName: path.posix.basename(gbrainEntry.ref.filename),
+        buffer: buf,
+        contentType,
+      });
+    }
+
     return new Response(opened.stream, {
       status: 200,
       headers: {
@@ -1542,15 +1639,11 @@ async function handleRaw(filePath: string, projectId: string | null) {
 
   const buf = await fs.promises.readFile(realFile);
   const contentType = RAW_CONTENT_TYPES[ext] || "application/octet-stream";
-
-  return new Response(new Uint8Array(buf), {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Content-Length": String(stat.size),
-      "Cache-Control": "private, max-age=60",
-      "Content-Disposition": buildInlineContentDisposition(path.basename(realFile)),
-    },
+  return buildBufferedRawPreviewResponse({
+    ext,
+    fileName: path.basename(realFile),
+    buffer: buf,
+    contentType,
   });
 }
 

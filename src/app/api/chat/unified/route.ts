@@ -2541,30 +2541,49 @@ async function materializeGbrainProjectWorkspaceForAgent(
   }
 }
 
-function getOpenClawRuntimeRoots(projectId: string | null): string[] {
+function getOpenClawCanvasDocumentRoots(): string[] {
+  const stateDir = getScienceSwarmOpenClawStateDir();
+  const roots = [path.join(stateDir, "canvas", "documents")];
   const homeDir = process.env.HOME;
-  if (!homeDir) {
-    return [];
+  if (homeDir) {
+    roots.push(path.join(homeDir, ".openclaw", "canvas", "documents"));
   }
+  return dedupePaths(roots);
+}
 
+function getOpenClawMediaRoots(): string[] {
+  const stateDir = getScienceSwarmOpenClawStateDir();
+  const roots = [path.join(stateDir, "media")];
+  const homeDir = process.env.HOME;
+  if (homeDir) {
+    roots.push(path.join(homeDir, ".openclaw", "media"));
+  }
+  return dedupePaths(roots);
+}
+
+function getOpenClawRuntimeRoots(projectId: string | null): string[] {
   // Include both the default ~/.openclaw paths (for profile-mode or legacy
-  // installs) AND the ScienceSwarm state-dir paths.  When OpenClaw runs with
+  // installs) AND the ScienceSwarm state-dir paths. When OpenClaw runs with
   // OPENCLAW_STATE_DIR=$SCIENCESWARM_DIR/openclaw its write tool places
   // outputs under the state dir, not ~/.openclaw.
   const stateDir = getScienceSwarmOpenClawStateDir();
   const roots = [
     path.join(stateDir, "workspace"),
-    path.join(stateDir, "media"),
-    path.join(homeDir, ".openclaw", "workspace"),
-    path.join(homeDir, ".openclaw", "media"),
+    ...getOpenClawMediaRoots(),
+    ...getOpenClawCanvasDocumentRoots(),
   ];
-
+  const homeDir = process.env.HOME;
+  if (homeDir) {
+    roots.push(path.join(homeDir, ".openclaw", "workspace"));
+  }
   if (projectId) {
     roots.push(path.join(stateDir, "projects", projectId));
-    roots.push(path.join(homeDir, ".openclaw", "projects", projectId));
+    if (homeDir) {
+      roots.push(path.join(homeDir, ".openclaw", "projects", projectId));
+    }
   }
 
-  return roots;
+  return dedupePaths(roots);
 }
 
 async function pathExists(candidatePath: string): Promise<boolean> {
@@ -2762,6 +2781,32 @@ async function resolveExistingPathWithinRoot(
   return canonicalCandidate;
 }
 
+function getOpenClawVirtualCandidatePaths(
+  candidate: string,
+): Array<{ root: string; candidatePath: string }> {
+  const normalized = stripQuotedToken(candidate)
+    .replaceAll("\\", "/")
+    .replace(/^\/+/, "");
+
+  if (normalized.startsWith("__openclaw__/canvas/documents/")) {
+    const relativePath = normalized.slice("__openclaw__/canvas/documents/".length);
+    return getOpenClawCanvasDocumentRoots().map((root) => ({
+      root,
+      candidatePath: path.join(root, relativePath),
+    }));
+  }
+
+  if (normalized.startsWith("__openclaw__/media/")) {
+    const relativePath = normalized.slice("__openclaw__/media/".length);
+    return getOpenClawMediaRoots().map((root) => ({
+      root,
+      candidatePath: path.join(root, relativePath),
+    }));
+  }
+
+  return [];
+}
+
 async function resolveGeneratedOutputPath(
   candidate: string,
   projectRoot: string,
@@ -2771,6 +2816,16 @@ async function resolveGeneratedOutputPath(
   const trimmed = stripQuotedToken(candidate);
   if (!trimmed) {
     return null;
+  }
+
+  for (const virtualCandidate of getOpenClawVirtualCandidatePaths(trimmed)) {
+    const resolved = await resolveExistingPathWithinRoot(
+      virtualCandidate.root,
+      virtualCandidate.candidatePath,
+    );
+    if (resolved) {
+      return resolved;
+    }
   }
 
   const homeDir = process.env.HOME;
@@ -2893,6 +2948,37 @@ async function reserveUniqueProjectOutputPath(
   }
 }
 
+async function relativePathWithinRoot(
+  absolutePath: string,
+  root: string,
+): Promise<string | null> {
+  const canonicalRoot = await realpath(root).catch(() => path.resolve(root));
+  const normalizedRoot = path.resolve(canonicalRoot);
+  const normalizedAbsolutePath = path.resolve(absolutePath);
+  if (
+    normalizedAbsolutePath === normalizedRoot ||
+    !normalizedAbsolutePath.startsWith(`${normalizedRoot}${path.sep}`)
+  ) {
+    return null;
+  }
+
+  return normalizeWorkspacePath(
+    path.relative(normalizedRoot, normalizedAbsolutePath),
+  );
+}
+
+async function relativeOpenClawCanvasDocumentPath(
+  absolutePath: string,
+): Promise<string | null> {
+  for (const root of getOpenClawCanvasDocumentRoots()) {
+    const relativePath = await relativePathWithinRoot(absolutePath, root);
+    if (relativePath) {
+      return relativePath;
+    }
+  }
+  return null;
+}
+
 async function importOpenClawGeneratedFile(
   projectId: string,
   sourcePath: string,
@@ -2921,7 +3007,15 @@ async function importOpenClawGeneratedFile(
     sourceStats?.mtime.toISOString() ?? new Date().toISOString();
 
   let workspacePath: string;
-  if (
+  const canvasDocumentPath = await relativeOpenClawCanvasDocumentPath(normalizedSource);
+  if (canvasDocumentPath) {
+    const targetPath = path.join(projectRoot, "figures", canvasDocumentPath);
+    await mkdir(path.dirname(targetPath), { recursive: true });
+    await copyFile(normalizedSource, targetPath);
+    workspacePath = normalizeWorkspacePath(
+      path.relative(projectRoot, targetPath),
+    );
+  } else if (
     normalizedSource === normalizedProjectRoot ||
     normalizedSource.startsWith(`${normalizedProjectRoot}${path.sep}`)
   ) {

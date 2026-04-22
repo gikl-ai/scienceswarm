@@ -5466,6 +5466,65 @@ describe("POST /api/chat/unified", () => {
     ).toBe(true);
   });
 
+  it("imports OpenClaw canvas documents into the project workspace and rewrites embed urls", async () => {
+    const projectRoot = createProjectRoot("alpha-project");
+    const scienceswarmDir = ensureScienceSwarmDir();
+    const canvasDocumentPath = path.join(
+      scienceswarmDir,
+      "openclaw",
+      "canvas",
+      "documents",
+      "snake-game",
+      "index.html",
+    );
+
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockImplementationOnce(async () => {
+      mkdirSync(path.dirname(canvasDocumentPath), { recursive: true });
+      writeFileSync(
+        canvasDocumentPath,
+        "<!doctype html><title>Snake</title><script>console.log('snake')</script>",
+      );
+      return "[embed url=\"/__openclaw__/canvas/documents/snake-game/index.html\" title=\"Snake\" height=\"420\" /]";
+    });
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Create a playable snake game preview.",
+        projectId: "alpha-project",
+        mode: "openclaw-tools",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      backend: "openclaw",
+      response:
+        "[embed url=\"figures/snake-game/index.html\" title=\"Snake\" height=\"420\" /]",
+      generatedFiles: ["figures/snake-game/index.html"],
+    });
+    expect(
+      existsSync(path.join(projectRoot, "figures", "snake-game", "index.html")),
+    ).toBe(true);
+    expect(
+      readFileSync(path.join(projectRoot, "figures", "snake-game", "index.html"), "utf-8"),
+    ).toContain("<title>Snake</title>");
+  });
+
   it("does not import absolute paths that escape the project and OpenClaw roots", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     const outsideRoot = mkdtempSync(path.join(tmpdir(), "openclaw-outside-"));
