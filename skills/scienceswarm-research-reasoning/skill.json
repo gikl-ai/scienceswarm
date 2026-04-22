@@ -1,0 +1,24 @@
+{
+  "slug": "scienceswarm-research-reasoning",
+  "name": "ScienceSwarm Research Reasoning",
+  "description": "Use optional reasoning prompt patterns for research questions without committing the project to a fixed UI workflow.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "reasoning",
+    "evidence"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Optional reasoning patterns for evidence maps, design critique, next experiments, model-system fit, target prioritization, multimodal interpretation, and decision updates.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-22T00:00:00.000Z",
+  "updatedAt": "2026-04-22T00:00:00.000Z"
+}

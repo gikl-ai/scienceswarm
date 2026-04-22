@@ -187,7 +187,7 @@ describe("Project dashboard smoke test", () => {
     });
   }
 
-  it("shows an honest low-confidence state when evidence does not justify a belief change", async () => {
+  it("does not render fixed reasoning panels on the project workspace", async () => {
     const fetchMock = stubDashboardFetch({
       projectBrief: {
         project: "demo-project",
@@ -211,15 +211,11 @@ describe("Project dashboard smoke test", () => {
 
     render(<ProjectPage />);
 
-    expect(
-      await screen.findByText("No Meaningful Belief Change Detected"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/does not yet justify a confident update/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Treat downstream guidance as low confidence/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Chat with your project")).toBeInTheDocument();
+    expect(screen.queryByText("Evidence Map")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Analyze evidence" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Project Understanding")).not.toBeInTheDocument();
+    expect(screen.queryByText("Low-Confidence Project Read")).not.toBeInTheDocument();
   });
 
 

@@ -10,7 +10,7 @@ metadata:
 
 ## Overview
 
-The dashboard is a Next.js web UI at `http://localhost:${FRONTEND_PORT:-3001}` providing:
+The dashboard is a Next.js web UI at `https://localhost:${FRONTEND_PORT:-3001}` by default, serving local HTTPS for Safari and secure-cookie compatibility:
 
 - **Project workspace**: View and manage research projects
 - **Communications panel**: Chat through OpenClaw, NanoClaw, or direct LLM backends
