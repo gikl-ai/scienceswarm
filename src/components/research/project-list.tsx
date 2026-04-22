@@ -51,7 +51,10 @@ export function ProjectList({
     async (signal?: AbortSignal) => {
       try {
         const res = await fetch("/api/projects", { signal });
-        if (!res.ok || signal?.aborted) {
+        if (signal?.aborted) {
+          return;
+        }
+        if (!res.ok) {
           setStatus("error");
           return;
         }

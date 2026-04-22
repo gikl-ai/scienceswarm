@@ -110,6 +110,7 @@ interface TreeNode {
 }
 
 const MAX_TEXT_PREVIEW_BYTES = 5 * 1024 * 1024;
+const workspaceMutationLocks = new Map<string, Promise<void>>();
 const SYNC_SKIP_DIRS = new Set([
   "node_modules", ".git", ".hg", "__pycache__", ".venv", "venv",
   ".tox", ".mypy_cache", ".pytest_cache", "dist", "build",
@@ -169,6 +170,29 @@ function shouldSkipWorkspaceEntry(entry: fs.Dirent, siblings: fs.Dirent[]): bool
 
   const base = entry.name.slice(0, -3);
   return siblings.some((candidate) => candidate.name === base);
+}
+
+async function withWorkspaceMutationLock<T>(
+  projectId: string | null,
+  task: () => Promise<T> | T,
+): Promise<T> {
+  const key = projectId ?? "__workspace__";
+  const previous = workspaceMutationLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.then(() => current);
+  workspaceMutationLocks.set(key, queued);
+  await previous;
+  try {
+    return await task();
+  } finally {
+    release();
+    if (workspaceMutationLocks.get(key) === queued) {
+      workspaceMutationLocks.delete(key);
+    }
+  }
 }
 
 function getScientistWorkspacePathForFlatFile(filename: string): string | null {
@@ -397,6 +421,23 @@ async function buildGbrainWorkspaceView(
   };
 }
 
+function resolveImportedWorkspacePath(
+  projectId: string,
+  relativePath: string,
+  root: string,
+): string {
+  const targetPath = getImportedWorkspacePath(projectId, relativePath);
+  const relativeToRoot = path.relative(root, targetPath);
+  if (
+    relativeToRoot === ""
+    || relativeToRoot.startsWith("..")
+    || path.isAbsolute(relativeToRoot)
+  ) {
+    throw new Error("Imported workspace path must stay inside the project workspace.");
+  }
+  return targetPath;
+}
+
 async function listGbrainWorkspaceFileEntries(
   projectId: string | null,
 ): Promise<GbrainWorkspaceFileEntry[]> {
@@ -484,6 +525,13 @@ async function listGbrainWorkspaceFileEntries(
 function getGbrainWorkspacePath(filename: string): string | null {
   const normalizedFilename = normalizeWorkspacePath(filename);
   if (!normalizedFilename) return null;
+  const isAbsolutePath =
+    filename.startsWith("/")
+    || /^[A-Za-z]:[\\/]/.test(filename);
+  if (isAbsolutePath) {
+    const baseName = path.posix.basename(normalizedFilename);
+    return `${getTargetFolder(baseName)}/${baseName}`;
+  }
   // Filenames from OpenHands writeback already carry a relative path (e.g.
   // "figures/plot.png"); applying getTargetFolder on top would double-nest them
   // into "figures/figures/plot.png". Only prepend the target folder for bare
@@ -642,7 +690,8 @@ async function syncProjectWorkspaceFromImportSource(
       detectedBytes += fileStat.size;
 
       const relativePath = path.relative(sourceRoot, fullPath);
-      const workspacePath = path.relative(root, getImportedWorkspacePath(projectId, relativePath));
+      const targetPath = resolveImportedWorkspacePath(projectId, relativePath, root);
+      const workspacePath = path.relative(root, targetPath);
       const sourceHash = computeImportFingerprint(fullPath, fileStat.size);
       const duplicateBucket = duplicatePathsByHash.get(sourceHash);
       if (duplicateBucket) {
@@ -652,8 +701,9 @@ async function syncProjectWorkspaceFromImportSource(
       }
       duplicatePathsByHash.set(sourceHash, [relativePath]);
 
-      const targetPath = getImportedWorkspacePath(projectId, relativePath);
       const existingRef = nextRefs.get(workspacePath);
+      const preserveLocalEdit = typeof existingRef?.localEditedAt === "string"
+        && existingRef.localEditedAt.trim().length > 0;
       let targetHash: string | null = existingRef?.hash ?? null;
       const targetExists = fs.existsSync(targetPath);
       const legacySourceHash = fileStat.size > LARGE_FILE_FINGERPRINT_THRESHOLD_BYTES
@@ -674,7 +724,7 @@ async function syncProjectWorkspaceFromImportSource(
         }
       }
 
-      if (!targetExists || targetHash !== sourceHash) {
+      if (!targetExists || (targetHash !== sourceHash && !preserveLocalEdit)) {
         fs.mkdirSync(path.dirname(targetPath), { recursive: true });
         fs.copyFileSync(fullPath, targetPath);
       }
@@ -682,12 +732,15 @@ async function syncProjectWorkspaceFromImportSource(
       const nextRef: FileReference = {
         originalPath: fullPath,
         workspacePath,
-        hash: sourceHash,
+        hash: preserveLocalEdit && targetHash ? targetHash : sourceHash,
         type: inferImportedFileType(entry.name),
-        size: fileStat.size,
+        size: preserveLocalEdit && targetExists
+          ? fs.statSync(targetPath).size
+          : fileStat.size,
         importedAt: existingRef?.importedAt ?? now,
         lastChecked: now,
-        changed: false,
+        changed: preserveLocalEdit ? targetHash !== sourceHash : false,
+        localEditedAt: preserveLocalEdit ? existingRef?.localEditedAt : undefined,
       };
 
       nextRefs.set(workspacePath, nextRef);
@@ -782,12 +835,24 @@ export async function POST(request: Request) {
     const action = body.action as string;
     const projectId = typeof body.projectId === "string" ? body.projectId : null;
 
-    if (action === "check-changes") return await handleCheckChanges(projectId);
+    if (action === "check-changes") {
+      return await withWorkspaceMutationLock(projectId, () =>
+        handleCheckChanges(projectId)
+      );
+    }
     if (action === "list") return await handleList(projectId);
     if (action === "watch") return await handleWatch(projectId, typeof body.since === "string" ? body.since : null);
     if (action === "update-meta") return handleUpdateMeta(body, projectId);
-    if (action === "write-file") return handleWriteFile(body, projectId);
-    if (action === "delete-file") return handleDeleteFile(body, projectId);
+    if (action === "write-file") {
+      return await withWorkspaceMutationLock(projectId, () =>
+        Promise.resolve(handleWriteFile(body, projectId))
+      );
+    }
+    if (action === "delete-file") {
+      return await withWorkspaceMutationLock(projectId, () =>
+        Promise.resolve(handleDeleteFile(body, projectId))
+      );
+    }
 
     return Response.json({ error: `Unknown action: ${action}` }, { status: 400 });
   } catch (err) {
@@ -1310,6 +1375,13 @@ async function findGbrainWorkspaceEntry(
   if (!projectId) return null;
   const requestedPath = normalizeWorkspacePath(filePath);
   if (!requestedPath) return null;
+  // Imported gbrain-backed files seed the workspace, but any explicit local
+  // edit should become the source of truth for subsequent reads. Without this
+  // overlay, the editor appears to save successfully and then "reverts" after
+  // a reload because the stale imported object still wins.
+  if (!("error" in safeResolveInsideRoot(requestedPath, projectId))) {
+    return null;
+  }
   const entries = await listGbrainWorkspaceFileEntries(projectId);
   return entries.find((entry) => entry.workspacePath === requestedPath) ?? null;
 }
@@ -1883,6 +1955,11 @@ function handleWriteFile(
     importedAt: refs.files.find((ref) => ref.workspacePath === workspacePath)?.importedAt ?? now,
     lastChecked: now,
     changed: false,
+    localEditedAt: path.isAbsolute(
+      refs.files.find((ref) => ref.workspacePath === workspacePath)?.originalPath ?? "",
+    )
+      ? now
+      : refs.files.find((ref) => ref.workspacePath === workspacePath)?.localEditedAt,
   };
   const existingIndex = refs.files.findIndex((ref) => ref.workspacePath === workspacePath);
   if (existingIndex >= 0) {

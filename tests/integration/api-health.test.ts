@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the universal agent-client that the route dynamic-imports.
@@ -28,6 +31,9 @@ vi.mock("@/lib/local-llm", () => ({
 import { GET } from "@/app/api/health/route";
 
 describe("GET /api/health", () => {
+  const originalCwd = process.cwd();
+  let tempRepoRoot: string | null = null;
+
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("unreachable")));
     vi.stubEnv("OPENAI_API_KEY", "");
@@ -39,6 +45,14 @@ describe("GET /api/health", () => {
     localHealth.mockResolvedValue({ running: false, models: [], url: "http://localhost:11434" });
     getLocalModel.mockReturnValue("gemma4");
     isLocalProviderConfigured.mockImplementation(() => process.env.LLM_PROVIDER === "local");
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    if (tempRepoRoot) {
+      await rm(tempRepoRoot, { recursive: true, force: true });
+      tempRepoRoot = null;
+    }
   });
 
   it("returns status for all services", async () => {
@@ -256,6 +270,8 @@ describe("GET /api/health", () => {
   });
 
   it("surfaces scienceswarm_user_handle with a message when missing", async () => {
+    tempRepoRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-health-"));
+    process.chdir(tempRepoRoot);
     vi.stubEnv("SCIENCESWARM_USER_HANDLE", "");
 
     const response = await GET();
@@ -269,6 +285,8 @@ describe("GET /api/health", () => {
   });
 
   it("treats whitespace-only SCIENCESWARM_USER_HANDLE as missing", async () => {
+    tempRepoRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-health-"));
+    process.chdir(tempRepoRoot);
     vi.stubEnv("SCIENCESWARM_USER_HANDLE", "   ");
 
     const response = await GET();
@@ -278,6 +296,24 @@ describe("GET /api/health", () => {
     expect(body.scienceswarm_user_handle.message).toContain(
       "SCIENCESWARM_USER_HANDLE is not set",
     );
+  });
+
+  it("reads scienceswarm_user_handle from the saved .env when setup updated it after boot", async () => {
+    tempRepoRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-health-"));
+    await writeFile(
+      path.join(tempRepoRoot, ".env"),
+      "SCIENCESWARM_USER_HANDLE=@saved-health-handle\n",
+    );
+    process.chdir(tempRepoRoot);
+    vi.stubEnv("SCIENCESWARM_USER_HANDLE", "");
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(body.scienceswarm_user_handle).toEqual({
+      configured: true,
+      value: "@saved-health-handle",
+    });
   });
 
   it("reports scientific database key presence without leaking values", async () => {

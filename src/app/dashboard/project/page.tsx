@@ -103,6 +103,7 @@ import {
   buildOpenClawSlashCommands,
   looksLikeSlashCommandInput,
 } from "@/lib/openclaw/slash-commands";
+import { buildMirroredBrainPagePath } from "@/lib/brain-artifact-path";
 
 // ── Types ──────────────────────────────────────────────────────
 interface Message {
@@ -116,8 +117,19 @@ interface Message {
 
 interface DashboardProjectBrief {
   project: string;
+  generatedAt: string;
+  topMatters: Array<{
+    summary: string;
+    evidence: string[];
+  }>;
+  unresolvedRisks: Array<{
+    risk: string;
+    evidence: string[];
+  }>;
   nextMove?: {
     recommendation?: string;
+    assumptions?: string[];
+    missingEvidence?: string[];
   };
   dueTasks?: Array<{
     path: string;
@@ -141,6 +153,17 @@ interface LatestImportSummary {
   generatedAt: string;
   source: string;
 }
+
+interface ProjectUnderstandingDelta {
+  changedAt: string;
+  summary: string;
+  previousRecommendation?: string;
+  nextRecommendation?: string;
+  whyItChanged: string[];
+  evidence: string[];
+}
+
+type ProjectUnderstandingStatus = "idle" | "loading" | "ready" | "error";
 
 interface ProjectImportSummaryResponse {
   project: string;
@@ -182,6 +205,8 @@ type BrainRadarStatus = {
   age_ms: number;
   stale: boolean;
   schedule_interval_ms: number;
+  briefing_slug?: string;
+  journal_slug?: string;
 };
 
 type BrainBootstrapState =
@@ -195,7 +220,7 @@ type BrainBootstrapState =
     }
   | { status: "error"; message: string };
 
-type _EvidenceMapStatus =
+type EvidenceMapStatus =
   | { state: "idle" }
   | { state: "running" }
   | {
@@ -213,6 +238,17 @@ const SCIENCESWARM_SIGN_IN_URL = getScienceSwarmSignInUrl();
 interface ExplicitCaptureIntent {
   content: string;
   kind?: CaptureKind;
+  mode?: "capture" | "decision-update";
+}
+
+interface DecisionPreviewTarget {
+  slug: string;
+  path: string;
+  title: string;
+}
+
+interface NextExperimentPlanIntent {
+  updateExisting: boolean;
 }
 
 type Tab =
@@ -273,6 +309,99 @@ function storeProjectTreeVisibilityMode(
   } catch {
     // Ignore storage failures; visibility still updates for this session.
   }
+}
+
+function normalizeProjectBriefRecommendation(
+  brief: DashboardProjectBrief | null | undefined,
+): string {
+  return brief?.nextMove?.recommendation?.trim() ?? "";
+}
+
+function buildProjectUnderstandingDelta(
+  previousBrief: DashboardProjectBrief | null,
+  nextBrief: DashboardProjectBrief,
+): ProjectUnderstandingDelta | null {
+  if (!previousBrief) return null;
+
+  const previousRecommendation =
+    normalizeProjectBriefRecommendation(previousBrief);
+  const nextRecommendation = normalizeProjectBriefRecommendation(nextBrief);
+  const previousTopMatters = previousBrief.topMatters ?? [];
+  const nextTopMatters = nextBrief.topMatters ?? [];
+  const previousUnresolvedRisks = previousBrief.unresolvedRisks ?? [];
+  const nextUnresolvedRisks = nextBrief.unresolvedRisks ?? [];
+  const previousTopMatter = previousTopMatters[0]?.summary?.trim() ?? "";
+  const nextTopMatter = nextTopMatters[0]?.summary?.trim() ?? "";
+  const previousTopRisk =
+    previousUnresolvedRisks[0]?.risk?.trim() ?? "";
+  const nextTopRisk = nextUnresolvedRisks[0]?.risk?.trim() ?? "";
+  const previousFrontier = previousBrief.frontier?.[0]?.title?.trim() ?? "";
+  const nextFrontier = nextBrief.frontier?.[0]?.title?.trim() ?? "";
+
+  const changedAreas: string[] = [];
+  if (previousRecommendation !== nextRecommendation) {
+    changedAreas.push("the recommended next move");
+  }
+  if (previousTopMatter !== nextTopMatter) {
+    changedAreas.push("the top matter driving the project");
+  }
+  if (previousTopRisk !== nextTopRisk) {
+    changedAreas.push("the leading unresolved risk");
+  }
+  if (previousFrontier !== nextFrontier) {
+    changedAreas.push("the frontier item worth watching");
+  }
+
+  if (changedAreas.length === 0) {
+    return null;
+  }
+
+  const whyItChanged = Array.from(
+    new Set(
+      [
+        ...nextTopMatters.slice(0, 2).map((item) => item.summary.trim()),
+        ...nextUnresolvedRisks.slice(0, 1).map((item) => item.risk.trim()),
+      ].filter(Boolean),
+    ),
+  );
+  const evidence = Array.from(
+    new Set(
+      [
+        ...nextTopMatters.flatMap((item) => item.evidence ?? []),
+        ...nextUnresolvedRisks.flatMap((item) => item.evidence ?? []),
+        ...(nextBrief.nextMove?.missingEvidence ?? []),
+      ].filter(Boolean),
+    ),
+  ).slice(0, 4);
+
+  return {
+    changedAt: nextBrief.generatedAt,
+    summary: `ScienceSwarm updated ${joinWithCommas(changedAreas)} after new project evidence arrived.`,
+    previousRecommendation: previousRecommendation || undefined,
+    nextRecommendation: nextRecommendation || undefined,
+    whyItChanged,
+    evidence,
+  };
+}
+
+function joinWithCommas(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "the project understanding";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
+}
+
+function formatProjectUnderstandingTime(value?: string): string {
+  if (!value) return "Not updated yet";
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return value;
+  const deltaMs = Date.now() - parsed;
+  if (deltaMs < 60_000) return "Updated just now";
+  const minutes = Math.round(deltaMs / 60_000);
+  if (minutes < 60) return `Updated ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `Updated ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  return `Updated ${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 function normalizeChatContextPath(value?: string): string {
@@ -536,28 +665,85 @@ function buildCaptureTitle(content: string): string {
 function parseExplicitCaptureIntent(
   text: string,
 ): ExplicitCaptureIntent | null {
-  const patterns: Array<{ pattern: RegExp; kind?: CaptureKind }> = [
+  const patterns: Array<{
+    pattern: RegExp;
+    kind?: CaptureKind;
+    mode?: "capture" | "decision-update";
+  }> = [
+    {
+      pattern: /^\s*(?:decision\s+update|update\s+decision|amend\s+decision)\s*:\s*([\s\S]+)$/i,
+      kind: "decision",
+      mode: "decision-update",
+    },
     { pattern: /^\s*remember(?:\s+this)?\s*:\s*([\s\S]+)$/i, kind: "note" },
     { pattern: /^\s*note\s*:\s*([\s\S]+)$/i, kind: "note" },
     { pattern: /^\s*observation\s*:\s*([\s\S]+)$/i, kind: "observation" },
     { pattern: /^\s*decision\s*:\s*([\s\S]+)$/i, kind: "decision" },
     { pattern: /^\s*hypothesis\s*:\s*([\s\S]+)$/i, kind: "hypothesis" },
     { pattern: /^\s*(?:task|todo)\s*:\s*([\s\S]+)$/i, kind: "task" },
+    { pattern: /^\s*survey\s*:\s*([\s\S]+)$/i, kind: "survey" },
+    { pattern: /^\s*method\s*:\s*([\s\S]+)$/i, kind: "method" },
+    {
+      pattern: /^\s*(?:original\s+synthesis|synthesis)\s*:\s*([\s\S]+)$/i,
+      kind: "original_synthesis",
+    },
+    {
+      pattern: /^\s*(?:research\s+packet|packet)\s*:\s*([\s\S]+)$/i,
+      kind: "research_packet",
+    },
+    {
+      pattern: /^\s*(?:overnight\s+journal|journal)\s*:\s*([\s\S]+)$/i,
+      kind: "overnight_journal",
+    },
   ];
 
-  for (const { pattern, kind } of patterns) {
+  for (const { pattern, kind, mode } of patterns) {
     const match = text.match(pattern);
     if (!match) continue;
     const content = match[1]?.trim();
     if (!content) return null;
-    return { content, kind };
+    return { content, kind, mode: mode ?? "capture" };
   }
 
   return null;
 }
 
+function parseNextExperimentPlanIntent(
+  text: string,
+): NextExperimentPlanIntent | null {
+  const normalized = text.trim().toLowerCase();
+  const asksForPlanner =
+    /\b(next experiment|next experiments|experiment plan|best experiment|best next experiment)\b/i.test(normalized)
+    || (
+      /\b(rank|prioritize|distinguish|separate|what should we do next)\b/i.test(normalized)
+      && /\b(experiment|assay|readout|control)\b/i.test(normalized)
+    );
+
+  if (!asksForPlanner) {
+    return null;
+  }
+
+  return {
+    updateExisting:
+      /\b(update|revise|rerank|re-rank|change|after this result|based on the new result|new result)\b/i.test(normalized),
+  };
+}
+
 function formatCaptureKind(kind: CaptureKind): string {
-  return kind.slice(0, 1).toUpperCase() + kind.slice(1);
+  const labels: Record<CaptureKind, string> = {
+    note: "Note",
+    observation: "Observation",
+    decision: "Decision",
+    hypothesis: "Hypothesis",
+    task: "Task",
+    survey: "Survey",
+    method: "Method",
+    original_synthesis: "Original synthesis",
+    research_packet: "Research packet",
+    overnight_journal: "Overnight journal",
+  };
+
+  return labels[kind];
 }
 
 function isCaretOnFirstLine(element: HTMLTextAreaElement): boolean {
@@ -759,6 +945,36 @@ function normalizeBrainArtifactSlug(
   const trimmed = slug?.trim().replace(/^gbrain:/, "");
   if (!trimmed) return null;
   return trimmed.replace(/\.md$/i, "");
+}
+
+function captureSourceRefFromPath(path: string): SourceRef | null {
+  const trimmed = path.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("gbrain:")) {
+    const slug = normalizeBrainArtifactSlug(trimmed);
+    return slug ? { kind: "artifact", ref: slug } : null;
+  }
+  return { kind: "artifact", ref: trimmed };
+}
+
+function buildDecisionPreviewTarget(
+  node: FileNode | null | undefined,
+): DecisionPreviewTarget | null {
+  const slug = normalizeBrainArtifactSlug(node?.slug);
+  if (!slug || node?.pageType?.trim().toLowerCase() !== "decision") {
+    return null;
+  }
+
+  const path = buildMirroredBrainPagePath(slug, "decision");
+  if (!path) {
+    return null;
+  }
+
+  return {
+    slug,
+    path,
+    title: node?.name ?? slug,
+  };
 }
 
 function buildActiveCompiledPageContext(
@@ -1144,6 +1360,8 @@ function ProjectPageContent() {
   const [selectedFileNode, setSelectedFileNode] = useState<FileNode | null>(
     null,
   );
+  const [lastExperimentPlanSlug, setLastExperimentPlanSlug] = useState<string | null>(null);
+  const [isPlanningExperiments, setIsPlanningExperiments] = useState(false);
   const [filePreview, setFilePreview] = useState<FilePreviewState>({
     status: "idle",
   });
@@ -1167,7 +1385,14 @@ function ProjectPageContent() {
     useState<DashboardProjectBrief | null>(null);
   const [evidenceMapQuestion, setEvidenceMapQuestion] = useState("");
   const [evidenceMapStatus, setEvidenceMapStatus] =
-    useState<_EvidenceMapStatus>({ state: "idle" });
+    useState<EvidenceMapStatus>({ state: "idle" });
+  const [projectUnderstandingStatus, setProjectUnderstandingStatus] =
+    useState<ProjectUnderstandingStatus>("idle");
+  const [projectUnderstandingError, setProjectUnderstandingError] = useState<
+    string | null
+  >(null);
+  const [projectUnderstandingDelta, setProjectUnderstandingDelta] =
+    useState<ProjectUnderstandingDelta | null>(null);
   const [latestImportSummary, setLatestImportSummary] =
     useState<LatestImportSummary | null>(null);
   const [, setImportSummaryState] = useState<ImportSummaryState>("loading");
@@ -1188,9 +1413,11 @@ function ProjectPageContent() {
   const rightWorkspaceRef = useRef<HTMLDivElement>(null);
   const filePreviewRef = useRef<FilePreviewState>({ status: "idle" });
   const filePreviewLocationRef = useRef(filePreviewLocation);
+  const lastProjectBriefRef = useRef<DashboardProjectBrief | null>(null);
   const gbrainArtifactRefreshControllerRef = useRef<AbortController | null>(
     null,
   );
+  const lastViewedDecisionRef = useRef<DecisionPreviewTarget | null>(null);
   const previewRequestSeqRef = useRef(0);
   const isMountedRef = useRef(true);
   const autoOnboardingHandledRef = useRef(false);
@@ -1216,6 +1443,11 @@ function ProjectPageContent() {
 
   useEffect(() => {
     setMobileProjectListOpen(false);
+  }, [activeProjectSlug]);
+
+  useEffect(() => {
+    setEvidenceMapQuestion("");
+    setEvidenceMapStatus({ state: "idle" });
   }, [activeProjectSlug]);
 
   useEffect(() => {
@@ -1427,9 +1659,16 @@ function ProjectPageContent() {
   const loadProjectBrief = useCallback(
     async (signal?: AbortSignal) => {
       if (!activeProjectSlug) {
+        lastProjectBriefRef.current = null;
         setProjectBrief(null);
+        setProjectUnderstandingStatus("idle");
+        setProjectUnderstandingError(null);
+        setProjectUnderstandingDelta(null);
         return;
       }
+
+      setProjectUnderstandingStatus("loading");
+      setProjectUnderstandingError(null);
 
       try {
         const res = await fetch(
@@ -1441,14 +1680,36 @@ function ProjectPageContent() {
 
         if (!res.ok) {
           setProjectBrief(null);
+          setProjectUnderstandingStatus("error");
+          setProjectUnderstandingError(
+            `Project understanding failed to refresh (${res.status}).`,
+          );
           return;
         }
 
         const data = (await res.json()) as DashboardProjectBrief;
+        if (signal?.aborted || (data.project && data.project !== activeProjectSlug)) {
+          return;
+        }
+        const delta = buildProjectUnderstandingDelta(
+          lastProjectBriefRef.current,
+          data,
+        );
+        if (delta) {
+          setProjectUnderstandingDelta(delta);
+        }
+        lastProjectBriefRef.current = data;
         setProjectBrief(data);
+        setProjectUnderstandingStatus("ready");
       } catch (error: unknown) {
         if (!(error instanceof Error && error.name === "AbortError")) {
           setProjectBrief(null);
+          setProjectUnderstandingStatus("error");
+          setProjectUnderstandingError(
+            error instanceof Error
+              ? error.message
+              : "Project understanding failed to refresh.",
+          );
         }
       }
     },
@@ -1802,7 +2063,11 @@ function ProjectPageContent() {
       gbrainArtifactRefreshControllerRef.current?.abort();
       const controller = new AbortController();
       gbrainArtifactRefreshControllerRef.current = controller;
-      void loadGbrainNodes(controller.signal);
+      void Promise.all([
+        loadGbrainNodes(controller.signal),
+        loadProjectBrief(controller.signal),
+        loadImportSummary(controller.signal),
+      ]);
     };
     window.addEventListener(
       "scienceswarm:gbrain-artifacts-updated",
@@ -1816,7 +2081,14 @@ function ProjectPageContent() {
         handleGbrainArtifactsUpdated,
       );
     };
-  }, [activeProjectSlug, loadGbrainNodes]);
+  }, [activeProjectSlug, loadGbrainNodes, loadImportSummary, loadProjectBrief]);
+
+  useEffect(() => {
+    lastProjectBriefRef.current = null;
+    setProjectUnderstandingDelta(null);
+    setProjectUnderstandingError(null);
+    setProjectUnderstandingStatus(activeProjectSlug ? "loading" : "idle");
+  }, [activeProjectSlug]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2213,6 +2485,10 @@ function ProjectPageContent() {
       node?: FileNode,
       options: { forceReload?: boolean; appendPreviewMessage?: boolean } = {},
     ) => {
+      const decisionTarget = buildDecisionPreviewTarget(node);
+      if (decisionTarget) {
+        lastViewedDecisionRef.current = decisionTarget;
+      }
       const source: WorkspacePreviewSource =
         node?.source === "gbrain" ? "gbrain" : "workspace";
       const requestSeq = previewRequestSeqRef.current + 1;
@@ -2297,9 +2573,15 @@ function ProjectPageContent() {
 
       // ── gbrain-sourced nodes: prefer compiled-page read, then raw file refs ──
       if (node?.source === "gbrain" && node.slug) {
+        const mirroredPath = buildMirroredBrainPagePath(
+          node.slug,
+          node.pageType,
+        );
         try {
           const readRes = await fetch(
-            `/api/brain/read?path=${encodeURIComponent(node.slug)}`,
+            `/api/brain/read?path=${encodeURIComponent(
+              mirroredPath ?? node.slug,
+            )}`,
           );
           if (readRes.ok) {
             const compiledPage = (await readRes.json()) as CompiledPageRead;
@@ -2322,6 +2604,21 @@ function ProjectPageContent() {
                 mime: "text/markdown",
                 editable: false,
                 compiledPage,
+              });
+              return;
+            }
+            if (
+              typeof compiledPage.path === "string" &&
+              typeof compiledPage.content === "string"
+            ) {
+              applyPreview({
+                status: "ready",
+                path,
+                source: "gbrain",
+                kind: "markdown",
+                content: compiledPage.content,
+                mime: "text/markdown",
+                editable: false,
               });
               return;
             }
@@ -2928,6 +3225,33 @@ function ProjectPageContent() {
     [setMessages],
   );
 
+  const buildVisibleCaptureSourceRefs = useCallback((): SourceRef[] => {
+    const sourceRefs: SourceRef[] = [];
+    const currentSelection = selectedFileNode?.source === "gbrain" && selectedFileNode.slug
+      ? captureSourceRefFromPath(`gbrain:${selectedFileNode.slug}`)
+      : selectedFile
+        ? captureSourceRefFromPath(selectedFile)
+        : activePreviewFile?.path
+          ? captureSourceRefFromPath(activePreviewFile.path)
+          : null;
+    if (currentSelection) {
+      sourceRefs.push(currentSelection);
+    }
+
+    for (const item of chatContextItems) {
+      const ref = captureSourceRefFromPath(item.path);
+      if (ref) {
+        sourceRefs.push(ref);
+      }
+    }
+
+    const deduped = new Map<string, SourceRef>();
+    for (const ref of sourceRefs) {
+      deduped.set(`${ref.kind}:${ref.ref}:${ref.hash ?? ""}`, ref);
+    }
+    return Array.from(deduped.values());
+  }, [activePreviewFile, chatContextItems, selectedFile, selectedFileNode]);
+
   const handleCaptureIntent = useCallback(
     async (text: string, intent: ExplicitCaptureIntent) => {
       if (isCapturing || isStreaming) return;
@@ -2936,9 +3260,17 @@ function ProjectPageContent() {
       const userMessageId = makeLocalMessageId();
       const replyMessageId = makeLocalMessageId();
       const userId = getWebCaptureUserId();
-      const sourceRefs: SourceRef[] = conversationId
-        ? [{ kind: "conversation", ref: conversationId }]
-        : [];
+      const decisionTarget = lastViewedDecisionRef.current;
+      const sourceRefs: SourceRef[] = [
+        ...(conversationId
+          ? [{ kind: "conversation", ref: conversationId } satisfies SourceRef]
+          : []),
+        ...buildVisibleCaptureSourceRefs(),
+      ].filter((ref) =>
+        intent.mode === "decision-update" && decisionTarget
+          ? !(ref.kind === "artifact" && ref.ref === decisionTarget.slug)
+          : true,
+      );
 
       setMessages((prev) => [
         ...prev,
@@ -2957,28 +3289,64 @@ function ProjectPageContent() {
         },
       ]);
       setInput("");
-      setIsCapturing(true);
       clearError();
 
+      if (intent.mode === "decision-update" && !decisionTarget) {
+        applyCaptureReply(
+          replyMessageId,
+          "No decision selected. Open a decision from Brain Artifacts first, then use `decision update:` to amend it.",
+        );
+        return;
+      }
+
+      setIsCapturing(true);
+
       try {
-        const response = await fetch("/api/brain/capture", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            content: intent.content,
-            kind: intent.kind,
-            channel: "web",
-            userId,
-            project: activeProjectSlug ?? null,
-            sourceRefs,
-          }),
-        });
+        const response = await fetch(
+          intent.mode === "decision-update"
+            ? "/api/brain/decision-update"
+            : "/api/brain/capture",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              intent.mode === "decision-update"
+                ? {
+                    slug: decisionTarget?.slug,
+                    project: activeProjectSlug ?? null,
+                    content: intent.content,
+                    sourceRefs,
+                  }
+                : {
+                    content: intent.content,
+                    kind: intent.kind,
+                    channel: "web",
+                    userId,
+                    project: activeProjectSlug ?? null,
+                    sourceRefs,
+                  },
+            ),
+          },
+        );
 
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
           throw new Error(
             typeof data.error === "string" ? data.error : "Capture failed",
           );
+        }
+
+        if (intent.mode === "decision-update") {
+          applyCaptureReply(
+            replyMessageId,
+            [
+              "**Decision updated**",
+              `Decision: ${decisionTarget?.title ?? "Current decision"}`,
+              `Path: ${typeof data.path === "string" ? data.path : decisionTarget?.path ?? "unknown"}`,
+            ].join("\n"),
+          );
+          await refreshProjectState();
+          return;
         }
 
         const result = data as CaptureResult;
@@ -3014,6 +3382,7 @@ function ProjectPageContent() {
     [
       activeProjectSlug,
       applyCaptureReply,
+      buildVisibleCaptureSourceRefs,
       clearError,
       conversationId,
       getWebCaptureUserId,
@@ -3107,7 +3476,110 @@ function ProjectPageContent() {
     ],
   );
 
-  const isChatBusy = isCapturing;
+  const handleNextExperimentPlannerIntent = useCallback(
+    async (text: string, intent: NextExperimentPlanIntent) => {
+      if (!activeProjectSlug || isPlanningExperiments || isStreaming) return;
+
+      const trimmed = text.trim();
+      const userMessageId = makeLocalMessageId();
+      const replyMessageId = makeLocalMessageId();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: userMessageId,
+          role: "user",
+          content: trimmed,
+          timestamp: new Date(),
+          channel: "web",
+        },
+        {
+          id: replyMessageId,
+          role: "assistant",
+          content: "Planning the next experiments...",
+          timestamp: new Date(),
+        },
+      ]);
+      setInput("");
+      setIsPlanningExperiments(true);
+      clearError();
+
+      try {
+        const response = await fetch("/api/brain/next-experiment-plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project: activeProjectSlug,
+            prompt: trimmed,
+            previousPlanSlug:
+              intent.updateExisting && lastExperimentPlanSlug
+                ? lastExperimentPlanSlug
+                : null,
+            focusBrainSlug:
+              selectedFileNode?.source === "gbrain" && selectedFileNode.slug
+                ? selectedFileNode.slug
+                : null,
+          }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(
+            typeof data.error === "string"
+              ? data.error
+              : "Next experiment planning failed",
+          );
+        }
+
+        const plannerResponse = data as {
+          artifactPage: string;
+          artifactTitle: string;
+          responseMarkdown: string;
+        };
+
+        applyCaptureReply(replyMessageId, plannerResponse.responseMarkdown);
+        setLastExperimentPlanSlug(plannerResponse.artifactPage);
+        await refreshProjectState();
+        void handleFileSelect(
+          `Brain Artifacts/gbrain:${plannerResponse.artifactPage}`,
+          {
+            name: plannerResponse.artifactTitle,
+            type: "file",
+            source: "gbrain",
+            slug: plannerResponse.artifactPage,
+            pageType: "artifact",
+            icon: "🧠",
+          },
+          { appendPreviewMessage: false },
+        );
+      } catch (error) {
+        removeCaptureReply(replyMessageId);
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Next experiment planning failed",
+        );
+      } finally {
+        setIsPlanningExperiments(false);
+      }
+    },
+    [
+      activeProjectSlug,
+      applyCaptureReply,
+      clearError,
+      handleFileSelect,
+      isPlanningExperiments,
+      isStreaming,
+      lastExperimentPlanSlug,
+      refreshProjectState,
+      removeCaptureReply,
+      selectedFileNode,
+      setError,
+      setMessages,
+    ],
+  );
+
+  const isChatBusy = isCapturing || isPlanningExperiments;
   const filesRenderInChat = filePreviewLocation === "chat-pane";
 
   const moveInputCursorToEnd = useCallback((value: string) => {
@@ -3250,6 +3722,12 @@ function ProjectPageContent() {
         return;
       }
 
+      const experimentPlanIntent = parseNextExperimentPlanIntent(trimmed);
+      if (experimentPlanIntent && activeProjectSlug) {
+        void handleNextExperimentPlannerIntent(trimmed, experimentPlanIntent);
+        return;
+      }
+
       // The preview pane is part of the visible scientist workflow. If a user
       // opens a report item and asks "what next?", attach that current view as
       // active-file context without requiring a separate context-chip action.
@@ -3258,7 +3736,9 @@ function ProjectPageContent() {
     },
     [
       activePreviewFile,
+      activeProjectSlug,
       handleCaptureIntent,
+      handleNextExperimentPlannerIntent,
       isChatBusy,
       recordPromptHistory,
       sendMessage,
@@ -3819,6 +4299,225 @@ function ProjectPageContent() {
                           + New Project
                         </Link>
                       </div>
+                    </section>
+                  )}
+                  {activeProjectSlug && (
+                    <section className="rounded-[28px] border border-border bg-white p-6 shadow-sm">
+                      <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                            Project Understanding
+                          </p>
+                          <h2 className="mt-1 text-lg font-semibold text-foreground">
+                            {projectBrief?.nextMove?.recommendation?.trim()
+                              ? "ScienceSwarm's current read on what matters now"
+                              : "ScienceSwarm is still building the current working view"}
+                          </h2>
+                          <p className="mt-1 text-sm text-muted">
+                            {projectUnderstandingStatus === "loading"
+                              ? "Refreshing project understanding..."
+                              : projectUnderstandingStatus === "error"
+                                ? projectUnderstandingError ||
+                                  "Project understanding could not refresh."
+                                : formatProjectUnderstandingTime(
+                                    projectBrief?.generatedAt,
+                                  )}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void refreshProjectState();
+                          }}
+                          className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-border bg-white px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+                        >
+                          Refresh
+                        </button>
+                      </div>
+
+                      {projectUnderstandingDelta ? (
+                        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                            Latest Change
+                          </p>
+                          <p className="mt-2 text-sm font-medium text-emerald-950">
+                            {projectUnderstandingDelta.summary}
+                          </p>
+                          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                            <div className="rounded-xl border border-emerald-200 bg-white/80 p-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                                Previous View
+                              </p>
+                              <p className="mt-2 text-sm text-foreground">
+                                {projectUnderstandingDelta.previousRecommendation ||
+                                  "No earlier recommendation was visible yet."}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-emerald-200 bg-white/80 p-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                                Current View
+                              </p>
+                              <p className="mt-2 text-sm text-foreground">
+                                {projectUnderstandingDelta.nextRecommendation ||
+                                  "ScienceSwarm did not change the next move."}
+                              </p>
+                            </div>
+                          </div>
+                          {projectUnderstandingDelta.whyItChanged.length > 0 ? (
+                            <div className="mt-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                                Why It Changed
+                              </p>
+                              <ul className="mt-2 space-y-2 text-sm text-foreground">
+                                {projectUnderstandingDelta.whyItChanged.map(
+                                  (item) => (
+                                    <li key={item} className="rounded-xl bg-white/80 px-3 py-2">
+                                      {item}
+                                    </li>
+                                  ),
+                                )}
+                              </ul>
+                            </div>
+                          ) : null}
+                          {projectUnderstandingDelta.evidence.length > 0 ? (
+                            <div className="mt-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                                Evidence That Drove The Update
+                              </p>
+                              <ul className="mt-2 space-y-2 text-sm text-foreground">
+                                {projectUnderstandingDelta.evidence.map((item) => (
+                                  <li key={item} className="rounded-xl bg-white/80 px-3 py-2">
+                                    {item}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {!projectUnderstandingDelta &&
+                      projectBrief &&
+                      (projectBrief.nextMove?.missingEvidence?.length ||
+                        (projectBrief.unresolvedRisks?.length ?? 0) > 0) ? (
+                        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">
+                            No Meaningful Belief Change Detected
+                          </p>
+                          <p className="mt-2 text-sm font-medium text-amber-950">
+                            ScienceSwarm is keeping the current project view in place because the linked evidence does not yet justify a confident update.
+                          </p>
+                          <p className="mt-2 text-sm text-amber-900">
+                            Treat downstream guidance as low confidence until the missing evidence or leading risk is resolved.
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {projectBrief ? (
+                        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                          <div className="rounded-2xl border border-border bg-surface/40 p-4">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+                              Current Next Move
+                            </p>
+                            <p className="mt-2 text-sm font-medium leading-6 text-foreground">
+                              {projectBrief.nextMove?.recommendation?.trim() ||
+                                "No recommendation yet. Add more evidence or capture the current working theory first."}
+                            </p>
+                            {projectBrief.nextMove?.assumptions?.length ? (
+                              <div className="mt-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                                  Assumptions
+                                </p>
+                                <ul className="mt-2 space-y-2 text-sm text-foreground">
+                                  {projectBrief.nextMove.assumptions
+                                    .slice(0, 3)
+                                    .map((item) => (
+                                      <li key={item} className="rounded-xl bg-white px-3 py-2">
+                                        {item}
+                                      </li>
+                                    ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {projectBrief.nextMove?.missingEvidence?.length ? (
+                              <div className="mt-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                                  Missing Evidence
+                                </p>
+                                <ul className="mt-2 space-y-2 text-sm text-foreground">
+                                  {projectBrief.nextMove.missingEvidence
+                                    .slice(0, 3)
+                                    .map((item) => (
+                                      <li key={item} className="rounded-xl bg-white px-3 py-2">
+                                        {item}
+                                      </li>
+                                    ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="grid gap-4">
+                            <div className="rounded-2xl border border-border bg-surface/40 p-4">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+                                Top Matters
+                              </p>
+                              <ul className="mt-2 space-y-2 text-sm text-foreground">
+                                {(projectBrief.topMatters?.length ?? 0) > 0 ? (
+                                  projectBrief.topMatters?.slice(0, 3).map((item) => (
+                                    <li key={item.summary} className="rounded-xl bg-white px-3 py-2">
+                                      <div>{item.summary}</div>
+                                      {item.evidence[0] ? (
+                                        <div className="mt-1 text-xs text-muted">
+                                          Evidence: {item.evidence[0]}
+                                        </div>
+                                      ) : null}
+                                    </li>
+                                  ))
+                                ) : (
+                                  <li className="rounded-xl bg-white px-3 py-2 text-muted">
+                                    No high-signal project matters have been synthesized yet.
+                                  </li>
+                                )}
+                              </ul>
+                            </div>
+
+                            <div className="rounded-2xl border border-border bg-surface/40 p-4">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+                                Downstream Guidance
+                              </p>
+                              <ul className="mt-2 space-y-2 text-sm text-foreground">
+                                {projectBrief.dueTasks?.[0] ? (
+                                  <li className="rounded-xl bg-white px-3 py-2">
+                                    Next task: {projectBrief.dueTasks[0].title}
+                                  </li>
+                                ) : null}
+                                {projectBrief.frontier?.[0] ? (
+                                  <li className="rounded-xl bg-white px-3 py-2">
+                                    Frontier watch: {projectBrief.frontier[0].title}
+                                  </li>
+                                ) : null}
+                                {projectBrief.unresolvedRisks?.[0] ? (
+                                  <li className="rounded-xl bg-white px-3 py-2">
+                                    Leading risk: {projectBrief.unresolvedRisks[0].risk}
+                                  </li>
+                                ) : null}
+                                {(projectBrief.dueTasks?.length ?? 0) === 0 &&
+                                (projectBrief.frontier?.length ?? 0) === 0 &&
+                                (projectBrief.unresolvedRisks?.length ?? 0) === 0 ? (
+                                  <li className="rounded-xl bg-white px-3 py-2 text-muted">
+                                    ScienceSwarm does not have enough linked evidence yet to push confident downstream guidance.
+                                  </li>
+                                ) : null}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      ) : projectUnderstandingStatus === "loading" ? (
+                        <div className="mt-4 rounded-2xl border border-border bg-surface/40 px-4 py-5 text-sm text-muted">
+                          Refreshing the latest project understanding from linked evidence...
+                        </div>
+                      ) : null}
                     </section>
                   )}
                   {showEmptyStateImport && (

@@ -66,12 +66,41 @@ function normalizeConfidence(value: unknown): "high" | "medium" | "low" {
 }
 
 function slugifySegment(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-+/g, "-")
-    .slice(0, 60) || "evidence-map";
+  let slug = "";
+  let needsSeparator = false;
+  for (const character of value.trim().toLowerCase()) {
+    const code = character.charCodeAt(0);
+    const isSafe =
+      (code >= 48 && code <= 57)
+      || (code >= 97 && code <= 122);
+
+    if (isSafe) {
+      if (needsSeparator && slug.length > 0) {
+        slug += "-";
+      }
+      slug += character;
+      needsSeparator = false;
+      if (slug.length >= 60) break;
+      continue;
+    }
+
+    needsSeparator = slug.length > 0;
+  }
+
+  while (slug.endsWith("-")) {
+    slug = slug.slice(0, -1);
+  }
+  return slug || "evidence-map";
+}
+
+function compactTimestampForSlug(timestamp: string): string {
+  return [
+    timestamp.slice(0, 10),
+    timestamp.slice(11, 13),
+    timestamp.slice(14, 16),
+    timestamp.slice(17, 19),
+    timestamp.slice(20, 23),
+  ].join("-");
 }
 
 function readNonEmptyString(value: unknown): string | null {
@@ -546,7 +575,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const parsed = JSON.parse(jsonPayload) as unknown;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonPayload);
+    } catch {
+      return Response.json(
+        { error: "Evidence map model response contained malformed JSON." },
+        { status: 502 },
+      );
+    }
     const pageMap = new Map(selectedPages.map((page) => [page.path, page]));
     const payload = normalizeEvidenceMapPayload(parsed, pageMap, question);
     const timestamp = new Date().toISOString();
@@ -561,7 +598,7 @@ export async function POST(request: Request) {
       "analysis",
       "evidence-maps",
       projectId,
-      `${timestamp.slice(0, 10)}-${slugifySegment(payload.focused_question)}`,
+      `${compactTimestampForSlug(timestamp)}-${slugifySegment(payload.focused_question)}`,
     ].join("/");
 
     const markdown = buildEvidenceMapMarkdown({
@@ -578,7 +615,6 @@ export async function POST(request: Request) {
 
     return Response.json({
       brain_slug: slug,
-      url: `/dashboard/project?name=${encodeURIComponent(projectId)}&brain_slug=${encodeURIComponent(slug)}`,
       project_url: `/dashboard/project?name=${encodeURIComponent(projectId)}&brain_slug=${encodeURIComponent(slug)}`,
       summary: {
         question: payload.focused_question,

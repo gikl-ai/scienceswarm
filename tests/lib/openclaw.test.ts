@@ -1,3 +1,6 @@
+import path from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -51,6 +54,19 @@ function mockExecFile(stdout: unknown, stderr = "") {
     const callback = args.at(-1);
     if (typeof callback !== "function") throw new Error("expected callback");
     callback(null, { stdout: typeof stdout === "string" ? stdout : JSON.stringify(stdout), stderr });
+  });
+}
+
+function mockExecFileError(stderr: string, stdout = "") {
+  execFileMock.mockImplementationOnce((...args: unknown[]) => {
+    const callback = args.at(-1);
+    if (typeof callback !== "function") throw new Error("expected callback");
+    const err = Object.assign(new Error(stderr), {
+      code: 1,
+      stderr,
+      stdout,
+    });
+    callback(err);
   });
 }
 
@@ -192,6 +208,77 @@ describe("OpenClaw healthCheck", () => {
     await expect(healthCheck()).resolves.toMatchObject({
       status: "connected",
       gateway: "ws://127.0.0.1:19002",
+    });
+  });
+
+  it("reports connected when status probes fail but embedded turns are ready", async () => {
+    vi.stubEnv("OPENCLAW_URL", "ws://127.0.0.1:19002/ws");
+    execFileMock
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("status unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("health unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(null, {
+          stdout: JSON.stringify({
+            resolvedDefault: "ollama/gemma4:latest",
+            auth: { missingProvidersInUse: [] },
+          }),
+          stderr: "",
+        });
+      });
+
+    await expect(healthCheck()).resolves.toEqual({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 0,
+      sessions: 0,
+    });
+  });
+
+  it("accepts prefixed JSON noise in the embedded-turn readiness probe", async () => {
+    vi.stubEnv("OPENCLAW_URL", "ws://127.0.0.1:19002/ws");
+    execFileMock
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("status unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(new Error("health unavailable"));
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args.at(-1);
+        if (typeof callback !== "function") throw new Error("expected callback");
+        callback(null, {
+          stdout: [
+            "[agents/auth-profiles] synced openai-codex credentials from external cli",
+            JSON.stringify({
+              resolvedDefault: "ollama/gemma4:latest",
+              auth: { missingProvidersInUse: [] },
+            }),
+          ].join("\n"),
+          stderr: "",
+        });
+      });
+
+    await expect(healthCheck()).resolves.toEqual({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 0,
+      sessions: 0,
     });
   });
 });
@@ -433,6 +520,23 @@ describe("sendAgentMessage output sanitization", () => {
 
     expect(execFileMock).toHaveBeenCalledTimes(1);
   });
+
+  it("waits and retries transient session-file locks on the CLI path", async () => {
+    vi.stubEnv("OPENCLAW_SESSION_LOCK_RETRY_DELAY_MS", "0");
+    mockExecFileError(
+      "FailoverError: session file locked (timeout 10000ms): pid=38781 /tmp/openclaw/sessions/web-alpha.jsonl.lock",
+    );
+    mockExecFile("<channel|>analysis saved");
+
+    await expect(
+      sendAgentMessage("Save the analysis", {
+        session: "web-alpha",
+        cwd: "/tmp/project-alpha",
+      }),
+    ).resolves.toBe("analysis saved");
+
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("OpenClaw conversation polling", () => {
@@ -509,5 +613,77 @@ describe("OpenClaw conversation polling", () => {
         content: "The chart is ready in results/r3-chart.svg.",
       }),
     ]);
+  });
+
+  it("falls back to the durable session log when CLI history is unavailable", async () => {
+    const scienceswarmDir = mkdtempSync(
+      path.join(tmpdir(), "scienceswarm-openclaw-history-"),
+    );
+    vi.stubEnv("SCIENCESWARM_DIR", scienceswarmDir);
+
+    const sessionId = "web-alpha-project-session-1";
+    const sessionFile = path.join(
+      scienceswarmDir,
+      "openclaw",
+      "agents",
+      "main",
+      "sessions",
+      `${sessionId}.jsonl`,
+    );
+    mkdirSync(path.dirname(sessionFile), { recursive: true });
+    writeFileSync(
+      sessionFile,
+      [
+        JSON.stringify({
+          type: "session",
+          id: sessionId,
+          timestamp: "2026-04-15T05:00:00.000Z",
+        }),
+        JSON.stringify({
+          type: "message",
+          id: "user-1",
+          timestamp: "2026-04-15T05:00:01.000Z",
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "Run the experiment." }],
+          },
+        }),
+        JSON.stringify({
+          type: "message",
+          id: "assistant-thinking",
+          timestamp: "2026-04-15T05:00:02.000Z",
+          message: {
+            role: "assistant",
+            content: [{ type: "thinking", thinking: "Planning." }],
+          },
+        }),
+        JSON.stringify({
+          type: "message",
+          id: "assistant-final",
+          timestamp: "2026-04-15T05:00:03.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: "Finished. Saved reports/baseline_vs_variant_summary.md.",
+              },
+            ],
+          },
+        }),
+      ].join("\n"),
+    );
+
+    await expect(
+      getConversationMessagesSince(sessionId, "2026-04-15T05:00:00.500Z"),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "assistant-final",
+        channel: "web",
+        content: "Finished. Saved reports/baseline_vs_variant_summary.md.",
+      }),
+    ]);
+
+    rmSync(scienceswarmDir, { recursive: true, force: true });
   });
 });

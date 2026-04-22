@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import type {
   ChatTaskPhase,
   MessageProgressEntry,
@@ -219,7 +219,7 @@ function formatProgressDisplayPath(value: string): string {
 function normalizeProgressDisplayCommand(value: string, maxChars = 160): string {
   let normalized = value.trim().replaceAll("\\", "/").replace(/\s+/g, " ");
   normalized = normalized.replace(
-    /(^|\s)\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3(?=\s|$)/g,
+    /(^|\s)(?:\/usr\/local\/Caskroom\/miniforge\/base\/bin\/python3|\/usr\/bin\/python3)(?=\s|$)/g,
     "$1python3",
   );
   normalized = normalized.replace(
@@ -585,6 +585,31 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
   );
 }
 
+function getCopyableMessageText(root: HTMLDivElement | null, fallback: string): string {
+  const renderedText =
+    typeof root?.innerText === "string" && root.innerText.trim().length > 0
+      ? root.innerText
+      : root?.textContent ?? "";
+  const normalizedRenderedText = renderedText
+    .replace(/\u00a0/g, " ")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (normalizedRenderedText) {
+    return normalizedRenderedText;
+  }
+
+  return fallback
+    .replace(/!\[[^\]]*]\([^)]+\)/g, "")
+    .replace(/\[embed[^\]]*]/gi, "")
+    .replace(/^MEDIA:[^\n]+$/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function renderContent(content: string, projectId: string) {
   // Split on bold markers, MEDIA references, embed tags, and markdown images
   const parts = content.split(/(\*\*[^*]+\*\*|MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gi);
@@ -735,7 +760,6 @@ function renderContent(content: string, projectId: string) {
 export function ChatMessage({
   role,
   content,
-  thinking,
   activityLog,
   progressLog,
   chatMode,
@@ -773,17 +797,75 @@ export function ChatMessage({
     role === "assistant" && Array.isArray(activityLog) && activityLog.length > 0
       ? activityLog
       : [];
+  const visibleStreamProgressLog =
+    role === "assistant" && isStreaming
+      ? Array.isArray(progressLog) && progressLog.length > 0
+        ? progressLog.filter((entry) => entry.kind === "activity")
+        : buildFallbackProgressLog(undefined, visibleActivityLog)
+      : [];
   const visibleProgressLog =
     role === "assistant"
-      ? Array.isArray(progressLog) && progressLog.length > 0
-        ? progressLog
-      : buildFallbackProgressLog(thinking, visibleActivityLog)
+      ? visibleStreamProgressLog
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
   const isOpenClawToolsTurn = chatMode === "openclaw-tools" && role !== "system";
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const copyFeedbackTimerRef = useRef<number | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const hasCopyableText = content.trim().length > 0 && !isStreaming;
+  const timestampText = `${timestamp.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })} · ${timestamp.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+  const footerTextClass = role === "user" ? "text-white/75" : "text-muted/55";
+  const selectionClass = role === "user"
+    ? "selection:bg-white/45 selection:text-slate-900"
+    : "selection:bg-accent/25 selection:text-slate-900";
+  const copyButtonClass =
+    role === "user"
+      ? "rounded border border-white/35 bg-transparent px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:border-white/70 hover:text-white"
+      : "rounded border border-border bg-white px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-accent hover:text-accent";
+
+  useEffect(() => () => {
+    if (copyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimerRef.current);
+    }
+  }, []);
+
+  const scheduleCopyFeedbackReset = () => {
+    if (copyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimerRef.current);
+    }
+    copyFeedbackTimerRef.current = window.setTimeout(() => {
+      setCopyState("idle");
+    }, 2000);
+  };
+
+  const copyToClipboard = async () => {
+    const nextClipboardText = getCopyableMessageText(contentRef.current, content);
+    const clipboard = navigator.clipboard;
+    if (!clipboard?.writeText || nextClipboardText.length === 0) {
+      console.warn("ChatMessage copy failed: clipboard API unavailable or no visible text.");
+      setCopyState("error");
+      scheduleCopyFeedbackReset();
+      return;
+    }
+    try {
+      await clipboard.writeText(nextClipboardText);
+      setCopyState("copied");
+    } catch (error) {
+      console.warn("ChatMessage copy failed.", error);
+      setCopyState("error");
+    }
+    scheduleCopyFeedbackReset();
+  };
 
   return (
     <div
@@ -892,17 +974,32 @@ export function ChatMessage({
         )}
 
         {/* Message content */}
-        <div className="whitespace-pre-wrap select-text">{renderContent(content, projectId)}</div>
+        <div
+          ref={contentRef}
+          className={`whitespace-pre-wrap select-text ${selectionClass}`}
+        >
+          {renderContent(content, projectId)}
+        </div>
 
-        {/* Timestamp for cross-channel messages */}
-        {isCrossChannel && (
-          <div className="mt-2 text-[9px] text-muted/40">
-            {timestamp.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </div>
-        )}
+        <div className="mt-2 flex items-center justify-between gap-3">
+          {hasCopyableText ? (
+            <button
+              type="button"
+              onClick={copyToClipboard}
+              className={copyButtonClass}
+              title={copyState === "error" ? "Copy failed" : "Copy message to clipboard"}
+            >
+              {copyState === "copied"
+                ? "Copied"
+                : copyState === "error"
+                  ? "Copy failed"
+                  : "Copy"}
+            </button>
+          ) : (
+            <div />
+          )}
+          <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
+        </div>
       </div>
     </div>
   );

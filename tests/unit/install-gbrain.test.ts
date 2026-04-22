@@ -26,8 +26,11 @@
  *     with the rest of the library (it's exported alongside).
  */
 
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import * as path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as brainPresets from "@/brain/presets";
 
 import {
   getCurrentUserHandle,
@@ -276,14 +279,12 @@ describe("install-gbrain happy path", () => {
     const resolverSeed = handle.fileAt(
       path.join("/home/test", ".scienceswarm", "brain", "RESOLVER.md"),
     );
-    expect(resolverSeed).toContain("ScienceSwarm scientist-defaults brain");
+    expect(resolverSeed).toContain("ScienceSwarm scientific-research brain");
     expect(resolverSeed).toContain(
       "OpenClaw communicates; OpenHands executes; gbrain stores.",
     );
-    expect(resolverSeed).toContain("gbrain v0.10 search detail");
-    expect(resolverSeed).toContain("detail=low");
-    expect(resolverSeed).toContain("detail=medium");
-    expect(resolverSeed).toContain("detail=high");
+    expect(resolverSeed).toContain("gather candidate papers in bulk");
+    expect(resolverSeed).toContain("write durable journal artifacts");
     expect(resolverSeed).toContain(
       "Do not run upstream gbrain autopilot daemon",
     );
@@ -293,6 +294,7 @@ describe("install-gbrain happy path", () => {
     expect(envContents).toContain(
       `BRAIN_ROOT=${path.join("/home/test", ".scienceswarm", "brain")}`,
     );
+    expect(envContents).toContain("BRAIN_PRESET=scientific_research");
     expect(handle.calls.envWrites).toHaveLength(1);
   });
 
@@ -327,6 +329,26 @@ describe("install-gbrain happy path", () => {
     if (summary.type === "summary") {
       expect(summary.brainRoot).toBe(customRoot);
     }
+  });
+
+  it("supports the generic scientist preset override", async () => {
+    const handle = makeFakeEnv();
+    const { ok } = await runInstallerToCompletion(
+      {
+        repoRoot: "/repo",
+        brainPreset: "generic_scientist",
+      },
+      handle.env,
+    );
+
+    expect(ok).toBe(true);
+    const resolverSeed = handle.fileAt(
+      path.join("/home/test", ".scienceswarm", "brain", "RESOLVER.md"),
+    );
+    expect(resolverSeed).toContain("ScienceSwarm scientist-defaults brain");
+    expect(handle.envFileContents("/repo")).toContain(
+      "BRAIN_PRESET=generic_scientist",
+    );
   });
 
   it("cleans up the writability sentinel files after probing", async () => {
@@ -495,6 +517,40 @@ describe("install-gbrain error taxonomy", () => {
     }
     expect(handle.calls.envWrites).toHaveLength(0);
   });
+
+  it("preset asset read failure surfaces as an internal installer error", async () => {
+    const handle = makeFakeEnv();
+    const presetSpy = vi
+      .spyOn(brainPresets, "loadBrainPreset")
+      .mockImplementation(() => {
+        throw new Error("missing preset asset");
+      });
+
+    try {
+      const { events, ok } = await runInstallerToCompletion(
+        { repoRoot: "/repo" },
+        handle.env,
+      );
+
+      expect(ok).toBe(false);
+      const summary = lastEvent(events);
+      if (summary.type === "summary") {
+        expect(summary.status).toBe("failed");
+        expect(summary.error?.code).toBe("internal");
+        expect(summary.error?.cause).toContain("missing preset asset");
+      }
+
+      const seedResolverEvents = eventsByStep(events, "seed-resolver");
+      expect(seedResolverEvents.at(-1)).toMatchObject({
+        type: "step",
+        step: "seed-resolver",
+        status: "failed",
+      });
+      expect(handle.calls.envWrites).toHaveLength(0);
+    } finally {
+      presetSpy.mockRestore();
+    }
+  });
 });
 
 // -----------------------------------------------------------------
@@ -641,5 +697,30 @@ describe("getCurrentUserHandle", () => {
     expect(() =>
       getCurrentUserHandle({ SCIENCESWARM_USER_HANDLE: "   " }),
     ).toThrowError(/SCIENCESWARM_USER_HANDLE is not set/);
+  });
+
+  it("falls back to the saved .env after setup when process env is stale", async () => {
+    const originalCwd = process.cwd();
+    const originalHandle = process.env.SCIENCESWARM_USER_HANDLE;
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-handle-"));
+    try {
+      await mkdir(repoRoot, { recursive: true });
+      await writeFile(
+        path.join(repoRoot, ".env"),
+        "SCIENCESWARM_USER_HANDLE=@saved-handle\n",
+      );
+      delete process.env.SCIENCESWARM_USER_HANDLE;
+      process.chdir(repoRoot);
+
+      expect(getCurrentUserHandle()).toBe("@saved-handle");
+    } finally {
+      process.chdir(originalCwd);
+      if (typeof originalHandle === "string") {
+        process.env.SCIENCESWARM_USER_HANDLE = originalHandle;
+      } else {
+        delete process.env.SCIENCESWARM_USER_HANDLE;
+      }
+      await rm(repoRoot, { recursive: true, force: true });
+    }
   });
 });

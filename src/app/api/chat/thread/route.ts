@@ -3,6 +3,7 @@ import {
   normalizeArtifactProvenanceEntries,
   type ArtifactProvenanceEntry,
 } from "@/lib/artifact-provenance";
+import { sanitizeOpenClawUserVisibleResponse } from "@/lib/openclaw/response-sanitizer";
 import {
   readChatThread,
   writeChatThread,
@@ -144,7 +145,24 @@ export async function GET(request: Request) {
   }
 
   const stored = await readChatThread(project);
-  return Response.json(stored ?? emptyThread(project));
+  if (!stored) {
+    return Response.json(emptyThread(project));
+  }
+
+  return Response.json({
+    ...stored,
+    messages: stored.messages.map((message) => ({
+      ...message,
+      content:
+        message.role === "user"
+          ? message.content
+          : sanitizeOpenClawUserVisibleResponse(message.content),
+      thinking:
+        typeof message.thinking === "string"
+          ? sanitizeOpenClawUserVisibleResponse(message.thinking)
+          : undefined,
+    })),
+  });
 }
 
 export async function POST(request: Request) {

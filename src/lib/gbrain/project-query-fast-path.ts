@@ -15,6 +15,8 @@ interface QueryableDbError {
   message?: unknown;
 }
 
+const unsupportedWorkspaceFilesTables = new WeakSet<QueryableDb>();
+
 export interface ProjectPageSummary {
   path: string;
   type: string;
@@ -120,7 +122,7 @@ export async function listProjectWorkspaceFileEntriesFast(
 ): Promise<ProjectWorkspaceFileEntry[] | null> {
   await ensureBrainStoreReady();
   const db = getQueryableDb();
-  if (!db) return null;
+  if (!db || unsupportedWorkspaceFilesTables.has(db)) return null;
 
   // The workspace tree only needs file metadata plus the owning page slug; keep
   // the heavy page body fetch deferred until a specific companion page is opened.
@@ -146,6 +148,7 @@ export async function listProjectWorkspaceFileEntriesFast(
     ));
   } catch (error) {
     if (isMissingRelationError(error, "files")) {
+      unsupportedWorkspaceFilesTables.add(db);
       return null;
     }
     throw error;

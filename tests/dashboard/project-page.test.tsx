@@ -60,10 +60,30 @@ describe("Project dashboard smoke test", () => {
 
   function stubDashboardFetch(options?: {
     brainReady?: boolean;
+    projectBrief?: Record<string, unknown>;
     importSummary?: LatestImportSummary | null;
     importSummaryStatus?: number;
   }) {
     const brainReady = options?.brainReady ?? true;
+    const projectBrief = options?.projectBrief ?? {
+      project: "demo-project",
+      nextMove: {
+        recommendation: "Review the imported sequencing notes before asking for a summary.",
+      },
+      topMatters: [],
+      unresolvedRisks: [],
+      dueTasks: [
+        { path: "wiki/tasks/task-1.md", title: "Review notes", status: "open" },
+      ],
+      frontier: [
+        {
+          path: "wiki/entities/frontier/item-1.md",
+          title: "CRISPR sequencing progress",
+          status: "promoted",
+          whyItMatters: "Directly relevant to the imported assay work.",
+        },
+      ],
+    };
     const importSummary = options?.importSummary ?? null;
     const importSummaryStatus = options?.importSummaryStatus ?? 200;
 
@@ -136,25 +156,7 @@ describe("Project dashboard smoke test", () => {
           );
         }
 
-        return Promise.resolve(
-          Response.json({
-            project: "demo-project",
-            nextMove: {
-              recommendation: "Review the imported sequencing notes before asking for a summary.",
-            },
-            dueTasks: [
-              { path: "wiki/tasks/task-1.md", title: "Review notes", status: "open" },
-            ],
-            frontier: [
-              {
-                path: "wiki/entities/frontier/item-1.md",
-                title: "CRISPR sequencing progress",
-                status: "promoted",
-                whyItMatters: "Directly relevant to the imported assay work.",
-              },
-            ],
-          }),
-        );
+        return Promise.resolve(Response.json(projectBrief));
       }
 
       if (url === "/api/projects/demo-project/import-summary") {
@@ -180,6 +182,41 @@ describe("Project dashboard smoke test", () => {
       );
     });
   }
+
+  it("shows an honest low-confidence state when evidence does not justify a belief change", async () => {
+    const fetchMock = stubDashboardFetch({
+      projectBrief: {
+        project: "demo-project",
+        generatedAt: "2026-04-22T20:00:00.000Z",
+        nextMove: {
+          recommendation: "Keep the current EGFR resistance plan unchanged until validation arrives.",
+          missingEvidence: ["A replicated washout result tied to the resistant cohort."],
+        },
+        topMatters: [],
+        unresolvedRisks: [
+          {
+            risk: "The new note is too thin to justify changing the working model.",
+            evidence: ["wiki/entities/artifacts/weak-follow-up.md"],
+          },
+        ],
+        dueTasks: [],
+        frontier: [],
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    expect(
+      await screen.findByText("No Meaningful Belief Change Detected"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not yet justify a confident update/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Treat downstream guidance as low confidence/i),
+    ).toBeInTheDocument();
+  });
 
 
   it("restores the last project slug when the workspace URL is missing name", async () => {
@@ -2651,6 +2688,122 @@ describe("Project dashboard smoke test", () => {
         String(input) === "/api/chat/unified" && (init as RequestInit | undefined)?.method === "POST",
       ),
     ).toBe(false);
+  });
+
+  it("routes research packet captures through /api/brain/capture with the research-native label", async () => {
+    let brainStatusCalls = 0;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/health") {
+        return Response.json({
+          openclaw: "connected",
+          openhands: "connected",
+          openai: "configured",
+          features: {
+            chat: true,
+            codeExecution: true,
+            github: true,
+            multiChannel: true,
+            structuredCritique: true,
+          },
+        });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          llmProvider: "openai",
+          ollamaModels: [],
+          configuredLocalModel: null,
+        });
+      }
+
+      if (url === "/api/brain/status") {
+        brainStatusCalls += 1;
+        return Response.json({
+          pageCount: brainStatusCalls > 1 ? 1 : 0,
+          backend: "filesystem",
+        });
+      }
+
+      if (url.startsWith("/api/brain/brief?project=")) {
+        return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
+      }
+
+      if (url === "/api/projects/demo-project/import-summary") {
+        return Response.json({ project: "demo-project", lastImport: null });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=demo-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/thread?project=demo-project") {
+        return Response.json({
+          version: 1,
+          project: "demo-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/brain/capture" && method === "POST") {
+        const body = JSON.parse(String(init?.body));
+        expect(body).toMatchObject({
+          content: "retained 12 exact-title matches after dedupe",
+          kind: "research_packet",
+          channel: "web",
+          project: "demo-project",
+        });
+
+        return Response.json({
+          captureId: "capture-packet",
+          channel: "web",
+          userId: "web-user-1",
+          kind: "research_packet",
+          project: "demo-project",
+          privacy: "cloud-ok",
+          rawPath: "raw/captures/web/2026-04-13/capture-packet.json",
+          materializedPath: "wiki/packets/2026-04-13-retained-12-exact-title-matches.md",
+          requiresClarification: false,
+          choices: [],
+          status: "saved",
+          createdAt: "2026-04-13T16:00:00.000Z",
+          extractedTasks: [],
+        });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        throw new Error("unexpected unified chat send");
+      }
+
+      return Response.json({ status: "disconnected" });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    expect(await screen.findByText(/Research workspace ready for/i)).toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByLabelText("Chat with your project"),
+      { target: { value: "packet: retained 12 exact-title matches after dedupe" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText(/Brain capture saved/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kind: Research packet/i)).toBeInTheDocument();
+    expect(screen.getByText(/wiki\/packets\/2026-04-13-retained-12-exact-title-matches\.md/i)).toBeInTheDocument();
   });
 
   it("renders inline project choices for ambiguous web captures and resolves them", async () => {

@@ -8,6 +8,10 @@ export function RadarBriefingView() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedbackNotice, setFeedbackNotice] = useState<{
+    message: string;
+    savedPath?: string;
+  } | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const fetchBriefing = useCallback(async () => {
@@ -62,7 +66,7 @@ export function RadarBriefingView() {
       setDismissed((prev) => new Set([...prev, signalId]));
     }
     try {
-      await fetch("/api/radar/feedback", {
+      const res = await fetch("/api/radar/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -72,8 +76,23 @@ export function RadarBriefingView() {
           matchedTopics: item.matchedTopics,
         }),
       });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        savedPath?: string;
+      };
+      if (!res.ok) {
+        setFeedbackNotice({
+          message: data.error ?? "Feedback could not be recorded.",
+        });
+        return;
+      }
+      setFeedbackNotice({
+        message: data.message ?? "Feedback recorded for future matches.",
+        savedPath: data.savedPath,
+      });
     } catch {
-      // best-effort
+      setFeedbackNotice({ message: "Feedback could not be recorded." });
     }
   }
 
@@ -111,6 +130,25 @@ export function RadarBriefingView() {
         </p>
       )}
 
+      {feedbackNotice && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+          {feedbackNotice.message}
+          {feedbackNotice.savedPath && (
+            <>
+              {" "}
+              <a
+                href={`/dashboard/gbrain?brain_slug=${encodeURIComponent(
+                  feedbackNotice.savedPath.replace(/\.md$/i, "")
+                )}`}
+                className="font-semibold underline"
+              >
+                Open saved brain note
+              </a>
+            </>
+          )}
+        </p>
+      )}
+
       {loading && (
         <p className="text-sm text-muted">Loading briefing...</p>
       )}
@@ -125,7 +163,7 @@ export function RadarBriefingView() {
         <div className="rounded-xl border border-border bg-surface/50 px-4 py-5 text-center">
           <p className="text-sm font-medium">Quiet day</p>
           <p className="mt-1 text-xs text-muted">
-            Nothing new matched your radar topics today.
+            {briefing.quietReason ?? "Nothing new matched your radar topics today."}
           </p>
         </div>
       )}
@@ -179,6 +217,23 @@ function BriefingCard({
 
       <p className="text-xs text-foreground leading-relaxed">{item.whyItMatters}</p>
 
+      {item.programMatches.length > 0 && (
+        <div className="rounded-lg border border-border bg-surface/50 px-3 py-2 text-xs text-foreground">
+          <p className="font-semibold">Why this changes your program</p>
+          {item.programMatches.map((match) => (
+            <div key={`${match.area}-${match.reference}`} className="mt-2 space-y-1">
+              <p>
+                <span className="font-medium capitalize">{match.area}</span>
+                {": "}
+                {match.reference}
+              </p>
+              <p className="text-muted">{match.whyThisMatters}</p>
+              <p className="text-muted">Next check: {match.recommendedAction}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {item.tldr && (
         <p className="rounded-lg bg-surface/60 px-3 py-2 text-xs text-muted italic">
           {item.tldr}
@@ -201,7 +256,7 @@ function BriefingCard({
       <div className="flex flex-wrap gap-2 pt-1">
         <button
           type="button"
-          onClick={() => onAction("save")}
+          onClick={() => onAction("save-to-brain")}
           className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-accent hover:text-accent"
         >
           Save to brain

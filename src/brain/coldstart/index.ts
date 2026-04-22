@@ -75,6 +75,9 @@ import {
   createProjectPage,
   importSingleFile,
 } from "./writer";
+import { persistImportedWorkspaceFile } from "@/lib/import/commit-import";
+import { writeProjectImportSummary } from "@/lib/state/project-import-summary";
+import { getTargetFolder } from "@/lib/workspace-manager";
 
 // ── Public re-exports (the coldstart.ts surface) ──────
 
@@ -105,6 +108,16 @@ export interface ColdstartProgressCallbacks {
 
 export interface ColdstartImportOptions extends ColdstartWriterOptions {
   skipDuplicates?: boolean;
+}
+
+interface ProjectImportSummaryFile {
+  path: string;
+  classification: string;
+}
+
+function getProjectWorkspaceRelativePath(filePath: string): string {
+  const filename = basename(filePath);
+  return `${getTargetFolder(filename)}/${filename}`;
 }
 
 // ── Public API ────────────────────────────────────────
@@ -262,6 +275,7 @@ export async function approveAndImport(
   const errors: Array<{ path: string; error: string }> = [];
   const projectsCreated: string[] = [];
   const createdPages: string[] = [];
+  const importedProjectFiles: ProjectImportSummaryFile[] = [];
 
   // Collect paths to skip (duplicates)
   const skipPaths = new Set<string>();
@@ -298,6 +312,13 @@ export async function approveAndImport(
     }
 
     try {
+      if (options?.projectSlug) {
+        await persistImportedWorkspaceFile({
+          projectSlug: options.projectSlug,
+          relativePath: getProjectWorkspaceRelativePath(file.path),
+          sourcePath: file.path,
+        });
+      }
       const pagePath = await importSingleFile(config, llm, file, {
         ...options,
         projectSlug: options?.projectSlug ?? file.projectCandidates[0] ?? preview.projects[0]?.slug,
@@ -305,6 +326,12 @@ export async function approveAndImport(
       if (pagePath) {
         imported.push(file.path);
         createdPages.push(pagePath);
+        if (options?.projectSlug) {
+          importedProjectFiles.push({
+            path: getProjectWorkspaceRelativePath(file.path),
+            classification: file.type,
+          });
+        }
       } else {
         skipped.push(file.path);
       }
@@ -315,6 +342,8 @@ export async function approveAndImport(
       });
     }
   }
+
+  await syncProjectImportState(options?.projectSlug, preview, importedProjectFiles);
 
   // Phase 3: Single ripple pass across all created pages
   if (createdPages.length > 0) {
@@ -381,6 +410,7 @@ export async function approveAndImportWithProgress(
   const errors: Array<{ path: string; error: string }> = [];
   const projectsCreated: string[] = [];
   const createdPages: string[] = [];
+  const importedProjectFiles: ProjectImportSummaryFile[] = [];
 
   // Collect paths to skip (duplicates)
   const skipPaths = new Set<string>();
@@ -431,6 +461,13 @@ export async function approveAndImportWithProgress(
     });
 
     try {
+      if (options?.projectSlug) {
+        await persistImportedWorkspaceFile({
+          projectSlug: options.projectSlug,
+          relativePath: getProjectWorkspaceRelativePath(file.path),
+          sourcePath: file.path,
+        });
+      }
       const pagePath = await importSingleFile(config, llm, file, {
         ...options,
         projectSlug: options?.projectSlug ?? file.projectCandidates[0] ?? preview.projects[0]?.slug,
@@ -438,6 +475,12 @@ export async function approveAndImportWithProgress(
       if (pagePath) {
         imported.push(file.path);
         createdPages.push(pagePath);
+        if (options?.projectSlug) {
+          importedProjectFiles.push({
+            path: getProjectWorkspaceRelativePath(file.path),
+            classification: file.type,
+          });
+        }
         callbacks.onFileDone?.({
           path: file.path,
           type: file.type,
@@ -452,6 +495,8 @@ export async function approveAndImportWithProgress(
       callbacks.onError?.({ path: file.path, error: msg });
     }
   }
+
+  await syncProjectImportState(options?.projectSlug, preview, importedProjectFiles);
 
   // Phase 3: Ripple
   if (createdPages.length > 0) {
@@ -514,6 +559,30 @@ export async function approveAndImportWithProgress(
     firstBriefing,
     durationMs: Date.now() - startTime,
   };
+}
+
+async function syncProjectImportState(
+  projectSlug: string | undefined,
+  preview: ImportPreview,
+  importedProjectFiles: ProjectImportSummaryFile[],
+): Promise<void> {
+  if (!projectSlug || importedProjectFiles.length === 0) {
+    return;
+  }
+
+  const projectName =
+    preview.projects.find((project) => project.slug === projectSlug)?.title
+    ?? projectSlug;
+
+  await writeProjectImportSummary(projectSlug, {
+    name: projectName,
+    preparedFiles: importedProjectFiles.length,
+    detectedItems: preview.files.length,
+    detectedBytes: preview.files.reduce((total, file) => total + file.size, 0),
+    duplicateGroups: preview.duplicateGroups.length,
+    generatedAt: new Date().toISOString(),
+    source: "coldstart-project-import",
+  });
 }
 
 /**

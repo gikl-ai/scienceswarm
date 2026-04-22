@@ -63,11 +63,13 @@ beforeAll(async () => {
   await resetBrainStore();
   searchCache.clear();
   testRoot = mkdtempSync(join(tmpdir(), "scienceswarm-brain-test-chat-"));
+  vi.stubEnv("BRAIN_ROOT", testRoot);
   initBrain({ root: testRoot });
   populateWiki();
 });
 
 beforeEach(async () => {
+  vi.stubEnv("BRAIN_ROOT", testRoot);
   await resetBrainStore();
   searchCache.clear();
   rmSync(join(testRoot, "state/chat"), { recursive: true, force: true });

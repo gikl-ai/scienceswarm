@@ -25,6 +25,7 @@ import {
 import { resolvePgliteDatabasePath } from "@/lib/capture/materialize-memory";
 import { createRuntimeEngine } from "./stores/gbrain-runtime.mjs";
 import { ensureBrainStoreReady, getActiveBrainRoot, getBrainStore } from "./store";
+import { filterProjectPages } from "./project-organizer";
 
 // Re-export research briefing functions for convenience
 export {
@@ -91,12 +92,17 @@ export async function buildProjectBrief(
     const decisionPages = loadPages(config, refreshedManifest.decisionPaths, project, gbrainPages);
     const artifactPages = loadPages(config, refreshedManifest.artifactPaths, project, gbrainPages);
     const recentEvents = safeRecentEvents(config);
+    const recentProjectPages = await loadRecentProjectPages(
+      refreshedManifest.slug,
+      refreshedManifest.projectPagePath,
+    );
     const evidence = collectEvidence([
       projectPage,
       ...taskPages,
       ...frontierPages,
       ...decisionPages,
       ...artifactPages,
+      ...recentProjectPages,
     ]);
 
     const topMatters = buildTopMatters({
@@ -105,6 +111,7 @@ export async function buildProjectBrief(
       taskPages,
       decisionPages,
       artifactPages,
+      recentProjectPages,
       recentEvents,
       importSummary,
     });
@@ -112,6 +119,7 @@ export async function buildProjectBrief(
       manifest: refreshedManifest,
       taskPages,
       frontierPages,
+      recentProjectPages,
       recentEvents,
       importSummary,
     });
@@ -172,9 +180,15 @@ export async function buildGuideBriefing(
     query: "status: running",
     mode: "grep",
     limit: 10,
+    profile: "synthesis",
   });
   const suggestionsRaw = focus
-    ? await search(config, { query: focus, mode: "grep", limit: 5 })
+    ? await search(config, {
+        query: focus,
+        mode: "grep",
+        limit: 5,
+        profile: "synthesis",
+      })
     : [];
   const suggestions = suggestionsRaw.filter(
     (result) => !isStructuralWikiPage(result.path),
@@ -501,70 +515,113 @@ function buildTopMatters(input: {
   taskPages: BriefingPage[];
   decisionPages: BriefingPage[];
   artifactPages: BriefingPage[];
+  recentProjectPages: BriefingPage[];
   recentEvents: BrainEvent[];
   importSummary: ProjectImportSummary | null;
 }): ProjectBrief["topMatters"] {
   const matters: ProjectBrief["topMatters"] = [];
-
-  if (input.projectPage) {
+  const pushMatter = (summary: string, evidence: string[]) => {
+    const normalizedSummary = summary.trim();
+    if (!normalizedSummary) return;
+    if (matters.some((item) => item.summary === normalizedSummary)) return;
     matters.push({
-      summary: input.projectPage.summary || `${input.manifest.title} project page`,
-      evidence: [input.projectPage.path],
+      summary: normalizedSummary,
+      evidence,
     });
+  };
+  const latestDecision = [...input.decisionPages].sort((left, right) =>
+    right.path.localeCompare(left.path),
+  )[0];
+  const latestTask = [...input.taskPages].sort((left, right) =>
+    right.path.localeCompare(left.path),
+  )[0];
+  const latestArtifact = [...input.artifactPages].sort((left, right) =>
+    right.path.localeCompare(left.path),
+  )[0];
+  const latestEvent = input.recentEvents[0];
+  const latestEventPage = resolveLatestEventPage(input, latestEvent);
+
+  if (latestEventPage) {
+    pushMatter(latestEventPage.summary || latestEventPage.title, [latestEventPage.path]);
+  }
+
+  if (latestDecision) {
+    pushMatter(latestDecision.summary || latestDecision.title, [latestDecision.path]);
+  }
+
+  if (latestTask) {
+    pushMatter(latestTask.summary || latestTask.title, [latestTask.path]);
+  }
+
+  if (latestArtifact) {
+    pushMatter(latestArtifact.summary || latestArtifact.title, [latestArtifact.path]);
+  }
+
+  if (input.recentProjectPages[0]) {
+    pushMatter(
+      input.recentProjectPages[0].summary || input.recentProjectPages[0].title,
+      [input.recentProjectPages[0].path],
+    );
   }
 
   if (input.importSummary) {
-    matters.push({
-      summary: formatImportSummary(input.importSummary),
-      evidence: [makeImportSummaryEvidencePath(input.manifest.slug)],
-    });
+    pushMatter(formatImportSummary(input.importSummary), [
+      makeImportSummaryEvidencePath(input.manifest.slug),
+    ]);
   }
 
-  if (input.decisionPages[0]) {
-    matters.push({
-      summary: input.decisionPages[0].summary || input.decisionPages[0].title,
-      evidence: [input.decisionPages[0].path],
-    });
+  if (input.projectPage) {
+    pushMatter(
+      input.projectPage.summary || `${input.manifest.title} project page`,
+      [input.projectPage.path],
+    );
   }
 
-  if (input.taskPages[0]) {
-    matters.push({
-      summary: input.taskPages[0].summary || input.taskPages[0].title,
-      evidence: [input.taskPages[0].path],
-    });
-  }
-
-  if (input.artifactPages[0]) {
-    matters.push({
-      summary: input.artifactPages[0].summary || input.artifactPages[0].title,
-      evidence: [input.artifactPages[0].path],
-    });
-  }
-
-  const latestEvent = input.recentEvents[0];
-  if (latestEvent) {
-    matters.push({
-      summary: `Latest event: ${latestEvent.type}`,
-      evidence: [
+  if (latestEvent && !latestEventPage) {
+    pushMatter(`Latest event: ${latestEvent.type}`, [
         latestEvent.created?.[0] ?? latestEvent.updated?.[0] ?? input.manifest.projectPagePath,
-      ].filter(Boolean) as string[],
-    });
+      ].filter(Boolean) as string[]);
   }
 
   if (matters.length === 0) {
-    matters.push({
-      summary: `Project ${input.manifest.title} is initialized and awaiting linked pages.`,
-      evidence: [input.manifest.projectPagePath],
-    });
+    pushMatter(
+      `Project ${input.manifest.title} is initialized and awaiting linked pages.`,
+      [input.manifest.projectPagePath],
+    );
   }
 
   return matters.slice(0, 3);
+}
+
+function resolveLatestEventPage(
+  input: {
+    projectPage: BriefingPage | null;
+    taskPages: BriefingPage[];
+    decisionPages: BriefingPage[];
+    artifactPages: BriefingPage[];
+    recentProjectPages: BriefingPage[];
+  },
+  latestEvent: BrainEvent | undefined,
+): BriefingPage | null {
+  const eventPath = latestEvent?.created?.[0] ?? latestEvent?.updated?.[0];
+  if (!eventPath) return null;
+
+  const pages = [
+    input.projectPage,
+    ...input.taskPages,
+    ...input.decisionPages,
+    ...input.artifactPages,
+    ...input.recentProjectPages,
+  ].filter((page): page is BriefingPage => page !== null);
+  const normalizedEventPath = normalizeBriefingPath(eventPath);
+  return pages.find((page) => normalizeBriefingPath(page.path) === normalizedEventPath) ?? null;
 }
 
 function buildUnresolvedRisks(input: {
   manifest: ProjectManifest;
   taskPages: BriefingPage[];
   frontierPages: BriefingPage[];
+  recentProjectPages: BriefingPage[];
   recentEvents: BrainEvent[];
   importSummary: ProjectImportSummary | null;
 }): ProjectBrief["unresolvedRisks"] {
@@ -583,6 +640,13 @@ function buildUnresolvedRisks(input: {
     risks.push({
       risk: `Frontier item still staged: ${frontier.title}`,
       evidence: [frontier.path],
+    });
+  }
+
+  if (risks.length === 0 && input.recentProjectPages[0]) {
+    risks.push({
+      risk: "Recent project evidence has not yet been turned into an explicit task or decision.",
+      evidence: [input.recentProjectPages[0].path],
     });
   }
 
@@ -612,8 +676,12 @@ function buildNextMove(input: {
   importSummary: ProjectImportSummary | null;
 }): ProjectBrief["nextMove"] {
   const nextTask = input.dueTasks[0];
-  const nextMatter = input.topMatters[0];
-  const genericMatter = nextMatter && isGenericProjectMatter(nextMatter.summary, input.manifest.title);
+  const nextMatter =
+    input.topMatters.find(
+      (matter) => !isGenericProjectMatter(matter.summary, input.manifest.title),
+    ) ?? input.topMatters[0];
+  const genericMatter =
+    nextMatter && isGenericProjectMatter(nextMatter.summary, input.manifest.title);
   const summaryMove = input.importSummary
     ? `Review the latest import summary for ${input.manifest.title} and turn it into the first task or decision.`
     : null;
@@ -788,13 +856,82 @@ function safeRecentEvents(config: BrainConfig): BrainEvent[] {
 
 function buildSummary(content: string): string {
   const preferredContent = extractSection(content, "Summary") ?? content;
-  const text = preferredContent
+  let text = preferredContent
     .replace(/^#+\s*/gm, "")
     .replace(/^\-\s+/gm, "")
     .replace(/\[\[([^\]]+)\]\]/g, "$1")
     .trim()
     .replace(/\s+/g, " ");
+  const title = extractTitle(content)?.replace(/\s+/g, " ").trim();
+  if (title) {
+    const duplicatedTitlePrefix = `${title} ${title}`;
+    if (text.startsWith(duplicatedTitlePrefix)) {
+      text = text.slice(title.length + 1).trimStart();
+    }
+  }
   return text.slice(0, 180) || "Linked page";
+}
+
+async function loadRecentProjectPages(
+  project: string,
+  projectPagePath: string,
+): Promise<BriefingPage[]> {
+  await ensureBrainStoreReady();
+  const store = getBrainStore();
+  const excludedProjectPaths = new Set(
+    [
+      projectPagePath,
+      slugFromPagePath(projectPagePath),
+      toBrainPageIdentifier(projectPagePath),
+    ].filter(Boolean),
+  );
+  const pages = filterProjectPages(await store.listPages({ limit: 5000 }), project)
+    .filter((page) => !excludedProjectPaths.has(page.path))
+    .sort((left, right) => {
+      const recencyDelta =
+        briefingPageRecencyValue(right.frontmatter, right.path)
+        - briefingPageRecencyValue(left.frontmatter, left.path);
+      if (recencyDelta !== 0) return recencyDelta;
+      return right.path.localeCompare(left.path);
+    });
+
+  return pages.slice(0, 3).map((page) => ({
+    path: page.path,
+    title: page.title || extractTitle(page.content) || page.path,
+    summary: buildSummary(page.content),
+    content: page.content,
+    status: typeof page.frontmatter?.status === "string" ? page.frontmatter.status : undefined,
+  }));
+}
+
+function briefingPageRecencyValue(
+  frontmatter: Record<string, unknown> | undefined,
+  path: string,
+): number {
+  const candidates = [
+    typeof frontmatter?.compiled_truth_updated_at === "string"
+      ? frontmatter.compiled_truth_updated_at
+      : null,
+    typeof frontmatter?.uploaded_at === "string" ? frontmatter.uploaded_at : null,
+    typeof frontmatter?.created_at === "string" ? frontmatter.created_at : null,
+    typeof frontmatter?.date === "string" ? frontmatter.date : null,
+  ].filter((value): value is string => Boolean(value));
+
+  for (const value of candidates) {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  const fromPath = Date.parse(path);
+  return Number.isFinite(fromPath) ? fromPath : 0;
+}
+
+function toBrainPageIdentifier(pagePath: string): string {
+  return `${slugFromPagePath(pagePath)}.md`;
+}
+
+function normalizeBriefingPath(path: string): string {
+  return basename(path);
 }
 
 function extractSection(content: string, heading: string): string | null {
@@ -842,12 +979,22 @@ function collectEvidence(pages: Array<BriefingPage | null>): string[] {
 }
 
 async function countSourcePages(config: BrainConfig): Promise<number> {
-  const pages = await search(config, { query: "", mode: "list", limit: 1000 });
+  const pages = await search(config, {
+    query: "",
+    mode: "list",
+    limit: 1000,
+    profile: "synthesis",
+  });
   return pages.length;
 }
 
 async function countCrossReferences(config: BrainConfig): Promise<number> {
-  const pages = await search(config, { query: "", mode: "list", limit: 1000 });
+  const pages = await search(config, {
+    query: "",
+    mode: "list",
+    limit: 1000,
+    profile: "synthesis",
+  });
   return pages.reduce((acc, page) => acc + countWikiLinks(page.path, config), 0);
 }
 
