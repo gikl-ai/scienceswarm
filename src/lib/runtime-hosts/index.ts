@@ -1,5 +1,9 @@
 export * from "./contracts";
+export * from "./concurrency";
+export * from "./dedupe";
 export * from "./errors";
+export * from "./events";
 export * from "./policy";
+export * from "./retention";
 export * from "./registry";
-
+export * from "./sessions";
