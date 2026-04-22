@@ -420,6 +420,31 @@ function shouldUseCompactOpenClawArtifactContext(
   );
 }
 
+function shouldForceOpenClawToolExecution(message: string): boolean {
+  if (isExplanatoryClarificationRequest(message)) {
+    return false;
+  }
+
+  const asksToCreateConcreteWorkspaceOutputs =
+    /\b(?:scaffold|build|create|generate|write|draft|produce|implement|save|export|set\s+up|setup)\b/i.test(
+      message,
+    ) &&
+    /\b(?:visible\s+)?(?:artifact|artifacts|file|files|workspace|project|experiment|starter code|codebase|code|config(?:uration)?s?|dataset(?:\s+entry\s+points?)?|entry\s+points?|training script|evaluation script|readme|notebook|chart|plot|graph|figure|report|plan|critique|cover letter|manuscript|package|benchmark|sweep|ablation)\b/i.test(
+      message,
+    );
+  const asksToExecuteResearchWorkflow =
+    /\b(?:run|rerun|re-run|execute|perform|start|train|evaluate|benchmark|sweep)\b/i.test(
+      message,
+    ) &&
+    /\b(?:experiment|training|evaluation|benchmark|sweep|ablation|test[- ]time|analysis|script|job|pipeline|workflow)\b/i.test(
+      message,
+    );
+
+  return (
+    asksToCreateConcreteWorkspaceOutputs || asksToExecuteResearchWorkflow
+  );
+}
+
 function openClawAgentOptions(
   session: string | null | undefined,
   cwd: string | undefined,
@@ -432,7 +457,8 @@ function openClawAgentOptions(
     timeoutMs:
       isRevisionWorkflowRequest(message) ||
       isPlanChangeRequest(message) ||
-      isRevisionRunRequest(message)
+      isRevisionRunRequest(message) ||
+      shouldForceOpenClawToolExecution(message)
         ? OPENCLAW_ARTIFACT_TASK_TIMEOUT_MS
         : undefined,
   };
@@ -2324,7 +2350,9 @@ function buildOpenClawTaskPhases(
   const needsRevisionRun = isRevisionRunRequest(message);
   const needsCoverLetter = isCoverLetterRequest(message);
   const needsCoverLetterOnly = isCoverLetterOnlyRequest(message);
+  const needsWorkspaceExecution = shouldForceOpenClawToolExecution(message);
   const needsImport =
+    needsWorkspaceExecution ||
     needsChart ||
     needsAuditPlan ||
     needsPlanChange ||
@@ -6379,27 +6407,15 @@ function streamOpenClawResponse(params: {
               ),
             });
 
-            let importedOutputs =
-              params.enableArtifactRepair === false
-                ? await finalizeOpenClawResponseImports({
-                    response,
-                    projectId: params.projectId,
-                    workingDirectory: params.workingDirectory,
-                    startedAtMs: params.startedAtMs,
-                    files: params.files,
-                    message: params.userMessage,
-                    sessionId: params.conversationId,
-                  })
-                : await importOpenClawOutputsIntoProject({
-                    response,
-                    projectId: params.projectId,
-                    workingDirectory: params.workingDirectory,
-                    files: params.files,
-                    message: params.userMessage,
-                    startedAtMs: params.startedAtMs,
-                    sessionId: params.conversationId,
-                    scanRecentOutputs: true,
-                  });
+            let importedOutputs = await finalizeOpenClawResponseImports({
+              response,
+              projectId: params.projectId,
+              workingDirectory: params.workingDirectory,
+              startedAtMs: params.startedAtMs,
+              files: params.files,
+              message: params.userMessage,
+              sessionId: params.conversationId,
+            });
             if (params.enableArtifactRepair === false) {
               completedIds = new Set(params.taskPhases.map((phase) => phase.id));
               await sendFinalEvent({
@@ -7164,6 +7180,9 @@ export async function handleUnifiedChatPost(
             messages,
             rawMessage ?? "",
           );
+      const forceToolExecution =
+        chatMode === "openclaw-tools" ||
+        shouldForceOpenClawToolExecution(userIntentMessage);
       if (streamPhases === true) {
         return streamOpenClawResponse({
           message: contextualOpenClawMessage,
@@ -7175,7 +7194,7 @@ export async function handleUnifiedChatPost(
           workingDirectory: openClawWorkingDirectory,
           startedAtMs: openClawTurnStartedAtMs,
           taskPhases,
-          forceToolExecution: chatMode === "openclaw-tools",
+          forceToolExecution,
           sendToOpenClaw,
         });
       }
@@ -7228,7 +7247,7 @@ export async function handleUnifiedChatPost(
           validatedProjectId,
           workspaceFileContext,
           userIntentMessage,
-          { forceToolExecution: chatMode === "openclaw-tools" },
+          { forceToolExecution },
         ),
         options: openClawAgentOptions(
           openClawConversationId,
@@ -7278,7 +7297,7 @@ export async function handleUnifiedChatPost(
         );
       }
 
-      let importedOutputs = await importOpenClawOutputsIntoProject({
+      let importedOutputs = await finalizeOpenClawResponseImports({
         response,
         projectId: validatedProjectId,
         workingDirectory: openClawWorkingDirectory,
@@ -7286,7 +7305,6 @@ export async function handleUnifiedChatPost(
         files: mergedFiles,
         message: userIntentMessage,
         sessionId: openClawConversationId,
-        scanRecentOutputs: true,
       });
       importedOutputs = await maybeRetryOpenClawRevisionArtifactCompleteness({
         sendToOpenClaw,

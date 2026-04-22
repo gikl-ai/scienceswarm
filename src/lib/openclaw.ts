@@ -154,18 +154,30 @@ function modelStatusHasEmbeddedTurnPath(data: Record<string, unknown>): boolean 
   return true;
 }
 
+function parseCliJsonObject<T>(stdout: string): T | null {
+  const normalized = stripAnsi(stdout).trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const firstObjectIndex = normalized.indexOf("{");
+  const candidate =
+    firstObjectIndex >= 0 ? normalized.slice(firstObjectIndex) : normalized;
+  try {
+    return JSON.parse(candidate) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function embeddedTurnReady(): Promise<boolean> {
   const result = await runOpenClaw(["models", "status", "--json"], {
     timeoutMs: 12000,
   });
   if (!result.ok) return false;
 
-  try {
-    const data = JSON.parse(result.stdout);
-    return isRecord(data) && modelStatusHasEmbeddedTurnPath(data);
-  } catch {
-    return false;
-  }
+  const data = parseCliJsonObject<unknown>(result.stdout);
+  return isRecord(data) && modelStatusHasEmbeddedTurnPath(data);
 }
 
 function inferMessageRole(message: OpenClawMessage): "user" | "assistant" | "system" {
@@ -288,6 +300,16 @@ export async function healthCheck(): Promise<OpenClawStatus> {
     return {
       status: "connected",
       gateway: httpGateway,
+      channels: [],
+      agents: 0,
+      sessions: 0,
+    };
+  }
+
+  if (await embeddedTurnReady()) {
+    return {
+      status: "connected",
+      gateway: fallbackGatewayUrl(),
       channels: [],
       agents: 0,
       sessions: 0,
