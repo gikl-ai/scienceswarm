@@ -1,3 +1,4 @@
+import { getOpenHandsUrl } from "@/lib/config/ports";
 import {
   RUNTIME_HOST_IDS,
   type RuntimeHostCapability,
@@ -191,7 +192,7 @@ const BUILT_IN_PROFILES: RuntimeHostProfile[] = [
     transport: {
       kind: "managed-openhands",
       protocol: "http",
-      endpoint: "http://127.0.0.1:3000",
+      endpoint: getOpenHandsUrl(),
     },
     controlSurface: {
       owner: "scienceSwarm-wrapper",
