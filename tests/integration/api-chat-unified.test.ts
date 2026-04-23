@@ -20,6 +20,7 @@ const {
   agentHealthCheck,
   sendAgentMessage,
   openClawHealthCheck,
+  openClawGatewayHealthCheck,
   sendOpenClawMessage,
   getConversationMessagesSince,
   runOpenClaw,
@@ -49,6 +50,7 @@ const {
   agentHealthCheck: vi.fn(),
   sendAgentMessage: vi.fn(),
   openClawHealthCheck: vi.fn(),
+  openClawGatewayHealthCheck: vi.fn(),
   sendOpenClawMessage: vi.fn(),
   getConversationMessagesSince: vi.fn(),
   runOpenClaw: vi.fn(),
@@ -86,7 +88,7 @@ vi.mock("@/lib/local-guard", () => ({
 
 vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
-  gatewayHealthCheck: openClawHealthCheck,
+  gatewayHealthCheck: openClawGatewayHealthCheck,
   sendAgentMessage: sendOpenClawMessage,
   sendOpenClawChatMessage: sendOpenClawMessage,
   getConversationMessagesSince,
@@ -248,6 +250,7 @@ beforeEach(() => {
   agentHealthCheck.mockReset();
   sendAgentMessage.mockReset();
   openClawHealthCheck.mockReset();
+  openClawGatewayHealthCheck.mockReset();
   sendOpenClawMessage.mockReset();
   runOpenClaw.mockReset();
   sendMessageViaGateway.mockReset();
@@ -327,6 +330,7 @@ beforeEach(() => {
     agents: 0,
     sessions: 0,
   });
+  openClawGatewayHealthCheck.mockImplementation(() => openClawHealthCheck());
   scienceswarmDir = null;
   delete process.env.SCIENCESWARM_DIR;
   delete process.env.BRAIN_ROOT;
@@ -1519,6 +1523,55 @@ describe("POST /api/chat/unified", () => {
     );
     expect(sendOpenClawMessage.mock.calls[0]?.[0]).toContain(
       "Do not describe steps — do them.",
+    );
+    expect(streamChat).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+  });
+
+  it("checks slash skill readiness with the fast OpenClaw gateway probe", async () => {
+    listOpenClawSkills.mockResolvedValueOnce([
+      {
+        slug: "project-organizer",
+        name: "project-organizer",
+        description: "Organize the current project",
+        runtime: "in-session",
+        emoji: null,
+      },
+    ]);
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawGatewayHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw organized the project");
+
+    const request = new Request("http://localhost/api/chat/command", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "slash-fast-gateway-test",
+      },
+      body: JSON.stringify({
+        message: "/project-organizer list stale exports",
+        messages: [
+          { role: "user", content: "/project-organizer list stale exports" },
+        ],
+      }),
+    });
+
+    const response = await commandPOST(request);
+
+    expect(response.status).toBe(200);
+    expect(openClawGatewayHealthCheck).toHaveBeenCalledTimes(1);
+    expect(openClawHealthCheck).not.toHaveBeenCalled();
+    expect(sendOpenClawMessage).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "ScienceSwarm slash command: `/project-organizer list stale exports`",
+      ),
+      expect.any(Object),
     );
     expect(streamChat).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
