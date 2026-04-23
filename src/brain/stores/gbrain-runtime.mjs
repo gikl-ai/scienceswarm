@@ -1,11 +1,17 @@
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, resolve as resolvePath } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const require = createRequire(import.meta.url);
 
 /**
  * Runtime bridge for the installed gbrain package.
  *
- * Use the package export for engine-factory so Next can preserve the package
- * boundary and keep PGLite external on the server. The command wrappers still
- * require deep imports until upstream exports stable subpaths for them.
+ * Prefer the package export for engine-factory when the installed gbrain
+ * version provides it. Fall back to the installed package path until upstream
+ * exports that subpath consistently. The command wrappers still require deep
+ * imports until upstream exports stable subpaths for them.
  */
 
 function timelineDateKey(date) {
@@ -66,13 +72,42 @@ function wrapRuntimeEngine(engine) {
   });
 }
 
+function resolveGbrainSourceSpecifier(relativePathFromCore) {
+  const gbrainEntryPath = require.resolve("gbrain");
+  return pathToFileURL(
+    resolvePath(dirname(gbrainEntryPath), relativePathFromCore),
+  ).href;
+}
+
+async function loadCreateEngine() {
+  try {
+    const engineFactorySpecifier = "gbrain/engine-factory";
+    const engineFactoryModule = await import(/* @vite-ignore */ engineFactorySpecifier);
+    if (typeof engineFactoryModule.createEngine === "function") {
+      return engineFactoryModule.createEngine;
+    }
+  } catch {
+    // Older installed gbrain builds do not export this subpath yet.
+  }
+
+  const fallbackEngineFactorySpecifier = resolveGbrainSourceSpecifier(
+    "engine-factory.ts",
+  );
+  const fallbackEngineFactoryModule = await import(
+    /* @vite-ignore */ fallbackEngineFactorySpecifier
+  );
+  return fallbackEngineFactoryModule.createEngine;
+}
+
 export async function createRuntimeEngine(config) {
-  const { createEngine } = await import("gbrain/engine-factory");
+  const createEngine = await loadCreateEngine();
   return wrapRuntimeEngine(await createEngine(config));
 }
 
 export async function runRuntimeExtract(engine, args) {
-  const extractModule = await import("../../../node_modules/gbrain/src/commands/extract.ts");
+  const extractModule = await import(
+    /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/extract.ts")
+  );
   const runExtractCore = extractModule.runExtractCore;
   const mode = args[0];
   const dirIdx = args.indexOf("--dir");
@@ -167,11 +202,15 @@ async function runRuntimeExtractFallback(engine, extractModule, mode, dir, dryRu
 }
 
 export async function runRuntimeEmbed(engine, args) {
-  const { runEmbed } = await import("../../../node_modules/gbrain/src/commands/embed.ts");
+  const { runEmbed } = await import(
+    /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/embed.ts")
+  );
   return runEmbed(engine, args);
 }
 
 export async function performRuntimeSync(engine, opts) {
-  const { performSync } = await import("../../../node_modules/gbrain/src/commands/sync.ts");
+  const { performSync } = await import(
+    /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/sync.ts")
+  );
   return performSync(engine, opts);
 }
