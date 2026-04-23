@@ -7768,7 +7768,7 @@ async function handleExplicitOpenClawSlashCommand(params: {
 
   const {
     healthCheck: openClawHealthCheck,
-    sendAgentMessage: sendToOpenClaw,
+    sendOpenClawChatMessage: sendToOpenClaw,
   } = await import("@/lib/openclaw");
   const openClawStatus = await openClawHealthCheck().catch(() => ({
     status: "disconnected" as const,
@@ -8240,7 +8240,7 @@ export async function handleUnifiedChatPost(
         return response;
       };
 
-      const { sendAgentMessage: sendToOpenClaw } =
+      const { sendOpenClawChatMessage: sendToOpenClaw } =
         await import("@/lib/openclaw");
       const openClawConversationId = buildOpenClawSessionId(
         validatedProjectId,
