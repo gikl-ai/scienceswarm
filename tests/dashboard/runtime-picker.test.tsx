@@ -90,6 +90,7 @@ describe("RuntimePicker", () => {
     })).toBeDisabled();
     expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("OpenClaw");
     expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("Local network");
+    expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("Ready to send");
   });
 
   it("supports keyboard-reachable mode and compare host controls", () => {
@@ -130,5 +131,6 @@ describe("RuntimePicker", () => {
 
     fireEvent.click(screen.getByLabelText("Claude Code"));
     expect(onCompareHostIdsChange).toHaveBeenCalledWith(["openclaw", "claude-code"]);
+    expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("Ready for preview");
   });
 });

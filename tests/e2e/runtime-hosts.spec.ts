@@ -849,7 +849,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await expect(codexOption).toHaveAttribute("disabled", "");
     await expect(codexOption).toContainText("Requires cloud-ok");
     await expect(page.getByTestId("runtime-selected-summary")).toContainText("OpenClaw");
-    await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready for preview");
+    await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready to send");
 
     await page.getByTestId("chat-input").fill("Use the local OpenClaw path.");
     await page.getByRole("button", { name: "Send" }).click();
@@ -866,7 +866,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
 
     await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
     await expect(page.getByTestId("runtime-picker")).toBeVisible();
-    await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready for preview");
+    await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready to send");
 
     await selectRuntimePolicy(page, "cloud-ok");
     await expect(page.locator('[data-testid="runtime-host-select"] option[value="codex"]'))
@@ -906,7 +906,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
 
     await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
     await expect(page.getByTestId("runtime-picker")).toBeVisible();
-    await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready for preview");
+    await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready to send");
 
     await selectRuntimePolicy(page, "cloud-ok");
     await expect(page.locator('[data-testid="runtime-host-select"] option[value="codex"]'))

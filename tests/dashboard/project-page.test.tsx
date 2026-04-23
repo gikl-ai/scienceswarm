@@ -1001,6 +1001,231 @@ describe("Project dashboard smoke test", () => {
     expect(postEndpoints).toEqual(["/api/chat/command"]);
   });
 
+  it("sends chat mode directly to the selected runtime host without opening the preview sheet", async () => {
+    const runtimeSessionBodies: Record<string, unknown>[] = [];
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/health") {
+        return Response.json({
+          openclaw: "connected",
+          openhands: "disconnected",
+          openai: "configured",
+          features: {
+            chat: true,
+            codeExecution: false,
+            github: false,
+            multiChannel: false,
+            structuredCritique: true,
+          },
+        });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+          llmProvider: "openai",
+          ollamaModels: [],
+          configuredLocalModel: null,
+        });
+      }
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 1, backend: "gbrain" });
+      }
+
+      if (url.startsWith("/api/brain/brief?project=")) {
+        return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
+      }
+
+      if (url === "/api/projects/demo-project/import-summary") {
+        return Response.json({ project: "demo-project", lastImport: null });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=demo-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/brain/list?project=demo-project") {
+        return Response.json([]);
+      }
+
+      if (url === "/api/chat/thread?project=demo-project") {
+        return Response.json({
+          version: 1,
+          project: "demo-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/runtime/health") {
+        return Response.json({
+          checkedAt: "2026-04-23T13:45:00.000Z",
+          hosts: [
+            {
+              profile: {
+                id: "openclaw",
+                label: "OpenClaw",
+                authMode: "local",
+                authProvider: "openclaw",
+                privacyClass: "local-network",
+                transport: {
+                  kind: "desktop-bridge",
+                  protocol: "websocket",
+                },
+                capabilities: ["chat", "stream", "cancel", "resume", "mcp-tools"],
+                lifecycle: {
+                  canStream: true,
+                  canCancel: true,
+                  canResumeNativeSession: true,
+                  canListNativeSessions: false,
+                  cancelSemantics: "kill-wrapper-process",
+                  resumeSemantics: "scienceSwarm-wrapper-session",
+                },
+                accountDisclosure: {
+                  storesTokensInScienceSwarm: false,
+                  requiresProjectPrivacy: "local-only",
+                },
+                mcpTools: [],
+              },
+              health: {
+                status: "ready",
+                checkedAt: "2026-04-23T13:45:00.000Z",
+              },
+              auth: {
+                status: "not-required",
+                authMode: "local",
+                provider: "openclaw",
+              },
+              privacy: {
+                privacyClass: "local-network",
+                adapterProof: "declared-local",
+              },
+            },
+            {
+              profile: {
+                id: "codex",
+                label: "Codex",
+                authMode: "subscription-native",
+                authProvider: "openai",
+                privacyClass: "hosted",
+                transport: {
+                  kind: "local-cli",
+                  protocol: "stdio",
+                  command: "codex",
+                },
+                capabilities: ["chat", "task", "stream", "cancel", "mcp-tools", "artifact-import"],
+                lifecycle: {
+                  canStream: true,
+                  canCancel: true,
+                  canResumeNativeSession: false,
+                  canListNativeSessions: false,
+                  cancelSemantics: "kill-wrapper-process",
+                  resumeSemantics: "none",
+                },
+                accountDisclosure: {
+                  storesTokensInScienceSwarm: false,
+                  requiresProjectPrivacy: "cloud-ok",
+                },
+                mcpTools: [],
+              },
+              health: {
+                status: "ready",
+                checkedAt: "2026-04-23T13:45:00.000Z",
+              },
+              auth: {
+                status: "authenticated",
+                authMode: "subscription-native",
+                provider: "openai",
+              },
+              privacy: {
+                privacyClass: "hosted",
+                adapterProof: "declared-hosted",
+              },
+            },
+          ],
+        });
+      }
+
+      if (url === "/api/runtime/sessions?projectId=demo-project") {
+        return Response.json({ sessions: [] });
+      }
+
+      if (url === "/api/runtime/preview" && method === "POST") {
+        throw new Error("unexpected runtime preview request");
+      }
+
+      if (url === "/api/runtime/sessions" && method === "POST") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        runtimeSessionBodies.push(body);
+        return Response.json({
+          session: {
+            id: "runtime-session-codex",
+            conversationId: "codex-native-session",
+            status: "completed",
+          },
+          events: [
+            {
+              type: "message",
+              payload: { text: "Codex direct answer" },
+            },
+          ],
+        });
+      }
+
+      if (url === "/api/projects") {
+        return Response.json({
+          projects: [
+            {
+              id: "demo-project",
+              slug: "demo-project",
+              name: "Demo Project",
+              status: "active",
+            },
+          ],
+        });
+      }
+
+      return Response.json({ status: "disconnected" });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ProjectPage />);
+
+    await screen.findByRole("option", { name: /Codex/ });
+    const policySelect = await screen.findByTestId("runtime-project-policy");
+    fireEvent.change(policySelect, { target: { value: "cloud-ok" } });
+    fireEvent.change(screen.getByTestId("runtime-host-select"), { target: { value: "codex" } });
+
+    expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("Ready to send");
+
+    const input = await screen.findByLabelText("Chat with your project");
+    fireEvent.change(input, { target: { value: "Talk to Codex directly" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Codex direct answer")).toBeInTheDocument();
+    expect(runtimeSessionBodies).toEqual([
+      expect.objectContaining({
+        hostId: "codex",
+        mode: "chat",
+        projectId: "demo-project",
+        projectPolicy: "cloud-ok",
+        approvalState: "approved",
+        prompt: "Talk to Codex directly",
+      }),
+    ]);
+    expect(screen.queryByRole("dialog", { name: "Runtime preview" })).not.toBeInTheDocument();
+  });
+
   it("opens project navigation from the mobile projects button", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
