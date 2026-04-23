@@ -2079,6 +2079,7 @@ describe("POST /api/brain/import-project", () => {
   it("returns a sanitized error when import attribution is not configured", async () => {
     vi.stubEnv("SCIENCESWARM_USER_HANDLE", "");
     const { POST } = await import("@/app/api/brain/import-project/route");
+    const cwd = vi.spyOn(process, "cwd").mockReturnValue(TEST_ROOT);
 
     const request = new Request("http://localhost/api/brain/import-project", {
       method: "POST",
@@ -2100,11 +2101,15 @@ describe("POST /api/brain/import-project", () => {
       }),
     });
 
-    const response = await POST(request);
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      error: "Server attribution is not configured",
-    });
+    try {
+      const response = await POST(request);
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        error: "Server attribution is not configured",
+      });
+    } finally {
+      cwd.mockRestore();
+    }
   });
 
   it("ignores untrusted sourcePath fields from browser import payloads", async () => {

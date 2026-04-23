@@ -50,7 +50,7 @@
     "@slack/bolt": "^4.7.0",
     "@slack/web-api": "^7.15.0",
     "chokidar": "^5.0.0",
-    "gbrain": "git+https://github.com/garrytan/gbrain.git#7bbfc3e36a1bc6e831940f12e49dbaeaddaa196e",
+    "gbrain": "git+https://github.com/garrytan/gbrain.git#90c5d93fcebb94c9d1e3b31167f9760fbfe077a9",
     "googleapis": "^171.4.0",
     "gray-matter": "^4.0.3",
     "katex": "^0.16.45",

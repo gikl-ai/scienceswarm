@@ -684,17 +684,10 @@ describe("gbrain contract behaviors: putPage", () => {
 });
 
 describe("gbrain contract behaviors: timeline", () => {
-  // Track C.1 finding: gbrain's addTimelineEntry is a raw INSERT and the
-  // timeline_entries table has no UNIQUE constraint on (page_id, date, summary).
-  // Calling it twice with the same payload produces two rows. This is
-  // surprising — ScienceSwarm's capture path assumes timeline appends are
-  // idempotent, and nothing catches the drift today.
-  //
-  // We keep the test as `it.skip` rather than deleting it: it documents the
-  // intended contract so a future gbrain fix (unique index or ON CONFLICT)
-  // will immediately flip this green. Tracked as an upstream gap:
-  // `addTimelineEntry` is not idempotent today.
-  it.skip("3. addTimelineEntry is idempotent by (page, date, summary) — UPSTREAM GAP", async () => {
+  // gbrain v0.16 adds a timeline dedup index and ON CONFLICT handling, so
+  // ScienceSwarm can now enforce the idempotent append behavior its capture
+  // paths already assumed.
+  it("3. addTimelineEntry is idempotent by (page, date, summary)", async () => {
     await seedPage("behavior-timeline-idem");
     const entry = {
       date: "2026-04-14",

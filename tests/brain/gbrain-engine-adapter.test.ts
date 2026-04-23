@@ -247,7 +247,7 @@ describe("GbrainEngineAdapter", () => {
     }
   });
 
-  it("throws when SCIENCESWARM_USER_HANDLE is unset during importCorpus", async () => {
+  it("throws when SCIENCESWARM_USER_HANDLE is unavailable during importCorpus", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "scienceswarm-gbrain-import-"));
     mkdirSync(path.join(root, "wiki"), { recursive: true });
     writeFileSync(
@@ -257,12 +257,14 @@ describe("GbrainEngineAdapter", () => {
     );
 
     delete process.env.SCIENCESWARM_USER_HANDLE;
+    const cwd = vi.spyOn(process, "cwd").mockReturnValue(root);
 
     try {
       await expect(adapter.importCorpus(root)).rejects.toThrow(
         /SCIENCESWARM_USER_HANDLE/,
       );
     } finally {
+      cwd.mockRestore();
       process.env.SCIENCESWARM_USER_HANDLE = "@test-adapter";
       rmSync(root, { recursive: true, force: true });
     }

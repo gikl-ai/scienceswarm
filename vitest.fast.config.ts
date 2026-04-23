@@ -17,6 +17,7 @@ export default defineConfig({
       "**/node_modules/**",
       "**/dist/**",
       "**/.next/**",
+      "**/.worktrees/**",
       "tests/e2e/**/*.spec.ts",
       "tests/e2e/briefings-dream.test.ts",
       "tests/e2e/capture-entity.test.ts",
