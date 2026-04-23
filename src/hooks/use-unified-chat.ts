@@ -27,6 +27,8 @@ import { looksLikeSlashCommandInput } from "@/lib/openclaw/slash-commands";
 
 import type { Step } from "@/components/research/step-cards";
 
+const OPENCLAW_UNREACHABLE_ERROR = "OpenClaw is not reachable. Start it in Settings.";
+
 // ── Types ──────────────────────────────────────────────────────
 
 export interface Message {
@@ -3892,6 +3894,11 @@ export function useUnifiedChat(
         }
 
         setOpenClawConnected(openClawReady);
+        if (openClawReady) {
+          setError((current) =>
+            current === OPENCLAW_UNREACHABLE_ERROR ? null : current,
+          );
+        }
       } catch {
         localProviderActiveRef.current = false;
         setOpenClawConnected(false);
@@ -4009,7 +4016,7 @@ export function useUnifiedChat(
           : normalizeBackend(runtimeOptions.runtimeHostId) ?? "openclaw";
 
       if (requestedBackend === "openclaw" && runtimeMode === "chat" && openClawConnected === false) {
-        setError("OpenClaw is not reachable. Start it in Settings.");
+        setError(OPENCLAW_UNREACHABLE_ERROR);
         return Promise.resolve();
       }
 

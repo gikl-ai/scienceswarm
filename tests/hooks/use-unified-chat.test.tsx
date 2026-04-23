@@ -5398,6 +5398,94 @@ describe("useUnifiedChat persistence", () => {
     });
   });
 
+  it("clears the stale OpenClaw unreachable error after a later health refresh succeeds", async () => {
+    const scheduledIntervals: Array<() => Promise<void> | void> = [];
+    vi.spyOn(globalThis, "setInterval").mockImplementation(((callback: TimerHandler) => {
+      scheduledIntervals.push(callback as () => Promise<void> | void);
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof setInterval);
+
+    let healthProbeCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        healthProbeCount += 1;
+        if (healthProbeCount === 1) {
+          return Response.json({
+            agent: { type: "openclaw", status: "disconnected" },
+            openclaw: "disconnected",
+            nanoclaw: "disconnected",
+            openhands: "connected",
+            ollama: "connected",
+            ollamaModels: ["gemma4:latest"],
+            configuredLocalModel: "gemma4",
+            llmProvider: "local",
+          });
+        }
+
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:latest"],
+          configuredLocalModel: "gemma4",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        throw new Error("Chat should not POST when OpenClaw is disconnected");
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("error").textContent).toContain("OpenClaw is not reachable");
+    });
+
+    await act(async () => {
+      for (const callback of scheduledIntervals) {
+        await callback?.();
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("error").textContent).toBe("");
+    });
+    expect(healthProbeCount).toBeGreaterThanOrEqual(2);
+  });
+
   it("polls by conversationId when the project slug is invalid but OpenClaw history exists", async () => {
     window.localStorage.setItem(
       "scienceswarm.chat.alpha%20project",
