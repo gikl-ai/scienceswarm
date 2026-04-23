@@ -62,7 +62,7 @@ describe("runtime host TurnPreview policy", () => {
       }),
     ).toMatchObject({
       allowed: true,
-      requiresUserApproval: true,
+      requiresUserApproval: false,
       effectivePrivacyClass: "hosted",
       accountDisclosure: {
         provider: "anthropic",
@@ -112,7 +112,7 @@ describe("runtime host TurnPreview policy", () => {
     );
   });
 
-  it("requires visible approval for cloud-ok hosted chat before prompt construction", () => {
+  it("uses project policy approval for cloud-ok hosted chat", () => {
     const preview = computeTurnPreview({
       projectPolicy: "cloud-ok",
       host: requireRuntimeHostProfile("claude-code"),
@@ -122,14 +122,9 @@ describe("runtime host TurnPreview policy", () => {
 
     expect(preview).toMatchObject({
       allowed: true,
-      requiresUserApproval: true,
+      requiresUserApproval: false,
     });
-    expect(() => assertTurnPreviewAllowsPromptConstruction(preview)).toThrow(
-      RuntimePreviewApprovalRequired,
-    );
-    expect(() =>
-      assertTurnPreviewAllowsPromptConstruction(preview, true)
-    ).not.toThrow();
+    expect(() => assertTurnPreviewAllowsPromptConstruction(preview)).not.toThrow();
   });
 
   it("requires execution-ok approval for task-capable hosted runtimes", () => {
@@ -312,4 +307,3 @@ describe("runtime host TurnPreview policy", () => {
     },
   );
 });
-

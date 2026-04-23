@@ -55,6 +55,17 @@ die() {
   exit 1
 }
 
+is_truthy() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 load_repo_env() {
   # shellcheck source=scripts/openclaw-env.sh
   source "$REPO_ROOT/scripts/openclaw-env.sh"
@@ -88,6 +99,7 @@ load_repo_env() {
 
   : "${FRONTEND_HOST:=127.0.0.1}"
   : "${FRONTEND_PORT:=3001}"
+  : "${FRONTEND_USE_HTTPS:=true}"
   DATA_ROOT="${SCIENCESWARM_DIR:-$HOME/.scienceswarm}"
   RUN_ROOT="$DATA_ROOT/run"
   LAUNCHER_PID_FILE="$RUN_ROOT/launcher.pid"
@@ -324,10 +336,6 @@ cmd_status() {
     fi
   fi
 
-  if curl -fsS --max-time 2 "http://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
-    frontend_health="ok"
-  fi
-
   openhands_container_id=$(read_text_file "$OPENHANDS_CONTAINER_FILE" || true)
   if [ -n "$openhands_container_id" ]; then
     openhands_state=$(docker_container_running_state "$openhands_container_id" || true)
@@ -347,6 +355,16 @@ cmd_status() {
   gateway_pid=$(read_openclaw_gateway_pid || true)
   if [ -n "$gateway_pid" ]; then
     gateway_status="running (pid $gateway_pid)"
+  fi
+
+  if is_truthy "${FRONTEND_USE_HTTPS:-true}"; then
+    if curl -kfsS --max-time 2 "https://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
+      frontend_health="ok"
+    elif curl -fsS --max-time 2 "http://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
+      frontend_health="ok"
+    fi
+  elif curl -fsS --max-time 2 "http://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
+    frontend_health="ok"
   fi
 
   note "ScienceSwarm status"

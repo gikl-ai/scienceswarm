@@ -7700,6 +7700,94 @@ describe("POST /api/chat/unified", () => {
     expect(events[finalTextIndex]).not.toHaveProperty("thinking");
   });
 
+  it("does not replay the previous assistant thinking when reusing a session", async () => {
+    const projectRoot = createProjectRoot("alpha-project");
+    const sessionId = "thinking-session-stream-reuse";
+    const sessionDir = path.join(
+      ensureScienceSwarmDir(),
+      "openclaw",
+      "agents",
+      "main",
+      "sessions",
+    );
+    mkdirSync(sessionDir, { recursive: true });
+    const sessionFile = path.join(sessionDir, `${sessionId}.jsonl`);
+    let sessionContents = `${JSON.stringify({
+      type: "message",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "Stale thinking from the previous turn." },
+          { type: "text", text: "Earlier OpenClaw answer" },
+        ],
+      },
+    })}\n`;
+    writeFileSync(sessionFile, sessionContents, "utf8");
+    readFile.mockImplementation(async () => sessionContents);
+
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockImplementationOnce(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 120);
+      });
+      sessionContents += `${JSON.stringify({
+        type: "message",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Fresh thinking for the new turn." },
+            { type: "text", text: "Fresh OpenClaw reasoning answer" },
+          ],
+        },
+      })}\n`;
+      writeFileSync(sessionFile, sessionContents, "utf8");
+      await new Promise((resolve) => {
+        setTimeout(resolve, 120);
+      });
+      return "Fresh OpenClaw reasoning answer";
+    });
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Save the result in this project.",
+        projectId: path.basename(projectRoot),
+        conversationId: sessionId,
+        streamPhases: true,
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
+
+    const events = await readSseEvents(response);
+    const thinkingEvents = events.filter(
+      (event) => typeof event.thinking === "string",
+    );
+
+    expect(thinkingEvents).toEqual([
+      {
+        thinking: "Fresh thinking for the new turn.",
+        replaceThinking: true,
+      },
+    ]);
+    expect(JSON.stringify(thinkingEvents)).not.toContain(
+      "Stale thinking from the previous turn.",
+    );
+  });
+
   it("does not reuse stale OpenClaw thinking when the latest assistant turn has none", async () => {
     ensureScienceSwarmDir();
     const sessionId = "thinking-session-without-latest-trace";

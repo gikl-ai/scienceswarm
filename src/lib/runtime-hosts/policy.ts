@@ -236,9 +236,11 @@ export function computeTurnPreview(
   const hasHostedOrExternalDestination = decisions.some((decision) =>
     !isLocalPrivacy(decision.privacyClass)
   );
+  const needsHostedDestinationApproval =
+    hasHostedOrExternalDestination && request.mode !== "chat";
   const requiresUserApproval = allowed
     && (
-      hasHostedOrExternalDestination
+      needsHostedDestinationApproval
       || request.mode === "task"
       || request.mode === "artifact-import"
     );

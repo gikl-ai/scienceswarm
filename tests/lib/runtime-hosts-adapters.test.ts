@@ -210,12 +210,12 @@ describe("runtime host adapters", () => {
       ...requestFor(codex, "chat"),
       preview: blockedPreview,
     };
-    const unapprovedRequest = requestFor(codex, "chat", "required");
+    const unapprovedRequest = requestFor(codex, "task", "required");
 
     await expect(adapter.sendTurn(blockedRequest)).rejects.toThrow(
       RuntimePrivacyBlocked,
     );
-    await expect(adapter.sendTurn(unapprovedRequest)).rejects.toThrow(
+    await expect(adapter.executeTask(unapprovedRequest)).rejects.toThrow(
       RuntimePreviewApprovalRequired,
     );
     expect(transport.requests).toHaveLength(0);
@@ -258,7 +258,7 @@ describe("runtime host adapters", () => {
     });
 
     expect(preview).toMatchObject({
-      requiresUserApproval: true,
+      requiresUserApproval: false,
       accountDisclosure: {
         authMode: "api-key",
         provider: "openai",

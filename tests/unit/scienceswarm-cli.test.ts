@@ -83,6 +83,68 @@ describe("scienceswarm CLI", () => {
     expect(output).toContain("OpenHands: stopped");
   });
 
+  it("probes frontend health over https when local https is enabled", () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-https-"));
+    const binRoot = path.join(tmpRoot, "bin");
+    const curlLogPath = path.join(tmpRoot, "curl.log");
+    fs.mkdirSync(binRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(binRoot, "curl"),
+      `#!/usr/bin/env bash
+printf '%s\\n' "$*" > ${JSON.stringify(curlLogPath)}
+if [ "$1" = "-kfsS" ] && [ "$2" = "--max-time" ] && [ "$3" = "2" ] && [ "$4" = "https://127.0.0.1:43994/api/health" ]; then
+  exit 0
+fi
+exit 1
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = runCli(["status"], {
+      SCIENCESWARM_DIR: tmpRoot,
+      FRONTEND_PORT: "43994",
+      FRONTEND_USE_HTTPS: "true",
+      HOME: tmpRoot,
+      PATH: `${binRoot}:${process.env.PATH ?? ""}`,
+    });
+
+    expect(output).toContain("Frontend health: ok");
+    expect(fs.readFileSync(curlLogPath, "utf8").trim()).toBe(
+      "-kfsS --max-time 2 https://127.0.0.1:43994/api/health",
+    );
+  });
+
+  it("falls back to http health probing when the https frontend probe fails", () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-http-fallback-"));
+    const binRoot = path.join(tmpRoot, "bin");
+    const curlLogPath = path.join(tmpRoot, "curl.log");
+    fs.mkdirSync(binRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(binRoot, "curl"),
+      `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> ${JSON.stringify(curlLogPath)}
+if [ "$1" = "-fsS" ] && [ "$2" = "--max-time" ] && [ "$3" = "2" ] && [ "$4" = "http://127.0.0.1:43995/api/health" ]; then
+  exit 0
+fi
+exit 1
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = runCli(["status"], {
+      SCIENCESWARM_DIR: tmpRoot,
+      FRONTEND_PORT: "43995",
+      HOME: tmpRoot,
+      PATH: `${binRoot}:${process.env.PATH ?? ""}`,
+    });
+
+    expect(output).toContain("Frontend health: ok");
+    expect(fs.readFileSync(curlLogPath, "utf8").trim().split("\n")).toEqual([
+      "-kfsS --max-time 2 https://127.0.0.1:43995/api/health",
+      "-fsS --max-time 2 http://127.0.0.1:43995/api/health",
+    ]);
+  });
+
   it("reports an exited OpenHands container as stopped instead of running", () => {
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-container-"));
     const runRoot = path.join(tmpRoot, "run");

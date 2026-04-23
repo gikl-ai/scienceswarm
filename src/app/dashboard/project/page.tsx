@@ -3674,6 +3674,7 @@ function ProjectPageContent() {
     async (prompt: string, activeFile?: ActiveFileContext) => {
       const mode = runtimeMode;
       const runtimeHostId = selectedRuntimeHostId as Backend;
+      const sendChatDirect = mode === "chat";
       const dataIncluded = buildComposerRuntimeDataIncluded(prompt, activeFile);
       const selectedHostIds = mode === "compare"
         ? compareHostIds.length > 0 ? compareHostIds : ["openclaw"]
@@ -3689,11 +3690,7 @@ function ProjectPageContent() {
         dataIncluded,
       };
 
-      const canSendOpenClawDirect =
-        runtimeHostId === "openclaw"
-        && mode === "chat"
-        && runtimeProjectPolicy === "local-only";
-      if (canSendOpenClawDirect) {
+      if (sendChatDirect) {
         await sendRuntimePrompt(prompt, options);
         return;
       }

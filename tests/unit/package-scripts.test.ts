@@ -4,6 +4,11 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_PORTS } from "../../src/lib/config/ports";
 
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
+  overrides?: {
+    gbrain?: {
+      "@electric-sql/pglite"?: string;
+    };
+  };
   scripts: Record<string, string>;
 };
 
@@ -26,5 +31,9 @@ describe("package.json scripts", () => {
     );
     // Must NOT be the bare "next dev" form that defaults to 3000.
     expect(dev).not.toMatch(/^next dev\s*$/);
+  });
+
+  it("forces gbrain to reuse the hoisted PGLite package", () => {
+    expect(pkg.overrides?.gbrain?.["@electric-sql/pglite"]).toBe("0.4.4");
   });
 });

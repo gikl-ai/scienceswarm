@@ -57,6 +57,7 @@ export function RuntimePicker({
   const selectedReason = selectedHost
     ? runtimeHostDisabledReason({ host: selectedHost, policy: projectPolicy, mode })
     : "Runtime host unavailable";
+  const readyLabel = mode === "chat" ? "Ready to send" : "Ready for preview";
   const compareHosts = hosts.filter((host) =>
     runtimeHostDisabledReason({ host, policy: projectPolicy, mode: "compare" }) === null
   );
@@ -200,7 +201,7 @@ export function RuntimePicker({
         {selectedReason ? (
           <RuntimeStatusChip label={selectedReason} tone="warn" />
         ) : (
-          <RuntimeStatusChip label="Ready for preview" tone="ok" />
+          <RuntimeStatusChip label={readyLabel} tone="ok" />
         )}
       </div>
     </section>

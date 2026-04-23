@@ -831,10 +831,9 @@ export async function defaultInstallerEnvironment(): Promise<InstallerEnvironmen
       });
     },
     async initGbrain(opts: { databasePath: string }) {
-      // gbrain doesn't export `engine-factory` from its package.json
-      // exports map; ScienceSwarm already reaches it via a runtime
-      // bridge for the dashboard hot path. We use the same bridge so
-      // there's exactly one place that knows the deep import.
+      // ScienceSwarm reaches gbrain's exported `engine-factory`
+      // through the shared runtime bridge so there's exactly one place
+      // that owns any package/runtime compatibility quirks.
       //
       // The bridge is a `.mjs` file because it predates this module —
       // ts-node / tsx / Next.js bundlers all happily consume it. The
