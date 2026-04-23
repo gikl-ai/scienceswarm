@@ -5339,6 +5339,86 @@ describe("useUnifiedChat persistence", () => {
     });
   });
 
+  it("rechecks OpenClaw health on send before surfacing a disconnected error", async () => {
+    let healthProbeCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        healthProbeCount += 1;
+        if (healthProbeCount === 1) {
+          return Response.json({
+            agent: { type: "openclaw", status: "disconnected" },
+            openclaw: "disconnected",
+            nanoclaw: "disconnected",
+            openhands: "connected",
+            ollama: "connected",
+            ollamaModels: ["gemma4:latest"],
+            configuredLocalModel: "gemma4",
+            llmProvider: "local",
+          });
+        }
+
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:latest"],
+          configuredLocalModel: "gemma4",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return Response.json({
+          response: "Recovered answer",
+          conversationId: "web:alpha-project:session-1",
+          messages: [],
+        });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain(
+        "assistant:Recovered answer",
+      );
+    });
+
+    expect(screen.getByTestId("error").textContent).toBe("");
+    expect(healthProbeCount).toBeGreaterThanOrEqual(2);
+  });
+
   it("blocks reasoning-mode send and surfaces an error when OpenClaw is disconnected even if OpenHands is up", async () => {
     // This is the new guarantee introduced by the chat-only-through-OpenClaw
     // cut: previously a reasoning-mode turn would silently fall through to

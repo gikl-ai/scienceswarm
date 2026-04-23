@@ -3856,51 +3856,56 @@ export function useUnifiedChat(
     ]
   );
 
+  const refreshOpenClawHealth = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/chat/unified?action=health");
+      const data = await res.json() as Record<string, unknown>;
+
+      const agentRecord =
+        data.agent && typeof data.agent === "object"
+          ? data.agent as { type?: unknown; status?: unknown }
+          : null;
+      const agentType = typeof agentRecord?.type === "string" ? agentRecord.type : null;
+      const agentOk = agentRecord?.status === "connected";
+      // Legacy-field fallback for older servers that don't return the
+      // `agent` object yet.
+      const legacyOpenClawOk = data.openclaw === "connected";
+      const openClawReady = (agentType === "openclaw" && agentOk) || legacyOpenClawOk;
+      localProviderActiveRef.current = false;
+
+      // Chat always routes through OpenClaw. OpenClaw itself may delegate
+      // to OpenHands or a local model internally, but that is not the
+      // hook's concern — the hook only cares whether OpenClaw is reachable.
+      const initialBackend: Backend = "openclaw";
+
+      // Only seed the active backend on the very first probe. After
+      // that we preserve whichever path the current thread last used.
+      if (!initialBackendSetRef.current) {
+        setBackend(initialBackend);
+        liveBackendRef.current = initialBackend;
+        initialBackendSetRef.current = true;
+      }
+
+      setOpenClawConnected(openClawReady);
+      return openClawReady;
+    } catch {
+      localProviderActiveRef.current = false;
+      setOpenClawConnected(false);
+      return false;
+    }
+  }, []);
+
   // Single mount-effect that handles runtime detection off the same
   // /api/chat/unified?action=health response. Previously we ran two
   // parallel effects, each firing its own ~3s WebSocket handshake probe
   // on mount — halving the cold-start cost.
   useEffect(() => {
-    async function probe() {
-      try {
-        const res = await fetch("/api/chat/unified?action=health");
-        const data = await res.json() as Record<string, unknown>;
-
-        const agentRecord =
-          data.agent && typeof data.agent === "object"
-            ? data.agent as { type?: unknown; status?: unknown }
-            : null;
-        const agentType = typeof agentRecord?.type === "string" ? agentRecord.type : null;
-        const agentOk = agentRecord?.status === "connected";
-        // Legacy-field fallback for older servers that don't return the
-        // `agent` object yet.
-        const legacyOpenClawOk = data.openclaw === "connected";
-        const openClawReady = (agentType === "openclaw" && agentOk) || legacyOpenClawOk;
-        localProviderActiveRef.current = false;
-
-        // Chat always routes through OpenClaw. OpenClaw itself may delegate
-        // to OpenHands or a local model internally, but that is not the
-        // hook's concern — the hook only cares whether OpenClaw is reachable.
-        const initialBackend: Backend = "openclaw";
-
-        // Only seed the active backend on the very first probe. After
-        // that we preserve whichever path the current thread last used.
-        if (!initialBackendSetRef.current) {
-          setBackend(initialBackend);
-          liveBackendRef.current = initialBackend;
-          initialBackendSetRef.current = true;
-        }
-
-        setOpenClawConnected(openClawReady);
-      } catch {
-        localProviderActiveRef.current = false;
-        setOpenClawConnected(false);
-      }
-    }
-    probe();
-    const interval = setInterval(probe, 15_000);
+    void refreshOpenClawHealth();
+    const interval = setInterval(() => {
+      void refreshOpenClawHealth();
+    }, 15_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshOpenClawHealth]);
 
   const drainSendQueue = useCallback(async () => {
     if (sendQueueProcessingRef.current) {
@@ -3994,7 +3999,7 @@ export function useUnifiedChat(
 
   // ── Unified send ──
   const sendMessageFn = useCallback(
-    (
+    async (
       content: string,
       activeFileOrOptions?: ActiveFileContext | RuntimeSendOptions,
     ): Promise<void> => {
@@ -4009,8 +4014,14 @@ export function useUnifiedChat(
           : normalizeBackend(runtimeOptions.runtimeHostId) ?? "openclaw";
 
       if (requestedBackend === "openclaw" && runtimeMode === "chat" && openClawConnected === false) {
-        setError("OpenClaw is not reachable. Start it in Settings.");
-        return Promise.resolve();
+        // The page-load probe can race with OpenClaw finishing startup after
+        // the user returns from Settings. Re-check once on send before we
+        // block the turn with a stale "not reachable" snapshot.
+        const openClawReady = await refreshOpenClawHealth();
+        if (!openClawReady) {
+          setError("OpenClaw is not reachable. Start it in Settings.");
+          return;
+        }
       }
 
       const userMsg: Message = {
@@ -4076,6 +4087,7 @@ export function useUnifiedChat(
       drainSendQueue,
       openClawConnected,
       projectName,
+      refreshOpenClawHealth,
     ]
   );
 
