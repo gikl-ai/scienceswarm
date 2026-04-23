@@ -18,6 +18,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
@@ -36,6 +37,7 @@ import type { InstallTask, TaskYield } from "./types";
 // release audit.
 const OPENCLAW_VERSION = "2026.4.14";
 const OPENCLAW_PACKAGE = `openclaw@${OPENCLAW_VERSION}`;
+const OPENCLAW_ONBOARD_TIMEOUT_MS = 15_000;
 
 function hasCli(name: string): Promise<string | null> {
   return new Promise((resolve) => {
@@ -221,12 +223,26 @@ async function* applyStateDirOnboarding(
       "--json",
     ],
     {
-      timeoutMs: 300_000,
+      timeoutMs: OPENCLAW_ONBOARD_TIMEOUT_MS,
       extraEnv: { OLLAMA_API_KEY: "ollama-local" },
     },
   );
 
   if (!result.ok) {
+    if (isOpenClawTimeout(result.stderr)) {
+      yield {
+        status: "running",
+        detail:
+          "OpenClaw onboarding timed out; writing minimal local gateway config…",
+      };
+      await writeMinimalStateDirOnboarding({
+        mode,
+        port: Number(port),
+        workspace,
+      });
+      return true;
+    }
+
     yield {
       status: "failed",
       error: `openclaw onboard failed. ${(result.stderr || result.stdout || `exit ${result.code}`).slice(0, 500)}`,
@@ -235,6 +251,54 @@ async function* applyStateDirOnboarding(
   }
 
   return true;
+}
+
+function isOpenClawTimeout(stderr: string): boolean {
+  return /timeout after \d+ms/i.test(stderr) || /timed out/i.test(stderr);
+}
+
+async function writeMinimalStateDirOnboarding(args: {
+  mode: Extract<OpenClawMode, { kind: "state-dir" }>;
+  port: number;
+  workspace: string;
+}): Promise<void> {
+  await fs.mkdir(args.mode.stateDir, { recursive: true });
+  await fs.mkdir(args.workspace, { recursive: true });
+
+  let config: Record<string, unknown> = {};
+  let rawConfig: string | null = null;
+  try {
+    rawConfig = await fs.readFile(args.mode.configPath, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw err;
+    }
+  }
+  if (rawConfig) {
+    config = JSON.parse(rawConfig) as Record<string, unknown>;
+  }
+
+  const existingGateway = config.gateway && typeof config.gateway === "object"
+    ? (config.gateway as Record<string, unknown>)
+    : {};
+  const existingAuth = existingGateway.auth && typeof existingGateway.auth === "object"
+    ? (existingGateway.auth as Record<string, unknown>)
+    : null;
+
+  config.gateway = {
+    ...existingGateway,
+    mode: "local",
+    port: args.port,
+    auth: existingAuth ?? {
+      mode: "token",
+      token: randomBytes(32).toString("hex"),
+    },
+  };
+
+  await fs.writeFile(args.mode.configPath, `${JSON.stringify(config, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
 }
 
 async function stateDirOnboardingExists(
