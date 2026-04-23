@@ -9105,6 +9105,7 @@ export async function GET(request: Request) {
     const agentStatus = await getConfiguredAgentRuntimeStatus(
       agentCfg,
       strictLocalOnly,
+      { preferFastOpenClawGatewayProbe: agentCfg?.type === "openclaw" },
     );
     const agent = {
       type: agentStatus.type,

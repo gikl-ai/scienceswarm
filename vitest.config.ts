@@ -28,6 +28,7 @@ export default defineConfig({
       "**/node_modules/**",
       "**/dist/**",
       "**/.next/**",
+      "**/.claude/**",
       "**/.worktrees/**",
       "tests/e2e/**/*.spec.ts",
     ],

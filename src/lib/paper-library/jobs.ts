@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -24,6 +24,7 @@ import { snapshotFile } from "./fs-safety";
 import { readJsonFile, writeJsonFile } from "@/lib/state/atomic-json";
 import { isPathAllowed } from "@/lib/import/background-import-job";
 import { shouldSkipImportDirectory, shouldSkipImportFile } from "@/lib/import/ignore";
+import { extractPdfText } from "@/lib/pdf-text-extractor";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 const STALE_HEARTBEAT_MS = 30_000;
@@ -45,6 +46,28 @@ function nowIso(): string {
 
 function isPdf(name: string): boolean {
   return name.toLowerCase().endsWith(".pdf");
+}
+
+function hashSemanticText(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function buildSemanticText(input: {
+  title?: string;
+  firstSentence?: string;
+  venue?: string;
+  identifiers?: { doi?: string; arxivId?: string; pmid?: string };
+}): string | undefined {
+  const segments = [
+    input.title?.trim(),
+    input.firstSentence?.trim(),
+    input.venue?.trim(),
+    input.identifiers?.doi ? `doi ${input.identifiers.doi}` : undefined,
+    input.identifiers?.arxivId ? `arxiv ${input.identifiers.arxivId}` : undefined,
+    input.identifiers?.pmid ? `pmid ${input.identifiers.pmid}` : undefined,
+  ].filter((segment): segment is string => Boolean(segment && segment.length > 0));
+  if (segments.length === 0) return undefined;
+  return segments.join(". ").slice(0, 4000);
 }
 
 function normalizeScan(scan: unknown): PaperLibraryScan {
@@ -273,8 +296,26 @@ export async function runPaperLibraryScanJob(
         continue;
       }
 
-      const evidence = extractPaperIdentityEvidence({ relativePath });
+      let extracted: Awaited<ReturnType<typeof extractPdfText>> | null = null;
+      try {
+        extracted = await extractPdfText(absolutePath);
+      } catch {
+        extracted = null;
+      }
+
+      const evidence = extractPaperIdentityEvidence({
+        relativePath,
+        text: extracted?.text,
+        pageCount: extracted?.pageCount,
+        wordCount: extracted?.wordCount,
+      });
       const candidate = createIdentityCandidateFromEvidence(evidence, relativePath);
+      const semanticText = buildSemanticText({
+        title: candidate.title,
+        firstSentence: extracted?.firstSentence,
+        venue: candidate.venue,
+        identifiers: candidate.identifiers,
+      });
       const needsReview = candidate.confidence < 0.9 || candidate.conflicts.length > 0;
       if (!needsReview) identified += 1;
       reviewItems.push({
@@ -287,6 +328,11 @@ export async function runPaperLibraryScanJob(
         candidates: [candidate],
         selectedCandidateId: needsReview ? undefined : candidate.id,
         version: 0,
+        semanticText,
+        semanticTextHash: semanticText ? hashSemanticText(semanticText) : undefined,
+        firstSentence: extracted?.firstSentence || undefined,
+        pageCount: extracted?.pageCount,
+        wordCount: extracted?.wordCount,
         updatedAt: nowIso(),
       });
 

@@ -308,8 +308,12 @@ describe("OpenClaw healthCheck", () => {
 
 describe("OpenClaw gatewayHealthCheck", () => {
   const originalFetch = globalThis.fetch;
+  let tempRoot = "";
 
   beforeEach(() => {
+    vi.unstubAllEnvs();
+    tempRoot = mkdtempSync(path.join(tmpdir(), "openclaw-gateway-health-"));
+    vi.stubEnv("SCIENCESWARM_DIR", tempRoot);
     execFileMock.mockReset();
     execFileSyncMock.mockReset();
     isGatewayConnectedMock.mockReset();
@@ -318,9 +322,21 @@ describe("OpenClaw gatewayHealthCheck", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    rmSync(tempRoot, { recursive: true, force: true });
   });
 
+  function writeGatewayToken(): void {
+    const configPath = path.join(tempRoot, "openclaw", "openclaw.json");
+    mkdirSync(path.dirname(configPath), { recursive: true });
+    writeFileSync(
+      configPath,
+      JSON.stringify({ gateway: { auth: { token: "test-token" } } }),
+      "utf8",
+    );
+  }
+
   it("reports connected from the gateway health endpoint without invoking the CLI", async () => {
+    writeGatewayToken();
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ ok: true }), {
         status: 200,
@@ -334,7 +350,35 @@ describe("OpenClaw gatewayHealthCheck", () => {
     expect(execFileMock).not.toHaveBeenCalled();
   });
 
+  it("reports disconnected when the gateway is reachable but auth config is missing", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+
+    await expect(gatewayHealthCheck()).resolves.toEqual({
+      status: "disconnected",
+      gateway: "",
+    });
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("reports disconnected when an active WebSocket exists but auth config is missing", async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock;
+    isGatewayConnectedMock.mockReturnValue(true);
+
+    await expect(gatewayHealthCheck()).resolves.toEqual({
+      status: "disconnected",
+      gateway: "",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
   it("reports connected from an authenticated gateway WebSocket without probing HTTP", async () => {
+    writeGatewayToken();
     const fetchMock = vi.fn();
     globalThis.fetch = fetchMock;
     isGatewayConnectedMock.mockReturnValue(true);
@@ -348,6 +392,7 @@ describe("OpenClaw gatewayHealthCheck", () => {
   });
 
   it("does not hide runtime failures from the authenticated gateway check", async () => {
+    writeGatewayToken();
     globalThis.fetch = vi.fn(async () => new Response("ok", { status: 200 }));
     isGatewayConnectedMock.mockImplementation(() => {
       throw new Error("gateway auth state unavailable");

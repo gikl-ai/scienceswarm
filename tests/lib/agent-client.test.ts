@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchMock = vi.fn();
+const hasOpenClawGatewayAuthToken = vi.hoisted(() => vi.fn(() => true));
+
 vi.stubGlobal("fetch", fetchMock);
+
+vi.mock("@/lib/openclaw/gateway-auth", () => ({
+  hasOpenClawGatewayAuthToken,
+}));
 
 describe("agent-client", () => {
   beforeEach(() => {
@@ -18,6 +24,8 @@ describe("agent-client", () => {
     process.env.OPENAI_API_KEY = "";
 
     fetchMock.mockReset();
+    hasOpenClawGatewayAuthToken.mockReset();
+    hasOpenClawGatewayAuthToken.mockReturnValue(true);
     // Clear module cache so resolveAgentConfig reads fresh env
     vi.resetModules();
   });
@@ -223,6 +231,19 @@ describe("agent-client", () => {
         url: "http://localhost:18789",
       });
       expect(result.status).toBe("connected");
+    });
+
+    it("does not report OpenClaw connected when local gateway auth is missing", async () => {
+      hasOpenClawGatewayAuthToken.mockReturnValue(false);
+
+      const { agentHealthCheck } = await loadModule();
+      const result = await agentHealthCheck({
+        type: "openclaw",
+        url: "http://localhost:18789",
+      });
+
+      expect(result.status).toBe("disconnected");
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("includes auth header when apiKey is provided", async () => {

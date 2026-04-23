@@ -13,6 +13,7 @@
  * the tests fast and deterministic.
  */
 
+import { StrictMode } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -322,6 +323,60 @@ describe("BrainProgress", () => {
     await waitFor(() => {
       expect(capturedSignal!.aborted || cancelled()).toBe(true);
     });
+  });
+
+  it("restarts autoStart after a Strict Mode effect replay aborts the first stream", async () => {
+    const first = makeHangingResponse();
+    const second = makeSseResponse([
+      { event: "start", data: { total: 1 } },
+      {
+        event: "progress",
+        data: {
+          phase: "importing",
+          current: 1,
+          total: 1,
+          currentFile: "alpha.md",
+          message: "Importing alpha.md (1/1)",
+        },
+      },
+      {
+        event: "complete",
+        data: {
+          imported: 1,
+          skipped: 0,
+          errors: [],
+        },
+      },
+    ]);
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(first.response)
+      .mockResolvedValueOnce(second);
+    globalThis.fetch = fetchMock;
+
+    const onComplete = vi.fn<(result: BrainProgressResult) => void>();
+
+    render(
+      <StrictMode>
+        <BrainProgress
+          streamUrl="/api/brain/coldstart-stream"
+          title="Importing your corpus"
+          onComplete={onComplete}
+        />
+      </StrictMode>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("brain-progress-success-banner"),
+      ).toBeInTheDocument(),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(first.cancelled()).toBe(true);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0][0].imported).toBe(1);
   });
 });
 

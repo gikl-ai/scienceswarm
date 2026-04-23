@@ -31,7 +31,17 @@ describe("paper-library gbrain writer", () => {
       page: {
         type: "paper",
         title: "Existing Paper",
-        compiledTruth: "Existing researcher note that must survive.",
+        compiledTruth: [
+          "Existing researcher note that must survive.",
+          "",
+          "## Paper Library",
+          "",
+          "Local PDF: `old.pdf`",
+          "",
+          "## My Notes",
+          "",
+          "Downstream notes must also survive.",
+        ].join("\n"),
         timeline: "",
         frontmatter: { entity_type: "paper", custom: "keep-me" },
       },
@@ -99,6 +109,9 @@ describe("paper-library gbrain writer", () => {
     expect(page?.content).toContain("Existing researcher note that must survive.");
     expect(page?.content).toContain("## Paper Library");
     expect(page?.content).toContain("2024 - Existing Paper.pdf");
+    expect(page?.content).toContain("## My Notes");
+    expect(page?.content).toContain("Downstream notes must also survive.");
+    expect(page?.content).not.toContain("old.pdf");
     expect(page?.frontmatter.custom).toBe("keep-me");
     expect(page?.frontmatter.paper_library).toMatchObject({
       project: "project-alpha",

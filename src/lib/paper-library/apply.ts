@@ -3,6 +3,7 @@ import { lstat, mkdir, realpath, rename } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  ApplyIdempotencyRecordSchema,
   ApplyManifestOperationShardSchema,
   ApplyManifestSchema,
   ApplyOperationShardSchema,
@@ -23,6 +24,7 @@ import {
 } from "./fs-safety";
 import { readAllPaperReviewItems } from "./review";
 import {
+  getPaperLibraryApplyIdempotencyPath,
   getPaperLibraryApplyOperationShardPath,
   getPaperLibraryApplyPlanPath,
   getPaperLibraryManifestOperationShardPath,
@@ -289,11 +291,15 @@ export async function approveApplyPlan(input: {
   return { plan: approved, approvalToken: token, expiresAt };
 }
 
-function validateApproval(plan: ApplyPlan, approvalToken: string): void {
-  if (plan.status !== "approved") throw new Error("Apply plan is not approved.");
+function validateApprovalTokenMatch(plan: ApplyPlan, approvalToken: string): void {
   if (!plan.approvalTokenHash || hashToken(approvalToken) !== plan.approvalTokenHash) {
     throw new Error("Approval token does not match this apply plan.");
   }
+}
+
+function validateApproval(plan: ApplyPlan, approvalToken: string): void {
+  if (plan.status !== "approved") throw new Error("Apply plan is not approved.");
+  validateApprovalTokenMatch(plan, approvalToken);
   if (!plan.approvalExpiresAt || Date.parse(plan.approvalExpiresAt) <= Date.now()) {
     throw new Error("Approval token expired.");
   }
@@ -310,6 +316,20 @@ function manifestOperationsFromPlan(operations: ApplyOperation[]): ApplyManifest
   }));
 }
 
+async function writeManifestOperationShard(
+  project: string,
+  manifestId: string,
+  shardId: string,
+  operations: ApplyManifestOperation[],
+  stateRoot: string,
+): Promise<void> {
+  await writeJsonFile(getPaperLibraryManifestOperationShardPath(project, manifestId, shardId, stateRoot), ApplyManifestOperationShardSchema.parse({
+    version: PAPER_LIBRARY_STATE_VERSION,
+    manifestId,
+    operations,
+  }));
+}
+
 async function writeManifestOperations(
   project: string,
   manifestId: string,
@@ -320,21 +340,36 @@ async function writeManifestOperations(
   for (let start = 0; start < operations.length; start += APPLY_SHARD_SIZE) {
     const shardId = String(shardIds.length + 1).padStart(4, "0");
     shardIds.push(shardId);
-    await writeJsonFile(getPaperLibraryManifestOperationShardPath(project, manifestId, shardId, stateRoot), ApplyManifestOperationShardSchema.parse({
-      version: PAPER_LIBRARY_STATE_VERSION,
+    await writeManifestOperationShard(
+      project,
       manifestId,
-      operations: operations.slice(start, start + APPLY_SHARD_SIZE),
-    }));
+      shardId,
+      operations.slice(start, start + APPLY_SHARD_SIZE),
+      stateRoot,
+    );
   }
   return shardIds;
 }
 
-async function rewriteManifestOperations(
+async function rewriteManifestOperationAt(
   manifest: ApplyManifest,
+  operationIndex: number,
   operations: ApplyManifestOperation[],
   stateRoot: string,
 ): Promise<void> {
-  await writeManifestOperations(manifest.project, manifest.id, operations, stateRoot);
+  const shardIndex = Math.floor(operationIndex / APPLY_SHARD_SIZE);
+  const shardId = manifest.operationShardIds[shardIndex];
+  if (!shardId) {
+    throw new Error(`Apply manifest ${manifest.id} is missing operation shard for operation index ${operationIndex}.`);
+  }
+  const start = shardIndex * APPLY_SHARD_SIZE;
+  await writeManifestOperationShard(
+    manifest.project,
+    manifest.id,
+    shardId,
+    operations.slice(start, start + APPLY_SHARD_SIZE),
+    stateRoot,
+  );
 }
 
 async function writeManifest(manifest: ApplyManifest, stateRoot: string): Promise<ApplyManifest> {
@@ -436,15 +471,46 @@ export interface PersistAppliedPaperLocationsInput {
   manifestOperations: ApplyManifestOperation[];
 }
 
+async function readExistingApplyForIdempotency(
+  project: string,
+  applyPlanId: string,
+  idempotencyKey: string | undefined,
+  plan: ApplyPlan,
+  brainRoot: string,
+  stateRoot: string,
+): Promise<{ manifest: ApplyManifest; operations: ApplyManifestOperation[] } | null> {
+  if (!idempotencyKey) return null;
+  const record = await readJsonFile<unknown>(
+    getPaperLibraryApplyIdempotencyPath(project, idempotencyKey, stateRoot),
+  );
+  if (!record) return null;
+  const parsed = ApplyIdempotencyRecordSchema.parse(record);
+  if (parsed.project !== project || parsed.applyPlanId !== applyPlanId) {
+    throw new Error("Idempotency key was already used for another apply plan.");
+  }
+  if (plan.planDigest && parsed.planDigest !== plan.planDigest) {
+    throw new Error("Idempotency key does not match this apply plan version.");
+  }
+  const manifest = await readApplyManifest(project, parsed.manifestId, brainRoot);
+  if (!manifest) return null;
+  return {
+    manifest,
+    operations: await readManifestOperations(project, parsed.manifestId, brainRoot),
+  };
+}
+
 export async function applyApprovedPlan(input: {
   project: string;
   applyPlanId: string;
   approvalToken: string;
+  idempotencyKey?: string;
   brainRoot: string;
   persistLocations?: (input: PersistAppliedPaperLocationsInput) => Promise<void>;
 }): Promise<{ manifest: ApplyManifest; operations: ApplyManifestOperation[] } | null> {
   const plan = await readApplyPlan(input.project, input.applyPlanId, input.brainRoot);
   if (!plan) return null;
+  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
+  validateApprovalTokenMatch(plan, input.approvalToken);
   if (plan.manifestId && plan.status !== "approved") {
     const existingManifest = await readApplyManifest(input.project, plan.manifestId, input.brainRoot);
     if (existingManifest) {
@@ -454,10 +520,19 @@ export async function applyApprovedPlan(input: {
       };
     }
   }
+  const existingForIdempotency = await readExistingApplyForIdempotency(
+    input.project,
+    input.applyPlanId,
+    input.idempotencyKey,
+    plan,
+    input.brainRoot,
+    stateRoot,
+  );
+  if (existingForIdempotency) return existingForIdempotency;
+
   validateApproval(plan, input.approvalToken);
   if (plan.conflictCount > 0) throw new Error("Cannot apply a plan with unresolved conflicts.");
 
-  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
   const operations = await readApplyOperations(input.project, input.applyPlanId, input.brainRoot);
   const manifestId = plan.manifestId ?? randomUUID();
   const manifestOperations = manifestOperationsFromPlan(operations);
@@ -486,6 +561,16 @@ export async function applyApprovedPlan(input: {
     updatedAt: createdAt,
   });
   await writeManifest(manifest, stateRoot);
+  if (input.idempotencyKey) {
+    await writeJsonFile(getPaperLibraryApplyIdempotencyPath(input.project, input.idempotencyKey, stateRoot), ApplyIdempotencyRecordSchema.parse({
+      version: PAPER_LIBRARY_STATE_VERSION,
+      project: input.project,
+      applyPlanId: input.applyPlanId,
+      manifestId,
+      planDigest,
+      createdAt,
+    }));
+  }
   await writeJsonFile(getPaperLibraryApplyPlanPath(input.project, input.applyPlanId, stateRoot), ApplyPlanSchema.parse({
     ...plan,
     status: "applying",
@@ -503,7 +588,7 @@ export async function applyApprovedPlan(input: {
         error: error instanceof Error ? error.message : "Apply operation failed.",
       };
     }
-    await rewriteManifestOperations(manifest, manifestOperations, stateRoot);
+    await rewriteManifestOperationAt(manifest, index, manifestOperations, stateRoot);
   }
 
   const appliedCount = manifestOperations.filter((operation) => operation.status === "verified").length;
@@ -571,7 +656,7 @@ export async function undoApplyManifest(input: {
           status: "undone",
           undoneAt: nowIso(),
         };
-        await rewriteManifestOperations(manifest, operations, stateRoot);
+        await rewriteManifestOperationAt(manifest, index, operations, stateRoot);
         continue;
       }
       if (operation.destinationSnapshot) {
@@ -597,7 +682,7 @@ export async function undoApplyManifest(input: {
         error: error instanceof Error ? error.message : "Undo operation failed.",
       };
     }
-    await rewriteManifestOperations(manifest, operations, stateRoot);
+    await rewriteManifestOperationAt(manifest, index, operations, stateRoot);
   }
 
   const failedCount = operations.filter((operation) => operation.status === "failed").length;
@@ -613,5 +698,12 @@ export async function undoApplyManifest(input: {
 }
 
 export function windowApplyOperations(operations: ApplyOperation[], options: { cursor?: string; limit?: number }) {
+  return readCursorWindow(operations, options);
+}
+
+export function windowManifestOperations(
+  operations: ApplyManifestOperation[],
+  options: { cursor?: string; limit?: number },
+) {
   return readCursorWindow(operations, options);
 }

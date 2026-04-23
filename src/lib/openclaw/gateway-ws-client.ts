@@ -29,17 +29,13 @@
 
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import WebSocket from "ws";
 
 import { getOpenClawGatewayUrl, getOpenClawPort } from "@/lib/config/ports";
-import {
-  getScienceSwarmOpenClawStateDir,
-  getScienceSwarmOpenClawConfigPath,
-} from "@/lib/scienceswarm-paths";
-import { resolveOpenClawMode } from "@/lib/openclaw/runner";
+import { getScienceSwarmOpenClawStateDir } from "@/lib/scienceswarm-paths";
+import { readOpenClawGatewayToken } from "@/lib/openclaw/gateway-auth";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -271,53 +267,7 @@ function importPrivateKey(base64urlPkcs8: string): crypto.KeyObject {
 // ─── Gateway Token ───────────────────────────────────────────────────────────
 
 function readGatewayToken(): string {
-  // The gateway token lives in the openclaw.json config under
-  // gateway.auth.token. We check both profile-mode and state-dir-mode paths.
-  const mode = resolveOpenClawMode();
-  let configPath: string;
-
-  if (mode.kind === "state-dir") {
-    configPath = mode.configPath;
-  } else {
-    // Profile mode: upstream OpenClaw stores config at ~/.openclaw/openclaw.json
-    configPath = path.join(
-      process.env.HOME ?? os.homedir(),
-      ".openclaw",
-      "openclaw.json",
-    );
-  }
-
-  // Also check the default ~/.openclaw/openclaw.json since the state-dir mode
-  // agent uses the default profile for gateway auth (see sendAgentMessage in
-  // src/lib/openclaw.ts which clears OPENCLAW_STATE_DIR for agent commands).
-  const paths = [configPath, getScienceSwarmOpenClawConfigPath()];
-  if (mode.kind === "state-dir") {
-    const defaultPath = path.join(
-      process.env.HOME ?? os.homedir(),
-      ".openclaw",
-      "openclaw.json",
-    );
-    if (!paths.includes(defaultPath)) paths.push(defaultPath);
-  }
-
-  for (const p of paths) {
-    try {
-      const raw = fs.readFileSync(p, "utf8");
-      const config = JSON.parse(raw) as {
-        gateway?: { auth?: { token?: string } };
-      };
-      const token = config?.gateway?.auth?.token;
-      if (token && token.trim().length > 0) return token.trim();
-    } catch {
-      // Try next path
-    }
-  }
-
-  throw new Error(
-    "Cannot read OpenClaw gateway token. Ensure the gateway is installed and " +
-      "openclaw.json contains gateway.auth.token. " +
-      `Searched: ${paths.join(", ")}`,
-  );
+  return readOpenClawGatewayToken();
 }
 
 // ─── WebSocket Singleton ─────────────────────────────────────────────────────
