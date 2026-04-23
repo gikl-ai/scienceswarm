@@ -2482,12 +2482,14 @@ describe("POST /api/chat/unified", () => {
     vi.stubEnv("SCIENCESWARM_STRICT_LOCAL_ONLY", "1");
     const agentCfg = { type: "openclaw", url: "http://localhost:19002" };
     resolveAgentConfig.mockReturnValue(agentCfg);
-    openClawHealthCheck.mockResolvedValueOnce({
+    openClawGatewayHealthCheck.mockResolvedValueOnce({
       status: "connected",
       gateway: "ws://127.0.0.1:19002",
-      channels: [],
-      agents: 1,
-      sessions: 2,
+    });
+    localHealthCheck.mockResolvedValueOnce({
+      running: true,
+      models: ["gemma4:latest"],
+      url: "http://localhost:11434",
     });
     sendOpenClawMessage.mockResolvedValueOnce("OpenClaw reply");
     const fetchMock = vi
@@ -2514,6 +2516,8 @@ describe("POST /api/chat/unified", () => {
     expect(streamChat).not.toHaveBeenCalled();
     expect(sendOpenClawMessage).toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
+    expect(openClawGatewayHealthCheck).toHaveBeenCalledOnce();
+    expect(openClawHealthCheck).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
