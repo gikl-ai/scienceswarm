@@ -2683,6 +2683,150 @@ describe("Project dashboard smoke test", () => {
     expect(input).toHaveValue("");
   });
 
+  it("does not overwrite a newer draft when the in-flight send fails", async () => {
+    let rejectUnifiedResponse: ((error: Error) => void) | null = null;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/health") {
+        return Promise.resolve(
+          Response.json({
+            openclaw: "connected",
+            openhands: "disconnected",
+            openai: "configured",
+            features: {
+              chat: true,
+              codeExecution: false,
+              github: false,
+              multiChannel: false,
+              structuredCritique: false,
+            },
+          }),
+        );
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Promise.resolve(
+          Response.json({
+            openclaw: "connected",
+            nanoclaw: "disconnected",
+            openhands: "disconnected",
+            llmProvider: "openai",
+            ollamaModels: [],
+            configuredLocalModel: null,
+          }),
+        );
+      }
+
+      if (url === "/api/brain/status") {
+        return Promise.resolve(Response.json({ pageCount: 0, backend: "filesystem" }));
+      }
+
+      if (url.startsWith("/api/workspace/summary?project=")) {
+        return Promise.resolve(
+          Response.json({
+            summary: {
+              project: "demo-project",
+              files: [],
+              generatedArtifacts: [],
+              activity: [],
+            },
+          }),
+        );
+      }
+
+      if (url === "/api/settings/file-preview-location") {
+        return Promise.resolve(Response.json({ location: "workspace-pane" }));
+      }
+
+      if (url === "/api/projects/demo-project/import-state") {
+        return Promise.resolve(
+          Response.json({
+            projectId: "demo-project",
+            projectName: "demo-project",
+            status: "idle",
+            counts: { total: 0, processed: 0, succeeded: 0, failed: 0 },
+            items: [],
+          }),
+        );
+      }
+
+      if (url === "/api/projects/demo-project") {
+        return Promise.resolve(
+          Response.json({
+            project: {
+              id: "demo-project",
+              name: "demo-project",
+              path: "/tmp/demo-project",
+            },
+          }),
+        );
+      }
+
+      if (url.startsWith("/api/brain/pages?project=")) {
+        return Promise.resolve(Response.json({ pages: [] }));
+      }
+
+      if (url.startsWith("/api/brain/brief?project=")) {
+        return Promise.resolve(Response.json({ project: "demo-project" }));
+      }
+
+      if (url === "/api/projects/demo-project/import-summary") {
+        return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=demo-project") {
+        return Promise.resolve(Response.json({ tree: [] }));
+      }
+
+      if (url === "/api/chat/thread?project=demo-project") {
+        return Promise.resolve(
+          Response.json({
+            version: 1,
+            project: "demo-project",
+            conversationId: null,
+            messages: [],
+          }),
+        );
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Promise.resolve(Response.json({ ok: true }));
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return new Promise<Response>((_, reject) => {
+          rejectUnifiedResponse = (error) => reject(error);
+        });
+      }
+
+      return Promise.resolve(Response.json({ status: "disconnected" }));
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    const input = await screen.findByLabelText("Chat with your project");
+
+    fireEvent.change(input, { target: { value: "original prompt" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(input).toHaveValue("");
+    });
+
+    fireEvent.change(input, { target: { value: "newer draft" } });
+
+    expect(rejectUnifiedResponse).not.toBeNull();
+    rejectUnifiedResponse!(new Error("chat failed"));
+
+    await waitFor(() => {
+      expect(input).toHaveValue("newer draft");
+    });
+  });
+
   it("does not swallow ArrowUp or ArrowDown when prompt history is empty", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
