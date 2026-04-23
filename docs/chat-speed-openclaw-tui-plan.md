@@ -110,9 +110,9 @@ thinking and activity panels. It must:
 
 ## Codex Reference Learnings
 
-The local `~/code/codex` clone is useful as a reference for mechanics and
-information density, even though it is primarily a TUI rather than a browser
-chat surface. The concrete patterns worth borrowing are:
+A local Codex checkout is useful as a reference for mechanics and information
+density, even though it is primarily a TUI rather than a browser chat surface.
+The concrete patterns worth borrowing are:
 
 - `codex-rs/tui/src/status_indicator_widget.rs`: a dedicated run-state widget
   owns the spinner, elapsed timer, interrupt hint, and short inline context on
@@ -188,6 +188,67 @@ The largest transport and latency differences versus the Codex reference are:
   the browser does not talk to that session directly. The hot path still pays a
   browser fetch, server route dispatch, SSE framing, and progress normalization
   pass on every turn.
+
+## Most Important Steps
+
+These are the highest-value steps in the current sequence. They should stay at
+the front of the execution order even if lower-priority visual polish PRs are
+ready in parallel.
+
+### Immediate Critical Path
+
+1. **Stabilize warm-path correctness first**
+   - Land and verify the OpenClaw prewarm and stale-health fixes before
+     attempting larger latency claims.
+   - In practice this means the current prewarm, stale-negative-cache,
+     clear-stale-error, and send-time reprobe slices must converge first.
+
+2. **Make the `Hi` benchmark trustworthy**
+   - Add the benchmark script and timing artifact capture before broader speed
+     refactors so every later PR can be judged by the same baseline.
+
+3. **Reduce first-turn server work**
+   - The biggest likely `Hi` wins after prewarm are greeting classification,
+     skipping project materialization, skipping file reference scans, tightening
+     recent-context budgets, and skipping artifact repair for non-artifact
+     turns.
+
+4. **Stop inferring so much client state from generic SSE**
+   - Move toward typed progress and transcript events before deeper UI work.
+   - This is the main prerequisite for making the communication feel closer to
+     Codex rather than just restyling the same noisy data.
+
+5. **Collapse duplicate progress state**
+   - Remove the remaining dual-write path between `activityLog` and
+     `progressLog` and stop showing timing/lifecycle filler in the visible
+     transcript.
+
+### Communication And UX Critical Path
+
+6. **Create one primary run-state surface**
+   - Replace the current duplication across page header, bubble-local `Working`
+     rows, and phase widgets with one dedicated active-run surface.
+   - This is the most important presentation change because it will make the
+     chat feel more like a single continuous conversation instead of a dashboard
+     card plus transcript dump.
+
+7. **Upgrade progress rendering to full markdown**
+   - Rich markdown and path normalization matter more than decorative styling
+     because they directly improve comprehension of agent output.
+
+8. **Coalesce tool and file activity**
+   - Sequential reads, searches, writes, and command phases should collapse into
+     compact grouped summaries rather than one bullet per raw event.
+
+9. **Reshape the assistant lane**
+   - After the run-state and progress structure are fixed, reduce the “wide
+     card” feel by moving transient run UI out of the assistant bubble and
+     making the lane read like a chat transcript.
+
+10. **Defer polish until core transport and state are fixed**
+    - Visual hierarchy tokens, transcript expansion UX, and additional motion
+      are valuable, but they should come after transport typing, progress
+      dedupe, and the dedicated run-state surface.
 
 ## Sequential PR Plan
 
