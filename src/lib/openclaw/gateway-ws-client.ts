@@ -12,6 +12,7 @@
  *
  * Exports:
  *   - sendMessageViaGateway(sessionKey, message, options?) → Promise<SendMessageResult>
+ *   - sendChatViaGateway(sessionKey, message, options?) → Promise<SendChatResult>
  *   - isGatewayConnected() → boolean
  *   - closeGatewayConnection() → void
  *
@@ -44,8 +45,8 @@ import { resolveOpenClawMode } from "@/lib/openclaw/runner";
 
 /**
  * Thrown when a turn fails AFTER the gateway has already accepted the message
- * (`sessions.send` ACKed). Examples: turn timeout, WebSocket drop while the
- * agent is still processing, listener reject after-the-fact.
+ * (`chat.send` or `sessions.send` ACKed). Examples: turn timeout, WebSocket
+ * drop while the agent is still processing, listener reject after-the-fact.
  *
  * The defining property: the gateway has the message and may already be
  * dispatching it to the agent. Callers MUST NOT retry the same message on the
@@ -82,6 +83,22 @@ export interface SendMessageOptions {
   timeoutMs?: number;
   /** Called for every non-infra event received during the turn. */
   onEvent?: (event: GatewayEvent) => void;
+}
+
+export interface SendChatOptions extends SendMessageOptions {
+  /** Optional OpenClaw thinking level, passed through to chat.send. */
+  thinking?: string;
+  /** Whether OpenClaw should deliver the response to an external channel. */
+  deliver?: boolean;
+  /** Optional OpenClaw RPC attachments. */
+  attachments?: unknown[];
+  /** Stable run id / idempotency key for this chat turn. */
+  idempotencyKey?: string;
+}
+
+export interface SendChatResult extends SendMessageResult {
+  /** The idempotency key used as the OpenClaw chat run id. */
+  runId: string;
 }
 
 export interface GatewayEvent {
@@ -151,6 +168,7 @@ function getFrameSessionKey(frame: GatewayFrame): string {
   return (
     (frame.params?.key as string | undefined) ??
     (frame.payload?.key as string | undefined) ??
+    (frame.payload?.sessionKey as string | undefined) ??
     (frame.payload?.session_key as string | undefined) ??
     ""
   );
@@ -656,7 +674,208 @@ async function sendRequest(
   });
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function extractTextFromMessageContent(content: unknown): string {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+
+  return content
+    .map((part) => {
+      const record = asRecord(part);
+      if (!record) return "";
+      return record.type === "text" && typeof record.text === "string"
+        ? record.text
+        : "";
+    })
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function extractAssistantTextFromMessage(message: unknown): string {
+  const record = asRecord(message);
+  if (!record) return typeof message === "string" ? message.trim() : "";
+
+  if (
+    typeof record.role === "string" &&
+    record.role !== "assistant"
+  ) {
+    return "";
+  }
+
+  return extractTextFromMessageContent(record.content);
+}
+
+function safeEmitGatewayEvent(
+  events: GatewayEvent[],
+  onEvent: SendMessageOptions["onEvent"],
+  event: GatewayEvent,
+): void {
+  events.push(event);
+  if (!onEvent) return;
+  try {
+    onEvent(event);
+  } catch {
+    // Don't let caller errors break the listener.
+  }
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
+
+/**
+ * Send a message through OpenClaw's high-level `chat.send` gateway RPC.
+ *
+ * This mirrors the OpenClaw TUI path more closely than the legacy
+ * `sessions.send` helper: callers get `chat` run state events plus `agent`
+ * tool/lifecycle events on the same persistent WebSocket connection.
+ */
+export async function sendChatViaGateway(
+  sessionKey: string,
+  message: string,
+  options?: SendChatOptions,
+): Promise<SendChatResult> {
+  const timeoutMs = options?.timeoutMs ?? 600_000;
+  const onEvent = options?.onEvent;
+  const runId = options?.idempotencyKey ?? crypto.randomUUID();
+  const events: GatewayEvent[] = [];
+  let responseText = "";
+  let turnTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let listenerEntry: GatewayEventListenerEntry | null = null;
+
+  await ensureConnected();
+
+  const cleanupListener = () => {
+    if (turnTimeoutId !== null) {
+      clearTimeout(turnTimeoutId);
+      turnTimeoutId = null;
+    }
+    if (listenerEntry) {
+      const idx = _eventListeners.indexOf(listenerEntry);
+      if (idx !== -1) _eventListeners.splice(idx, 1);
+      listenerEntry = null;
+    }
+  };
+
+  const turnPromise = new Promise<void>((resolve, reject) => {
+    turnTimeoutId = setTimeout(() => {
+      cleanupListener();
+      reject(
+        new Error(
+          `OpenClaw chat turn timed out after ${timeoutMs}ms for session "${sessionKey}"`,
+        ),
+      );
+    }, timeoutMs);
+
+    const listener = (frame: GatewayFrame) => {
+      const method = frame.event ?? frame.method ?? "";
+      if (INFRA_EVENTS.has(method)) return;
+
+      const payload = asRecord(frame.payload);
+      const eventRunId =
+        typeof payload?.runId === "string"
+          ? payload.runId
+          : typeof payload?.run_id === "string"
+            ? payload.run_id
+            : undefined;
+      const isRunScopedEvent = method === "chat" || method === "agent";
+      if (isRunScopedEvent) {
+        if (!eventRunId || eventRunId !== runId) return;
+      } else if (eventRunId && eventRunId !== runId) {
+        return;
+      }
+
+      const event: GatewayEvent = {
+        type: frame.type,
+        method,
+        payload: frame.payload,
+        raw: frame,
+      };
+      safeEmitGatewayEvent(events, onEvent, event);
+
+      if (method === "chat") {
+        const state = typeof payload?.state === "string" ? payload.state : "";
+        const nextText = extractAssistantTextFromMessage(payload?.message);
+        if (nextText) responseText = nextText;
+
+        if (state === "final") {
+          cleanupListener();
+          resolve();
+          return;
+        }
+
+        if (state === "error" || state === "aborted") {
+          cleanupListener();
+          const detail =
+            typeof payload?.errorMessage === "string"
+              ? payload.errorMessage
+              : `OpenClaw chat turn ${state}`;
+          reject(new Error(detail));
+          return;
+        }
+        return;
+      }
+
+      if (method === "agent" && payload) {
+        const data = asRecord(payload.data);
+        if (payload.stream === "assistant") {
+          const text =
+            typeof data?.text === "string"
+              ? data.text
+              : typeof data?.delta === "string"
+                ? `${responseText}${data.delta}`
+                : "";
+          if (text) responseText = text;
+        }
+      }
+    };
+
+    listenerEntry = {
+      sessionKey,
+      handler: listener,
+      reject: (err: Error) => {
+        cleanupListener();
+        reject(err);
+      },
+    };
+    _eventListeners.push(listenerEntry);
+  });
+
+  let sendAcked = false;
+  try {
+    const params: Record<string, unknown> = {
+      sessionKey,
+      message,
+      deliver: options?.deliver ?? false,
+      timeoutMs,
+      idempotencyKey: runId,
+    };
+    if (options?.thinking) params.thinking = options.thinking;
+    if (options?.attachments) params.attachments = options.attachments;
+
+    await sendRequest("chat.send", params, 30_000);
+    sendAcked = true;
+    await turnPromise;
+  } catch (err) {
+    cleanupListener();
+    if (sendAcked) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new GatewayPostAckError(
+        sessionKey,
+        `OpenClaw gateway accepted chat run "${runId}" for session "${sessionKey}" but ` +
+          `the turn failed before completion: ${detail}`,
+        { cause: err },
+      );
+    }
+    throw err;
+  }
+
+  return { text: responseText, events, runId };
+}
 
 /**
  * Send a message to an OpenClaw session via the gateway WebSocket and wait
@@ -764,14 +983,7 @@ export async function sendMessageViaGateway(
       };
 
       // Forward to caller
-      events.push(event);
-      if (onEvent) {
-        try {
-          onEvent(event);
-        } catch {
-          // Don't let caller errors break the listener
-        }
-      }
+      safeEmitGatewayEvent(events, onEvent, event);
 
       // Capture assistant text from streaming events
       if (method === "agent" && frame.payload) {

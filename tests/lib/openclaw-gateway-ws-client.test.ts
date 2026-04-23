@@ -47,6 +47,19 @@ const { mockPaths, mockWebSockets } = vi.hoisted(() => {
       const frame = JSON.parse(data) as Record<string, unknown>;
       this.sentFrames.push(frame);
       queueMicrotask(() => {
+        const method = typeof frame.method === "string" ? frame.method : "";
+        if (mockWebSockets.requestFailures.has(method)) {
+          this.emit(
+            "message",
+            JSON.stringify({
+              type: "res",
+              id: frame.id,
+              ok: false,
+              error: mockWebSockets.requestFailures.get(method),
+            }),
+          );
+          return;
+        }
         this.emit(
           "message",
           JSON.stringify({
@@ -81,8 +94,13 @@ const { mockPaths, mockWebSockets } = vi.hoisted(() => {
     mockWebSockets: {
       MockWebSocket,
       instances: [] as MockWebSocket[],
+      requestFailures: new Map<string, unknown>(),
+      failMethod(method: string, error: unknown) {
+        this.requestFailures.set(method, error);
+      },
       reset() {
         this.instances.length = 0;
+        this.requestFailures.clear();
       },
     },
   };
@@ -143,6 +161,373 @@ describe("gateway-ws-client", () => {
       // Ignore cleanup failures in tests that never imported the module.
     }
     rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it("sends web chat turns through chat.send and resolves from chat.final", async () => {
+    const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const turn = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+    });
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
+    });
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+    expect(socket?.sentFrames.some((frame) => frame.method === "sessions.send")).toBe(false);
+
+    const chatSendFrame = socket?.sentFrames.find((frame) => frame.method === "chat.send");
+    expect(chatSendFrame).toMatchObject({
+      method: "chat.send",
+      params: {
+        sessionKey: "session-alpha",
+        message: "hello",
+        deliver: false,
+        timeoutMs: 60_000,
+        idempotencyKey: "run-alpha",
+      },
+    });
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "run-alpha",
+          state: "final",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "hidden" },
+              { type: "text", text: "visible reply" },
+            ],
+          },
+        },
+      }),
+    );
+
+    await expect(turn).resolves.toMatchObject({
+      runId: "run-alpha",
+      text: "visible reply",
+      events: [expect.objectContaining({ method: "chat" })],
+    });
+  });
+
+  it("does not treat chat.final tool-role content as assistant text", async () => {
+    const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const turn = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+    });
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
+    });
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "run-alpha",
+          state: "final",
+          message: {
+            role: "tool",
+            content: [{ type: "text", text: "tool output" }],
+          },
+        },
+      }),
+    );
+
+    await expect(turn).resolves.toMatchObject({
+      runId: "run-alpha",
+      text: "",
+      events: [expect.objectContaining({ method: "chat" })],
+    });
+  });
+
+  it("forwards chat.send agent progress events for the active run", async () => {
+    const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+    const onEvent = vi.fn();
+
+    const turn = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+      onEvent,
+    });
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
+    });
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "other-run",
+          stream: "tool",
+          data: { phase: "start", name: "read" },
+        },
+      }),
+    );
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "run-alpha",
+          stream: "tool",
+          data: { phase: "start", name: "read", args: { path: "paper.md" } },
+        },
+      }),
+    );
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "run-alpha",
+          state: "final",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "done" }],
+          },
+        },
+      }),
+    );
+
+    await expect(turn).resolves.toMatchObject({ text: "done" });
+    expect(onEvent).toHaveBeenCalledTimes(2);
+    expect(onEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        method: "agent",
+        payload: expect.objectContaining({
+          runId: "run-alpha",
+          stream: "tool",
+        }),
+      }),
+    );
+    expect(onEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ method: "chat" }),
+    );
+  });
+
+  it("ignores run-scoped chat.send events without the active run id", async () => {
+    const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+    const onEvent = vi.fn();
+
+    const turn = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+      onEvent,
+    });
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
+    });
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          state: "final",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "wrong reply" }],
+          },
+        },
+      }),
+    );
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          sessionKey: "session-alpha",
+          stream: "assistant",
+          data: { text: "wrong progress" },
+        },
+      }),
+    );
+
+    expect(onEvent).not.toHaveBeenCalled();
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "run-alpha",
+          state: "final",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "visible reply" }],
+          },
+        },
+      }),
+    );
+
+    await expect(turn).resolves.toMatchObject({
+      text: "visible reply",
+      events: [expect.objectContaining({ method: "chat" })],
+    });
+    expect(onEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps chat.send failures after ACK as post-ACK errors", async () => {
+    const {
+      GatewayPostAckError,
+      sendChatViaGateway,
+    } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const turnResult = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+    }).then(
+      (value) => ({ status: "resolved" as const, value }),
+      (error) => ({ status: "rejected" as const, error }),
+    );
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = mockWebSockets.instances.at(-1);
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "run-alpha",
+          state: "error",
+          errorMessage: "model failed",
+        },
+      }),
+    );
+
+    const outcome = await turnResult;
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status === "rejected") {
+      expect(outcome.error).toBeInstanceOf(GatewayPostAckError);
+      expect(outcome.error).toMatchObject({
+        message: expect.stringContaining("model failed"),
+      });
+    }
+  });
+
+  it("wraps aborted chat.send turns after ACK as post-ACK errors", async () => {
+    const {
+      GatewayPostAckError,
+      sendChatViaGateway,
+    } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const turnResult = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+    }).then(
+      (value) => ({ status: "resolved" as const, value }),
+      (error) => ({ status: "rejected" as const, error }),
+    );
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const socket = mockWebSockets.instances.at(-1);
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "run-alpha",
+          state: "aborted",
+          errorMessage: "user stopped turn",
+        },
+      }),
+    );
+
+    const outcome = await turnResult;
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status === "rejected") {
+      expect(outcome.error).toBeInstanceOf(GatewayPostAckError);
+      expect(outcome.error).toMatchObject({
+        message: expect.stringContaining("user stopped turn"),
+      });
+    }
+  });
+
+  it("surfaces chat.send pre-ACK failures without post-ACK wrapping", async () => {
+    const {
+      GatewayPostAckError,
+      sendChatViaGateway,
+    } = await import("@/lib/openclaw/gateway-ws-client");
+    mockWebSockets.failMethod("chat.send", { message: "gateway rejected send" });
+
+    const turnResult = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+    }).then(
+      (value) => ({ status: "resolved" as const, value }),
+      (error) => ({ status: "rejected" as const, error }),
+    );
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
+    });
+
+    const outcome = await turnResult;
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status === "rejected") {
+      expect(outcome.error).toMatchObject({
+        message: expect.stringContaining("gateway rejected send"),
+      });
+      expect(outcome.error).not.toBeInstanceOf(GatewayPostAckError);
+    }
   });
 
   it("rejects a dropped turn before a reconnect can reuse stale listeners", async () => {
