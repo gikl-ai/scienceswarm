@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  type SetStateAction,
+} from "react";
 import {
   mergeArtifactProvenanceEntries,
   normalizeArtifactProvenanceEntries,
@@ -2255,21 +2262,21 @@ async function persistChatToServer(
 export function useUnifiedChat(
   projectName: string,
 ): UseUnifiedChat {
-  const [messages, setMessages] = useState<Message[]>(() => buildInitialMessages(projectName));
+  const [messages, setMessagesState] = useState<Message[]>(() => buildInitialMessages(projectName));
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [backend, setBackend] = useState<Backend>("openclaw");
-  const [chatMode, setChatMode] = useState<ChatMode>("reasoning");
+  const [backend, setBackendState] = useState<Backend>("openclaw");
+  const [chatMode, setChatModeState] = useState<ChatMode>("reasoning");
   const [crossChannelMessages, setCrossChannelMessages] = useState<Message[]>(
     []
   );
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [workspaceTree, setWorkspaceTree] = useState<WorkspaceTreeNode[]>([]);
   const [generatedArtifacts, setGeneratedArtifacts] = useState<GeneratedArtifact[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [conversationBackend, setConversationBackend] = useState<Backend | null>(null);
+  const [conversationId, setConversationIdState] = useState<string | null>(null);
+  const [conversationBackend, setConversationBackendState] = useState<Backend | null>(null);
   const [openClawConnected, setOpenClawConnected] = useState<boolean | null>(null);
-  const [artifactProvenance, setArtifactProvenance] = useState<ArtifactProvenanceEntry[]>([]);
+  const [artifactProvenance, setArtifactProvenanceState] = useState<ArtifactProvenanceEntry[]>([]);
   // Tracks whether hydration from localStorage/server has committed. The
   // cross-channel poll effect uses this to avoid registering a setInterval
   // whose closure captures a stale `scopedConversationId = null` on the
@@ -2283,6 +2290,7 @@ export function useUnifiedChat(
   const lastPollRef = useRef<string>(new Date().toISOString());
   const hydratedChatKeyRef = useRef<string | null>(null);
   const pendingHydrationKeyRef = useRef<string | null>(null);
+  const skipHydrationPersistKeyRef = useRef<string | null>(null);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unloadPersistedRef = useRef(false);
   const liveMessagesRef = useRef<Message[]>(messages);
@@ -2304,13 +2312,39 @@ export function useUnifiedChat(
   const sendQueueProcessingRef = useRef(false);
   const scopedConversationId = getScopedConversationId(conversationId, conversationBackend, backend);
 
+  // Keep state updater callbacks pure. The layout effect below mirrors the
+  // committed state into live refs before passive cleanup reads them.
+  const setMessages = useCallback((updater: SetStateAction<Message[]>) => {
+    setMessagesState(updater);
+  }, []);
+
+  const setBackend = useCallback((updater: SetStateAction<Backend>) => {
+    setBackendState(updater);
+  }, []);
+
+  const setChatMode = useCallback((updater: SetStateAction<ChatMode>) => {
+    setChatModeState(updater);
+  }, []);
+
+  const setConversationId = useCallback((updater: SetStateAction<string | null>) => {
+    setConversationIdState(updater);
+  }, []);
+
+  const setConversationBackend = useCallback((updater: SetStateAction<Backend | null>) => {
+    setConversationBackendState(updater);
+  }, []);
+
+  const setArtifactProvenance = useCallback((updater: SetStateAction<ArtifactProvenanceEntry[]>) => {
+    setArtifactProvenanceState(updater);
+  }, []);
+
   const applyMessagesUpdate = useCallback((updater: (messages: Message[]) => Message[]) => {
     const next = updater(liveMessagesRef.current);
     liveMessagesRef.current = next;
-    setMessages(next);
+    setMessagesState(next);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     liveMessagesRef.current = messages;
     liveConversationIdRef.current = conversationId;
     liveConversationBackendRef.current = conversationBackend;
@@ -2328,6 +2362,25 @@ export function useUnifiedChat(
     messages,
     projectName,
     uploadedFiles,
+  ]);
+
+  useLayoutEffect(() => {
+    const storageKey = getChatStorageKey(projectName);
+    if (pendingHydrationKeyRef.current !== storageKey) {
+      return;
+    }
+
+    // The hydration effect only seeds the restored thread into state. Do not
+    // allow persistence or unmount cleanup to treat that thread as durable
+    // until this render has actually committed for the current project.
+    pendingHydrationKeyRef.current = null;
+    hydratedChatKeyRef.current = storageKey;
+  }, [
+    artifactProvenance,
+    conversationBackend,
+    conversationId,
+    messages,
+    projectName,
   ]);
 
   useEffect(() => {
@@ -2349,6 +2402,7 @@ export function useUnifiedChat(
     projectVersionRef.current += 1;
     hydratedChatKeyRef.current = null;
     pendingHydrationKeyRef.current = storageKey;
+    skipHydrationPersistKeyRef.current = storageKey;
     const hydratedMessages = materializeMessages(projectName, restored);
     const restoredBackend: Backend = "openclaw";
     const restoredChatMode: ChatMode =
@@ -2418,12 +2472,11 @@ export function useUnifiedChat(
 
   useEffect(() => {
     const storageKey = getChatStorageKey(projectName);
-    if (pendingHydrationKeyRef.current === storageKey) {
-      pendingHydrationKeyRef.current = null;
-      hydratedChatKeyRef.current = storageKey;
+    if (hydratedChatKeyRef.current !== storageKey) {
       return;
     }
-    if (hydratedChatKeyRef.current !== storageKey) {
+    if (skipHydrationPersistKeyRef.current === storageKey) {
+      skipHydrationPersistKeyRef.current = null;
       return;
     }
     persistChat(projectName, messages, conversationId, conversationBackend, artifactProvenance);
@@ -2453,6 +2506,16 @@ export function useUnifiedChat(
         return;
       }
       unloadPersistedRef.current = true;
+      // Route changes can interrupt the delayed server sync. Persist the live
+      // thread to local storage first so a return to the project always
+      // rehydrates from the newest in-memory state.
+      persistChat(
+        projectName,
+        liveMessagesRef.current,
+        liveConversationIdRef.current,
+        liveConversationBackendRef.current,
+        liveArtifactProvenanceRef.current,
+      );
       void persistChatToServer(
         projectName,
         liveMessagesRef.current,
