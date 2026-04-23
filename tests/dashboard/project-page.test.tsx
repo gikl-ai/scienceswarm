@@ -1084,7 +1084,8 @@ describe("Project dashboard smoke test", () => {
     expect(postEndpoints).toEqual(["/api/chat/command"]);
   });
 
-  it("sends chat mode directly to the selected runtime host without opening the preview sheet", async () => {
+  it("requires runtime preview approval before hosted chat sends", async () => {
+    const runtimePreviewBodies: Record<string, unknown>[] = [];
     const runtimeSessionBodies: Record<string, unknown>[] = [];
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1244,7 +1245,45 @@ describe("Project dashboard smoke test", () => {
       }
 
       if (url === "/api/runtime/preview" && method === "POST") {
-        throw new Error("unexpected runtime preview request");
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        runtimePreviewBodies.push(body);
+        return Response.json({
+          preview: {
+            allowed: true,
+            projectPolicy: "cloud-ok",
+            hostId: "codex",
+            mode: "chat",
+            effectivePrivacyClass: "hosted",
+            destinations: [
+              {
+                hostId: "codex",
+                label: "Codex",
+                privacyClass: "hosted",
+              },
+            ],
+            dataIncluded: [
+              {
+                kind: "prompt",
+                label: "Chat prompt",
+                bytes: 22,
+              },
+            ],
+            proof: {
+              projectGatePassed: true,
+              operationPrivacyClass: "hosted",
+              adapterProof: "declared-hosted",
+            },
+            blockReason: null,
+            requiresUserApproval: true,
+            accountDisclosure: {
+              authMode: "subscription-native",
+              provider: "openai",
+              billingClass: "subscription-native",
+              accountSource: "host-cli-login",
+              costCopyRequired: false,
+            },
+          },
+        });
       }
 
       if (url === "/api/runtime/sessions" && method === "POST") {
@@ -1301,6 +1340,21 @@ describe("Project dashboard smoke test", () => {
     fireEvent.change(input, { target: { value: "Talk to Codex directly" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
+    const previewDialog = await screen.findByRole("dialog", { name: "Runtime preview" });
+    expect(previewDialog).toBeInTheDocument();
+    expect(runtimePreviewBodies).toEqual([
+      expect.objectContaining({
+        hostId: "codex",
+        mode: "chat",
+        projectId: "demo-project",
+        projectPolicy: "cloud-ok",
+        prompt: "Talk to Codex directly",
+      }),
+    ]);
+    expect(runtimeSessionBodies).toEqual([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve and send" }));
+
     expect(await screen.findByText("Codex direct answer")).toBeInTheDocument();
     expect(runtimeSessionBodies).toEqual([
       expect.objectContaining({
@@ -1308,11 +1362,13 @@ describe("Project dashboard smoke test", () => {
         mode: "chat",
         projectId: "demo-project",
         projectPolicy: "cloud-ok",
-        approvalState: "not-required",
+        approvalState: "approved",
         prompt: "Talk to Codex directly",
       }),
     ]);
-    expect(screen.queryByRole("dialog", { name: "Runtime preview" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Runtime preview" })).not.toBeInTheDocument();
+    });
   });
 
   it("opens project navigation from the mobile projects button", async () => {
