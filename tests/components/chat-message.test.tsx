@@ -161,6 +161,43 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("ticks the live Working row on the next wall-clock second boundary", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T10:00:05.900Z"));
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByRole("log")).toHaveTextContent(
+      "Working (5s • esc to interrupt)",
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(screen.getByRole("log")).toHaveTextContent(
+      "Working (6s • esc to interrupt)",
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(screen.getByRole("log")).toHaveTextContent(
+      "Working (7s • esc to interrupt)",
+    );
+  });
+
   it("renders streaming thinking rows as markdown in the assistant transcript", () => {
     render(
       <ChatMessage
