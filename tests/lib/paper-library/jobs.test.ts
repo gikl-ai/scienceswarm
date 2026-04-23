@@ -169,6 +169,7 @@ describe("paper-library jobs", () => {
       createdAt: "2000-01-01T00:00:00.000Z",
       updatedAt: "2000-01-01T00:00:00.000Z",
       heartbeatAt: "2000-01-01T00:00:00.000Z",
+      claimId: "worker-1",
       counters: {
         detectedFiles: 10,
         identified: 1,
