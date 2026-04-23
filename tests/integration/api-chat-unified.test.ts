@@ -934,6 +934,42 @@ describe("GET /api/chat/unified", () => {
     expect(sendOpenClawMessage).toHaveBeenCalledTimes(1);
   });
 
+  it("reuses the cheap OpenClaw gateway status for back-to-back POSTs", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValue({
+      status: "connected",
+      gateway: "http://127.0.0.1:19002",
+    });
+    sendOpenClawMessage
+      .mockResolvedValueOnce("First response")
+      .mockResolvedValueOnce("Second response");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
+    );
+
+    for (const [index, message] of ["Hi", "Hi again"].entries()) {
+      const postResponse = await POST(new Request("http://localhost/api/chat/unified", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-real-ip": `runtime-status-post-cache-test-${index}`,
+        },
+        body: JSON.stringify({
+          message,
+          messages: [{ role: "user", content: message }],
+        }),
+      }));
+      expect(postResponse.status).toBe(200);
+    }
+
+    expect(openClawHealthCheck).toHaveBeenCalledTimes(1);
+    expect(sendOpenClawMessage).toHaveBeenCalledTimes(2);
+  });
+
   it("prunes expired runtime-status cache entries before caching a new config", async () => {
     vi.useFakeTimers();
     try {
@@ -956,7 +992,7 @@ describe("GET /api/chat/unified", () => {
       expect(firstResponse.status).toBe(200);
       expect(__getConfiguredAgentRuntimeStatusCacheSizeForTests()).toBe(1);
 
-      vi.setSystemTime(new Date("2026-04-22T00:00:06Z"));
+      vi.setSystemTime(new Date("2026-04-22T00:00:11Z"));
       resolveAgentConfig.mockReturnValueOnce({
         type: "openclaw",
         url: "http://localhost:19003",

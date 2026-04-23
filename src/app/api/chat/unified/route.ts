@@ -7059,7 +7059,7 @@ async function importOpenClawOutputsFromMessages(params: {
   };
 }
 
-const AGENT_RUNTIME_STATUS_CACHE_TTL_MS = 5_000;
+const AGENT_RUNTIME_STATUS_CACHE_TTL_MS = 10_000;
 
 type AgentRuntimeStatusCacheEntry = {
   expiresAt: number;
