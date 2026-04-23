@@ -278,6 +278,35 @@ describe("openclawTask upstream onboarding", () => {
     expect(events.some((e) => e.status === "succeeded")).toBe(false);
   });
 
+  it("does not treat upstream dependency timeouts as runner timeouts", async () => {
+    mockRunOpenClaw.mockImplementation(async (args) => {
+      if (args[0] === "--version") {
+        return {
+          ok: true,
+          stdout: `OpenClaw ${PINNED_VERSION} (test)\n`,
+          stderr: "",
+          code: 0,
+        };
+      }
+      return {
+        ok: false,
+        stdout: "",
+        stderr: "Connection to Ollama timed out",
+        code: 1,
+      };
+    });
+
+    const events = await runTask();
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        status: "failed",
+        error: expect.stringContaining("openclaw onboard failed"),
+      }),
+    );
+    expect(events.some((e) => e.status === "succeeded")).toBe(false);
+  });
+
   it("falls back to minimal state-dir config when upstream onboarding times out", async () => {
     mockRunOpenClaw.mockImplementation(async (args) => {
       if (args[0] === "--version") {
@@ -318,6 +347,38 @@ describe("openclawTask upstream onboarding", () => {
     expect(config.gateway?.auth?.token).toEqual(expect.any(String));
     const workspace = await fs.stat(WORKSPACE_DIR);
     expect(workspace.isDirectory()).toBe(true);
+  });
+
+  it("replaces malformed state-dir config when runner timeout recovery runs", async () => {
+    await fs.mkdir(STATE_DIR, { recursive: true });
+    await fs.writeFile(`${STATE_DIR}/openclaw.json`, "{not-json", "utf8");
+    mockRunOpenClaw.mockImplementation(async (args) => {
+      if (args[0] === "--version") {
+        return {
+          ok: true,
+          stdout: `OpenClaw ${PINNED_VERSION} (test)\n`,
+          stderr: "",
+          code: 0,
+        };
+      }
+      return {
+        ok: false,
+        stdout: "",
+        stderr: "openclaw killed by signal SIGTERM (timeout after 15000ms)",
+        code: null,
+      };
+    });
+
+    const events = await runTask();
+    const config = JSON.parse(
+      await fs.readFile(`${STATE_DIR}/openclaw.json`, "utf8"),
+    ) as { gateway?: { mode?: string; port?: number } };
+
+    expect(events.some((e) => e.status === "succeeded")).toBe(true);
+    expect(config.gateway).toMatchObject({
+      mode: "local",
+      port: 18789,
+    });
   });
 
   it("honors OPENCLAW_PORT override when running onboarding", async () => {

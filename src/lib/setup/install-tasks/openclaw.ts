@@ -37,6 +37,10 @@ import type { InstallTask, TaskYield } from "./types";
 // release audit.
 const OPENCLAW_VERSION = "2026.4.14";
 const OPENCLAW_PACKAGE = `openclaw@${OPENCLAW_VERSION}`;
+// Upstream onboarding is best-effort here: ScienceSwarm owns the
+// minimal local gateway config needed to unblock setup. Keep this
+// timeout short so a wedged upstream step does not hold first-run
+// users on "Connecting your runtime" for minutes.
 const OPENCLAW_ONBOARD_TIMEOUT_MS = 15_000;
 
 function hasCli(name: string): Promise<string | null> {
@@ -254,7 +258,7 @@ async function* applyStateDirOnboarding(
 }
 
 function isOpenClawTimeout(stderr: string): boolean {
-  return /timeout after \d+ms/i.test(stderr) || /timed out/i.test(stderr);
+  return /timeout after \d+ms/i.test(stderr);
 }
 
 async function writeMinimalStateDirOnboarding(args: {
@@ -275,7 +279,11 @@ async function writeMinimalStateDirOnboarding(args: {
     }
   }
   if (rawConfig) {
-    config = JSON.parse(rawConfig) as Record<string, unknown>;
+    try {
+      config = JSON.parse(rawConfig) as Record<string, unknown>;
+    } catch {
+      config = {};
+    }
   }
 
   const existingGateway = config.gateway && typeof config.gateway === "object"
