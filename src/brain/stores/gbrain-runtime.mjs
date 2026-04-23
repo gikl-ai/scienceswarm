@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 /**
  * Runtime bridge for the installed gbrain package.
  *
@@ -73,26 +75,79 @@ export async function runRuntimeExtract(engine, args) {
     });
   }
 
-  const runExtract = extractModule.runExtract;
-  if (typeof runExtract !== "function") {
-    throw new Error("Installed gbrain package does not expose an extract runner.");
+  return runRuntimeExtractFallback(engine, extractModule, mode, dir, args.includes("--dry-run"));
+}
+
+async function runRuntimeExtractFallback(engine, extractModule, mode, dir, dryRun) {
+  const {
+    walkMarkdownFiles,
+    extractLinksFromFile,
+    extractTimelineFromContent,
+  } = extractModule;
+  if (
+    typeof walkMarkdownFiles !== "function"
+    || typeof extractLinksFromFile !== "function"
+    || typeof extractTimelineFromContent !== "function"
+  ) {
+    throw new Error("Installed gbrain package does not expose extract helpers.");
   }
 
-  let jsonOutput = "";
-  const originalLog = console.log;
-  if (args.includes("--json")) {
-    console.log = (...parts) => {
-      jsonOutput += `${parts.join(" ")}\n`;
-    };
+  const files = walkMarkdownFiles(dir);
+  const allSlugs = new Set(files.map((file) => file.relPath.replace(/\.md$/, "")));
+  const result = {
+    links_created: 0,
+    timeline_entries_created: 0,
+    pages_processed: files.length,
+  };
+
+  for (const file of files) {
+    let content;
+    try {
+      content = readFileSync(file.path, "utf-8");
+    } catch {
+      continue;
+    }
+
+    const slug = file.relPath.replace(/\.md$/, "");
+    if (mode === "links" || mode === "all") {
+      const links = extractLinksFromFile(content, file.relPath, allSlugs);
+      for (const link of links) {
+        if (dryRun) {
+          result.links_created += 1;
+          continue;
+        }
+        try {
+          await engine.addLink(link.from_slug, link.to_slug, link.context, link.link_type);
+          result.links_created += 1;
+        } catch {
+          // Match gbrain's CLI behavior: skip duplicate or missing-page links.
+        }
+      }
+    }
+
+    if (mode === "timeline" || mode === "all") {
+      const entries = extractTimelineFromContent(content, slug);
+      for (const entry of entries) {
+        if (dryRun) {
+          result.timeline_entries_created += 1;
+          continue;
+        }
+        try {
+          await engine.addTimelineEntry(entry.slug, {
+            date: entry.date,
+            source: entry.source,
+            summary: entry.summary,
+            detail: entry.detail,
+          });
+          result.timeline_entries_created += 1;
+        } catch {
+          // Match gbrain's CLI behavior: skip duplicate or missing-page entries.
+        }
+      }
+    }
   }
-  try {
-    const result = await runExtract(engine, args);
-    if (result !== undefined) return result;
-  } finally {
-    console.log = originalLog;
-  }
-  if (!jsonOutput.trim()) return undefined;
-  return JSON.parse(jsonOutput);
+
+  return result;
 }
 
 export async function runRuntimeEmbed(engine, args) {

@@ -303,6 +303,16 @@ export const ApplyStartRequestSchema = z.object({
 });
 export type ApplyStartRequest = z.infer<typeof ApplyStartRequestSchema>;
 
+export const ApplyIdempotencyRecordSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  project: ProjectSlugSchema,
+  applyPlanId: z.string().min(1),
+  manifestId: z.string().min(1),
+  planDigest: z.string().min(1),
+  createdAt: IsoDateStringSchema,
+});
+export type ApplyIdempotencyRecord = z.infer<typeof ApplyIdempotencyRecordSchema>;
+
 export const ApplyManifestStatusSchema = z.enum([
   "applying",
   "applied",

@@ -129,6 +129,7 @@ describe("paper-library review and apply routes", () => {
       project: "project-alpha",
       applyPlanId: created.applyPlanId,
       approvalToken: approval.approvalToken,
+      idempotencyKey: "route-review-apply-manifest",
     }));
     expect(applyResponse.status).toBe(200);
     const applied = await applyResponse.json() as {
@@ -159,6 +160,7 @@ describe("paper-library review and apply routes", () => {
       project: "project-alpha",
       applyPlanId: created.applyPlanId,
       approvalToken: approval.approvalToken,
+      idempotencyKey: "route-review-apply-manifest",
     }));
     expect(repeatedApply.status).toBe(200);
     await expect(repeatedApply.json()).resolves.toMatchObject({
