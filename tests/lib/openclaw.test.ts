@@ -364,7 +364,21 @@ describe("OpenClaw gatewayHealthCheck", () => {
     expect(execFileMock).not.toHaveBeenCalled();
   });
 
+  it("reports disconnected when an active WebSocket exists but auth config is missing", async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock;
+    isGatewayConnectedMock.mockReturnValue(true);
+
+    await expect(gatewayHealthCheck()).resolves.toEqual({
+      status: "disconnected",
+      gateway: "",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
   it("reports connected from an authenticated gateway WebSocket without probing HTTP", async () => {
+    writeGatewayToken();
     const fetchMock = vi.fn();
     globalThis.fetch = fetchMock;
     isGatewayConnectedMock.mockReturnValue(true);
@@ -378,6 +392,7 @@ describe("OpenClaw gatewayHealthCheck", () => {
   });
 
   it("does not hide runtime failures from the authenticated gateway check", async () => {
+    writeGatewayToken();
     globalThis.fetch = vi.fn(async () => new Response("ok", { status: 200 }));
     isGatewayConnectedMock.mockImplementation(() => {
       throw new Error("gateway auth state unavailable");

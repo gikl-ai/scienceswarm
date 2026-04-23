@@ -641,6 +641,14 @@ export async function gatewayHealthCheck(): Promise<OpenClawGatewayStatus> {
   } catch {
     // If the WS helper cannot be loaded, fall back to HTTP readiness below.
   }
+
+  if (!getOpenClawGatewayAuthStatus().configured) {
+    return {
+      status: "disconnected",
+      gateway: "",
+    };
+  }
+
   if (isGatewayConnected?.()) {
     return {
       status: "connected",
@@ -650,13 +658,6 @@ export async function gatewayHealthCheck(): Promise<OpenClawGatewayStatus> {
 
   const { reachable, gateway } = await probeGatewayHealth(1500);
   if (!reachable) {
-    return {
-      status: "disconnected",
-      gateway: "",
-    };
-  }
-
-  if (!getOpenClawGatewayAuthStatus().configured) {
     return {
       status: "disconnected",
       gateway: "",

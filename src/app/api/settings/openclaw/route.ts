@@ -149,10 +149,8 @@ async function isOpenClawRunning(): Promise<boolean> {
 }
 
 async function isOpenClawReady(): Promise<boolean> {
-  const [reachable, auth] = await Promise.all([
-    isOpenClawGatewayReachable(),
-    Promise.resolve(getOpenClawGatewayAuthStatus()),
-  ]);
+  const reachable = await isOpenClawGatewayReachable();
+  const auth = getOpenClawGatewayAuthStatus();
   return reachable && auth.configured;
 }
 
