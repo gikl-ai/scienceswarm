@@ -580,7 +580,7 @@ function extractTextContent(value: unknown): string | undefined {
     const parts = value
       .map((entry) => extractTextContent(entry))
       .filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
-    return parts.length > 0 ? parts.join(" ") : undefined;
+    return parts.length > 0 ? parts.join("") : undefined;
   }
 
   const record = asRecord(value);
@@ -1662,7 +1662,7 @@ function extractOpenClawProgressUpdate(progress: {
   }
 
   const stream = firstNonEmptyString(payload.stream);
-  const data = asRecord(payload.data) ?? payload;
+  const data = asRecord(payload.data);
 
   if (stream === "thinking" || stream === "reasoning" || stream === "reasoning_text") {
     const nextThinking = firstNonEmptyString(data?.delta, data?.text, data?.reasoning);
@@ -3159,7 +3159,7 @@ export function useUnifiedChat(
                 };
                 text?: string;
                 content?: string;
-                message?: string;
+                message?: unknown;
               };
             };
             sawProgressEvent = true;

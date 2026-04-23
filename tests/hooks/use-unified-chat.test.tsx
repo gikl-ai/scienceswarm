@@ -3573,6 +3573,8 @@ describe("useUnifiedChat persistence", () => {
             progress: {
               method: "session.message",
               payload: {
+                stream: "thinking",
+                text: "Planning how to inspect the chart files.",
                 message: {
                   role: "assistant",
                   content: [
@@ -3606,6 +3608,9 @@ describe("useUnifiedChat persistence", () => {
     });
     expect(screen.getByTestId("thinking-log").textContent).toContain(
       "assistant:Planning how to inspect the chart files.",
+    );
+    expect(screen.getByTestId("thinking-log").textContent).not.toContain(
+      "Planning how to inspect the chart files.\nPlanning how to inspect the chart files.",
     );
     expect(screen.getByTestId("activity-log").textContent).toContain("Tool read_file:");
     expect(screen.getByTestId("activity-log").textContent).toContain(
@@ -4434,7 +4439,7 @@ describe("useUnifiedChat persistence", () => {
             message: {
               role: "assistant",
               content: [
-                { type: "text", text: "Canonical" },
+                { type: "text", text: "Canonical " },
                 { type: "text", text: "final answer." },
               ],
             },
