@@ -990,4 +990,62 @@ description: Updated PubMed description
       "/dashboard/gbrain?name=demo-project&brain_slug=wiki%2Fconcepts%2Ftp53-mdm2",
     );
   });
+
+  it("routes the paper library tab through the gbrain URL", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 4, backend: "gbrain" });
+      }
+
+      if (url.startsWith("/api/brain/brief?project=")) {
+        return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
+      }
+
+      if (url === "/api/brain/dream") {
+        return Response.json({ lastRun: null });
+      }
+
+      if (url === "/api/brain/dream-schedule") {
+        return Response.json({
+          schedule: { enabled: true, cron: "0 3 * * *", mode: "full" },
+          nextRun: "2026-04-19T10:00:00.000Z",
+        });
+      }
+
+      return Response.json({});
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GbrainPage />);
+
+    await screen.findByLabelText("Search research brain");
+    fireEvent.click(screen.getByRole("button", { name: "Paper Library" }));
+
+    expect(replaceMock).toHaveBeenCalledWith("/dashboard/gbrain?name=demo-project&view=paper-library");
+  });
+
+  it("keeps the paper library view available when gbrain is missing", async () => {
+    searchParamsValue = "name=demo-project&view=paper-library";
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url === "/api/brain/status") {
+        return Response.json({ error: "Run setup first" }, { status: 503 });
+      }
+
+      return Response.json({});
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GbrainPage />);
+
+    expect(await screen.findByText("Paper Library needs local setup.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Local research library operator" })).toBeInTheDocument();
+    expect(replaceMock).not.toHaveBeenCalledWith("/setup");
+  });
 });

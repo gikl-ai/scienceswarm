@@ -121,6 +121,7 @@ async function updateScanReviewCounters(
   await updatePaperLibraryScan(project, scanId, brainRoot, (scan) => ({
     ...scan,
     status: counts.needsReview === 0 ? "ready_for_apply" : "ready_for_review",
+    applyPlanId: undefined,
     updatedAt: new Date().toISOString(),
     counters: {
       ...scan.counters,

@@ -3,7 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initBrain } from "@/brain/init";
-import { startPaperLibraryScan } from "@/lib/paper-library/jobs";
+import {
+  readPaperLibraryScan,
+  startPaperLibraryScan,
+} from "@/lib/paper-library/jobs";
 import {
   approveApplyPlan,
   applyApprovedPlan,
@@ -160,5 +163,63 @@ describe("paper-library review and apply", () => {
     expect(undone?.manifest.status).toBe("undone");
     expect(await exists(originalPath)).toBe(true);
     expect(await exists(destination)).toBe(false);
+  });
+
+  it("clears the active apply plan when a reviewed item changes", async () => {
+    const originalPath = path.join(paperRoot, "2024 - Interesting Paper.pdf");
+    await writeFile(originalPath, "fake pdf", "utf-8");
+
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const reviewPage = await listPaperReviewItems({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      limit: 10,
+    });
+    const item = reviewPage?.items[0];
+    if (!item) throw new Error("expected review item");
+
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: item.id,
+      action: "accept",
+      selectedCandidateId: item.candidates[0]?.id,
+      brainRoot,
+    });
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{year} - {title}.pdf",
+    });
+    expect(created?.plan.id).toBeTruthy();
+
+    const afterPlan = await readPaperLibraryScan("project-alpha", scan.id, brainRoot);
+    expect(afterPlan?.applyPlanId).toBe(created?.plan.id);
+
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: item.id,
+      action: "correct",
+      selectedCandidateId: item.candidates[0]?.id,
+      correction: {
+        title: "Interesting Paper Revised",
+      },
+      brainRoot,
+    });
+
+    const afterCorrection = await readPaperLibraryScan("project-alpha", scan.id, brainRoot);
+    expect(afterCorrection?.applyPlanId).toBeUndefined();
+    expect(afterCorrection?.status).toBe("ready_for_apply");
   });
 });

@@ -700,3 +700,10 @@ export async function undoApplyManifest(input: {
 export function windowApplyOperations(operations: ApplyOperation[], options: { cursor?: string; limit?: number }) {
   return readCursorWindow(operations, options);
 }
+
+export function windowManifestOperations(
+  operations: ApplyManifestOperation[],
+  options: { cursor?: string; limit?: number },
+) {
+  return readCursorWindow(operations, options);
+}
