@@ -1619,7 +1619,7 @@ function ReportOverview({
           isSaving={saveStatus.state === "saving"}
         />
       ) : null}
-      {saveStatus.state === "error" ? (
+      {!destinationControls?.isOpen && saveStatus.state === "error" ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
           {saveStatus.error}
         </div>
@@ -2438,6 +2438,7 @@ function StructuredCritiquePageContent() {
       setSavePanelError(null);
       setNewProjectName("");
       setNewProjectDescription("");
+      setIsCreatingProjectForSave(false);
       if (status.state === "saved") {
         setSelectedSaveProjectSlugs(status.projectSlugs ?? []);
       } else {
