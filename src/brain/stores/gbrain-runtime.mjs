@@ -1,14 +1,12 @@
 /**
  * Runtime bridge for the installed gbrain package.
  *
- * The public gbrain package ships `src/core/engine-factory.ts` but does not
- * currently export that subpath in package.json. Importing the file directly
- * keeps ScienceSwarm on the public package surface instead of depending on a
- * dirty local checkout.
+ * Keep ScienceSwarm on gbrain's exported package surface for the small set of
+ * runtime APIs we intentionally call from the Next.js host process.
  */
 
 export async function createRuntimeEngine(config) {
-  const { createEngine } = await import("../../../node_modules/gbrain/src/core/engine-factory.ts");
+  const { createEngine } = await import("gbrain/engine-factory");
   return createEngine(config);
 }
 
