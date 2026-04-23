@@ -110,9 +110,11 @@ thinking and activity panels. It must:
 
 ## Sequential PR Plan
 
-Each PR below should be one small commit where feasible. After opening each PR,
-run local validation, address review feedback, enable auto-merge only when safe,
-wait for the merge, then measure and report the `Hi` response time.
+Each PR below should be one small commit where feasible. This plan intentionally
+contains 35 PR-sized units so speed work, OpenClaw parity, and background-agent
+UX can land in reviewable slices. After opening each PR, run local validation,
+address review feedback, enable auto-merge only when safe, wait for the merge,
+then measure and report the `Hi` response time.
 
 1. **Plan PR**
    - Add this plan.
@@ -276,6 +278,52 @@ wait for the merge, then measure and report the `Hi` response time.
     - Validation: full relevant test suite, typecheck, lint, and final `Hi`
       benchmark.
 
+29. **Settings Runtime Propagation PR**
+    - Ensure background OpenClaw/OpenHands task launches use the saved Settings
+      runtime provider, model, and endpoint instead of defaulting to cloud
+      provider names.
+    - Validation: route or service test proves an Ollama/gemma4 setting is
+      passed into the background task request.
+
+30. **Local Runtime Guardrail PR**
+    - When Settings selects a local runtime, reject accidental direct
+      `openai/*` provider launches and return an actionable local-runtime error
+      instead of an API-key failure.
+    - Validation: unit test covers local settings, missing API key, and allowed
+      `openai-codex/*` OAuth provider cases.
+
+31. **Background Monitor PR**
+    - Keep monitoring launched background tasks and stream status updates back
+      into the chat until the task completes, fails, or is cancelled.
+    - Validation: mocked background task test proves queued, running, progress,
+      complete, and failed states become progress entries.
+
+32. **Background Error Formatting PR**
+    - Convert provider, key, connection, and timeout failures into concise
+      OpenClaw-style transcript rows with a clear next action.
+    - Validation: formatter tests cover missing API key, OpenClaw unreachable,
+      model unavailable, and task timeout errors.
+
+33. **OpenClaw TUI Fixture Parity PR**
+    - Add representative OpenClaw TUI transcript fixtures and assert the web
+      transcript renderer produces matching wording, ordering, and emphasis.
+    - Validation: fixture tests cover plan updates, explored actions, command
+      completion, media generation, and final answer rows.
+
+34. **Agent Chat Layout Polish PR**
+    - Make assistant turns read like an agent console instead of ordinary chat
+      bubbles: user text remains clearly authored, while agent progress and
+      answers use a wider structured transcript surface.
+    - Validation: component/browser test proves user and assistant layouts stay
+      distinguishable and responsive.
+
+35. **Timing Visualization PR**
+    - Add a compact timing waterfall for the latest chat turn so readiness,
+      prompt assembly, OpenClaw gateway, first token, and final text are visible
+      without reading logs.
+    - Validation: component test renders a sample timing payload and verifies
+      phase labels, durations, and total time.
+
 ## Merge Order
 
 The exact order is sequential because the user asked for many small PRs with a
@@ -290,6 +338,8 @@ these groups are safe to overlap after their shared contracts merge:
   before transcript-only rendering PRs.
 - Transcript rendering work: PRs 15 to 23.
 - Stability and cleanup work: PRs 24 to 28.
+- Background-agent runtime and monitoring work: PRs 29 to 32.
+- OpenClaw parity, layout, and visualization work: PRs 33 to 35.
 
 ## Validation Standard
 
