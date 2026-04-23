@@ -585,6 +585,42 @@ function shouldUseCompactOpenClawArtifactContext(
   );
 }
 
+function hasWorkspaceReferenceNotes(
+  referenceNotes?: WorkspaceReferenceNotes | null,
+): boolean {
+  return Boolean(
+    referenceNotes &&
+      (referenceNotes.resolved.length > 0 || referenceNotes.ambiguous.length > 0),
+  );
+}
+
+function isBriefConversationalOpenClawTurn(message: string): boolean {
+  const normalized = message
+    .trim()
+    .toLowerCase()
+    .replace(/[!.?\s]+$/g, "")
+    .replace(/\s+/g, " ");
+  return /^(hi|hello|hey|thanks|thank you|ok|okay|got it|sounds good|good morning|good afternoon|good evening)$/.test(
+    normalized,
+  );
+}
+
+function shouldUseMinimalOpenClawConversationalContext(params: {
+  message: string;
+  files: UploadedFileDescriptor[];
+  activeFile: { path: string; content: string } | null;
+  referenceNotes?: WorkspaceReferenceNotes | null;
+  forceToolExecution: boolean;
+}): boolean {
+  return (
+    !params.forceToolExecution &&
+    params.files.length === 0 &&
+    params.activeFile === null &&
+    !hasWorkspaceReferenceNotes(params.referenceNotes) &&
+    isBriefConversationalOpenClawTurn(params.message)
+  );
+}
+
 function openClawAgentOptions(
   session: string | null | undefined,
   cwd: string | undefined,
@@ -8699,33 +8735,43 @@ export async function handleUnifiedChatPost(
       const forceToolExecution =
         chatMode === "openclaw-tools" ||
         shouldForceOpenClawToolExecution(userIntentMessage);
+      const useMinimalConversationalContext =
+        shouldUseMinimalOpenClawConversationalContext({
+          message: userIntentMessage,
+          files: mergedFiles,
+          activeFile,
+          referenceNotes,
+          forceToolExecution,
+        });
+      const shouldBuildRichPromptContext =
+        !useCompactArtifactContext && !useMinimalConversationalContext;
       const promptContextPhase = chatTiming.startPhase(
         "prompt_context_construction",
       );
-      const projectPrompt = useCompactArtifactContext
-        ? ""
-        : await buildScienceSwarmPromptContextText({
+      const projectPrompt = shouldBuildRichPromptContext
+        ? await buildScienceSwarmPromptContextText({
             projectId: validatedProjectId,
             backend: "openclaw",
-          });
+          })
+        : "";
       const augmentedOpenClawMessage = projectPrompt
         ? `${projectPrompt}\n\nCurrent user request:\n${message}`
-        : useCompactArtifactContext
+        : !shouldBuildRichPromptContext
           ? userIntentMessage
           : message;
-      const recentChatContext = useCompactArtifactContext
-        ? null
-        : buildOpenClawRecentChatContext(messages, rawMessage ?? "");
+      const recentChatContext = shouldBuildRichPromptContext
+        ? buildOpenClawRecentChatContext(messages, rawMessage ?? "")
+        : null;
       const contextualOpenClawMessage = recentChatContext
         ? `${recentChatContext}\n\nCurrent user request:\n${augmentedOpenClawMessage}`
         : augmentedOpenClawMessage;
-      const workspaceFileContext = useCompactArtifactContext
-        ? null
-        : await buildWorkspaceFileContext(
+      const workspaceFileContext = shouldBuildRichPromptContext
+        ? await buildWorkspaceFileContext(
             mergedFiles,
             validatedProjectId,
             referenceNotes,
-          );
+          )
+        : null;
       const projectRootForPrompt = validatedProjectId
         ? getScienceSwarmProjectRoot(validatedProjectId)
         : null;
