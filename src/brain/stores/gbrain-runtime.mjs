@@ -3,9 +3,9 @@ import { readFile } from "node:fs/promises";
 /**
  * Runtime bridge for the installed gbrain package.
  *
- * gbrain does not currently export the engine factory or command wrappers
- * through its package exports map, so this bridge centralizes the deep imports
- * until upstream exposes stable subpaths.
+ * Use the package export for engine-factory so Next can preserve the package
+ * boundary and keep PGLite external on the server. The command wrappers still
+ * require deep imports until upstream exports stable subpaths for them.
  */
 
 function timelineDateKey(date) {
@@ -67,7 +67,7 @@ function wrapRuntimeEngine(engine) {
 }
 
 export async function createRuntimeEngine(config) {
-  const { createEngine } = await import("../../../node_modules/gbrain/src/core/engine-factory.ts");
+  const { createEngine } = await import("gbrain/engine-factory");
   return wrapRuntimeEngine(await createEngine(config));
 }
 

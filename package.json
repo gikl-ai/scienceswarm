@@ -76,6 +76,11 @@
     "ws": "^8.20.0",
     "yauzl": "^3.3.0"
   },
+  "overrides": {
+    "gbrain": {
+      "@electric-sql/pglite": "0.4.4"
+    }
+  },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4",
