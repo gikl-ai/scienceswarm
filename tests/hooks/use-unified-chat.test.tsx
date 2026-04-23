@@ -4406,7 +4406,11 @@ describe("useUnifiedChat persistence", () => {
         progress: {
           type: "event",
           method: "chat.delta",
-          payload: { delta: "Draft answer" },
+          payload: {
+            delta: "Draft answer",
+            stream: "assistant",
+            data: { delta: "Draft answer" },
+          },
         },
       });
       await Promise.resolve();
@@ -4417,6 +4421,9 @@ describe("useUnifiedChat persistence", () => {
         "assistant:Draft answer",
       );
     });
+    expect(screen.getByTestId("message-log").textContent).not.toContain(
+      "assistant:Draft answerDraft answer",
+    );
 
     await act(async () => {
       deferredStream.send({

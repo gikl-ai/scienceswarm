@@ -1650,6 +1650,7 @@ function extractOpenClawProgressUpdate(progress: {
       update,
       extractGatewayChatProgressUpdate(eventName, payload),
     );
+    return update;
   }
 
   if (eventName.startsWith("agent.")) {
