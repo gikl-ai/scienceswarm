@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   benchmarkHelpText,
   buildBenchmarkPayload,
+  chatTimingArtifactUrl,
   chatBenchmarkUrl,
   formatBenchmarkSummary,
   normalizeBenchmarkBaseUrl,
   parseBenchmarkArgs,
   parseSseEvents,
   summarizeChatBenchmarkResponse,
+  summarizeLatestTimingArtifact,
 } from "../../scripts/benchmark-chat-hi";
 
 describe("benchmark-chat-hi", () => {
@@ -166,6 +168,7 @@ describe("benchmark-chat-hi", () => {
         "--timeout-ms",
         "5000",
         "--no-stream-phases",
+        "--timing-artifact",
         "--json",
       ],
       {},
@@ -178,10 +181,14 @@ describe("benchmark-chat-hi", () => {
       conversationId: "bench-fixed",
       timeoutMs: 5000,
       streamPhases: false,
+      includeTimingArtifact: true,
       json: true,
     });
     expect(chatBenchmarkUrl(options.baseUrl)).toBe(
       "http://127.0.0.1:3001/api/chat/unified",
+    );
+    expect(chatTimingArtifactUrl(options.baseUrl)).toBe(
+      "http://127.0.0.1:3001/api/chat/timing",
     );
     expect(normalizeBenchmarkBaseUrl("http://localhost:4000/proxy?a=1#top")).toBe(
       "http://localhost:4000",
@@ -205,7 +212,89 @@ describe("benchmark-chat-hi", () => {
         progressEventCount: 1,
         finalEventCount: 1,
         finalTextSample: "Hello.",
+        timingArtifact: {
+          turnId: "turn-1",
+          totalDurationMs: 100,
+          outcome: "streamed",
+          status: 200,
+          phaseCount: 1,
+          phases: [{ name: "chat_readiness", durationMs: 7 }],
+          promptCharCounts: { total: 42 },
+        },
       }),
     ).toContain("Total: 100 ms");
+    expect(
+      formatBenchmarkSummary({
+        status: 200,
+        ok: true,
+        backend: "openclaw",
+        contentType: "text/event-stream",
+        conversationId: "bench-fixed",
+        headersMs: 5,
+        firstChunkMs: 10,
+        totalMs: 100,
+        bytes: 200,
+        eventCount: 3,
+        progressEventCount: 1,
+        finalEventCount: 1,
+        finalTextSample: "Hello.",
+        timingArtifact: null,
+      }),
+    ).toContain("Timing artifact: unavailable");
+  });
+
+  it("summarizes the latest sanitized chat timing artifact", () => {
+    expect(
+      summarizeLatestTimingArtifact({
+        maxEntries: 25,
+        timings: [
+          {
+            turnId: "older",
+            totalDurationMs: 999,
+            outcome: "old",
+            status: 200,
+            phases: [],
+            promptCharCounts: { total: 1 },
+          },
+          {
+            turnId: "turn-1",
+            totalDurationMs: 123.6,
+            outcome: "streamed",
+            status: 200,
+            phases: [
+              { name: "request_parse", durationMs: 1.2 },
+              {
+                name: "chat_readiness",
+                durationMs: 7.5,
+                inferred: true,
+              },
+              { name: "", durationMs: 99 },
+            ],
+            promptCharCounts: {
+              user_text: 2,
+              guardrails: 40.2,
+              total: 42.2,
+            },
+          },
+        ],
+      }),
+    ).toEqual({
+      turnId: "turn-1",
+      totalDurationMs: 124,
+      outcome: "streamed",
+      status: 200,
+      phaseCount: 2,
+      phases: [
+        { name: "request_parse", durationMs: 1 },
+        { name: "chat_readiness", durationMs: 8, inferred: true },
+      ],
+      promptCharCounts: {
+        user_text: 2,
+        guardrails: 40,
+        total: 42,
+      },
+    });
+
+    expect(summarizeLatestTimingArtifact({ timings: [] })).toBeNull();
   });
 });

@@ -15,6 +15,7 @@ export interface ChatBenchmarkOptions {
   conversationId: string;
   timeoutMs: number;
   streamPhases: boolean;
+  includeTimingArtifact: boolean;
   json: boolean;
 }
 
@@ -43,6 +44,24 @@ export interface ChatBenchmarkSummary {
   progressEventCount: number;
   finalEventCount: number;
   finalTextSample: string;
+  timingArtifact?: ChatBenchmarkTimingArtifactSummary | null;
+}
+
+export interface ChatBenchmarkTimingPhaseSummary {
+  name: string;
+  durationMs: number;
+  skipped?: boolean;
+  inferred?: boolean;
+}
+
+export interface ChatBenchmarkTimingArtifactSummary {
+  turnId: string;
+  totalDurationMs: number;
+  outcome: string | null;
+  status: number | null;
+  phaseCount: number;
+  phases: ChatBenchmarkTimingPhaseSummary[];
+  promptCharCounts: Record<string, number>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -51,6 +70,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function toPositiveInteger(value: string, fallback: number): number {
@@ -214,6 +237,7 @@ export function buildBenchmarkPayload(
 }
 
 export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
+  const timingArtifact = summary.timingArtifact;
   return [
     "Chat Hi Benchmark",
     `Status: ${summary.status} ${summary.ok ? "ok" : "failed"}`,
@@ -226,6 +250,19 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
     `Total: ${summary.totalMs} ms`,
     `Bytes: ${summary.bytes}`,
     `Events: ${summary.eventCount} (${summary.progressEventCount} progress, ${summary.finalEventCount} final)`,
+    ...(timingArtifact === undefined
+      ? []
+      : timingArtifact === null
+        ? ["Timing artifact: unavailable"]
+        : [
+            `Timing artifact: ${timingArtifact.totalDurationMs} ms, outcome ${
+              timingArtifact.outcome ?? "unknown"
+            }, status ${timingArtifact.status ?? "unknown"}`,
+            `Timing phases: ${timingArtifact.phases
+              .map((phase) => `${phase.name} ${phase.durationMs} ms`)
+              .join(", ")}`,
+            `Prompt chars: total ${timingArtifact.promptCharCounts.total ?? 0}`,
+          ]),
     summary.finalTextSample
       ? `Final sample: ${summary.finalTextSample}`
       : "Final sample: n/a",
@@ -243,6 +280,7 @@ export function benchmarkHelpText(): string {
     "  --conversation-id <id>   Conversation id for the benchmark turn",
     "  --timeout-ms <ms>        Abort after this many ms (default: 120000)",
     "  --no-stream-phases       Disable streamPhases for comparison",
+    "  --timing-artifact        Fetch the latest local /api/chat/timing artifact after the run",
     "  --json                   Print machine-readable JSON",
   ].join("\n");
 }
@@ -265,6 +303,7 @@ export function parseBenchmarkArgs(
       120_000,
     ),
     streamPhases: true,
+    includeTimingArtifact: false,
     json: false,
   };
 
@@ -285,6 +324,8 @@ export function parseBenchmarkArgs(
       options.json = true;
     } else if (arg === "--no-stream-phases") {
       options.streamPhases = false;
+    } else if (arg === "--timing-artifact") {
+      options.includeTimingArtifact = true;
     }
   }
 
@@ -296,6 +337,88 @@ export function chatBenchmarkUrl(baseUrl: string): string {
     "/api/chat/unified",
     normalizeBenchmarkBaseUrl(baseUrl),
   ).toString();
+}
+
+export function chatTimingArtifactUrl(baseUrl: string): string {
+  return new URL(
+    "/api/chat/timing",
+    normalizeBenchmarkBaseUrl(baseUrl),
+  ).toString();
+}
+
+export function summarizeLatestTimingArtifact(
+  responseJson: unknown,
+): ChatBenchmarkTimingArtifactSummary | null {
+  const response = isRecord(responseJson) ? responseJson : null;
+  const timings = Array.isArray(response?.timings) ? response.timings : [];
+  let latest: unknown;
+  for (let index = timings.length - 1; index >= 0; index -= 1) {
+    if (isRecord(timings[index])) {
+      latest = timings[index];
+      break;
+    }
+  }
+  if (!isRecord(latest)) {
+    return null;
+  }
+
+  const phases = Array.isArray(latest.phases)
+    ? latest.phases.flatMap((phase): ChatBenchmarkTimingPhaseSummary[] => {
+        if (!isRecord(phase)) {
+          return [];
+        }
+        const name = asString(phase.name);
+        const durationMs = asFiniteNumber(phase.durationMs);
+        if (!name || durationMs === null) {
+          return [];
+        }
+        return [{
+          name,
+          durationMs: Math.round(durationMs),
+          ...(typeof phase.skipped === "boolean"
+            ? { skipped: phase.skipped }
+            : {}),
+          ...(typeof phase.inferred === "boolean"
+            ? { inferred: phase.inferred }
+            : {}),
+        }];
+      })
+    : [];
+
+  const promptCharCounts = isRecord(latest.promptCharCounts)
+    ? Object.fromEntries(
+        Object.entries(latest.promptCharCounts).flatMap(([key, value]) => {
+          const numericValue = asFiniteNumber(value);
+          return numericValue === null ? [] : [[key, Math.round(numericValue)]];
+        }),
+      )
+    : {};
+
+  return {
+    turnId: asString(latest.turnId) ?? "unknown",
+    totalDurationMs: Math.round(asFiniteNumber(latest.totalDurationMs) ?? 0),
+    outcome: asString(latest.outcome),
+    status: asFiniteNumber(latest.status),
+    phaseCount: phases.length,
+    phases,
+    promptCharCounts,
+  };
+}
+
+async function fetchLatestTimingArtifact(
+  baseUrl: string,
+): Promise<ChatBenchmarkTimingArtifactSummary | null> {
+  try {
+    const response = await fetch(chatTimingArtifactUrl(baseUrl), {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return summarizeLatestTimingArtifact(await response.json());
+  } catch {
+    return null;
+  }
 }
 
 export async function runChatHiBenchmark(
@@ -339,7 +462,7 @@ export async function runChatHiBenchmark(
     }
 
     const completedAt = performance.now();
-    return summarizeChatBenchmarkResponse({
+    const summary = summarizeChatBenchmarkResponse({
       status: response.status,
       ok: response.ok,
       backend: response.headers.get("x-chat-backend"),
@@ -352,6 +475,10 @@ export async function runChatHiBenchmark(
       totalMs: completedAt - startedAt,
       bytes,
     });
+    if (options.includeTimingArtifact) {
+      summary.timingArtifact = await fetchLatestTimingArtifact(options.baseUrl);
+    }
+    return summary;
   } finally {
     clearTimeout(timeout);
   }
