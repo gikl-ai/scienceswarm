@@ -7486,6 +7486,7 @@ export function __getConfiguredAgentRuntimeStatusCacheSizeForTests(): number {
 
 function prewarmOpenClawGatewayFromUnifiedHealth(
   agentConfig: ReturnType<typeof resolveAgentConfig>,
+  agentStatus?: AgentRuntimeStatus,
 ): void {
   if (agentConfig?.type !== "openclaw") {
     return;
@@ -7494,7 +7495,9 @@ function prewarmOpenClawGatewayFromUnifiedHealth(
   void import("@/lib/openclaw")
     .then((openClawModule) => {
       if (typeof openClawModule.prewarmGatewayConnectionIfHealthy === "function") {
-        openClawModule.prewarmGatewayConnectionIfHealthy();
+        openClawModule.prewarmGatewayConnectionIfHealthy(
+          agentStatus?.status === "connected",
+        );
       }
     })
     .catch(() => {
@@ -9237,7 +9240,7 @@ export async function GET(request: Request) {
       strictLocalOnly,
       { preferFastOpenClawGatewayProbe: agentCfg?.type === "openclaw" },
     );
-    prewarmOpenClawGatewayFromUnifiedHealth(agentCfg);
+    prewarmOpenClawGatewayFromUnifiedHealth(agentCfg, agentStatus);
     const agent = {
       type: agentStatus.type,
       status: agentStatus.status as string,

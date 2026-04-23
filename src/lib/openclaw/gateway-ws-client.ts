@@ -12,7 +12,7 @@
  *
  * Exports:
  *   - ensureGatewayConnection() → Promise<void>
- *   - prewarmGatewayConnection() → Promise<void>
+ *   - prewarmGatewayConnection() → void
  *   - sendMessageViaGateway(sessionKey, message, options?) → Promise<SendMessageResult>
  *   - sendChatViaGateway(sessionKey, message, options?) → Promise<SendChatResult>
  *   - isGatewayConnected() → boolean
@@ -394,12 +394,10 @@ export async function ensureGatewayConnection(): Promise<void> {
  * Best-effort background warmup for callers that want to start the singleton
  * handshake without awaiting it on their critical path.
  */
-export function prewarmGatewayConnection(): Promise<void> {
-  const promise = ensureGatewayConnection();
-  promise.catch((error) => {
+export function prewarmGatewayConnection(): void {
+  void ensureGatewayConnection().catch((error) => {
     debugLog("background prewarm failed", error);
   });
-  return promise;
 }
 
 async function connectAndAuth(): Promise<void> {

@@ -673,21 +673,27 @@ export async function gatewayHealthCheck(): Promise<OpenClawGatewayStatus> {
 /**
  * Fire-and-forget fast-probe + gateway WS warmup for the next dashboard turn.
  *
- * This intentionally does not block the caller: it only prewarms when the
- * lightweight gateway health probe reports connected, and it swallows probe /
- * warmup failures because the regular chat turn still owns transport errors.
+ * This intentionally does not block the caller. If a caller already knows the
+ * gateway is healthy, it can pass `true` to skip the extra fast probe; otherwise
+ * this helper runs the lightweight gateway health probe before warming the WS
+ * singleton. Probe / warmup failures are swallowed because the regular chat
+ * turn still owns transport errors.
  */
-export function prewarmGatewayConnectionIfHealthy(): void {
+export function prewarmGatewayConnectionIfHealthy(
+  gatewayAlreadyHealthy?: boolean,
+): void {
   void (async () => {
-    const status = await gatewayHealthCheck();
-    if (status.status !== "connected") {
-      return;
+    if (gatewayAlreadyHealthy !== true) {
+      const status = await gatewayHealthCheck();
+      if (status.status !== "connected") {
+        return;
+      }
     }
 
     const { prewarmGatewayConnection } = await import(
       "@/lib/openclaw/gateway-ws-client"
     );
-    void prewarmGatewayConnection();
+    prewarmGatewayConnection();
   })().catch(() => {
     // Best-effort only. The next real chat turn will report transport errors.
   });
