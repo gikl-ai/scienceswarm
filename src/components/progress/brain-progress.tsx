@@ -176,6 +176,7 @@ export function BrainProgress({
   const fileDurationsRef = useRef<number[]>([]);
   const lastFileStartRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const autoStartedRef = useRef(false);
   // Snapshot onComplete/onError into refs so handleRun doesn't need to
   // re-bind when a consumer re-renders with a new inline closure.
   const onCompleteRef = useRef(onComplete);
@@ -194,6 +195,7 @@ export function BrainProgress({
     return () => {
       abortRef.current?.abort();
       abortRef.current = null;
+      autoStartedRef.current = false;
     };
   }, []);
 
@@ -405,7 +407,6 @@ export function BrainProgress({
 
   // Auto-start on mount when requested. Runs exactly once regardless
   // of re-renders because handleRun is memoized on stable props.
-  const autoStartedRef = useRef(false);
   useEffect(() => {
     if (!autoStart) return;
     if (autoStartedRef.current) return;

@@ -16,32 +16,48 @@ function timelineDateKey(date) {
 function wrapRuntimeEngine(engine) {
   return new Proxy(engine, {
     get(target, prop, receiver) {
-      if (prop === "searchKeyword") {
+      if (prop === "searchKeyword" && typeof target.searchKeyword === "function") {
         return async (...args) => {
           const results = await target.searchKeyword(...args);
-          return results.map((result) => ({
-            ...result,
-            source_id: result.source_id ?? "default",
-          }));
+          return Array.isArray(results)
+            ? results.map((result) => ({
+                ...result,
+                source_id: result.source_id ?? "default",
+              }))
+            : results;
         };
       }
-      if (prop === "addTimelineEntry") {
+      if (
+        prop === "addTimelineEntry"
+        && typeof target.addTimelineEntry === "function"
+      ) {
         return async (slug, entry) => {
-          const existing = await target.getTimeline(slug, { limit: 100000 }).catch(() => []);
+          const getTimeline = typeof target.getTimeline === "function"
+            ? target.getTimeline.bind(target)
+            : async () => [];
+          const existing = await getTimeline(slug, { limit: 100000 }).catch(() => []);
           const entryKey = `${timelineDateKey(entry.date)}::${entry.summary}`;
-          if (existing.some((row) => `${timelineDateKey(row.date)}::${row.summary}` === entryKey)) {
+          if (
+            existing.some(
+              (row) => `${timelineDateKey(row.date)}::${row.summary}` === entryKey,
+            )
+          ) {
             return undefined;
           }
           return target.addTimelineEntry(slug, entry);
         };
       }
-      if (prop === "addLink") {
+      if (prop === "addLink" && typeof target.addLink === "function") {
         return async (from, to, context, linkType) => target.addLink(
           from,
           to,
           context,
           linkType === "mention" ? "mentions" : linkType,
         );
+      }
+      if (prop === "transaction" && typeof target.transaction === "function") {
+        return async (fn) =>
+          target.transaction((tx) => fn(wrapRuntimeEngine(tx)));
       }
 
       const value = Reflect.get(target, prop, receiver);

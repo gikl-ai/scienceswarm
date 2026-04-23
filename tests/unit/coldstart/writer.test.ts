@@ -7,7 +7,7 @@
  * handling.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createHash } from "crypto";
 import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
@@ -48,6 +48,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
   for (const d of [brainRoot, corpusDir]) {
     if (existsSync(d)) rmSync(d, { recursive: true, force: true });
   }
@@ -202,6 +204,22 @@ describe("createWikiPageFromText", () => {
     expect(path).toBeTruthy();
     const body = readFileSync(join(brainRoot, path!), "utf-8");
     expect(body).toContain("# Oops");
+    expect(body).toContain("type: note");
+  });
+
+  it("falls back to a simple page when the LLM stalls", async () => {
+    vi.stubEnv("SCIENCESWARM_COLDSTART_TEXT_LLM_TIMEOUT_MS", "100");
+    const config = makeConfig();
+    const file = makeFile("notes/slow.md", "# Slow\nbody", "note");
+    const stalledLlm: LLMClient = {
+      complete: () => new Promise<LLMResponse>(() => {}),
+    };
+
+    const path = await createWikiPageFromText(config, stalledLlm, file, "note");
+
+    expect(path).toBeTruthy();
+    const body = readFileSync(join(brainRoot, path!), "utf-8");
+    expect(body).toContain("# Slow");
     expect(body).toContain("type: note");
   });
 

@@ -49,6 +49,7 @@ import {
   extractMarkdownTitle,
   formatSize,
 } from "./transformer";
+import { withLlmTimeout } from "./timeout";
 
 export interface ColdstartWriterOptions {
   enableGbrain?: boolean;
@@ -64,6 +65,8 @@ interface ColdstartWriterDeps {
   uploadedBy: string;
   projectSlug?: string;
 }
+
+const DEFAULT_TEXT_EXTRACTION_TIMEOUT_MS = 15_000;
 
 function getProjectScopedSourceFilename(
   filePath: string,
@@ -349,7 +352,7 @@ export async function createWikiPageFromText(
   if (existsSync(absPath)) return null;
 
   try {
-    const response = await llm.complete({
+    const response = await completeTextExtractionWithTimeout(llm, {
       system: `You are a research knowledge extraction agent. Given source text, produce a wiki page with YAML frontmatter (date, type, para, tags, title) and markdown body. Be concise and factual. Extract key claims with source references.`,
       user: content.slice(0, 8000),
       model: config.extractionModel,
@@ -385,6 +388,17 @@ export async function createWikiPageFromText(
     writeFileSync(absPath, simpleContent + "\n");
     return pagePath;
   }
+}
+
+async function completeTextExtractionWithTimeout(
+  llm: LLMClient,
+  call: Parameters<LLMClient["complete"]>[0],
+): Promise<Awaited<ReturnType<LLMClient["complete"]>>> {
+  return withLlmTimeout(llm.complete(call), {
+    defaultMs: DEFAULT_TEXT_EXTRACTION_TIMEOUT_MS,
+    envVar: "SCIENCESWARM_COLDSTART_TEXT_LLM_TIMEOUT_MS",
+    stage: "Coldstart text extraction",
+  });
 }
 
 export function createPaperPageFromPdf(
