@@ -3674,7 +3674,7 @@ function ProjectPageContent() {
     async (prompt: string, activeFile?: ActiveFileContext) => {
       const mode = runtimeMode;
       const runtimeHostId = selectedRuntimeHostId as Backend;
-      const sendChatDirect = mode === "chat";
+      const sendChatDirect = mode === "chat" && runtimeHostId === "openclaw";
       const dataIncluded = buildComposerRuntimeDataIncluded(prompt, activeFile);
       const selectedHostIds = mode === "compare"
         ? compareHostIds.length > 0 ? compareHostIds : ["openclaw"]
@@ -3717,14 +3717,19 @@ function ProjectPageContent() {
         if (!response.ok || !payload?.preview) {
           throw new Error(payload?.error || `Runtime preview failed: ${response.status}`);
         }
+        const previewOptions: RuntimeSendOptions = {
+          ...options,
+          approvalState: payload.preview.requiresUserApproval ? "approved" : "not-required",
+        };
+        if (mode === "chat" && payload.preview.allowed && !payload.preview.requiresUserApproval) {
+          await sendRuntimePrompt(prompt, previewOptions);
+          return;
+        }
         setPendingRuntimeSend({
           prompt,
           activeFile,
           preview: payload.preview,
-          options: {
-            ...options,
-            approvalState: payload.preview.requiresUserApproval ? "approved" : "not-required",
-          },
+          options: previewOptions,
           label: `${mode} via ${payload.preview.destinations.map((item) => item.label).join(", ")}`,
         });
       } catch (err) {
