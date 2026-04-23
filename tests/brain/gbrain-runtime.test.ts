@@ -78,7 +78,7 @@ describe("gbrain runtime bridge", () => {
     expect(await engine.getLinks("source")).toEqual([
       expect.objectContaining({
         to_slug: "target",
-        link_type: "mentions",
+        link_type: "mention",
       }),
     ]);
     expect(await engine.getTimeline("source")).toEqual([

@@ -115,6 +115,8 @@ interface ProjectImportSummaryFile {
   classification: string;
 }
 
+const DEFAULT_COLDSTART_LLM_TIMEOUT_MS = 15_000;
+
 function getProjectWorkspaceRelativePath(filePath: string): string {
   const filename = basename(filePath);
   return `${getTargetFolder(filename)}/${filename}`;
@@ -359,11 +361,14 @@ export async function approveAndImport(
 
       const allTags = extractAllTags(config, createdPages);
       if (allTags.length > 0) {
-        await ripple(config, llm, {
-          newPagePath: createdPages[0],
-          newPageContent: allContent.slice(0, 10000),
-          tags: allTags.slice(0, 10),
-        });
+        await withColdstartLlmTimeout(
+          ripple(config, llm, {
+            newPagePath: createdPages[0],
+            newPageContent: allContent.slice(0, 10000),
+            tags: allTags.slice(0, 10),
+          }),
+          "ripple pass",
+        );
       }
     } catch {
       // Ripple failure is non-fatal for coldstart
@@ -520,11 +525,14 @@ export async function approveAndImportWithProgress(
 
       const allTags = extractAllTags(config, createdPages);
       if (allTags.length > 0) {
-        await ripple(config, llm, {
-          newPagePath: createdPages[0],
-          newPageContent: allContent.slice(0, 10000),
-          tags: allTags.slice(0, 10),
-        });
+        await withColdstartLlmTimeout(
+          ripple(config, llm, {
+            newPagePath: createdPages[0],
+            newPageContent: allContent.slice(0, 10000),
+            tags: allTags.slice(0, 10),
+          }),
+          "ripple pass",
+        );
       }
     } catch {
       // Ripple failure is non-fatal for coldstart
@@ -624,11 +632,14 @@ export async function generateFirstBriefing(
   if (allPages.length > 0 && stats.totalPages >= 3) {
     try {
       const briefingPrompt = buildBriefingPrompt(allPages, paperPages, stats);
-      const response = await llm.complete({
-        system: loadColdstartTemplate(),
-        user: briefingPrompt,
-        model: config.synthesisModel,
-      });
+      const response = await withColdstartLlmTimeout(
+        llm.complete({
+          system: loadColdstartTemplate(),
+          user: briefingPrompt,
+          model: config.synthesisModel,
+        }),
+        "first briefing",
+      );
       const parsed = parseBriefingResponse(response.content, paperPages, stats);
       if (parsed) return parsed;
     } catch {
@@ -638,4 +649,34 @@ export async function generateFirstBriefing(
 
   // Heuristic briefing (no LLM)
   return buildHeuristicBriefing(allPages, paperPages, stats);
+}
+
+async function withColdstartLlmTimeout<T>(
+  promise: Promise<T>,
+  stage: string,
+): Promise<T> {
+  const timeoutMs = getColdstartLlmTimeoutMs();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Coldstart ${stage} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+function getColdstartLlmTimeoutMs(): number {
+  const raw = process.env.SCIENCESWARM_COLDSTART_LLM_TIMEOUT_MS;
+  if (!raw) return DEFAULT_COLDSTART_LLM_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_COLDSTART_LLM_TIMEOUT_MS;
+  }
+  return Math.max(100, Math.floor(parsed));
 }
