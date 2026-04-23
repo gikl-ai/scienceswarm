@@ -115,7 +115,16 @@ import {
 } from "@/lib/openhands/gbrain-checkout";
 import { ensureProjectShellForProjectSlug } from "@/lib/projects/ensure-project-shell";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
-import { readSavedLlmRuntimeEnv } from "@/lib/runtime-saved-env";
+import {
+  getCurrentExplicitLlmRuntimeConfig,
+  getCurrentLlmRuntimeEnv,
+  readExplicitLlmRuntimeConfig,
+  readSavedLlmRuntimeEnv,
+  type ExplicitLlmRuntimeConfig,
+  type SavedLlmRuntimeEnv,
+} from "@/lib/runtime-saved-env";
+import { resolveConfiguredLocalModel } from "@/lib/runtime/model-catalog";
+import { validateOpenAiKey } from "@/lib/setup/config-status";
 import {
   getDefaultRuntimeHostRouter,
   type RuntimeHostRouter,
@@ -389,6 +398,65 @@ function matchesLocalModel(
     availableModel === targetModel ||
     availableModel.startsWith(`${targetModel}:`)
   );
+}
+
+function configuredLocalModelForSavedRuntime(
+  savedRuntimeEnv: SavedLlmRuntimeEnv,
+  explicitRuntimeConfig: ExplicitLlmRuntimeConfig,
+): string | null {
+  const shouldValidateLocalRuntime =
+    savedRuntimeEnv.llmProvider === "local"
+    && (explicitRuntimeConfig.llmProvider || explicitRuntimeConfig.ollamaModel);
+  if (!shouldValidateLocalRuntime) {
+    return null;
+  }
+  return resolveConfiguredLocalModel({
+    OLLAMA_MODEL: savedRuntimeEnv.ollamaModel ?? undefined,
+  });
+}
+
+async function getOpenClawRuntimeMisconfiguration(
+  savedRuntimeEnv: SavedLlmRuntimeEnv,
+  explicitRuntimeConfig: ExplicitLlmRuntimeConfig,
+): Promise<string | null> {
+  const configuredLocalModel = configuredLocalModelForSavedRuntime(
+    savedRuntimeEnv,
+    explicitRuntimeConfig,
+  );
+  if (configuredLocalModel) {
+    const { healthCheck: localHealth } = await import("@/lib/local-llm");
+    const localStatus = await localHealth();
+    if (!localStatus.running) {
+      return `Local runtime is selected, but Ollama is not running. Start Ollama and make sure \`${configuredLocalModel}\` is available in Settings.`;
+    }
+    if (!localStatus.models.some((model) => matchesLocalModel(model, configuredLocalModel))) {
+      return `Local runtime is selected, but \`${configuredLocalModel}\` is not installed in Ollama. Pull that model in Settings and retry.`;
+    }
+    return null;
+  }
+
+  const shouldValidateOpenAiRuntime =
+    !savedRuntimeEnv.strictLocalOnly
+    && savedRuntimeEnv.llmProvider === "openai"
+    && (
+      explicitRuntimeConfig.llmProvider
+      || explicitRuntimeConfig.llmModel
+      || explicitRuntimeConfig.openaiApiKey
+    );
+  if (!shouldValidateOpenAiRuntime) {
+    return null;
+  }
+
+  const openAiKeyStatus = validateOpenAiKey(savedRuntimeEnv.openaiApiKey ?? undefined);
+  if (openAiKeyStatus.state !== "ok") {
+    const detail =
+      openAiKeyStatus.state === "missing"
+        ? "no OpenAI API key is saved"
+        : openAiKeyStatus.reason;
+    return `OpenAI runtime is selected, but ${detail}. Save a valid OpenAI key in Settings or switch to Local Ollama.`;
+  }
+
+  return null;
 }
 
 function normalizeChatMode(value: unknown): ChatMode {
@@ -8488,6 +8556,8 @@ export async function handleUnifiedChatPost(
 
     const agentConfig = resolveAgentConfig();
     const strictLocalOnly = isStrictLocalOnlyEnabled();
+    const savedRuntimeEnv = getCurrentLlmRuntimeEnv(process.env);
+    const explicitRuntimeConfig = getCurrentExplicitLlmRuntimeConfig(process.env);
     let privacyErrorPromise: Promise<Response | null> | null = null;
     const getPrivacyError = (): Promise<Response | null> => {
       privacyErrorPromise ??= enforceCloudPrivacy(validatedProjectId);
@@ -8555,6 +8625,32 @@ export async function handleUnifiedChatPost(
           chatTiming,
           privacyError,
           "privacy_blocked",
+        );
+      }
+      const runtimeMisconfiguration =
+        await getOpenClawRuntimeMisconfiguration(
+          savedRuntimeEnv,
+          explicitRuntimeConfig,
+        );
+      if (runtimeMisconfiguration) {
+        return finishChatTimingResponse(
+          chatTiming,
+          Response.json(
+            {
+              error: runtimeMisconfiguration,
+              backend: "openclaw",
+              mode: chatMode,
+              strictLocalOnly,
+            },
+            {
+              status: 503,
+              headers: {
+                "X-Chat-Backend": "openclaw",
+                "X-Chat-Mode": chatMode,
+              },
+            },
+          ),
+          "openclaw_runtime_misconfigured",
         );
       }
 
@@ -9109,6 +9205,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const action = url.searchParams.get("action");
   const savedRuntimeEnv = readSavedLlmRuntimeEnv();
+  const explicitRuntimeConfig = readExplicitLlmRuntimeConfig();
   const strictLocalOnly = savedRuntimeEnv.strictLocalOnly;
 
   if (action === "health") {
@@ -9139,9 +9236,10 @@ export async function GET(request: Request) {
       const ls = await localHealth();
       ollama = ls.running;
       const configuredLocalModel =
-        savedRuntimeEnv.llmProvider === "local"
-          ? savedRuntimeEnv.ollamaModel
-          : null;
+        configuredLocalModelForSavedRuntime(
+          savedRuntimeEnv,
+          explicitRuntimeConfig,
+        );
       const localReady = Boolean(
         ollama &&
         configuredLocalModel !== null &&
@@ -9182,9 +9280,10 @@ export async function GET(request: Request) {
       ollama: ollama ? "connected" : "disconnected",
       ollamaModels: [],
       configuredLocalModel:
-        savedRuntimeEnv.llmProvider === "local"
-          ? savedRuntimeEnv.ollamaModel
-          : null,
+        configuredLocalModelForSavedRuntime(
+          savedRuntimeEnv,
+          explicitRuntimeConfig,
+        ),
       llmProvider: savedRuntimeEnv.llmProvider,
       strictLocalOnly,
       openhands: openhands ? "connected" : "disconnected",

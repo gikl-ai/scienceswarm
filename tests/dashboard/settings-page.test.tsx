@@ -713,6 +713,67 @@ describe("SettingsPage runtime settings", () => {
     expect(screen.getByTestId("runtime-apply-button")).toBeEnabled();
   });
 
+  it("persists the configured local model when applying the local runtime", async () => {
+    const fetchMock = buildFetchStub({
+      settings: {
+        llmProvider: "local",
+        ollamaModel: "gemma4:latest",
+      },
+      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:latest"] },
+      openclaw: {
+        installed: true,
+        configured: true,
+        running: true,
+        model: "ollama/gemma4:latest",
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SettingsPage />);
+
+    await screen.findByText("API Keys & Model");
+    fireEvent.click(screen.getByTestId("runtime-apply-button"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Local runtime saved and applied to OpenClaw")).toBeInTheDocument();
+    });
+
+    const settingsActions = fetchMock.mock.calls
+      .filter(([, init]) => (init?.method ?? "GET") === "POST")
+      .filter(([input]) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        return url === "/api/settings";
+      })
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as { action?: string });
+
+    expect(settingsActions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "save-provider", provider: "local" }),
+        expect.objectContaining({ action: "save-ollama-model", ollamaModel: "gemma4:latest" }),
+      ]),
+    );
+
+    const openclawActions = fetchMock.mock.calls
+      .filter(([, init]) => (init?.method ?? "GET") === "POST")
+      .filter(([input]) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        return url === "/api/settings/openclaw";
+      })
+      .map(([, init]) => (JSON.parse(String(init?.body ?? "{}")) as { action?: string }).action);
+
+    expect(openclawActions).toEqual(["configure", "stop", "start"]);
+  });
+
   it("connects an existing Telegram bot token from Settings", async () => {
     const fetchMock = buildFetchStub();
     vi.stubGlobal("fetch", fetchMock);

@@ -548,6 +548,7 @@ export default function SettingsPage() {
     const provider = llmProviderDraft;
     const model = llmModelDraft.trim();
     const key = openAiKeyDraft.trim();
+    const localModel = resolveConfiguredOllamaModel(settings);
     const hasSavedKey = Boolean(settings?.openaiKey);
     const shouldApplyToOpenClaw =
       Boolean(openclawSetup?.installed) || health?.openclaw === "connected";
@@ -581,6 +582,14 @@ export default function SettingsPage() {
         const modelSave = await postSettings({ action: "save-model", model });
         if (modelSave.ok !== true) {
           throw new Error(String(modelSave.error || "Failed to save OpenAI model"));
+        }
+      } else {
+        const localModelSave = await postSettings({
+          action: "save-ollama-model",
+          ollamaModel: localModel,
+        });
+        if (localModelSave.ok !== true) {
+          throw new Error(String(localModelSave.error || "Failed to save local Ollama model"));
         }
       }
 

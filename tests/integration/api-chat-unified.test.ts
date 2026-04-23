@@ -1235,6 +1235,54 @@ describe("GET /api/chat/unified", () => {
     }
   });
 
+  it("defaults configuredLocalModel to gemma4:latest when local provider is selected without OLLAMA_MODEL", async () => {
+    const originalCwd = process.cwd();
+    const isolatedCwd = mkdtempSync(
+      path.join(tmpdir(), "scienceswarm-chat-health-"),
+    );
+
+    process.chdir(isolatedCwd);
+    writeFileSync(
+      path.join(isolatedCwd, ".env"),
+      "LLM_PROVIDER=local\nAGENT_BACKEND=openclaw\n",
+      "utf8",
+    );
+
+    try {
+      resolveAgentConfig.mockReturnValue({
+        type: "openclaw",
+        url: "http://localhost:19002",
+      });
+      openClawGatewayHealthCheck.mockResolvedValueOnce({
+        status: "connected",
+        gateway: "ws://127.0.0.1:19002",
+      });
+      localHealthCheck.mockResolvedValueOnce({
+        running: true,
+        models: ["gemma4:latest"],
+        url: "http://localhost:11434",
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
+      );
+
+      const request = new Request(
+        "http://localhost/api/chat/unified?action=health",
+      );
+      const response = await GET(request);
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.llmProvider).toBe("local");
+      expect(body.configuredLocalModel).toBe("gemma4:latest");
+      expect(body.ready).toBe(true);
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(isolatedCwd, { recursive: true, force: true });
+    }
+  });
+
   it("returns a strict-local-only poll response when the mode is enabled", async () => {
     vi.stubEnv("SCIENCESWARM_STRICT_LOCAL_ONLY", "1");
 
@@ -1899,6 +1947,43 @@ describe("POST /api/chat/unified", () => {
     expect(sendAgentMessage).not.toHaveBeenCalled();
     expect(sendOpenClawMessage).not.toHaveBeenCalled();
     expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it("fails fast when OpenAI runtime is selected but the saved API key is invalid", async () => {
+    vi.stubEnv("LLM_PROVIDER", "openai");
+    vi.stubEnv("LLM_MODEL", "gpt-5.4");
+    vi.stubEnv("OPENAI_API_KEY", "asdfghjkl");
+
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawGatewayHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+    });
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "invalid-openai-runtime-test",
+      },
+      body: JSON.stringify({
+        message: "Hi",
+        messages: [{ role: "user", content: "Hi" }],
+        projectId: "alpha-project",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      backend: "openclaw",
+      error: expect.stringContaining("OpenAI runtime is selected"),
+    });
+    expect(sendOpenClawMessage).not.toHaveBeenCalled();
   });
 
   it("does not bypass OpenClaw tools mode for scientific source prompts", async () => {
