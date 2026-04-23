@@ -12,6 +12,7 @@ import {
 } from "@/lib/paper-library/graph";
 import type { PaperIdentifier, PaperReviewItem } from "@/lib/paper-library/contracts";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
+import { getPaperLibraryGraphPath } from "@/lib/paper-library/state";
 
 const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
 const ORIGINAL_SCIENCESWARM_USER_HANDLE = process.env.SCIENCESWARM_USER_HANDLE;
@@ -245,6 +246,7 @@ describe("paper-library graph", () => {
     const firstPage = windowPaperLibraryGraph(graph!, { limit: 2 });
     expect(firstPage.nodes).toHaveLength(2);
     expect(firstPage.nextCursor).toBeDefined();
+    expect(firstPage.sourceRuns.length).toBeGreaterThan(0);
 
     const focused = windowPaperLibraryGraph(graph!, { focusNodeId: "paper:doi:10.1000/source", limit: 10 });
     expect(focused.filteredCount).toBe(2);
@@ -253,6 +255,10 @@ describe("paper-library graph", () => {
       "paper:doi:10.2000/target",
     ]);
     expect(focused.edges).toHaveLength(1);
+
+    const secondPage = windowPaperLibraryGraph(graph!, { cursor: firstPage.nextCursor, limit: 2 });
+    expect(secondPage.sourceRuns).toEqual([]);
+    expect(secondPage.warnings).toEqual([]);
   });
 
   it("rebuilds persisted graphs after review state changes", async () => {
@@ -278,5 +284,26 @@ describe("paper-library graph", () => {
       adapters: [],
     });
     expect(rebuilt?.nodes[0]?.title).toBe("Corrected Source Title");
+  });
+
+  it("rebuilds instead of throwing when a persisted graph cache is malformed or from an old version", async () => {
+    await seedReviewState([
+      reviewItem({ paperId: "source", title: "Source", identifiers: { doi: "10.1000/source" } }),
+    ]);
+    await mkdir(path.dirname(getPaperLibraryGraphPath("project-alpha", "scan-1", stateRoot())), { recursive: true });
+    await writeFile(getPaperLibraryGraphPath("project-alpha", "scan-1", stateRoot()), JSON.stringify({
+      version: 999,
+      project: "project-alpha",
+      scanId: "scan-1",
+      updatedAt: now(),
+    }), "utf-8");
+
+    const graph = await getOrBuildPaperLibraryGraph({
+      project: "project-alpha",
+      scanId: "scan-1",
+      brainRoot,
+      adapters: [],
+    });
+    expect(graph?.nodes[0]?.id).toBe("paper:doi:10.1000/source");
   });
 });

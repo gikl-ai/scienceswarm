@@ -73,6 +73,7 @@ export interface PaperLibraryGraphFetchResult extends Partial<PaperLibraryGraphR
 
 export interface PaperLibraryGraphAdapter {
   source: PaperMetadataSource;
+  lookupIdentifier?(identifiers: PaperIdentifier): string | null;
   fetch(seed: {
     paperId: string;
     identifiers: PaperIdentifier;
@@ -456,7 +457,7 @@ async function enrichSeed(input: {
   warnings: string[];
 }): Promise<void> {
   const startedAt = nowIso();
-  const identifier = cacheIdentifier(input.seed.identifiers);
+  const identifier = input.adapter.lookupIdentifier?.(input.seed.identifiers) ?? cacheIdentifier(input.seed.identifiers);
   if (!identifier) {
     input.sourceRuns.push(sourceRun({
       source: input.adapter.source,
@@ -465,7 +466,7 @@ async function enrichSeed(input: {
       attempts: 0,
       fetchedCount: 0,
       cacheHits: 0,
-      message: "No stable external identifier available for graph enrichment.",
+      message: `No supported identifier available for ${input.adapter.source} graph enrichment.`,
       startedAt,
       completedAt: nowIso(),
     }));
@@ -695,10 +696,14 @@ export async function getOrBuildPaperLibraryGraph(input: BuildPaperLibraryGraphI
       getPaperLibraryGraphPath(input.project, input.scanId, getProjectStateRootForBrainRoot(input.project, input.brainRoot)),
     );
     if (raw) {
-      const graph = normalizeGraph(raw);
-      const scan = await readPaperLibraryScan(input.project, input.scanId, input.brainRoot);
-      if (!scan) return null;
-      if (Date.parse(graph.updatedAt) >= Date.parse(scan.updatedAt)) return graph;
+      try {
+        const graph = normalizeGraph(raw);
+        const scan = await readPaperLibraryScan(input.project, input.scanId, input.brainRoot);
+        if (!scan) return null;
+        if (Date.parse(graph.updatedAt) >= Date.parse(scan.updatedAt)) return graph;
+      } catch {
+        // Malformed or version-mismatched graph cache falls through to a rebuild.
+      }
     }
   }
   return buildPaperLibraryGraph(input);
@@ -722,11 +727,12 @@ export function windowPaperLibraryGraph(
     : graph.nodes;
   const page = readCursorWindow(filteredNodes, { cursor: options.cursor, limit: options.limit });
   const included = new Set(page.items.map((node) => node.id));
+  const includeMetadata = !options.cursor;
   return {
     nodes: page.items,
     edges: graph.edges.filter((edge) => included.has(edge.sourceNodeId) && included.has(edge.targetNodeId)),
-    sourceRuns: graph.sourceRuns,
-    warnings: graph.warnings,
+    sourceRuns: includeMetadata ? graph.sourceRuns : [],
+    warnings: includeMetadata ? graph.warnings : [],
     nextCursor: page.nextCursor,
     totalCount: graph.nodes.length,
     filteredCount: filteredNodes.length,
@@ -756,6 +762,7 @@ const SEMANTIC_SCHOLAR_GRAPH_FIELDS = [
 export function createSemanticScholarGraphAdapter(): PaperLibraryGraphAdapter {
   return {
     source: "semantic_scholar",
+    lookupIdentifier: semanticScholarLookupId,
     async fetch(seed) {
       const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY?.trim();
       if (!apiKey) {
@@ -823,6 +830,8 @@ function semanticScholarLookupId(identifiers: PaperIdentifier): string | null {
   if (normalized.doi) return `DOI:${normalized.doi}`;
   if (normalized.arxivId) return `ARXIV:${normalized.arxivId}`;
   if (normalized.pmid) return `PMID:${normalized.pmid}`;
+  // Semantic Scholar's documented paper lookup examples cover DOI, arXiv, PMID, and Semantic Scholar paper IDs.
+  // OpenAlex IDs remain useful as local graph identities, but we do not attempt to query them here.
   return null;
 }
 

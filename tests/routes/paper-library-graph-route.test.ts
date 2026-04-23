@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initBrain } from "@/brain/init";
 import type { PaperReviewItem } from "@/lib/paper-library/contracts";
+import { getPaperLibraryGraphPath } from "@/lib/paper-library/state";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 const mockIsLocal = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
@@ -153,5 +154,25 @@ describe("paper-library graph route", () => {
       "http://localhost/api/brain/paper-library/graph?project=project-alpha&scanId=scan-1",
     ));
     expect(response.status).toBe(403);
+  });
+
+  it("rebuilds stale or malformed cached graph files instead of surfacing a 400", async () => {
+    await mkdir(path.dirname(getPaperLibraryGraphPath("project-alpha", "scan-1", stateRoot())), { recursive: true });
+    await writeFile(getPaperLibraryGraphPath("project-alpha", "scan-1", stateRoot()), JSON.stringify({
+      version: 999,
+      project: "project-alpha",
+      scanId: "scan-1",
+      updatedAt: new Date().toISOString(),
+    }), "utf-8");
+
+    const { GET } = await import("@/app/api/brain/paper-library/graph/route");
+    const response = await GET(new Request(
+      "http://localhost/api/brain/paper-library/graph?project=project-alpha&scanId=scan-1",
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { ok: boolean; nodes: Array<{ id: string }> };
+    expect(body.ok).toBe(true);
+    expect(body.nodes[0]?.id).toBe("paper:doi:10.1000/route");
   });
 });
