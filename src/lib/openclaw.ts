@@ -634,6 +634,19 @@ export async function healthCheck(): Promise<OpenClawStatus> {
  * the full `healthCheck()` path.
  */
 export async function gatewayHealthCheck(): Promise<OpenClawGatewayStatus> {
+  let isGatewayConnected: (() => boolean) | undefined;
+  try {
+    ({ isGatewayConnected } = await import("@/lib/openclaw/gateway-ws-client"));
+  } catch {
+    // If the WS helper cannot be loaded, fall back to HTTP readiness below.
+  }
+  if (isGatewayConnected?.()) {
+    return {
+      status: "connected",
+      gateway: gatewayHealthUrl(),
+    };
+  }
+
   const { reachable, gateway } = await probeGatewayHealth(1500);
   if (!reachable) {
     return {
