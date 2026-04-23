@@ -63,6 +63,9 @@ describe("PaperLibrary gap suggestions", () => {
     );
 
     let gapState: "open" | "watching" = "open";
+    let graphRequests = 0;
+    let clusterRequests = 0;
+    const gapGetUrls: string[] = [];
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -73,6 +76,7 @@ describe("PaperLibrary gap suggestions", () => {
       }
 
       if (url.startsWith("/api/brain/paper-library/graph?")) {
+        graphRequests += 1;
         return Response.json({
           ok: true,
           nodes: [
@@ -100,6 +104,7 @@ describe("PaperLibrary gap suggestions", () => {
       }
 
       if (url.startsWith("/api/brain/paper-library/clusters?")) {
+        clusterRequests += 1;
         return Response.json({
           ok: true,
           clusters: [
@@ -133,6 +138,7 @@ describe("PaperLibrary gap suggestions", () => {
       }
 
       if (url.startsWith("/api/brain/paper-library/gaps?")) {
+        gapGetUrls.push(url);
         return Response.json({
           ok: true,
           suggestions: [
@@ -205,5 +211,139 @@ describe("PaperLibrary gap suggestions", () => {
     await waitFor(() => {
       expect(screen.getByText("watching")).toBeInTheDocument();
     });
+    expect(graphRequests).toBe(1);
+    expect(clusterRequests).toBe(1);
+    expect(gapGetUrls).toHaveLength(2);
+    expect(gapGetUrls.every((url) => !url.includes("refresh="))).toBe(true);
+  });
+
+  it("reloads only gap suggestions when the gap filter changes", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "graph",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+      }),
+    );
+
+    let graphRequests = 0;
+    let clusterRequests = 0;
+    let gapRequests = 0;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({ ok: true, scan: baseScan() });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/graph?")) {
+        graphRequests += 1;
+        return Response.json({
+          ok: true,
+          nodes: [],
+          edges: [],
+          sourceRuns: [],
+          warnings: [],
+          totalCount: 0,
+          filteredCount: 0,
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/clusters?")) {
+        clusterRequests += 1;
+        return Response.json({
+          ok: true,
+          clusters: [],
+          unclusteredCount: 0,
+          model: {
+            id: "paper-library-hash-embedding-v1",
+            provider: "local_hash",
+            dimensions: 256,
+            chunking: "semantic-summary-v1",
+            status: "ready",
+            cacheHits: 0,
+            generatedCount: 0,
+            reusedGbrainCount: 0,
+            fallbackCount: 0,
+          },
+          warnings: [],
+          totalCount: 0,
+          filteredCount: 0,
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/gaps?")) {
+        gapRequests += 1;
+        const search = new URL(url, "http://localhost");
+        const state = search.searchParams.get("state");
+        return Response.json({
+          ok: true,
+          suggestions: state === "watching"
+            ? []
+            : [
+                {
+                  id: "gap-1",
+                  scanId: "scan-1",
+                  nodeId: "paper:doi:10.2000/missing",
+                  title: "Missing Seminal Paper",
+                  authors: ["Liskov"],
+                  year: 2025,
+                  venue: "Nature",
+                  identifiers: { doi: "10.2000/missing" },
+                  sources: ["semantic_scholar"],
+                  state: "open",
+                  reasonCodes: ["citation_frequency"],
+                  score: {
+                    overall: 0.88,
+                    citationFrequency: 0.75,
+                    bridgePosition: 0.5,
+                    clusterGap: 0.5,
+                    recentConnected: 1,
+                    disagreementPenalty: 0,
+                  },
+                  localConnectionCount: 3,
+                  evidencePaperIds: ["paper-1"],
+                  evidenceClusterIds: ["cluster-1"],
+                  evidenceNodeIds: ["paper:doi:10.1000/local"],
+                  createdAt: "2026-04-23T12:10:00.000Z",
+                  updatedAt: "2026-04-23T12:10:00.000Z",
+                },
+              ],
+          stateCounts: {
+            open: 1,
+            watching: 0,
+            ignored: 0,
+            saved: 0,
+            imported: 0,
+          },
+          warnings: [],
+          totalCount: 1,
+          filteredCount: state === "watching" ? 0 : 1,
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByText("Missing Seminal Paper (2025)")).toBeInTheDocument();
+    expect(graphRequests).toBe(1);
+    expect(clusterRequests).toBe(1);
+    expect(gapRequests).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "watching 0" }));
+
+    await waitFor(() => {
+      expect(gapRequests).toBe(2);
+    });
+    expect(graphRequests).toBe(1);
+    expect(clusterRequests).toBe(1);
+    expect(screen.getByText("No gap suggestions match this filter yet.")).toBeInTheDocument();
   });
 });
