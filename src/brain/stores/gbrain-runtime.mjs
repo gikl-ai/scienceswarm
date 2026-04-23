@@ -1,8 +1,9 @@
 /**
  * Runtime bridge for the installed gbrain package.
  *
- * Keep ScienceSwarm on gbrain's exported package surface for the small set of
- * runtime APIs we intentionally call from the Next.js host process.
+ * `createRuntimeEngine` uses gbrain's exported `gbrain/engine-factory`
+ * subpath. The command wrappers below still reach into internal gbrain
+ * command modules until upstream exports stable package subpaths for them.
  */
 
 export async function createRuntimeEngine(config) {

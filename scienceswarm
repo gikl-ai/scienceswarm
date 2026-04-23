@@ -62,6 +62,8 @@ load_repo_env() {
   if [ -f "$REPO_ROOT/.env" ]; then
     local existing_env=""
     existing_env="$(mktemp)"
+    # Snapshot after OpenClaw defaults are loaded so .env cannot override
+    # runtime-resolved OpenClaw values or explicit caller env.
     env -0 > "$existing_env"
     set -a
     # shellcheck disable=SC1091
