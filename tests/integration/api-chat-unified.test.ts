@@ -1911,6 +1911,58 @@ describe("POST /api/chat/unified", () => {
     infoSpy.mockRestore();
   });
 
+  it("records streaming timing failures as stream errors", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockRejectedValueOnce(new Error("gateway exploded"));
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Trigger stream error",
+        projectId: "alpha-project",
+        mode: "reasoning",
+        streamPhases: true,
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const events = await readSseEvents(response);
+    expect(events.at(-1)).toMatchObject({
+      backend: "openclaw",
+      generatedFiles: [],
+    });
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      outcome?: string;
+      status?: number;
+    };
+    expect(payload).toMatchObject({
+      outcome: "stream_error",
+      status: 500,
+    });
+    infoSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
   it("pre-materializes openclaw-tools turns even without content hints", () => {
     expect(
       shouldPreMaterializeProjectWorkspaceForTurn({

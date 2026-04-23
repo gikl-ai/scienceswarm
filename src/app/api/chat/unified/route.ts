@@ -7349,6 +7349,7 @@ function streamOpenClawResponse(params: {
 }): Response {
   const encoder = new TextEncoder();
   let streamClosed = false;
+  let timingFinish = { outcome: "stream_closed", status: 200 };
 
   return new Response(
     new ReadableStream({
@@ -7378,7 +7379,7 @@ function streamOpenClawResponse(params: {
             // The browser may have closed the SSE connection before OpenClaw finished.
           } finally {
             streamClosed = true;
-            params.timing?.finish({ outcome: "stream_closed", status: 200 });
+            params.timing?.finish(timingFinish);
           }
         };
 
@@ -7784,6 +7785,7 @@ function streamOpenClawResponse(params: {
             });
             params.onComplete?.();
           } catch (err) {
+            timingFinish = { outcome: "stream_error", status: 500 };
             console.warn(
               "OpenClaw stream failed during unified response:",
               err instanceof Error ? err.message : String(err),
