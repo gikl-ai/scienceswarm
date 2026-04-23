@@ -341,10 +341,22 @@ describe("OpenClaw gatewayHealthCheck", () => {
 
     await expect(gatewayHealthCheck()).resolves.toEqual({
       status: "connected",
-      gateway: expect.stringMatching(/^ws:\/\/127\.0\.0\.1:\d+$/),
+      gateway: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("does not hide runtime failures from the authenticated gateway check", async () => {
+    globalThis.fetch = vi.fn(async () => new Response("ok", { status: 200 }));
+    isGatewayConnectedMock.mockImplementation(() => {
+      throw new Error("gateway auth state unavailable");
+    });
+
+    await expect(gatewayHealthCheck()).rejects.toThrow(
+      "gateway auth state unavailable",
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it("reports disconnected when the gateway health endpoint is unavailable", async () => {
