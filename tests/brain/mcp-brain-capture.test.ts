@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "events";
 import { Readable, Writable } from "stream";
+import { mkdtempSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import matter from "gray-matter";
 import {
   buildCapturePage,
@@ -10,6 +13,14 @@ import { createGbrainClient, type SpawnFn } from "@/brain/gbrain-client";
 
 const FIXED_DATE = new Date("2026-04-13T12:34:56Z");
 const FIXED_HASH = "abc123";
+const RUNTIME_PROVENANCE = {
+  runtimeSessionId: "session-1",
+  hostId: "codex",
+  sourceArtifactId: "artifact-1",
+  promptHash: "prompt-hash-1",
+  inputFileRefs: ["gbrain:wiki/notes/assay-summary"],
+  approvalState: "approved" as const,
+};
 
 beforeEach(() => {
   vi.stubEnv("SCIENCESWARM_USER_HANDLE", "@test-researcher");
@@ -95,6 +106,22 @@ describe("buildCapturePage", () => {
       "@alice",
     );
     expect(page.markdown).toContain("[Source: @alice via mcp:unknown, 2026-04-13]");
+  });
+
+  it("persists RuntimeGbrainProvenance in frontmatter when runtime provenance is supplied", () => {
+    const page = buildCapturePage(
+      {
+        content: "Runtime synthesized a short note.",
+        title: "Runtime note",
+        runtimeProvenance: RUNTIME_PROVENANCE,
+      },
+      FIXED_DATE,
+      FIXED_HASH,
+      "@alice",
+    );
+
+    const parsed = matter(page.markdown);
+    expect(parsed.data.runtime_gbrain_provenance).toEqual(RUNTIME_PROVENANCE);
   });
 
   it("strips leading markdown heading markers when auto-extracting the title", () => {
@@ -222,6 +249,70 @@ describe("createBrainCaptureHandler", () => {
     expect(client.putPage).not.toHaveBeenCalled();
   });
 
+  it("rejects runtime-originated captures without RuntimeGbrainProvenance before writing", async () => {
+    const client = { putPage: vi.fn(), linkPages: vi.fn() };
+    const handler = createBrainCaptureHandler({ client });
+
+    const result = await handler({
+      content: "Runtime note",
+      runtimeOriginated: true,
+      runtimeSessionId: "session-1",
+      runtimeHostId: "codex",
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("RuntimeGbrainProvenance");
+    expect(client.putPage).not.toHaveBeenCalled();
+  });
+
+  it("rejects runtime-originated captures when provenance does not match the session", async () => {
+    const client = { putPage: vi.fn(), linkPages: vi.fn() };
+    const handler = createBrainCaptureHandler({ client });
+
+    const result = await handler({
+      content: "Runtime note",
+      runtimeOriginated: true,
+      runtimeSessionId: "session-2",
+      runtimeHostId: "codex",
+      runtimeProvenance: RUNTIME_PROVENANCE,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Invalid RuntimeGbrainProvenance");
+    expect(client.putPage).not.toHaveBeenCalled();
+  });
+
+  it("allows runtime-originated captures with matching RuntimeGbrainProvenance", async () => {
+    const calls: Array<{ slug: string; content: string }> = [];
+    const handler = createBrainCaptureHandler({
+      now: () => FIXED_DATE,
+      hash: () => FIXED_HASH,
+      client: {
+        async putPage(slug, content) {
+          calls.push({ slug, content });
+          return { stdout: "ok\n", stderr: "" };
+        },
+        async linkPages() {
+          return { stdout: "", stderr: "" };
+        },
+      },
+    });
+
+    const result = await handler({
+      content: "Runtime note",
+      title: "Runtime note",
+      runtimeOriginated: true,
+      runtimeSessionId: "session-1",
+      runtimeHostId: "codex",
+      runtimeProvenance: RUNTIME_PROVENANCE,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(calls).toHaveLength(1);
+    const parsed = matter(calls[0].content);
+    expect(parsed.data.runtime_gbrain_provenance).toEqual(RUNTIME_PROVENANCE);
+  });
+
   it("reports a human-readable error when gbrain is not on PATH (ENOENT)", async () => {
     const handler = createBrainCaptureHandler({
       client: {
@@ -245,14 +336,20 @@ describe("createBrainCaptureHandler", () => {
 
   it("fails loud when SCIENCESWARM_USER_HANDLE is unset", async () => {
     vi.unstubAllEnvs();
+    const cwdWithoutEnv = mkdtempSync(join(tmpdir(), "scienceswarm-no-env-"));
+    vi.spyOn(process, "cwd").mockReturnValue(cwdWithoutEnv);
     const client = { putPage: vi.fn(), linkPages: vi.fn() };
     const handler = createBrainCaptureHandler({ client });
 
-    const result = await handler({ content: "hello" });
+    try {
+      const result = await handler({ content: "hello" });
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("SCIENCESWARM_USER_HANDLE");
-    expect(client.putPage).not.toHaveBeenCalled();
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("SCIENCESWARM_USER_HANDLE");
+      expect(client.putPage).not.toHaveBeenCalled();
+    } finally {
+      rmSync(cwdWithoutEnv, { recursive: true, force: true });
+    }
   });
 
   it("surfaces stderr when gbrain exits non-zero", async () => {

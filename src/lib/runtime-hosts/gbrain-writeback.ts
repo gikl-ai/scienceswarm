@@ -86,7 +86,7 @@ function runtimeArtifactSlug(artifact: RuntimeArtifactRecord): string {
   ].join("-");
 }
 
-function validateRuntimeGbrainProvenance(input: {
+export function validateRuntimeGbrainProvenance(input: {
   provenance: RuntimeGbrainProvenance;
   runtimeSessionId: string;
   hostId: RuntimeHostId | string;
