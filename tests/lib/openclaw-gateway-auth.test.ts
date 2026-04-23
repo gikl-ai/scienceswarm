@@ -47,7 +47,15 @@ describe("OpenClaw gateway auth config", () => {
     mkdirSync(path.dirname(configPath), { recursive: true });
     writeFileSync(
       configPath,
-      JSON.stringify({ gateway: { auth: { token: "state-token" } } }),
+      [
+        "// JSON5 comments and unquoted keys are valid upstream config",
+        "{",
+        "  gateway: {",
+        '    auth: { token: "state-token" },',
+        "  },",
+        "}",
+        "",
+      ].join("\n"),
       "utf8",
     );
 
@@ -78,17 +86,47 @@ describe("OpenClaw gateway auth config", () => {
     );
   });
 
-  it("replaces malformed state-dir config with valid gateway auth", () => {
+  it("preserves existing config fields while adding gateway auth", () => {
     const configPath = path.join(tempRoot, "openclaw", "openclaw.json");
     mkdirSync(path.dirname(configPath), { recursive: true });
-    writeFileSync(configPath, "{not-json", "utf8");
+    writeFileSync(
+      configPath,
+      [
+        "{",
+        '  agents: { defaults: { workspace: "/tmp/project-alpha" } },',
+        "  gateway: {",
+        '    bind: "loopback",',
+        "  },",
+        "}",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
 
     ensureOpenClawGatewayAuthConfig({ port: 19003 });
 
     const config = JSON.parse(readFileSync(configPath, "utf8")) as {
-      gateway?: { port?: number; auth?: { token?: string } };
+      agents?: { defaults?: { workspace?: string } };
+      gateway?: {
+        bind?: string;
+        port?: number;
+        auth?: { token?: string };
+      };
     };
+    expect(config.agents?.defaults?.workspace).toBe("/tmp/project-alpha");
+    expect(config.gateway?.bind).toBe("loopback");
     expect(config.gateway?.port).toBe(19003);
     expect(config.gateway?.auth?.token).toEqual(expect.any(String));
+  });
+
+  it("does not overwrite malformed state-dir config", () => {
+    const configPath = path.join(tempRoot, "openclaw", "openclaw.json");
+    mkdirSync(path.dirname(configPath), { recursive: true });
+    writeFileSync(configPath, "{not-json", "utf8");
+
+    expect(() =>
+      ensureOpenClawGatewayAuthConfig({ port: 19003 }),
+    ).toThrow("is not valid JSON5");
+    expect(readFileSync(configPath, "utf8")).toBe("{not-json");
   });
 });

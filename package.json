@@ -54,6 +54,7 @@
     "gbrain": "git+https://github.com/garrytan/gbrain.git#90c5d93fcebb94c9d1e3b31167f9760fbfe077a9",
     "googleapis": "^171.4.0",
     "gray-matter": "^4.0.3",
+    "json5": "^2.2.3",
     "katex": "^0.16.45",
     "next": "16.2.3",
     "openai": "^6.34.0",
