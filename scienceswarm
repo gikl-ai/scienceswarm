@@ -99,7 +99,7 @@ load_repo_env() {
 
   : "${FRONTEND_HOST:=127.0.0.1}"
   : "${FRONTEND_PORT:=3001}"
-  : "${FRONTEND_USE_HTTPS:=true}"
+  : "${FRONTEND_USE_HTTPS:=false}"
   DATA_ROOT="${SCIENCESWARM_DIR:-$HOME/.scienceswarm}"
   RUN_ROOT="$DATA_ROOT/run"
   LAUNCHER_PID_FILE="$RUN_ROOT/launcher.pid"
@@ -357,13 +357,15 @@ cmd_status() {
     gateway_status="running (pid $gateway_pid)"
   fi
 
-  if is_truthy "${FRONTEND_USE_HTTPS:-true}"; then
+  if is_truthy "${FRONTEND_USE_HTTPS:-false}"; then
     if curl -kfsS --max-time 2 "https://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
       frontend_health="ok"
     elif curl -fsS --max-time 2 "http://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
       frontend_health="ok"
     fi
   elif curl -fsS --max-time 2 "http://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
+    frontend_health="ok"
+  elif curl -kfsS --max-time 2 "https://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
     frontend_health="ok"
   fi
 
