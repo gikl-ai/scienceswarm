@@ -489,6 +489,8 @@ function buildProgressSectionChanges(blocks: ProgressTranscriptBlock[]): ReactNo
 
   blocks.forEach((block, index) => {
     const nextSection = block.section;
+    // Repeat labels on section switches so interleaved thinking/activity reads
+    // like the live OpenClaw transcript order instead of two detached panels.
     if (nextSection !== lastSection) {
       const sectionMeta = PROGRESS_SECTION_META[nextSection];
       const sectionTitleId = `openclaw-progress-section-${nextSection}-${index}`;
@@ -1121,7 +1123,7 @@ export function ChatMessage({
             {buildProgressSectionChanges(progressTranscript)}
 
             {workingElapsed && (
-              <div className="whitespace-pre-wrap text-xs text-muted">
+              <div className="whitespace-pre-wrap text-muted">
                 {`• Working (${workingElapsed} • esc to interrupt)`}
               </div>
             )}

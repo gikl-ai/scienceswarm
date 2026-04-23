@@ -150,11 +150,33 @@ describe("ChatMessage", () => {
 
     const progressLog = screen.getByRole("log");
     const text = progressLog.textContent ?? "";
-    expect(text.indexOf("Thinking Trace")).toBeGreaterThan(-1);
-    expect(text.indexOf("OpenClaw Activity")).toBeGreaterThan(-1);
-    expect(text.indexOf("Thinking Trace")).toBeLessThan(text.indexOf("OpenClaw Activity"));
-    expect(text).toContain("Plan: inspect files");
-    expect(text).toContain("Now summarize findings");
+    const firstThinking = text.indexOf("Thinking Trace");
+    const firstPlan = text.indexOf("Plan: inspect files");
+    const firstActivity = text.indexOf("OpenClaw Activity");
+    const firstRead = text.indexOf("Read docs/results_table.csv");
+    const secondThinking = text.indexOf("Thinking Trace", firstThinking + 1);
+    const secondThought = text.indexOf("Now summarize findings");
+    const secondActivity = text.indexOf("OpenClaw Activity", firstActivity + 1);
+    const secondRead = text.indexOf("Read docs/notes.md");
+    for (const position of [
+      firstThinking,
+      firstPlan,
+      firstActivity,
+      firstRead,
+      secondThinking,
+      secondThought,
+      secondActivity,
+      secondRead,
+    ]) {
+      expect(position).toBeGreaterThan(-1);
+    }
+    expect(firstThinking).toBeLessThan(firstPlan);
+    expect(firstPlan).toBeLessThan(firstActivity);
+    expect(firstActivity).toBeLessThan(firstRead);
+    expect(firstRead).toBeLessThan(secondThinking);
+    expect(secondThinking).toBeLessThan(secondThought);
+    expect(secondThought).toBeLessThan(secondActivity);
+    expect(secondActivity).toBeLessThan(secondRead);
   });
 
   it("increments the live Working elapsed row every second under fake timers", () => {
