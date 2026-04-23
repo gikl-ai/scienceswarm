@@ -3859,6 +3859,11 @@ export function useUnifiedChat(
   const refreshOpenClawHealth = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch("/api/chat/unified?action=health");
+      if (!res.ok) {
+        localProviderActiveRef.current = false;
+        setOpenClawConnected(false);
+        return false;
+      }
       const data = await res.json() as Record<string, unknown>;
 
       const agentRecord =
