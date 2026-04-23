@@ -324,6 +324,35 @@ describe("GET /api/settings/openclaw", () => {
     }
   });
 
+  it("returns a controlled error when an already-running gateway cannot save the backend env", async () => {
+    installExecFileMock({ openclawInstalled: false });
+    const fsPromises = await import("node:fs/promises");
+    const readFileMock = fsPromises.readFile as unknown as ReturnType<typeof vi.fn>;
+    const prevImpl = readFileMock.getMockImplementation();
+    readFileMock.mockRejectedValue(Object.assign(new Error("denied"), { code: "EACCES" }));
+
+    try {
+      const { POST } = await import("@/app/api/settings/openclaw/route");
+      const response = await POST(localRequest({ action: "start" }));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toMatchObject({
+        error:
+          "OpenClaw is running, but ScienceSwarm could not save AGENT_BACKEND=openclaw. Check .env file permissions, then retry Start.",
+        running: true,
+        alreadyRunning: true,
+      });
+    } finally {
+      if (prevImpl) {
+        readFileMock.mockImplementation(prevImpl);
+      } else {
+        readFileMock.mockResolvedValue(
+          "OPENAI_API_KEY=sk-test-openai\nLLM_MODEL=gpt-5.4\n",
+        );
+      }
+    }
+  });
+
   it("rejects configure when OpenClaw is attached externally", async () => {
     installExecFileMock({ openclawInstalled: false });
 

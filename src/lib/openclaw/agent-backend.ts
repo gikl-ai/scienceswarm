@@ -26,7 +26,10 @@ export async function activateOpenClawAgentBackend(
   let rawEnv = "";
   try {
     rawEnv = await readFile(envPath, "utf-8");
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw err;
+    }
     // Missing .env is acceptable; create the first entry below.
   }
 

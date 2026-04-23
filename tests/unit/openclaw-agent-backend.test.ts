@@ -64,4 +64,8 @@ describe("activateOpenClawAgentBackend", () => {
 
     await expect(fs.readFile(envPath, "utf-8")).resolves.toBe("AGENT_BACKEND=openclaw");
   });
+
+  it("does not overwrite env content when the existing path cannot be read", async () => {
+    await expect(activateOpenClawAgentBackend(tmpRoot)).rejects.toThrow();
+  });
 });

@@ -158,6 +158,25 @@ async function waitForOpenClawRunning(timeoutMs = 10_000): Promise<boolean> {
   return false;
 }
 
+async function activateOpenClawBackendOrResponse(
+  detail: { alreadyRunning?: boolean } = {},
+): Promise<Response | null> {
+  try {
+    await activateOpenClawAgentBackend();
+    return null;
+  } catch {
+    return Response.json(
+      {
+        error:
+          "OpenClaw is running, but ScienceSwarm could not save AGENT_BACKEND=openclaw. Check .env file permissions, then retry Start.",
+        running: true,
+        alreadyRunning: detail.alreadyRunning === true ? true : undefined,
+      },
+      { status: 500 },
+    );
+  }
+}
+
 export async function GET(): Promise<Response> {
   if (!(await isLocalRequest())) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -271,7 +290,12 @@ export async function POST(request: Request): Promise<Response> {
     case "start": {
       const alreadyRunning = await isOpenClawRunning();
       if (alreadyRunning) {
-        await activateOpenClawAgentBackend();
+        const activationError = await activateOpenClawBackendOrResponse({
+          alreadyRunning: true,
+        });
+        if (activationError) {
+          return activationError;
+        }
         return Response.json({ ok: true, running: true, alreadyRunning: true });
       }
 
@@ -338,7 +362,10 @@ export async function POST(request: Request): Promise<Response> {
               { status: 503 },
             );
           }
-          await activateOpenClawAgentBackend();
+          const activationError = await activateOpenClawBackendOrResponse();
+          if (activationError) {
+            return activationError;
+          }
           return Response.json({ ok: true, running: true });
         }
 
@@ -409,7 +436,10 @@ export async function POST(request: Request): Promise<Response> {
             { status: 503 },
           );
         }
-        await activateOpenClawAgentBackend();
+        const activationError = await activateOpenClawBackendOrResponse();
+        if (activationError) {
+          return activationError;
+        }
         return Response.json({ ok: true, running: true });
       } catch {
         return Response.json({ error: "Start failed" }, { status: 500 });
