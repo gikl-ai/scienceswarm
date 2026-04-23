@@ -30,7 +30,10 @@ class MorningBriefTimeoutError extends Error {
 
 class MorningBriefLLMProviderError extends Error {
   constructor(err: unknown) {
-    super(err instanceof Error ? err.message : "LLM provider unavailable.");
+    super(
+      err instanceof Error ? err.message : "LLM provider unavailable.",
+      err instanceof Error ? { cause: err } : undefined,
+    );
     this.name = "MorningBriefLLMProviderError";
   }
 }
