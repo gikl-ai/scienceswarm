@@ -970,6 +970,58 @@ describe("GET /api/chat/unified", () => {
     expect(sendOpenClawMessage).toHaveBeenCalledTimes(2);
   });
 
+  it("does not cache disconnected OpenClaw chat readiness for the next POST", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck
+      .mockResolvedValueOnce({
+        status: "disconnected",
+        gateway: "",
+      })
+      .mockResolvedValueOnce({
+        status: "connected",
+        gateway: "http://127.0.0.1:19002",
+      });
+    sendOpenClawMessage.mockResolvedValueOnce("Recovered response");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
+    );
+
+    const firstResponse = await POST(new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "runtime-status-negative-cache-test-1",
+      },
+      body: JSON.stringify({
+        message: "Hi",
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    }));
+    expect(firstResponse.status).toBe(503);
+    expect(__getConfiguredAgentRuntimeStatusCacheSizeForTests()).toBe(0);
+
+    const secondResponse = await POST(new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "runtime-status-negative-cache-test-2",
+      },
+      body: JSON.stringify({
+        message: "Hi after Settings restart",
+        messages: [{ role: "user", content: "Hi after Settings restart" }],
+      }),
+    }));
+    expect(secondResponse.status).toBe(200);
+
+    expect(openClawHealthCheck).toHaveBeenCalledTimes(2);
+    expect(sendOpenClawMessage).toHaveBeenCalledTimes(1);
+    expect(__getConfiguredAgentRuntimeStatusCacheSizeForTests()).toBe(1);
+  });
+
   it("prunes expired runtime-status cache entries before caching a new config", async () => {
     vi.useFakeTimers();
     try {

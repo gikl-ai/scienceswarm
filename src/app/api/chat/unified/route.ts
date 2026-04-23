@@ -7224,6 +7224,18 @@ function pruneExpiredConfiguredAgentRuntimeStatusCache(now: number): void {
   }
 }
 
+function shouldCacheConfiguredAgentRuntimeStatus(
+  status: AgentRuntimeStatus,
+  agentConfig: ReturnType<typeof resolveAgentConfig>,
+  options: { preferFastOpenClawGatewayProbe?: boolean } = {},
+): boolean {
+  const isFastOpenClawChatReadiness =
+    agentConfig?.type === "openclaw" &&
+    options.preferFastOpenClawGatewayProbe === true;
+
+  return !isFastOpenClawChatReadiness || status.status === "connected";
+}
+
 async function loadConfiguredAgentRuntimeStatus(
   agentConfig: ReturnType<typeof resolveAgentConfig>,
   strictLocalOnly: boolean,
@@ -7322,14 +7334,18 @@ async function getConfiguredAgentRuntimeStatus(
     .then((status) => {
       const refreshedAt = Date.now();
       pruneExpiredConfiguredAgentRuntimeStatusCache(refreshedAt);
-      configuredAgentRuntimeStatusCache.set(cacheKey, {
-        status,
-        hasChannelInventory: !(
-          agentConfig?.type === "openclaw"
-          && options.preferFastOpenClawGatewayProbe === true
-        ),
-        expiresAt: refreshedAt + AGENT_RUNTIME_STATUS_CACHE_TTL_MS,
-      });
+      if (
+        shouldCacheConfiguredAgentRuntimeStatus(status, agentConfig, options)
+      ) {
+        configuredAgentRuntimeStatusCache.set(cacheKey, {
+          status,
+          hasChannelInventory: !(
+            agentConfig?.type === "openclaw"
+            && options.preferFastOpenClawGatewayProbe === true
+          ),
+          expiresAt: refreshedAt + AGENT_RUNTIME_STATUS_CACHE_TTL_MS,
+        });
+      }
       return status;
     })
     .finally(() => {
