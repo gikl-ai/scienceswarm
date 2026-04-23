@@ -432,6 +432,17 @@ function buildFetchStub(options?: {
       return Response.json(state.runtimeHealth);
     }
 
+    if (url.startsWith("/api/runtime/sessions?")) {
+      return Response.json({ sessions: [] });
+    }
+
+    if (url.startsWith("/api/runtime/sessions/")) {
+      if (url.endsWith("/events")) {
+        return Response.json({ events: [] });
+      }
+      return Response.json({ session: null });
+    }
+
     if (url === "/api/settings/telegram" && method === "POST") {
       const body = JSON.parse(String(init?.body ?? "{}")) as {
         action?: "approve-pending";
@@ -1078,14 +1089,15 @@ describe("SettingsPage runtime settings", () => {
     );
   });
 
-  it("disables hosted runtime defaults under local-only policy", async () => {
+  it("renders project runtime controls and keeps hosted hosts disabled under local-only policy", async () => {
     vi.stubGlobal("fetch", buildFetchStub());
 
     render(<SettingsPage />);
 
-    const hostSelect = await screen.findByTestId("runtime-default-host-select");
+    expect(await screen.findByTestId("project-runtime-project-select")).toHaveValue("alpha-project");
+    const hostSelect = await screen.findByTestId("runtime-host-select");
     const codexOption = within(hostSelect).getByRole("option", {
-      name: "Codex - Blocked by current policy",
+      name: "Codex - Requires cloud-ok",
     });
 
     expect(codexOption).toBeDisabled();

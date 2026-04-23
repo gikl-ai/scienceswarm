@@ -104,6 +104,10 @@ export function getPaperLibraryClustersPath(project: string, scanId: string, sta
   return path.join(getPaperLibraryStateDir(project, stateRoot), "clusters", `${encodeURIComponent(scanId)}.json`);
 }
 
+export function getPaperLibraryGapsPath(project: string, scanId: string, stateRoot?: string): string {
+  return path.join(getPaperLibraryStateDir(project, stateRoot), "gaps", `${encodeURIComponent(scanId)}.json`);
+}
+
 export function parsePersistedState<T>(
   value: unknown,
   schema: z.ZodType<T>,

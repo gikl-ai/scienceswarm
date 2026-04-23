@@ -1199,14 +1199,20 @@ describe("Project dashboard smoke test", () => {
     });
 
     vi.stubGlobal("fetch", fetchMock);
+    window.localStorage.setItem(
+      "scienceswarm.runtime.project.demo-project",
+      JSON.stringify({
+        projectPolicy: "cloud-ok",
+        mode: "chat",
+        selectedHostId: "codex",
+        compareHostIds: ["openclaw"],
+      }),
+    );
     render(<ProjectPage />);
 
-    await screen.findByRole("option", { name: /Codex/ });
-    const policySelect = await screen.findByTestId("runtime-project-policy");
-    fireEvent.change(policySelect, { target: { value: "cloud-ok" } });
-    fireEvent.change(screen.getByTestId("runtime-host-select"), { target: { value: "codex" } });
-
-    expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("Ready to send");
+    await waitFor(() => {
+      expect(screen.queryByTestId("runtime-picker")).not.toBeInTheDocument();
+    });
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "Talk to Codex directly" } });

@@ -7276,6 +7276,10 @@ function shouldCacheConfiguredAgentRuntimeStatus(
   agentConfig: ReturnType<typeof resolveAgentConfig>,
   options: { preferFastOpenClawGatewayProbe?: boolean } = {},
 ): boolean {
+  if (agentConfig?.type === "openclaw" && status.status !== "connected") {
+    return false;
+  }
+
   const isFastOpenClawChatReadiness =
     agentConfig?.type === "openclaw" &&
     options.preferFastOpenClawGatewayProbe === true;
@@ -7357,9 +7361,16 @@ async function getConfiguredAgentRuntimeStatus(
   const now = Date.now();
   pruneExpiredConfiguredAgentRuntimeStatusCache(now);
   const cached = configuredAgentRuntimeStatusCache.get(cacheKey);
+  const canReuseDisconnectedOpenClawStatus =
+    agentConfig?.type !== "openclaw" || cached?.status.status === "connected";
   const canReuseCachedStatus = options.preferFastOpenClawGatewayProbe === true
     || cached?.hasChannelInventory === true;
-  if (cached && cached.expiresAt > now && canReuseCachedStatus) {
+  if (
+    cached &&
+    cached.expiresAt > now &&
+    canReuseCachedStatus &&
+    canReuseDisconnectedOpenClawStatus
+  ) {
     return cached.status;
   }
 

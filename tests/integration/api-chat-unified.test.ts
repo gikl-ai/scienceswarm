@@ -1062,6 +1062,53 @@ describe("GET /api/chat/unified", () => {
     expect(__getConfiguredAgentRuntimeStatusCacheSizeForTests()).toBe(1);
   });
 
+  it("does not reuse disconnected OpenClaw health status for the next GET health probe", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck
+      .mockResolvedValueOnce({
+        status: "disconnected",
+        gateway: "",
+      })
+      .mockResolvedValueOnce({
+        status: "connected",
+        gateway: "ws://127.0.0.1:19002",
+        channels: ["telegram"],
+        agents: 1,
+        sessions: 2,
+      });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
+    );
+
+    const firstResponse = await GET(
+      new Request("http://localhost/api/chat/unified?action=health"),
+    );
+    expect(firstResponse.status).toBe(200);
+    await expect(firstResponse.json()).resolves.toMatchObject({
+      agent: { type: "openclaw", status: "disconnected" },
+      openclaw: "disconnected",
+    });
+    expect(__getConfiguredAgentRuntimeStatusCacheSizeForTests()).toBe(0);
+
+    const secondResponse = await GET(
+      new Request("http://localhost/api/chat/unified?action=health"),
+    );
+    expect(secondResponse.status).toBe(200);
+    const secondBody = await secondResponse.json();
+    expect(secondBody).toMatchObject({
+      agent: { type: "openclaw", status: "connected" },
+      openclaw: "connected",
+    });
+    expect(Array.isArray(secondBody.channels)).toBe(true);
+
+    expect(openClawHealthCheck).toHaveBeenCalledTimes(2);
+    expect(__getConfiguredAgentRuntimeStatusCacheSizeForTests()).toBe(1);
+  });
+
   it("prunes expired runtime-status cache entries before caching a new config", async () => {
     vi.useFakeTimers();
     try {

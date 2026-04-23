@@ -122,7 +122,7 @@ describe("ChatMessage", () => {
     );
 
     const progressLog = screen.getByRole("log");
-    expect(screen.getByText("• Explored")).toBeInTheDocument();
+    expect(progressLog).toHaveTextContent("• Explored");
     expect(progressLog).toHaveTextContent("Checking the imported files...");
     expect(progressLog).toHaveTextContent("└ Read docs/results_table.csv");
     expect(progressLog).toHaveTextContent("Search activityLog in use-unified-chat.ts");
@@ -245,13 +245,13 @@ describe("ChatMessage", () => {
     );
   });
 
-  it("renders streaming thinking rows as markdown in the assistant transcript", () => {
+  it("renders bold, italic, and code inline formatting in thinking rows", () => {
     render(
       <ChatMessage
         role="assistant"
         content=""
         progressLog={[
-          { kind: "thinking", text: "**Moving forward with embedding**" },
+          { kind: "thinking", text: "**Moving forward** with *embedding* and `rg`." },
           { kind: "thinking", text: "I think I'll finalize by saying \"Made it\"." },
         ]}
         timestamp={new Date("2026-04-21T10:00:00.000Z")}
@@ -261,32 +261,35 @@ describe("ChatMessage", () => {
 
     const progressLog = screen.getByRole("log");
     expect(progressLog).toHaveTextContent("Moving forward with embedding");
+    expect(progressLog).toHaveTextContent("rg");
     expect(progressLog).toHaveTextContent("I think I'll finalize by saying \"Made it\".");
-    expect(progressLog).not.toHaveTextContent("**Moving forward with embedding**");
-    expect(
-      screen.getByText("Moving forward with embedding", { selector: "strong" }),
-    ).toBeInTheDocument();
+    expect(progressLog).not.toHaveTextContent("**Moving forward** with *embedding* and `rg`.");
+    expect(progressLog.querySelector("strong")).toHaveTextContent("Moving forward");
+    expect(progressLog.querySelector("em")).toHaveTextContent("embedding");
+    expect(progressLog.querySelector("code")).toHaveTextContent("rg");
     expect(screen.queryByTestId("chat-streaming-spinner")).not.toBeInTheDocument();
   });
 
-  it("renders inline code inside visible explored transcript rows", () => {
+  it("renders mixed inline formatting inside visible explored transcript rows", () => {
     render(
       <ChatMessage
         role="assistant"
         content=""
         progressLog={[
-          { kind: "thinking", text: "Saving output to `docs/results_chart.png`." },
-          { kind: "activity", text: "Read `docs/results_table.csv`" },
+          { kind: "thinking", text: "Saving output to `docs/results_chart.png` *carefully*." },
+          { kind: "activity", text: "Read `docs/results_table.csv` before **summarizing**" },
         ]}
         timestamp={new Date("2026-04-21T10:00:00.000Z")}
         isStreaming
       />,
     );
 
-    expect(
-      screen.getByText("docs/results_table.csv", { selector: "code" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("docs/results_chart.png", { selector: "code" })).toBeInTheDocument();
+    const progressLog = screen.getByRole("log");
+    const codeTexts = Array.from(progressLog.querySelectorAll("code")).map((node) => node.textContent);
+    expect(codeTexts).toContain("docs/results_table.csv");
+    expect(codeTexts).toContain("docs/results_chart.png");
+    expect(progressLog.querySelector("em")).toHaveTextContent("carefully");
+    expect(progressLog.querySelector("strong")).toHaveTextContent("summarizing");
   });
 
   it("normalizes legacy raw tool JSON lines in the visible transcript", () => {
@@ -404,9 +407,7 @@ describe("ChatMessage", () => {
     const progressLog = screen.getByRole("log");
     expect(progressLog).toHaveTextContent("Internal planning that should stay visible.");
     expect(progressLog).toHaveTextContent("Read docs/results_table.csv");
-    expect(
-      screen.getByText("planning", { selector: "strong" }),
-    ).toBeInTheDocument();
+    expect(progressLog.querySelector("strong")).toHaveTextContent("planning");
   });
 
   it("renders a stored progress transcript after a completed assistant turn", () => {

@@ -37,7 +37,14 @@ export async function GET(request: Request) {
     }
     const operations = await readManifestOperations(parsed.data.project, parsed.data.id, guard.brainRoot);
     const page = windowManifestOperations(operations, parsed.data);
-    return Response.json({ ok: true, manifest, operations: page.items, ...page });
+    return Response.json({
+      ok: true,
+      manifest,
+      operations: page.items,
+      nextCursor: page.nextCursor,
+      totalCount: page.totalCount,
+      filteredCount: page.filteredCount,
+    });
   } catch (error) {
     return paperLibraryBadRequest(error);
   }
