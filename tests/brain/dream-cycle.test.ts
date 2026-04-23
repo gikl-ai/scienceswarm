@@ -570,18 +570,19 @@ describe("runDreamCycle", () => {
     );
 
     try {
-      const expectedDate = new Date().toISOString().slice(0, 10);
       const result = await runDreamCycle(config, llm, "sweep-only");
-
-      expect(result.journalSlug).toBe(`journals/${expectedDate}-dream-cycle-sweep-only`);
-      expect(
-        existsSync(join(TEST_ROOT, "journals", `${expectedDate}-dream-cycle-sweep-only.md`)),
-      ).toBe(true);
-
-      const journal = readFileSync(
-        join(TEST_ROOT, "journals", `${expectedDate}-dream-cycle-sweep-only.md`),
-        "utf-8",
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const journalPath = join(
+        TEST_ROOT,
+        "journals",
+        `${dateStr}-dream-cycle-sweep-only.md`,
       );
+      const expectedSlug = `journals/${dateStr}-dream-cycle-sweep-only`;
+
+      expect(result.journalSlug).toBe(expectedSlug);
+      expect(existsSync(journalPath)).toBe(true);
+
+      const journal = readFileSync(journalPath, "utf-8");
       expect(journal).toContain("Dream Cycle Journal");
       expect(journal).toContain("Mode: sweep-only");
     } finally {
