@@ -598,6 +598,51 @@ function firstNonEmptyString(...values: unknown[]): string | undefined {
   return undefined;
 }
 
+function extractTextContent(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value.trim().length > 0 ? value : undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((entry) => extractTextContent(entry))
+      .filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+    return parts.length > 0 ? parts.join("") : undefined;
+  }
+
+  const record = asRecord(value);
+  if (!record) {
+    return undefined;
+  }
+
+  const type = typeof record.type === "string" ? record.type.toLowerCase() : "";
+  if (
+    type
+    && ![
+      "assistant",
+      "delta",
+      "message",
+      "output_text",
+      "text",
+    ].includes(type)
+  ) {
+    return undefined;
+  }
+
+  return firstNonEmptyString(record.delta, record.text, record.message)
+    ?? extractTextContent(record.content);
+}
+
+function firstNonEmptyTextContent(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const text = extractTextContent(value);
+    if (typeof text === "string" && text.trim().length > 0) {
+      return text;
+    }
+  }
+  return undefined;
+}
+
 function collapseProgressWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -1244,17 +1289,249 @@ function formatLifecycleProgressLine(
 ): string | null {
   const summary = summarizeProgressValue(detail);
   switch (phase) {
+    case "start":
+    case "running":
+      return summary ? `Status: running - ${summary}` : "Status: running";
+    case "end":
+    case "done":
+    case "idle":
+      return summary ? `Status: idle - ${summary}` : "Status: idle";
+    case "aborted":
+    case "abort":
+      return summary ? `Turn aborted: ${summary}` : "Turn aborted";
     case "error":
     case "failed":
       return summary ? `Turn failed: ${summary}` : "Turn failed";
     default:
-      return null;
+      return phase && summary ? `Status: ${phase} - ${summary}` : null;
   }
+}
+
+function normalizeGatewayProgressEventName(progress: {
+  type?: unknown;
+  method?: unknown;
+  payload?: unknown;
+  raw?: unknown;
+}): string {
+  const raw = asRecord(progress.raw);
+  const payload = asRecord(progress.payload);
+  const explicitMethod = firstNonEmptyString(
+    progress.method,
+    raw?.event,
+    raw?.method,
+  );
+
+  if (explicitMethod === "chat") {
+    const chatType = firstNonEmptyString(
+      payload?.type,
+      payload?.event,
+      payload?.kind,
+      payload?.phase,
+    );
+    if (chatType?.startsWith("chat.")) {
+      return chatType;
+    }
+    if (chatType) {
+      return `chat.${chatType}`;
+    }
+  }
+
+  if (explicitMethod) {
+    return explicitMethod;
+  }
+
+  const payloadType = firstNonEmptyString(
+    payload?.type,
+    payload?.event,
+    payload?.kind,
+  );
+  if (payloadType?.startsWith("chat.") || payloadType?.startsWith("agent.")) {
+    return payloadType;
+  }
+
+  const eventType = firstNonEmptyString(progress.type, raw?.type);
+  return eventType?.startsWith("chat.") || eventType?.startsWith("agent.")
+    ? eventType
+    : "";
+}
+
+function eventPhaseFromName(eventName: string): string | undefined {
+  const colonPhase = eventName.split(":").at(1);
+  if (colonPhase) {
+    return colonPhase;
+  }
+
+  const parts = eventName.split(".");
+  return parts.length > 2 ? parts.at(-1) : undefined;
+}
+
+function extractGatewayChatMessageText(payload: Record<string, unknown>): string | undefined {
+  const message = asRecord(payload.message);
+  return firstNonEmptyTextContent(
+    payload.delta,
+    payload.text,
+    payload.content,
+    payload.response,
+    message?.delta,
+    message?.text,
+    message?.content,
+    message,
+  );
+}
+
+function formatGatewayChatStatusLine(
+  eventName: string,
+  payload: Record<string, unknown>,
+): string | null {
+  const label =
+    eventName === "chat.aborted" || eventName === "chat.abort"
+      ? "Chat aborted"
+      : "Chat failed";
+  const detail =
+    firstNonEmptyTextContent(
+      payload.error,
+      payload.reason,
+      payload.message,
+      payload.text,
+      payload.content,
+    )
+    ?? summarizeProgressValue(
+      payload.error ?? payload.reason ?? payload.message,
+    );
+
+  return detail ? `${label}: ${detail}` : label;
+}
+
+function extractGatewayChatProgressUpdate(
+  eventName: string,
+  payload: Record<string, unknown>,
+): OpenClawProgressUpdate {
+  const update: OpenClawProgressUpdate = {
+    activityLines: [],
+    progressEntries: [],
+  };
+
+  switch (eventName) {
+    case "chat.delta": {
+      const assistantText = extractGatewayChatMessageText(payload);
+      if (assistantText) {
+        update.assistantText = assistantText;
+      }
+      break;
+    }
+    case "chat.final": {
+      const assistantText = extractGatewayChatMessageText(payload);
+      if (assistantText) {
+        update.assistantText = assistantText;
+        update.assistantTextMode = "replace";
+      }
+      break;
+    }
+    case "chat.error":
+    case "chat.aborted":
+    case "chat.abort": {
+      const statusLine = formatGatewayChatStatusLine(eventName, payload);
+      if (statusLine) {
+        update.activityLines.push(statusLine);
+        update.progressEntries.push(...buildActivityProgressEntries([statusLine]));
+      }
+      break;
+    }
+    case "chat.side_result": {
+      const sideResultText = firstNonEmptyTextContent(
+        payload.text,
+        payload.message,
+        payload.content,
+        payload.result,
+      );
+      if (sideResultText) {
+        const line = `Side result: ${summarizeProgressText(sideResultText)}`;
+        update.activityLines.push(line);
+        update.progressEntries.push(...buildActivityProgressEntries([line]));
+      }
+      break;
+    }
+    default:
+      break;
+  }
+
+  return update;
+}
+
+function extractAgentEventProgressUpdate(
+  eventName: string,
+  payload: Record<string, unknown>,
+): OpenClawProgressUpdate {
+  const update: OpenClawProgressUpdate = {
+    activityLines: [],
+    progressEntries: [],
+  };
+  const data = asRecord(payload.data) ?? payload;
+
+  if (eventName.startsWith("agent.tool")) {
+    const toolPhase = firstNonEmptyString(
+      data.phase,
+      payload.phase,
+      eventPhaseFromName(eventName),
+    );
+    const toolName = firstNonEmptyString(
+      data.name,
+      data.tool,
+      data.toolName,
+      data.tool_name,
+      payload.name,
+      payload.tool,
+    );
+    const toolDetail =
+      toolPhase === "result" || toolPhase === "done" || toolPhase === "end"
+        ? (data.output ?? data.result ?? data.text ?? data.content)
+        : (data.args ?? data.arguments ?? data.input ?? data.text ?? data.content);
+
+    update.activityLines.push(formatToolActivityLine(toolPhase, toolName, toolDetail));
+    update.progressEntries.push(
+      ...buildOptionalActivityProgressEntries([
+        formatToolProgressEntry(toolPhase, toolName, toolDetail),
+      ]),
+    );
+    return update;
+  }
+
+  if (eventName.startsWith("agent.lifecycle")) {
+    const lifecyclePhase = firstNonEmptyString(
+      data.phase,
+      payload.phase,
+      eventPhaseFromName(eventName),
+    );
+    const lifecycleDetail = firstNonEmptyTextContent(
+      data.text,
+      data.message,
+      payload.text,
+      payload.message,
+      payload.content,
+    );
+    const lifecycleLine = formatLifecycleActivityLine(
+      lifecyclePhase,
+      lifecycleDetail,
+    );
+    if (lifecycleLine) {
+      update.activityLines.push(lifecycleLine);
+    }
+    const lifecycleProgressLine = formatLifecycleProgressLine(
+      lifecyclePhase,
+      lifecycleDetail,
+    );
+    if (lifecycleProgressLine) {
+      update.progressEntries.push(...buildActivityProgressEntries([lifecycleProgressLine]));
+    }
+  }
+
+  return update;
 }
 
 type OpenClawProgressUpdate = {
   thinking?: string;
   assistantText?: string;
+  assistantTextMode?: "append" | "replace";
   activityLines: string[];
   progressEntries: MessageProgressEntry[];
 };
@@ -1267,9 +1544,16 @@ function mergeOpenClawProgressUpdate(
     thinking: right.thinking
       ? mergeStreamingText(left.thinking, right.thinking)
       : left.thinking,
-    assistantText: right.assistantText
-      ? mergeStreamingText(left.assistantText, right.assistantText)
-      : left.assistantText,
+    assistantText:
+      right.assistantText && right.assistantTextMode === "replace"
+        ? right.assistantText
+        : right.assistantText
+          ? mergeStreamingText(left.assistantText, right.assistantText)
+          : left.assistantText,
+    assistantTextMode:
+      right.assistantText && right.assistantTextMode === "replace"
+        ? "replace"
+        : left.assistantTextMode,
     activityLines: [...left.activityLines, ...right.activityLines],
     progressEntries: [...left.progressEntries, ...right.progressEntries],
   };
@@ -1364,8 +1648,10 @@ function extractSessionMessageProgressUpdate(
 }
 
 function extractOpenClawProgressUpdate(progress: {
-  method?: string;
+  type?: unknown;
+  method?: unknown;
   payload?: unknown;
+  raw?: unknown;
 }): OpenClawProgressUpdate {
   const payload = asRecord(progress.payload);
   if (!payload) {
@@ -1377,11 +1663,29 @@ function extractOpenClawProgressUpdate(progress: {
     progressEntries: [],
   };
 
-  if (progress.method === "session.message") {
+  const eventName = normalizeGatewayProgressEventName(progress);
+
+  if (eventName === "session.message") {
     update = mergeOpenClawProgressUpdate(
       update,
       extractSessionMessageProgressUpdate(payload),
     );
+  }
+
+  if (eventName.startsWith("chat.")) {
+    update = mergeOpenClawProgressUpdate(
+      update,
+      extractGatewayChatProgressUpdate(eventName, payload),
+    );
+    return update;
+  }
+
+  if (eventName.startsWith("agent.")) {
+    update = mergeOpenClawProgressUpdate(
+      update,
+      extractAgentEventProgressUpdate(eventName, payload),
+    );
+    return update;
   }
 
   const stream = firstNonEmptyString(payload.stream);
@@ -1399,12 +1703,12 @@ function extractOpenClawProgressUpdate(progress: {
       update.assistantText = mergeStreamingText(update.assistantText, nextAssistantText);
     }
   } else if (stream === "tool") {
-    const toolPhase = firstNonEmptyString(data?.phase);
-    const toolName = firstNonEmptyString(data?.name);
+    const toolPhase = firstNonEmptyString(data?.phase, payload.phase);
+    const toolName = firstNonEmptyString(data?.name, data?.tool, payload.name, payload.tool);
     const toolDetail =
-      data?.phase === "result" || data?.phase === "done"
-        ? (data?.output ?? data?.result ?? data?.text)
-        : (data?.args ?? data?.input ?? data?.text);
+      toolPhase === "result" || toolPhase === "done" || toolPhase === "end"
+        ? (data?.output ?? data?.result ?? data?.text ?? data?.content)
+        : (data?.args ?? data?.arguments ?? data?.input ?? data?.text ?? data?.content);
     const activityLine = formatToolActivityLine(
       toolPhase,
       toolName,
@@ -1417,8 +1721,8 @@ function extractOpenClawProgressUpdate(progress: {
       ]),
     );
   } else if (stream === "lifecycle") {
-    const lifecyclePhase = firstNonEmptyString(data?.phase);
-    const lifecycleDetail = firstNonEmptyString(data?.text, data?.message, payload.text, payload.content);
+    const lifecyclePhase = firstNonEmptyString(data?.phase, payload.phase);
+    const lifecycleDetail = firstNonEmptyTextContent(data?.text, data?.message, payload.text, payload.content);
     const lifecycleLine = formatLifecycleActivityLine(
       lifecyclePhase,
       lifecycleDetail,
@@ -1440,7 +1744,11 @@ function extractOpenClawProgressUpdate(progress: {
     payload.content,
     typeof payload.message === "string" ? payload.message : undefined,
   );
-  if (payloadNarration) {
+  if (
+    !eventName.startsWith("chat.") &&
+    !eventName.startsWith("agent.") &&
+    payloadNarration
+  ) {
     update.activityLines.push(payloadNarration);
     update.progressEntries.push(...buildActivityProgressEntries([payloadNarration]));
   }
@@ -2943,8 +3251,9 @@ export function useUnifiedChat(
             && isSendContextCurrent(context)
           ) {
             const progress = parsed.progress as {
-              type?: string;
-              method?: string;
+              type?: unknown;
+              method?: unknown;
+              raw?: unknown;
               payload?: {
                 stream?: string;
                 data?: {
@@ -2959,7 +3268,7 @@ export function useUnifiedChat(
                 };
                 text?: string;
                 content?: string;
-                message?: string;
+                message?: unknown;
               };
             };
             sawProgressEvent = true;
@@ -2979,7 +3288,9 @@ export function useUnifiedChat(
                           ? mergeStreamingText(m.thinking, progressUpdate.thinking)
                           : m.thinking,
                         content: progressUpdate.assistantText
-                          ? mergeStreamingText(m.content, progressUpdate.assistantText)
+                          ? progressUpdate.assistantTextMode === "replace"
+                            ? progressUpdate.assistantText
+                            : mergeStreamingText(m.content, progressUpdate.assistantText)
                           : m.content,
                         activityLog: progressUpdate.activityLines.length > 0
                           ? appendActivityLog(m.activityLog, progressUpdate.activityLines)
