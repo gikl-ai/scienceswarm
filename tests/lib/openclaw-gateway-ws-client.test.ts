@@ -305,6 +305,7 @@ describe("gateway-ws-client", () => {
     } = await import("@/lib/openclaw/gateway-ws-client");
 
     const prewarm = prewarmGatewayConnection();
+    expect(prewarm).toBeUndefined();
     const turn = sendChatViaGateway("session-alpha", "hello", {
       timeoutMs: 60_000,
       idempotencyKey: "run-alpha",
@@ -344,7 +345,6 @@ describe("gateway-ws-client", () => {
       }),
     );
 
-    await expect(prewarm).resolves.toBeUndefined();
     await expect(turn).resolves.toMatchObject({
       runId: "run-alpha",
       text: "visible reply",
