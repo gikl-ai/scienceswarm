@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 
 /**
  * Runtime bridge for the installed gbrain package.
@@ -103,7 +103,7 @@ async function runRuntimeExtractFallback(engine, extractModule, mode, dir, dryRu
   for (const file of files) {
     let content;
     try {
-      content = readFileSync(file.path, "utf-8");
+      content = await readFile(file.path, "utf-8");
     } catch {
       continue;
     }
