@@ -253,7 +253,10 @@ describe("paper-library review and apply routes", () => {
       userConfirmation: true,
     }));
     expect(firstApprovalResponse.status).toBe(200);
-    const firstApproval = await firstApprovalResponse.json() as { approvalToken: string };
+    const firstApproval = await firstApprovalResponse.json() as {
+      approvalToken: string;
+      plan: { approvedAt?: string };
+    };
 
     const secondApprovalResponse = await approveRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply-plan/approve", {
       project: "project-alpha",
@@ -261,9 +264,13 @@ describe("paper-library review and apply routes", () => {
       userConfirmation: true,
     }));
     expect(secondApprovalResponse.status).toBe(200);
-    const secondApproval = await secondApprovalResponse.json() as { approvalToken: string };
+    const secondApproval = await secondApprovalResponse.json() as {
+      approvalToken: string;
+      plan: { approvedAt?: string };
+    };
     expect(secondApproval.approvalToken).toBeTruthy();
     expect(secondApproval.approvalToken).not.toBe(firstApproval.approvalToken);
+    expect(secondApproval.plan.approvedAt).toBe(firstApproval.plan.approvedAt);
 
     const applyRoute = await import("@/app/api/brain/paper-library/apply/route");
     const staleApplyResponse = await applyRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply", {
@@ -272,9 +279,9 @@ describe("paper-library review and apply routes", () => {
       approvalToken: firstApproval.approvalToken,
       idempotencyKey: "route-review-reapprove-stale-token",
     }));
-    expect(staleApplyResponse.status).toBe(409);
+    expect(staleApplyResponse.status).toBe(403);
     await expect(staleApplyResponse.json()).resolves.toMatchObject({
-      error: { code: "apply_blocked_conflicts" },
+      error: { code: "invalid_approval_token" },
     });
 
     const applyResponse = await applyRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply", {

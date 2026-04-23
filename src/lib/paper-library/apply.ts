@@ -281,12 +281,13 @@ export async function approveApplyPlan(input: {
 
   const token = crypto.randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + APPROVAL_TTL_MS).toISOString();
+  const approvedAt = plan.approvedAt ?? nowIso();
   const approved = ApplyPlanSchema.parse({
     ...plan,
     status: "approved",
     approvalTokenHash: hashToken(token),
     approvalExpiresAt: expiresAt,
-    approvedAt: nowIso(),
+    approvedAt,
     updatedAt: nowIso(),
   });
   const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
