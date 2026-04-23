@@ -79,7 +79,12 @@ function getCachedBrief(
 ): MorningBriefCacheEntry | null {
   const cached = briefCache.get(key);
   if (!cached) return null;
-  if (Date.now() - cached.generatedAtMs > maxAgeMs) return null;
+  const ageMs = Date.now() - cached.generatedAtMs;
+  if (ageMs > MORNING_BRIEF_STALE_TTL_MS) {
+    briefCache.delete(key);
+    return null;
+  }
+  if (ageMs > maxAgeMs) return null;
   return cached;
 }
 
@@ -198,13 +203,30 @@ function llmUnavailableResponse(err: unknown): Response {
   );
 }
 
+function isLLMProviderError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("llm provider") ||
+    normalized.includes("api_key") ||
+    normalized.includes("api key") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("forbidden") ||
+    normalized.includes("quota") ||
+    normalized.includes("rate limit") ||
+    normalized.includes("rate_limit") ||
+    normalized.includes("model host") ||
+    normalized.includes("model provider") ||
+    normalized.includes("openai") ||
+    normalized.includes("anthropic") ||
+    normalized.includes("gemini") ||
+    normalized.includes("ollama")
+  );
+}
+
 function generationFailedResponse(err: unknown): Response {
   const message =
     err instanceof Error ? err.message : "Morning brief generation failed";
-  if (
-    message.includes("OPENAI_API_KEY") ||
-    message.toLowerCase().includes("llm provider")
-  ) {
+  if (isLLMProviderError(message)) {
     return llmUnavailableResponse(err);
   }
   return Response.json({ error: message }, { status: 500 });

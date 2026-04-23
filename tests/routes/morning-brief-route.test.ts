@@ -141,4 +141,20 @@ describe("GET /api/brain/morning-brief", () => {
     });
     expect(mocks.buildMorningBrief).not.toHaveBeenCalled();
   });
+
+  it("maps generation-time provider failures to a structured 503", async () => {
+    mocks.buildMorningBrief.mockRejectedValue(
+      new Error("Missing ANTHROPIC_API_KEY environment variable."),
+    );
+
+    const { GET } = await importRoute();
+    const response = await GET(new Request("http://localhost/api/brain/morning-brief"));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "llm_unavailable",
+      error: "Morning brief generation requires a configured LLM provider.",
+      cause: "Missing ANTHROPIC_API_KEY environment variable.",
+    });
+  });
 });
