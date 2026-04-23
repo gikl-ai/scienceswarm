@@ -6,7 +6,7 @@ import {
 } from "@/lib/paper-library/contracts";
 import {
   cancelPaperLibraryScan,
-  readPaperLibraryScan,
+  reconcileStalePaperLibraryScan,
   startPaperLibraryScan,
 } from "@/lib/paper-library/jobs";
 import { isLocalRequest } from "@/lib/local-guard";
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
   });
   if (!lookup.success) return badRequest(lookup.error);
 
-  const scan = await readPaperLibraryScan(lookup.data.project, lookup.data.id, configOrError.root);
+  const scan = await reconcileStalePaperLibraryScan(lookup.data.project, lookup.data.id, configOrError.root);
   if (!scan) {
     return Response.json(paperLibraryError("job_not_found", "Paper library scan not found."), { status: 404 });
   }

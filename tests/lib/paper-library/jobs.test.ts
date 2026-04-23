@@ -3,7 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initBrain } from "@/brain/init";
-import { startPaperLibraryScan } from "@/lib/paper-library/jobs";
+import {
+  cancelPaperLibraryScan,
+  readPaperLibraryScan,
+  reconcileStalePaperLibraryScan,
+  startPaperLibraryScan,
+} from "@/lib/paper-library/jobs";
 
 const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
 const ORIGINAL_SCIENCESWARM_USER_HANDLE = process.env.SCIENCESWARM_USER_HANDLE;
@@ -11,8 +16,8 @@ const ORIGINAL_SCIENCESWARM_USER_HANDLE = process.env.SCIENCESWARM_USER_HANDLE;
 let dataRoot: string;
 let paperRoot: string;
 
-async function waitForScanFile(project: string, scanId: string): Promise<Record<string, unknown>> {
-  const scanPath = path.join(
+function scanPath(project: string, scanId: string): string {
+  return path.join(
     dataRoot,
     "projects",
     project,
@@ -22,8 +27,11 @@ async function waitForScanFile(project: string, scanId: string): Promise<Record<
     "scans",
     `${scanId}.json`,
   );
+}
+
+async function waitForScanFile(project: string, scanId: string): Promise<Record<string, unknown>> {
   for (let attempt = 0; attempt < 50; attempt += 1) {
-    const body = JSON.parse(await readFile(scanPath, "utf-8")) as Record<string, unknown>;
+    const body = JSON.parse(await readFile(scanPath(project, scanId), "utf-8")) as Record<string, unknown>;
     if (body.status === "ready_for_review" || body.status === "ready_for_apply" || body.status === "failed") {
       return body;
     }
@@ -106,5 +114,60 @@ describe("paper-library jobs", () => {
       rootPath: "/etc",
       brainRoot: path.join(dataRoot, "brain"),
     })).rejects.toThrow(/not allowed/i);
+  });
+
+  it("keeps reads pure and reconciles stale scans explicitly", async () => {
+    const staleScanPath = scanPath("project-alpha", "stale-scan");
+    await mkdir(path.dirname(staleScanPath), { recursive: true });
+    await writeFile(staleScanPath, JSON.stringify({
+      version: 1,
+      id: "stale-scan",
+      project: "project-alpha",
+      rootPath: paperRoot,
+      rootRealpath: paperRoot,
+      status: "queued",
+      createdAt: "2000-01-01T00:00:00.000Z",
+      updatedAt: "2000-01-01T00:00:00.000Z",
+      heartbeatAt: "2000-01-01T00:00:00.000Z",
+      counters: {
+        detectedFiles: 0,
+        identified: 0,
+        needsReview: 0,
+        readyForApply: 0,
+        failed: 0,
+      },
+      warnings: [],
+      currentPath: null,
+      reviewShardIds: [],
+    }), "utf-8");
+
+    const readOnly = await readPaperLibraryScan("project-alpha", "stale-scan", path.join(dataRoot, "brain"));
+    expect(readOnly?.status).toBe("queued");
+    expect(JSON.parse(await readFile(staleScanPath, "utf-8"))).toMatchObject({
+      status: "queued",
+      warnings: [],
+    });
+
+    const reconciled = await reconcileStalePaperLibraryScan("project-alpha", "stale-scan", path.join(dataRoot, "brain"));
+    expect(reconciled).toMatchObject({
+      status: "failed",
+      warnings: ["scan_worker_stale"],
+    });
+  });
+
+  it("does not add cancel requests to scans that already reached a stable waiting state", async () => {
+    await writeFile(path.join(paperRoot, "2024 - Smith - Interesting Paper.pdf"), "fake pdf", "utf-8");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot: path.join(dataRoot, "brain"),
+    });
+
+    const completed = await waitForScanFile("project-alpha", scan.id);
+    expect(["ready_for_review", "ready_for_apply"]).toContain(completed.status);
+
+    const canceled = await cancelPaperLibraryScan("project-alpha", scan.id, path.join(dataRoot, "brain"));
+    expect(canceled?.status).toBe(completed.status);
+    expect(canceled?.cancelRequestedAt).toBeUndefined();
   });
 });
