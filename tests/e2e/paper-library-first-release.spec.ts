@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 function json(body: unknown, status = 200) {
@@ -7,6 +9,36 @@ function json(body: unknown, status = 200) {
     body: JSON.stringify(body),
   };
 }
+
+const ENV_PATH = join(process.cwd(), ".env");
+const READY_ENV_LINES = [
+  "AGENT_BACKEND=openclaw",
+  "LLM_PROVIDER=local",
+  "OLLAMA_MODEL=gemma4:latest",
+];
+const FAR_FUTURE_EXPIRY = "3026-04-23T13:00:00.000Z";
+const FAR_FUTURE_APPROVED_AT = "3026-04-23T12:30:00.000Z";
+let originalEnvContents: string | null = null;
+let hadOriginalEnv = false;
+
+test.beforeEach(async () => {
+  hadOriginalEnv = existsSync(ENV_PATH);
+  originalEnvContents = hadOriginalEnv ? readFileSync(ENV_PATH, "utf8") : null;
+  const nextEnv = originalEnvContents
+    ? `${originalEnvContents.trimEnd()}\n${READY_ENV_LINES.join("\n")}\n`
+    : `${READY_ENV_LINES.join("\n")}\n`;
+
+  writeFileSync(ENV_PATH, nextEnv);
+});
+
+test.afterEach(async () => {
+  if (hadOriginalEnv && originalEnvContents !== null) {
+    writeFileSync(ENV_PATH, originalEnvContents);
+    return;
+  }
+
+  rmSync(ENV_PATH, { force: true });
+});
 
 test("paper library command center supports review, apply, and undo flows", async ({ page }) => {
   let scanStatus: "review" | "apply" | "applied" | "undone" = "review";
@@ -126,8 +158,8 @@ test("paper library command center supports review, apply, and undo flows", asyn
         operationShardIds: ["0001"],
         planDigest: "digest",
         approvalTokenHash: approved ? "token-hash" : undefined,
-        approvalExpiresAt: approved ? "2026-04-23T13:00:00.000Z" : undefined,
-        approvedAt: approved ? "2026-04-23T12:30:00.000Z" : undefined,
+        approvalExpiresAt: approved ? FAR_FUTURE_EXPIRY : undefined,
+        approvedAt: approved ? FAR_FUTURE_APPROVED_AT : undefined,
         manifestId: applied ? "manifest-1" : undefined,
         createdAt: "2026-04-23T12:20:00.000Z",
         updatedAt: "2026-04-23T12:20:00.000Z",
@@ -162,7 +194,7 @@ test("paper library command center supports review, apply, and undo flows", asyn
     await route.fulfill(json({
       ok: true,
       approvalToken: "approval-token",
-      expiresAt: "2026-04-23T13:00:00.000Z",
+      expiresAt: FAR_FUTURE_EXPIRY,
     }));
   });
 
