@@ -180,8 +180,9 @@ function formatStatus(status: string): string {
 }
 
 function makeIdempotencyKey(prefix: string): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `${prefix}-${crypto.randomUUID()}`;
+  const webCrypto = globalThis.crypto;
+  if (webCrypto && typeof webCrypto.randomUUID === "function") {
+    return `${prefix}-${webCrypto.randomUUID()}`;
   }
   return `${prefix}-${Date.now()}`;
 }
