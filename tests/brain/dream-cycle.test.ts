@@ -575,14 +575,14 @@ describe("runDreamCycle", () => {
       vi.setSystemTime(new Date("2026-04-22T12:00:00.000Z"));
 
       const result = await runDreamCycle(config, llm, "sweep-only");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const expectedSlug = `journals/${dateStr}-dream-cycle-sweep-only`;
 
-      expect(result.journalSlug).toBe("journals/2026-04-22-dream-cycle-sweep-only");
-      expect(
-        existsSync(join(TEST_ROOT, "journals", "2026-04-22-dream-cycle-sweep-only.md")),
-      ).toBe(true);
+      expect(result.journalSlug).toBe(expectedSlug);
+      expect(existsSync(join(TEST_ROOT, "journals", `${dateStr}-dream-cycle-sweep-only.md`))).toBe(true);
 
       const journal = readFileSync(
-        join(TEST_ROOT, "journals", "2026-04-22-dream-cycle-sweep-only.md"),
+        join(TEST_ROOT, "journals", `${dateStr}-dream-cycle-sweep-only.md`),
         "utf-8",
       );
       expect(journal).toContain("Dream Cycle Journal");
