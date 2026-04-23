@@ -591,6 +591,8 @@ export interface SearchResult {
   chunkId?: number;
   /** gbrain content_chunks.chunk_index for stable per-page chunk ordering. */
   chunkIndex?: number;
+  /** gbrain sources.id for source-aware result identity when available. */
+  sourceId?: string;
 }
 
 // ── Observe Types ──────────────────────────────────────

@@ -49,6 +49,7 @@ interface BrainEngineLike {
   // Pages
   getPage(slug: string): Promise<PageLike | null>;
   putPage(slug: string, page: PageInputLike): Promise<PageLike>;
+  listPages(filters?: PageFiltersLike): Promise<PageLike[]>;
 
   // Chunks (needed so searchKeyword has something to surface)
   upsertChunks(slug: string, chunks: ChunkInputLike[]): Promise<void>;
@@ -77,6 +78,10 @@ interface BrainEngineLike {
   // Stats + health
   getStats(): Promise<BrainStatsLike>;
   getHealth(): Promise<BrainHealthLike>;
+
+  // Config
+  getConfig(key: string): Promise<string | null>;
+  setConfig(key: string, value: string): Promise<void>;
 }
 
 interface EngineConfigLike {
@@ -107,6 +112,13 @@ interface PageLike {
   content_hash?: string;
 }
 
+interface PageFiltersLike {
+  type?: string;
+  tag?: string;
+  limit?: number;
+  offset?: number;
+}
+
 interface ChunkInputLike {
   chunk_index: number;
   chunk_text: string;
@@ -133,6 +145,7 @@ interface SearchResultLike {
   chunk_index: number;
   score: number;
   stale: boolean;
+  source_id?: string;
 }
 
 interface LinkLike {
@@ -215,6 +228,7 @@ describe("gbrain contract: lifecycle", () => {
       "transaction",
       "getPage",
       "putPage",
+      "listPages",
       "upsertChunks",
       "searchKeyword",
       "searchVector",
@@ -229,6 +243,8 @@ describe("gbrain contract: lifecycle", () => {
       "removeTag",
       "getStats",
       "getHealth",
+      "getConfig",
+      "setConfig",
     ];
 
     for (const method of requiredMethods) {
@@ -314,6 +330,31 @@ describe("gbrain contract: getPage", () => {
   });
 });
 
+describe("gbrain contract: listPages", () => {
+  it("returns Page[] and honors type/limit filters ScienceSwarm passes", async () => {
+    await seedPage("list-concept-one", { title: "List Concept One" });
+    await seedPage("list-concept-two", { title: "List Concept Two" });
+    await seedPage("list-note", {
+      type: "note",
+      title: "List Note",
+      compiled_truth: "Note body.",
+    });
+
+    const concepts = await engine.listPages({ type: "concept", limit: 10 });
+    expect(Array.isArray(concepts)).toBe(true);
+    expect(concepts.some((page) => page.slug === "list-concept-one")).toBe(true);
+    expect(concepts.some((page) => page.slug === "list-note")).toBe(false);
+
+    const limited = await engine.listPages({ limit: 1 });
+    expect(limited).toHaveLength(1);
+    expect(limited[0]).toMatchObject({
+      slug: expect.any(String),
+      title: expect.any(String),
+      compiled_truth: expect.any(String),
+    });
+  });
+});
+
 describe("gbrain contract: searchKeyword", () => {
   it("returns SearchResult[] with slug/title/type/chunk identity/score/stale fields", async () => {
     await seedPage("kw-target", {
@@ -338,6 +379,7 @@ describe("gbrain contract: searchKeyword", () => {
       title: "Keyword Target",
       type: "concept",
       chunk_source: "compiled_truth",
+      source_id: "default",
     });
     expect(typeof top.page_id).toBe("number");
     expect(typeof top.chunk_id).toBe("number");
@@ -533,6 +575,16 @@ describe("gbrain contract: getStats", () => {
     expect(stats.pages_by_type).not.toBeNull();
     // pages_by_type is a Record<string, number> keyed by page type.
     expect(stats.pages_by_type.concept).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("gbrain contract: config", () => {
+  it("round-trips config values and returns null for missing keys", async () => {
+    await expect(engine.getConfig("science.missing")).resolves.toBeNull();
+    await engine.setConfig("science.repo_path", "/tmp/scienceswarm-brain");
+    await expect(engine.getConfig("science.repo_path")).resolves.toBe(
+      "/tmp/scienceswarm-brain",
+    );
   });
 });
 
