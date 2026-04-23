@@ -282,7 +282,7 @@ describe("benchmark-chat-hi", () => {
     ).toContain("Timing artifact: unavailable");
   });
 
-  it("exposes unavailable timing diagnostics in JSON and human output", async () => {
+  it("classifies a 404 timing response as disabled/no timings with a human hint", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/chat/unified")) {
@@ -298,9 +298,9 @@ describe("benchmark-chat-hi", () => {
       }
       if (url.endsWith("/api/chat/timing")) {
         return Promise.resolve(
-          new Response(JSON.stringify({ timings: [] }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
+          new Response("", {
+            status: 404,
+            statusText: "Not Found",
           }),
         );
       }
@@ -323,13 +323,14 @@ describe("benchmark-chat-hi", () => {
     expect(summary.timingArtifact).toMatchObject({
       available: false,
       reason: "endpoint_disabled_or_no_timings",
-      detail: "timings array was empty",
+      detail:
+        "HTTP 404 Not Found; enable SCIENCESWARM_CHAT_TIMING=1 and ensure the app is running locally with current code",
     });
     expect(JSON.stringify(summary, null, 2)).toContain(
       '"reason": "endpoint_disabled_or_no_timings"',
     );
     expect(formatBenchmarkSummary(summary)).toContain(
-      "Timing artifact: unavailable (artifact endpoint disabled or no timings; timings array was empty)",
+      "Timing artifact: unavailable (artifact endpoint disabled or no timings; HTTP 404 Not Found; enable SCIENCESWARM_CHAT_TIMING=1 and ensure the app is running locally with current code)",
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -378,6 +379,19 @@ describe("benchmark-chat-hi", () => {
   });
 
   it.each([
+    {
+      name: "classifies a 404 timing response as disabled/no timings",
+      response: new Response("", {
+        status: 404,
+        statusText: "Not Found",
+      }),
+      expected: {
+        reason: "endpoint_disabled_or_no_timings",
+        detail:
+          "HTTP 404 Not Found; enable SCIENCESWARM_CHAT_TIMING=1 and ensure the app is running locally with current code",
+      },
+      minStartedAtMs: undefined,
+    },
     {
       name: "classifies a non-OK timing response as unreachable/non-OK",
       response: new Response("", {

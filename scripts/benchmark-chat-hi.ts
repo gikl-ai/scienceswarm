@@ -531,6 +531,12 @@ export async function fetchLatestTimingArtifact(
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
+    if (response.status === 404) {
+      return unavailableTimingArtifact(
+        "endpoint_disabled_or_no_timings",
+        "HTTP 404 Not Found; enable SCIENCESWARM_CHAT_TIMING=1 and ensure the app is running locally with current code",
+      );
+    }
     if (!response.ok) {
       return unavailableTimingArtifact(
         "endpoint_unreachable_or_non_ok",
