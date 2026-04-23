@@ -3,8 +3,13 @@ import {
   getRecentChatTimingArtifacts,
   isChatTimingTelemetryEnabled,
 } from "@/lib/chat-timing-telemetry";
+import { isLocalRequest } from "@/lib/local-guard";
 
-export function GET(): Response {
+export async function GET(request: Request): Promise<Response> {
+  if (!(await isLocalRequest(request))) {
+    return new Response(null, { status: 404 });
+  }
+
   if (!isChatTimingTelemetryEnabled()) {
     return new Response(null, { status: 404 });
   }

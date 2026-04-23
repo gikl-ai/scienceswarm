@@ -129,6 +129,17 @@ function sanitizeTimingArtifact(payload: ChatTimingLogPayload): ChatTimingLogPay
   };
 }
 
+function cloneTimingArtifact(payload: ChatTimingLogPayload): ChatTimingLogPayload {
+  return {
+    ...payload,
+    phases: payload.phases.map((phase) => ({
+      ...phase,
+      detail: phase.detail ? { ...phase.detail } : undefined,
+    })),
+    promptCharCounts: { ...payload.promptCharCounts },
+  };
+}
+
 export function recordChatTimingArtifact(payload: ChatTimingLogPayload): void {
   recentChatTimingArtifacts.push(sanitizeTimingArtifact(payload));
   if (recentChatTimingArtifacts.length > CHAT_TIMING_ARTIFACT_LIMIT) {
@@ -140,7 +151,7 @@ export function recordChatTimingArtifact(payload: ChatTimingLogPayload): void {
 }
 
 export function getRecentChatTimingArtifacts(): ChatTimingLogPayload[] {
-  return recentChatTimingArtifacts.map((payload) => sanitizeTimingArtifact(payload));
+  return recentChatTimingArtifacts.map((payload) => cloneTimingArtifact(payload));
 }
 
 export function clearChatTimingArtifactsForTests(): void {

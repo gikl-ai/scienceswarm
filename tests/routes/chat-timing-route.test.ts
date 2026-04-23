@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { isLocalRequestMock } = vi.hoisted(() => ({
+  isLocalRequestMock: vi.fn(),
+}));
+
+vi.mock("@/lib/local-guard", () => ({
+  isLocalRequest: isLocalRequestMock,
+}));
+
 import { GET } from "@/app/api/chat/timing/route";
 import {
   CHAT_TIMING_ARTIFACT_LIMIT,
@@ -42,10 +50,12 @@ function timingPayload(
 describe("GET /api/chat/timing", () => {
   beforeEach(() => {
     clearChatTimingArtifactsForTests();
+    isLocalRequestMock.mockResolvedValue(true);
   });
 
   afterEach(() => {
     clearChatTimingArtifactsForTests();
+    isLocalRequestMock.mockReset();
     vi.unstubAllEnvs();
   });
 
@@ -54,7 +64,20 @@ describe("GET /api/chat/timing", () => {
       timingPayload("turn-secret", { raw_prompt: "Secret prompt" }),
     );
 
-    const response = GET();
+    const response = await GET(new Request("http://localhost/api/chat/timing"));
+
+    expect(response.status).toBe(404);
+    await expect(response.text()).resolves.toBe("");
+  });
+
+  it("rejects non-local requests even when timing artifacts are enabled", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    isLocalRequestMock.mockResolvedValue(false);
+    recordChatTimingArtifact(
+      timingPayload("turn-secret", { raw_prompt: "Secret prompt" }),
+    );
+
+    const response = await GET(new Request("https://example.com/api/chat/timing"));
 
     expect(response.status).toBe(404);
     await expect(response.text()).resolves.toBe("");
@@ -66,7 +89,7 @@ describe("GET /api/chat/timing", () => {
       timingPayload("turn-safe-1", { raw_prompt: "Secret prompt" }),
     );
 
-    const response = GET();
+    const response = await GET(new Request("http://localhost/api/chat/timing"));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -95,7 +118,7 @@ describe("GET /api/chat/timing", () => {
       recordChatTimingArtifact(timingPayload(`turn-${index}`));
     }
 
-    const response = GET();
+    const response = await GET(new Request("http://localhost/api/chat/timing"));
     const body = await response.json() as { timings: Array<{ turnId: string }> };
 
     expect(body.timings).toHaveLength(CHAT_TIMING_ARTIFACT_LIMIT);
