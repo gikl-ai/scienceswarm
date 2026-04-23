@@ -14,6 +14,7 @@ export interface BuildStructuredCritiquePageInput {
   job: StructuredCritiqueJob;
   parentSlug: string;
   projectSlug?: string;
+  projectSlugs?: string[];
   sourceFilename?: string;
   uploadedAt: Date;
   uploadedBy: string;
@@ -91,10 +92,18 @@ export function buildStructuredCritiquePageMarkdown(
   const brief = buildStructuredCritiqueBrief(result);
   const uploadedAt = input.uploadedAt.toISOString().replace(/\.\d+/, "");
   const styleProfile = input.job.style_profile || "professional";
+  const explicitProjectSlugs = normalizeProjectSlugs([
+    ...(input.projectSlugs ?? []),
+    ...(input.projectSlug ? [input.projectSlug] : []),
+  ]);
+  const projectSlugs =
+    explicitProjectSlugs.length > 0 ? explicitProjectSlugs : [input.parentSlug];
+  const primaryProjectSlug = projectSlugs[0] ?? input.parentSlug;
 
   const parsedFrontmatter: CritiqueFrontmatter = CritiqueFrontmatterSchema.parse({
     type: "critique",
-    project: input.projectSlug || input.parentSlug,
+    project: primaryProjectSlug,
+    projects: projectSlugs,
     parent: input.parentSlug,
     source_filename: input.sourceFilename || undefined,
     uploaded_at: uploadedAt,
@@ -125,6 +134,18 @@ export function buildStructuredCritiquePageMarkdown(
     severityCounts,
     findingCount: result.findings.length,
   };
+}
+
+function normalizeProjectSlugs(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const slug = value.trim();
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    out.push(slug);
+  }
+  return out;
 }
 
 function stripUndefinedValues<T extends Record<string, unknown>>(input: T): T {

@@ -16,6 +16,7 @@ type PersistCritiqueRequest = {
   job?: unknown;
   parentSlug?: unknown;
   projectSlug?: unknown;
+  projectSlugs?: unknown;
   sourceFilename?: unknown;
 };
 
@@ -23,6 +24,7 @@ type PersistedCritiqueSummary = {
   brain_slug: string;
   parent_slug?: string;
   project_slug?: string;
+  project_slugs?: string[];
   title: string;
   uploaded_at?: string;
   source_filename?: string;
@@ -30,6 +32,7 @@ type PersistedCritiqueSummary = {
   finding_count?: number;
   url: string;
   project_url?: string;
+  project_urls?: Record<string, string>;
 };
 
 const critiquePersistLocks = new Map<string, Promise<void>>();
@@ -118,13 +121,10 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const explicitProjectSlug =
-    typeof body.projectSlug === "string" && body.projectSlug.trim().length > 0
-      ? body.projectSlug.trim()
-      : undefined;
-  if (explicitProjectSlug && !isValidCritiqueSlug(explicitProjectSlug)) {
+  const destinationProjects = readDestinationProjectSlugs(body);
+  if ("error" in destinationProjects) {
     return Response.json(
-      { error: "projectSlug must be a safe audit-revise slug" },
+      { error: destinationProjects.error },
       { status: 400 },
     );
   }
@@ -139,21 +139,15 @@ export async function POST(request: Request): Promise<Response> {
       typeof parentFrontmatter.type === "string"
         ? parentFrontmatter.type
         : parentPage?.type;
-    const parentProject =
-      explicitProjectSlug ||
-      (
-        typeof parentFrontmatter.project === "string" &&
-        isValidCritiqueSlug(parentFrontmatter.project)
-          ? parentFrontmatter.project
-          : parentSlug
-      );
+    const projectSlugs = destinationProjects.projectSlugs;
+    const primaryProjectSlug = projectSlugs[0];
 
     const persisted = await withCritiquePersistenceLock(parentSlug, async () => {
       const critiqueSlug = await allocateCritiqueSlug(parentSlug, job.id);
       const built = buildStructuredCritiquePageMarkdown({
         job,
         parentSlug,
-        projectSlug: parentProject,
+        projectSlugs,
         sourceFilename,
         uploadedAt: new Date(),
         uploadedBy: getCurrentUserHandle(),
@@ -170,24 +164,31 @@ export async function POST(request: Request): Promise<Response> {
       return { critiqueSlug, built, linkedParent };
     });
 
-    await ensureProjectShellForProjectSlug({
-      projectSlug: parentProject,
-      sourceFilename,
-    }).catch((error) => {
-      console.warn("Failed to ensure project shell for critique", {
-        projectSlug: parentProject,
-        error: error instanceof Error ? error.message : String(error),
+    for (const projectSlug of projectSlugs) {
+      await ensureProjectShellForProjectSlug({
+        projectSlug,
+        sourceFilename,
+      }).catch((error) => {
+        console.warn("Failed to ensure project shell for critique", {
+          projectSlug,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
       });
-      return null;
-    });
+    }
+
+    const encodedSlug = encodeURIComponent(persisted.critiqueSlug);
+    const projectUrls = buildProjectUrls(projectSlugs, encodedSlug);
 
     return Response.json({
       brain_slug: persisted.critiqueSlug,
       parent_slug: parentSlug,
-      project_slug: parentProject,
+      project_slug: primaryProjectSlug,
+      project_slugs: projectSlugs,
       linked_parent: persisted.linkedParent,
-      url: `/dashboard/reasoning?brain_slug=${encodeURIComponent(persisted.critiqueSlug)}`,
-      project_url: `/dashboard/project?name=${encodeURIComponent(parentProject)}&brain_slug=${encodeURIComponent(persisted.critiqueSlug)}`,
+      url: `/dashboard/reasoning?brain_slug=${encodedSlug}`,
+      project_url: primaryProjectSlug ? projectUrls[primaryProjectSlug] : undefined,
+      project_urls: projectUrls,
       brief: persisted.built.brief,
       severity_counts: persisted.built.severityCounts,
       finding_count: persisted.built.findingCount,
@@ -217,7 +218,8 @@ function pageToPersistedCritiqueSummary(
   if (!slug) return null;
 
   const parentSlug = readSafeSlug(frontmatter.parent);
-  const projectSlug = readSafeSlug(frontmatter.project);
+  const projectSlugs = readProjectSlugs(frontmatter);
+  const projectSlug = projectSlugs[0];
   const title =
     readNonEmptyString(frontmatter.title) ||
     page.title ||
@@ -228,21 +230,64 @@ function pageToPersistedCritiqueSummary(
   const descartesJobId = readNonEmptyString(frontmatter.descartes_job_id);
   const findingCount = readFiniteNumber(frontmatter.finding_count);
   const encodedSlug = encodeURIComponent(slug);
+  const projectUrls = buildProjectUrls(projectSlugs, encodedSlug);
 
   return {
     brain_slug: slug,
     parent_slug: parentSlug,
     project_slug: projectSlug,
+    project_slugs: projectSlugs.length > 0 ? projectSlugs : undefined,
     title,
     uploaded_at: uploadedAt,
     source_filename: sourceFilename,
     descartes_job_id: descartesJobId,
     finding_count: findingCount,
     url: `/dashboard/reasoning?brain_slug=${encodedSlug}`,
-    project_url: projectSlug
-      ? `/dashboard/project?name=${encodeURIComponent(projectSlug)}&brain_slug=${encodedSlug}`
-      : undefined,
+    project_url: projectSlug ? projectUrls[projectSlug] : undefined,
+    project_urls: Object.keys(projectUrls).length > 0 ? projectUrls : undefined,
   };
+}
+
+function readDestinationProjectSlugs(
+  body: PersistCritiqueRequest,
+): { projectSlugs: string[] } | { error: string } {
+  const rawValues: unknown[] = [];
+
+  if (body.projectSlug !== undefined) {
+    rawValues.push(body.projectSlug);
+  }
+
+  if (body.projectSlugs !== undefined) {
+    if (!Array.isArray(body.projectSlugs)) {
+      return { error: "projectSlugs must be an array of project slugs" };
+    }
+    rawValues.push(...body.projectSlugs);
+  }
+
+  if (rawValues.length === 0) {
+    return { error: "Choose at least one project before saving a critique" };
+  }
+
+  const projectSlugs: string[] = [];
+  const seen = new Set<string>();
+  for (const value of rawValues) {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      return { error: "projectSlugs must contain non-empty project slugs" };
+    }
+    const slug = value.trim();
+    if (!isValidCritiqueSlug(slug)) {
+      return { error: "projectSlugs must contain safe audit-revise slugs" };
+    }
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    projectSlugs.push(slug);
+  }
+
+  if (projectSlugs.length === 0) {
+    return { error: "Choose at least one project before saving a critique" };
+  }
+
+  return { projectSlugs };
 }
 
 function normalizePageSlug(path: string): string {
@@ -259,6 +304,31 @@ function readNonEmptyString(value: unknown): string | undefined {
 function readSafeSlug(value: unknown): string | undefined {
   const slug = readNonEmptyString(value);
   return slug && isValidCritiqueSlug(slug) ? slug : undefined;
+}
+
+function readProjectSlugs(frontmatter: Record<string, unknown>): string[] {
+  const slugs: string[] = [];
+  const primary = readSafeSlug(frontmatter.project);
+  if (primary) slugs.push(primary);
+  if (Array.isArray(frontmatter.projects)) {
+    for (const value of frontmatter.projects) {
+      const slug = readSafeSlug(value);
+      if (slug) slugs.push(slug);
+    }
+  }
+  return Array.from(new Set(slugs));
+}
+
+function buildProjectUrls(
+  projectSlugs: string[],
+  encodedBrainSlug: string,
+): Record<string, string> {
+  return Object.fromEntries(
+    projectSlugs.map((projectSlug) => [
+      projectSlug,
+      `/dashboard/project?name=${encodeURIComponent(projectSlug)}&brain_slug=${encodedBrainSlug}`,
+    ]),
+  );
 }
 
 function readFiniteNumber(value: unknown): number | undefined {
