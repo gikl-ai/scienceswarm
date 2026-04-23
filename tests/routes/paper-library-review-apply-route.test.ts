@@ -201,4 +201,90 @@ describe("paper-library review and apply routes", () => {
     });
     expect(await exists(originalPath)).toBe(true);
   });
+
+  it("returns 409 and leaves every file in place when an approved source changes", async () => {
+    const alphaPath = path.join(paperRoot, "2024 - Alpha Paper.pdf");
+    const betaPath = path.join(paperRoot, "2025 - Beta Paper.pdf");
+    await writeFile(alphaPath, "fake pdf alpha", "utf-8");
+    await writeFile(betaPath, "fake pdf beta", "utf-8");
+
+    const scanRoute = await import("@/app/api/brain/paper-library/scan/route");
+    const scanResponse = await scanRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/scan", {
+      action: "start",
+      project: "project-alpha",
+      rootPath: paperRoot,
+      mode: "dry-run",
+      idempotencyKey: "route-review-apply-stale-start",
+    }));
+    expect(scanResponse.status).toBe(200);
+    const scanStarted = await scanResponse.json() as { scanId: string };
+    await waitForReady(scanRoute.GET, "project-alpha", scanStarted.scanId);
+
+    const reviewRoute = await import("@/app/api/brain/paper-library/review/route");
+    const reviewResponse = await reviewRoute.GET(new Request(
+      `http://localhost/api/brain/paper-library/review?project=project-alpha&scanId=${scanStarted.scanId}&limit=10`,
+    ));
+    expect(reviewResponse.status).toBe(200);
+    const reviewPage = await reviewResponse.json() as {
+      items: Array<{ id: string; candidates: Array<{ id: string }> }>;
+    };
+    expect(reviewPage.items).toHaveLength(2);
+
+    for (const item of reviewPage.items) {
+      const acceptedResponse = await reviewRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/review", {
+        project: "project-alpha",
+        scanId: scanStarted.scanId,
+        itemId: item.id,
+        action: "accept",
+        selectedCandidateId: item.candidates[0]?.id,
+      }));
+      expect(acceptedResponse.status).toBe(200);
+    }
+
+    const applyPlanRoute = await import("@/app/api/brain/paper-library/apply-plan/route");
+    const createdResponse = await applyPlanRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply-plan", {
+      project: "project-alpha",
+      scanId: scanStarted.scanId,
+      templateFormat: "{year} - {title}.pdf",
+    }));
+    expect(createdResponse.status).toBe(200);
+    const created = await createdResponse.json() as { applyPlanId: string };
+
+    const plannedResponse = await applyPlanRoute.GET(new Request(
+      `http://localhost/api/brain/paper-library/apply-plan?project=project-alpha&id=${created.applyPlanId}&limit=10`,
+    ));
+    expect(plannedResponse.status).toBe(200);
+    const planned = await plannedResponse.json() as {
+      operations: Array<{ destinationRelativePath: string }>;
+    };
+
+    const approveRoute = await import("@/app/api/brain/paper-library/apply-plan/approve/route");
+    const approvalResponse = await approveRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply-plan/approve", {
+      project: "project-alpha",
+      applyPlanId: created.applyPlanId,
+      userConfirmation: true,
+    }));
+    expect(approvalResponse.status).toBe(200);
+    const approval = await approvalResponse.json() as { approvalToken: string };
+
+    await writeFile(alphaPath, "mutated after approval", "utf-8");
+
+    const applyRoute = await import("@/app/api/brain/paper-library/apply/route");
+    const applyResponse = await applyRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply", {
+      project: "project-alpha",
+      applyPlanId: created.applyPlanId,
+      approvalToken: approval.approvalToken,
+      idempotencyKey: "route-review-apply-stale-manifest",
+    }));
+    expect(applyResponse.status).toBe(409);
+    await expect(applyResponse.json()).resolves.toMatchObject({
+      error: { code: "source_changed_since_approval" },
+    });
+
+    expect(await exists(alphaPath)).toBe(true);
+    expect(await exists(betaPath)).toBe(true);
+    for (const operation of planned.operations) {
+      expect(await exists(path.join(paperRoot, operation.destinationRelativePath))).toBe(false);
+    }
+  });
 });
