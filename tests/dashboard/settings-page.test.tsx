@@ -628,7 +628,7 @@ describe("SettingsPage runtime settings", () => {
     await screen.findByText("API Keys & Model");
 
     fireEvent.click(screen.getByTestId("llm-provider-openai"));
-    fireEvent.change(screen.getByTestId("openai-api-key-input"), {
+    fireEvent.change(await screen.findByTestId("openai-api-key-input"), {
       target: { value: "sk-test-openai-1234" },
     });
     fireEvent.change(screen.getByTestId("openai-model-input"), {
