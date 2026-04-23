@@ -488,9 +488,10 @@ describe("runBootstrap finalize ready flags", () => {
     }
 
     const calls = runOpenClawMock.mock.calls;
-    expect(calls.length).toBeGreaterThanOrEqual(2);
+    expect(calls.length).toBeGreaterThanOrEqual(3);
     const providerCall = calls[0]!;
-    const modelCall = calls[1]!;
+    const allowedModelsCall = calls[1]!;
+    const modelCall = calls[2]!;
     expect(providerCall).toEqual([
       [
         "config",
@@ -518,6 +519,19 @@ describe("runBootstrap finalize ready flags", () => {
         reasoning: true,
       }),
     );
+    expect(allowedModelsCall).toEqual([
+      [
+        "config",
+        "set",
+        "agents.defaults.models",
+        JSON.stringify({
+          "ollama/gemma4:latest": {},
+          "ollama/gemma4": {},
+        }),
+        "--strict-json",
+      ],
+      { timeoutMs: 10_000 },
+    ]);
     expect(modelCall).toEqual([
       ["models", "set", "ollama/gemma4:latest"],
       {

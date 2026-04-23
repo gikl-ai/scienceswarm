@@ -36,8 +36,27 @@ describe("activateOpenClawAgentBackend", () => {
     const saved = await fs.readFile(envPath, "utf-8");
     expect(saved).toContain("# User settings");
     expect(saved).toContain("AGENT_BACKEND=openclaw");
+    expect(saved).toContain("OLLAMA_API_KEY=ollama-local");
     expect(saved).not.toContain("AGENT_BACKEND=none");
     expect(saved).toContain("LLM_PROVIDER=local");
+  });
+
+  it("preserves an existing local Ollama sentinel", async () => {
+    await fs.writeFile(
+      envPath,
+      [
+        "AGENT_BACKEND=none",
+        "LLM_PROVIDER=local",
+        "OLLAMA_API_KEY=custom-local-marker",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    await activateOpenClawAgentBackend(envPath);
+
+    const saved = await fs.readFile(envPath, "utf-8");
+    expect(saved).toContain("AGENT_BACKEND=openclaw");
+    expect(saved).toContain("OLLAMA_API_KEY=custom-local-marker");
   });
 
   it("creates the backend entry when .env does not exist yet", async () => {

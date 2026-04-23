@@ -19,6 +19,7 @@
 import * as path from "node:path";
 import { promises as fs } from "node:fs";
 
+import { buildLocalOpenClawAllowedModels } from "@/lib/openclaw/model-config";
 import {
   mergeEnvValues,
   parseEnvFile,
@@ -531,6 +532,22 @@ async function finalizeOpenClawDefaults(args: {
   if (!providerResult.ok) {
     throw new Error(
       `openclaw config set models.providers.ollama failed: ${providerResult.stderr || `exit ${providerResult.code}`}`,
+    );
+  }
+
+  const allowedModelsResult = await runOpenClaw(
+    [
+      "config",
+      "set",
+      "agents.defaults.models",
+      JSON.stringify(buildLocalOpenClawAllowedModels(OPENCLAW_OLLAMA_MODEL_REF)),
+      "--strict-json",
+    ],
+    { timeoutMs: 10_000 },
+  );
+  if (!allowedModelsResult.ok) {
+    throw new Error(
+      `openclaw config set agents.defaults.models failed: ${allowedModelsResult.stderr || `exit ${allowedModelsResult.code}`}`,
     );
   }
 

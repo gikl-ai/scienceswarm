@@ -311,6 +311,7 @@ describe("GET /api/settings/openclaw", () => {
       });
       const savedEnv = readFileSync(join(tmpRoot, ".env"), "utf-8");
       expect(savedEnv).toContain("AGENT_BACKEND=openclaw");
+      expect(savedEnv).toContain("OLLAMA_API_KEY=ollama-local");
       expect(savedEnv).not.toContain("AGENT_BACKEND=none");
     } finally {
       if (prevImpl) {
@@ -438,6 +439,7 @@ describe("GET /api/settings/openclaw", () => {
 
     const configuredModels: string[] = [];
     const providerConfigs: Array<{ args: string[]; env: NodeJS.ProcessEnv | undefined }> = [];
+    const allowedModelConfigs: string[] = [];
     const modelSetEnvs: NodeJS.ProcessEnv[] = [];
     mockExecFile.mockImplementation((file: string, maybeArgs: unknown, maybeOptions: unknown, maybeCb: unknown) => {
       const args = Array.isArray(maybeArgs) ? maybeArgs as string[] : [];
@@ -474,6 +476,15 @@ describe("GET /api/settings/openclaw", () => {
         providerConfigs.push({ args, env: options?.env });
       }
 
+      if (
+        file === "openclaw"
+        && args[0] === "config"
+        && args[1] === "set"
+        && args[2] === "agents.defaults.models"
+      ) {
+        allowedModelConfigs.push(args[3] ?? "");
+      }
+
       cb(null, "", "");
     });
 
@@ -498,6 +509,11 @@ describe("GET /api/settings/openclaw", () => {
           (model) => model.id === "gemma4:latest" && model.reasoning === true,
         ),
       ).toBe(true);
+      expect(allowedModelConfigs.length).toBe(1);
+      expect(JSON.parse(allowedModelConfigs[0]!)).toEqual({
+        "ollama/gemma4:latest": {},
+        "ollama/gemma4": {},
+      });
       expect(modelSetEnvs.some((env) => env.OLLAMA_API_KEY === "ollama-local")).toBe(true);
     } finally {
       if (prevOpenAiKey === undefined) {

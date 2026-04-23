@@ -2,6 +2,7 @@ import {
   buildOpenClawOllamaProviderConfig,
   OPENCLAW_OLLAMA_PROVIDER_KEY,
 } from "@/lib/openclaw/ollama-provider";
+import { normalizeOllamaModelName } from "@/lib/ollama-models";
 import { runOpenClaw } from "@/lib/openclaw/runner";
 
 export type OpenClawLlmProvider = "openai" | "local";
@@ -16,6 +17,22 @@ export function normalizeOpenClawModel(
   }
   if (model.startsWith("openai/")) return model;
   return `openai/${model.replace(/^ollama\//, "").trim()}`;
+}
+
+export function buildLocalOpenClawAllowedModels(
+  model: string,
+): Record<string, Record<string, never>> {
+  const modelId = normalizeOllamaModelName(model).trim();
+  const allowedModels = new Set<string>();
+  if (modelId) {
+    allowedModels.add(`ollama/${modelId}`);
+    if (modelId.endsWith(":latest")) {
+      allowedModels.add(`ollama/${modelId.slice(0, -":latest".length)}`);
+    }
+  }
+  return Object.fromEntries(
+    Array.from(allowedModels).map((modelRef) => [modelRef, {}]),
+  );
 }
 
 export async function configureOpenClawModel(
@@ -37,6 +54,20 @@ export async function configureOpenClawModel(
       { timeoutMs },
     );
     if (!providerConfigResult.ok) {
+      return false;
+    }
+
+    const allowedModelsResult = await runOpenClaw(
+      [
+        "config",
+        "set",
+        "agents.defaults.models",
+        JSON.stringify(buildLocalOpenClawAllowedModels(model)),
+        "--strict-json",
+      ],
+      { timeoutMs },
+    );
+    if (!allowedModelsResult.ok) {
       return false;
     }
   }
