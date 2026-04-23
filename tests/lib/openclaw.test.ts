@@ -328,6 +328,8 @@ describe("OpenClaw gatewayHealthCheck", () => {
     vi.unstubAllEnvs();
     tempRoot = mkdtempSync(path.join(tmpdir(), "openclaw-gateway-health-"));
     vi.stubEnv("SCIENCESWARM_DIR", tempRoot);
+    vi.stubEnv("HOME", path.join(tempRoot, "home"));
+    vi.stubEnv("OPENCLAW_PROFILE", "");
     execFileMock.mockReset();
     execFileSyncMock.mockReset();
     isGatewayConnectedMock.mockReset();
