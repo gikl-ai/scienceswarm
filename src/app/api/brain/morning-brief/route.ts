@@ -205,21 +205,27 @@ function llmUnavailableResponse(err: unknown): Response {
 
 function isLLMProviderError(message: string): boolean {
   const normalized = message.toLowerCase();
+  const providerCredential =
+    /\b(?:openai|anthropic|gemini|ollama)[_ -]?api[_ -]?key\b/.test(
+      normalized,
+    );
+  const providerAuthOrQuota =
+    /\b(?:openai|anthropic|gemini)\s+(?:api\s+)?(?:quota|rate[_ -]?limit)\b/.test(
+      normalized,
+    );
+  const localProviderFailure =
+    /\bollama\s+(?:chat|stream|pull|request)\s+failed\b/.test(normalized) ||
+    /\bollama\b.{0,80}\b(?:model host|no response body|connection refused|unavailable)\b/.test(
+      normalized,
+    );
+
   return (
     normalized.includes("llm provider") ||
-    normalized.includes("api_key") ||
-    normalized.includes("api key") ||
-    normalized.includes("unauthorized") ||
-    normalized.includes("forbidden") ||
-    normalized.includes("quota") ||
-    normalized.includes("rate limit") ||
-    normalized.includes("rate_limit") ||
-    normalized.includes("model host") ||
     normalized.includes("model provider") ||
-    normalized.includes("openai") ||
-    normalized.includes("anthropic") ||
-    normalized.includes("gemini") ||
-    normalized.includes("ollama")
+    normalized.includes("model host") ||
+    providerCredential ||
+    providerAuthOrQuota ||
+    localProviderFailure
   );
 }
 

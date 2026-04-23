@@ -142,10 +142,13 @@ describe("GET /api/brain/morning-brief", () => {
     expect(mocks.buildMorningBrief).not.toHaveBeenCalled();
   });
 
-  it("maps generation-time provider failures to a structured 503", async () => {
-    mocks.buildMorningBrief.mockRejectedValue(
-      new Error("Missing ANTHROPIC_API_KEY environment variable."),
-    );
+  it.each([
+    "Missing ANTHROPIC_API_KEY environment variable.",
+    "Ollama chat failed (401): unauthorized model host.",
+    "Gemini API key quota exceeded.",
+    "OpenAI API rate limit exceeded.",
+  ])("maps generation-time provider failure %s to a structured 503", async (message) => {
+    mocks.buildMorningBrief.mockRejectedValue(new Error(message));
 
     const { GET } = await importRoute();
     const response = await GET(new Request("http://localhost/api/brain/morning-brief"));
@@ -154,7 +157,23 @@ describe("GET /api/brain/morning-brief", () => {
     await expect(response.json()).resolves.toMatchObject({
       code: "llm_unavailable",
       error: "Morning brief generation requires a configured LLM provider.",
-      cause: "Missing ANTHROPIC_API_KEY environment variable.",
+      cause: message,
+    });
+  });
+
+  it.each([
+    "Paper repository returned 403 Forbidden for Anthropic Institute paper",
+    "Google Gemini paper metadata fetch failed",
+    "Semantic Scholar rate limit hit for Gemini benchmark corpus",
+  ])("keeps research-domain failure %s as a generation error", async (message) => {
+    mocks.buildMorningBrief.mockRejectedValue(new Error(message));
+
+    const { GET } = await importRoute();
+    const response = await GET(new Request("http://localhost/api/brain/morning-brief"));
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: message,
     });
   });
 });
