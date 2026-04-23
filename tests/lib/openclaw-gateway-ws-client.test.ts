@@ -298,6 +298,59 @@ describe("gateway-ws-client", () => {
     });
   });
 
+  it("reuses the same handshake when a chat turn arrives during prewarm", async () => {
+    const {
+      prewarmGatewayConnection,
+      sendChatViaGateway,
+    } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const prewarm = prewarmGatewayConnection();
+    const turn = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+    });
+
+    await waitUntil(() => mockWebSockets.instances.length === 1);
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+
+    await waitUntil(() => {
+      const connectFrames =
+        socket?.sentFrames.filter((frame) => frame.method === "connect").length ?? 0;
+      const chatSendFrames =
+        socket?.sentFrames.filter((frame) => frame.method === "chat.send").length ?? 0;
+      return connectFrames === 1 && chatSendFrames === 1;
+    });
+
+    expect(mockWebSockets.instances).toHaveLength(1);
+    expect(
+      socket?.sentFrames.filter((frame) => frame.method === "connect"),
+    ).toHaveLength(1);
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "run-alpha",
+          state: "final",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "visible reply" }],
+          },
+        },
+      }),
+    );
+
+    await expect(prewarm).resolves.toBeUndefined();
+    await expect(turn).resolves.toMatchObject({
+      runId: "run-alpha",
+      text: "visible reply",
+    });
+  });
+
   it("forwards chat.send agent progress events for the active run", async () => {
     const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
     const onEvent = vi.fn();
