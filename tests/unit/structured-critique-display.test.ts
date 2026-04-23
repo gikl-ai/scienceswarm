@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import mendelFixture from "../fixtures/audit-revise/descartes-cached/mendel-1866-textlayer.professional.json";
-import { buildCritiqueDisplayModel } from "@/lib/structured-critique-display";
+import {
+  buildCritiqueDisplayModel,
+  parseMarkdownSections,
+  type MarkdownSection,
+} from "@/lib/structured-critique-display";
 import { normalizeStructuredCritiqueResultPayload } from "@/lib/structured-critique-schema";
+
+function flattenSectionTitles(sections: MarkdownSection[]): string[] {
+  return sections.flatMap((section) => [
+    section.title,
+    ...flattenSectionTitles(section.children),
+  ]);
+}
 
 describe("structured critique display model", () => {
   it("promotes existing Descartes-style author feedback fields", () => {
@@ -124,5 +135,92 @@ describe("structured critique display model", () => {
         findingIds: ["F010"],
       },
     ]);
+  });
+
+  it("matches semantic markdown headings through normalized aliases", () => {
+    const result = normalizeStructuredCritiqueResultPayload({
+      title: "Alias audit",
+      findings: [],
+      report_markdown: [
+        "# Alias audit",
+        "",
+        "## Section-by-section Feedback",
+        "",
+        "### Methods",
+        "",
+        "The methods section needs a clearer sampling frame.",
+      ].join("\n"),
+    });
+
+    const model = buildCritiqueDisplayModel(result);
+
+    expect(model.sectionFeedback).toEqual([
+      {
+        title: "Methods",
+        bodyMarkdown: "The methods section needs a clearer sampling frame.",
+      },
+    ]);
+  });
+
+  it("ignores markdown headings inside backtick and tilde fences", () => {
+    const sections = parseMarkdownSections(
+      [
+        "## Summary",
+        "",
+        "Visible summary.",
+        "",
+        "~~~",
+        "# Not a tilde heading",
+        "~~~",
+        "",
+        "```",
+        "## Not a backtick heading",
+        "```",
+        "",
+        "## Top Issues",
+        "",
+        "Visible issues.",
+      ].join("\n"),
+    );
+
+    expect(flattenSectionTitles(sections)).toEqual(["Summary", "Top Issues"]);
+  });
+
+  it("removes consumed nested markdown sections from unclassified sections", () => {
+    const result = normalizeStructuredCritiqueResultPayload({
+      title: "Nested audit",
+      findings: [],
+      report_markdown: [
+        "# Nested audit",
+        "",
+        "## Review Details",
+        "",
+        "Context that can remain unclassified.",
+        "",
+        "### Section-by-section Feedback",
+        "",
+        "#### Methods",
+        "",
+        "The methods section needs calibration detail.",
+        "",
+        "### Other Notes",
+        "",
+        "A separate note remains available for fallback display.",
+      ].join("\n"),
+    });
+
+    const model = buildCritiqueDisplayModel(result);
+    const titles = flattenSectionTitles(model.unclassifiedSections);
+
+    expect(model.sectionFeedback).toEqual([
+      {
+        title: "Methods",
+        bodyMarkdown: "The methods section needs calibration detail.",
+      },
+    ]);
+    expect(titles).toContain("Review Details");
+    expect(titles).toContain("Other Notes");
+    expect(titles).not.toContain("Section-by-section Feedback");
+    expect(titles).not.toContain("Methods");
   });
 });

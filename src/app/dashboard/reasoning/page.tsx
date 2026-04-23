@@ -1329,7 +1329,9 @@ function CritiqueMarkdownBlock({
 }) {
   return (
     <div className={`file-markdown bg-transparent p-0 ${className}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} disallowedElements={["img"]}>
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }
