@@ -6,6 +6,13 @@ const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   output: process.env.CAPACITOR_BUILD ? "export" : undefined,
+  // E2E smoke tests may launch a second Next dev server with a
+  // different runtime env. Give that server its own cache/lock dir
+  // without changing the default app behavior.
+  distDir: process.env.NEXT_DIST_DIR,
+  typescript: process.env.NEXT_TSCONFIG_PATH
+    ? { tsconfigPath: process.env.NEXT_TSCONFIG_PATH }
+    : undefined,
   // TODO: API routes (/api/agent, /api/chat, /api/parse-file) must be
   // moved to a separate backend before static export can be enabled.
   transpilePackages: ["gbrain"],

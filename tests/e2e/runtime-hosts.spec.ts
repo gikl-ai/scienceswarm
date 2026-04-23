@@ -1,10 +1,12 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { spawn, type ChildProcess } from "node:child_process";
 import { promises as fs } from "node:fs";
+import { createServer } from "node:net";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 const PROJECT_ID = "project-alpha";
 const NOW = "2026-04-23T02:00:00.000Z";
-const ENV_PATH = path.join(process.cwd(), ".env");
 
 type RuntimeSessionStatus =
   | "queued"
@@ -129,6 +131,16 @@ const GEMINI_PROFILE = hostProfile({
   capabilities: ["chat", "task", "stream", "cancel", "mcp-tools", "artifact-import"],
 });
 
+const HOST_PROFILES = new Map([
+  [OPENCLAW_PROFILE.id, OPENCLAW_PROFILE],
+  [CODEX_PROFILE.id, CODEX_PROFILE],
+  [GEMINI_PROFILE.id, GEMINI_PROFILE],
+]);
+
+function profileForHost(hostId: string): typeof OPENCLAW_PROFILE {
+  return HOST_PROFILES.get(hostId) ?? OPENCLAW_PROFILE;
+}
+
 function healthHost(profile: typeof OPENCLAW_PROFILE, authStatus = "authenticated") {
   return {
     profile,
@@ -198,16 +210,21 @@ function turnPreview(input: {
   const selectedHostIds = input.selectedHostIds?.length
     ? input.selectedHostIds
     : [input.hostId];
+  const selectedProfiles = selectedHostIds.map(profileForHost);
+  const hostedProfile = selectedProfiles.find((profile) => profile.privacyClass === "hosted");
+  const primaryProfile = profileForHost(input.hostId);
+  const disclosureProfile = hostedProfile ?? primaryProfile;
+  const effectivePrivacyClass = hostedProfile ? "hosted" : "local-network";
   return {
     allowed: true,
     projectPolicy: input.projectPolicy,
     hostId: input.hostId,
     mode: input.mode,
-    effectivePrivacyClass: selectedHostIds.includes("codex") ? "hosted" : "local-network",
-    destinations: selectedHostIds.map((hostId) => ({
-      hostId,
-      label: hostId === "codex" ? "Codex" : "OpenClaw",
-      privacyClass: hostId === "codex" ? "hosted" : "local-network",
+    effectivePrivacyClass,
+    destinations: selectedProfiles.map((profile) => ({
+      hostId: profile.id,
+      label: profile.label,
+      privacyClass: profile.privacyClass,
     })),
     dataIncluded: [
       {
@@ -223,75 +240,24 @@ function turnPreview(input: {
     ],
     proof: {
       projectGatePassed: true,
-      operationPrivacyClass: selectedHostIds.includes("codex") ? "hosted" : "local-network",
-      adapterProof: selectedHostIds.includes("codex") ? "declared-hosted" : "declared-local",
+      operationPrivacyClass: effectivePrivacyClass,
+      adapterProof: hostedProfile ? "declared-hosted" : "declared-local",
     },
     blockReason: null,
-    requiresUserApproval: input.requiresUserApproval ?? selectedHostIds.includes("codex"),
+    requiresUserApproval: input.requiresUserApproval ?? Boolean(hostedProfile),
     accountDisclosure: {
-      authMode: selectedHostIds.includes("codex") ? "subscription-native" : "local",
-      provider: selectedHostIds.includes("codex") ? "openai" : "openclaw",
-      billingClass: selectedHostIds.includes("codex") ? "subscription" : "local-compute",
-      accountSource: selectedHostIds.includes("codex") ? "host-cli-login" : "local-service",
+      authMode: disclosureProfile.authMode,
+      provider: disclosureProfile.authProvider,
+      billingClass: disclosureProfile.authMode === "subscription-native"
+        ? "subscription"
+        : "local-compute",
+      accountSource: disclosureProfile.authMode === "subscription-native"
+        ? "host-cli-login"
+        : "local-service",
       costCopyRequired: false,
     },
     hostLabel: input.hostLabel,
   };
-}
-
-async function readOptionalFile(filePath: string): Promise<string | null> {
-  try {
-    return await fs.readFile(filePath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-}
-
-async function writeReadyEnv(): Promise<string | null> {
-  const previous = await readOptionalFile(ENV_PATH);
-  const runtimeHome = process.env.E2E_TMP_HOME
-    ?? path.join(process.cwd(), ".tmp", "runtime-hosts-e2e");
-  await fs.mkdir(runtimeHome, { recursive: true });
-  await fs.writeFile(
-    ENV_PATH,
-    [
-      "AGENT_BACKEND=openclaw",
-      "LLM_PROVIDER=local",
-      "OLLAMA_MODEL=gemma4:latest",
-      `SCIENCESWARM_DIR=${runtimeHome}`,
-      "SCIENCESWARM_USER_HANDLE=smoke-test",
-      "",
-    ].join("\n"),
-  );
-  return previous;
-}
-
-async function restoreEnv(previous: string | null): Promise<void> {
-  if (previous === null) {
-    if (process.env.CI) {
-      // Next dev reloads `.env` into the shared smoke server process. If this
-      // spec simply deletes the ready file, already-loaded readiness keys can
-      // leak into later smoke files. Leave CI in an explicit unready state so
-      // the fresh-install redirect smoke remains a real fresh-install check.
-      await fs.writeFile(
-        ENV_PATH,
-        [
-          "AGENT_BACKEND=none",
-          "LLM_PROVIDER=",
-          "OLLAMA_MODEL=",
-          "OPENAI_API_KEY=",
-          "SCIENCESWARM_DIR=",
-          "",
-        ].join("\n"),
-      );
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      return;
-    }
-    await fs.rm(ENV_PATH, { force: true });
-    return;
-  }
-  await fs.writeFile(ENV_PATH, previous);
 }
 
 interface RuntimeRouteState {
@@ -307,6 +273,188 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
     contentType: "application/json",
     body: JSON.stringify(body),
   });
+}
+
+interface ReadyRuntimeServer {
+  baseUrl: string;
+  process: ChildProcess | null;
+  runtimeHome: string | null;
+  distDir: string | null;
+  tsconfigPath: string | null;
+}
+
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Could not allocate a runtime e2e port.")));
+        return;
+      }
+      const port = address.port;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForReadyServer(
+  baseUrl: string,
+  child: ChildProcess,
+  logs: string[],
+): Promise<void> {
+  const deadline = Date.now() + 180_000;
+  let exited = false;
+  child.once("exit", (code, signal) => {
+    exited = true;
+    logs.push(`[exit] code=${code ?? "null"} signal=${signal ?? "null"}`);
+  });
+
+  while (Date.now() < deadline) {
+    if (exited) {
+      throw new Error(`Runtime host e2e server exited before ready:\n${logs.join("\n")}`);
+    }
+    try {
+      const response = await fetch(`${baseUrl}/setup`);
+      if (response.ok) return;
+    } catch {
+      // Server is still booting.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error(`Timed out waiting for runtime host e2e server:\n${logs.join("\n")}`);
+}
+
+async function startReadyRuntimeServer(): Promise<ReadyRuntimeServer> {
+  const externalBaseUrl = process.env.E2E_RUNTIME_HOSTS_BASE_URL?.trim();
+  if (externalBaseUrl) {
+    return {
+      baseUrl: externalBaseUrl.replace(/\/$/, ""),
+      process: null,
+      runtimeHome: null,
+      distDir: null,
+      tsconfigPath: null,
+    };
+  }
+
+  const port = process.env.E2E_RUNTIME_HOSTS_PORT
+    ? Number(process.env.E2E_RUNTIME_HOSTS_PORT)
+    : await getFreePort();
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error("E2E_RUNTIME_HOSTS_PORT must be a positive integer.");
+  }
+
+  const runtimeHome = await fs.mkdtemp(path.join(tmpdir(), "scienceswarm-runtime-hosts-e2e-"));
+  const brainRoot = path.join(runtimeHome, "brain");
+  await fs.mkdir(brainRoot, { recursive: true });
+  const distDir = `.omc/next-runtime-hosts-e2e-${process.pid}-${port}`;
+  const distDirPath = path.join(process.cwd(), distDir);
+  const tsconfigPath = `tsconfig.runtime-hosts-e2e-${process.pid}-${port}.json`;
+  await fs.mkdir(distDirPath, { recursive: true });
+  await fs.writeFile(
+    path.join(process.cwd(), tsconfigPath),
+    "{\n  \"extends\": \"./tsconfig.json\"\n}\n",
+  );
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    FRONTEND_PORT: String(port),
+    PORT: String(port),
+    NEXT_DIST_DIR: distDir,
+    NEXT_TSCONFIG_PATH: tsconfigPath,
+    AGENT_BACKEND: "openclaw",
+    LLM_PROVIDER: "local",
+    OLLAMA_MODEL: "gemma4:latest",
+    SCIENCESWARM_HOME: runtimeHome,
+    SCIENCESWARM_DIR: runtimeHome,
+    BRAIN_ROOT: brainRoot,
+    SCIENCESWARM_USER_HANDLE: "smoke-test",
+    ENABLE_RADAR_RUNNER: "false",
+    OPENAI_API_KEY: "",
+  };
+  const logs: string[] = [];
+  const child = spawn("npm", ["run", "dev"], {
+    cwd: process.cwd(),
+    detached: true,
+    env: childEnv,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  const capture = (chunk: Buffer | string) => {
+    logs.push(chunk.toString());
+    while (logs.join("").length > 8000) logs.shift();
+  };
+  child.stdout?.on("data", capture);
+  child.stderr?.on("data", capture);
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  try {
+    await waitForReadyServer(baseUrl, child, logs);
+  } catch (error) {
+    await stopReadyRuntimeServer({
+      baseUrl,
+      process: child,
+      runtimeHome,
+      distDir,
+      tsconfigPath,
+    });
+    throw error;
+  }
+
+  return {
+    baseUrl,
+    process: child,
+    runtimeHome,
+    distDir,
+    tsconfigPath,
+  };
+}
+
+async function stopReadyRuntimeServer(server: ReadyRuntimeServer): Promise<void> {
+  if (server.process?.pid) {
+    const pid = server.process.pid;
+    const exited = new Promise<void>((resolve) => {
+      server.process?.once("exit", () => resolve());
+    });
+    try {
+      process.kill(-pid, "SIGTERM");
+    } catch {
+      // Already stopped.
+    }
+    const stopped = await Promise.race([
+      exited.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
+    ]);
+    if (!stopped) {
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {
+        // Already stopped.
+      }
+    }
+  }
+  if (server.runtimeHome) {
+    await fs.rm(server.runtimeHome, { recursive: true, force: true });
+  }
+  if (server.tsconfigPath) {
+    await fs.rm(path.join(process.cwd(), server.tsconfigPath), { force: true });
+  }
+  if (server.distDir) {
+    try {
+      await fs.rm(path.join(process.cwd(), server.distDir), {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 250,
+      });
+    } catch (error) {
+      console.warn(
+        "[runtime-hosts.spec] Could not remove isolated Next cache",
+        error instanceof Error ? error.name : "unknown_error",
+      );
+    }
+  }
 }
 
 async function installRuntimeRoutes(page: Page): Promise<RuntimeRouteState> {
@@ -395,6 +543,20 @@ async function installRuntimeRoutes(page: Page): Promise<RuntimeRouteState> {
       return;
     }
 
+    if (url.pathname === "/api/scheduler") {
+      await fulfillJson(route, { jobs: [], pipelines: [] });
+      return;
+    }
+
+    if (url.pathname === "/api/scienceswarm-auth/status") {
+      await fulfillJson(route, {
+        detail: "",
+        expiresAt: null,
+        signedIn: false,
+      });
+      return;
+    }
+
     if (url.pathname === "/api/runtime/health") {
       await fulfillJson(route, {
         checkedAt: NOW,
@@ -436,7 +598,7 @@ async function installRuntimeRoutes(page: Page): Promise<RuntimeRouteState> {
       await fulfillJson(route, {
         preview: turnPreview({
           hostId: body.hostId,
-          hostLabel: body.hostId === "codex" ? "Codex" : "OpenClaw",
+          hostLabel: profileForHost(body.hostId).label,
           projectPolicy: body.projectPolicy,
           mode: body.mode,
           selectedHostIds,
@@ -460,7 +622,7 @@ async function installRuntimeRoutes(page: Page): Promise<RuntimeRouteState> {
       const session = makeSession({
         id: `rt-${body.hostId}-${body.mode}-1`,
         hostId: body.hostId,
-        label: body.hostId === "codex" ? "Codex" : "OpenClaw",
+        label: profileForHost(body.hostId).label,
         mode: body.mode,
         status: body.mode === "task" ? "failed" : "completed",
         canCancel: false,
@@ -636,7 +798,12 @@ async function installRuntimeRoutes(page: Page): Promise<RuntimeRouteState> {
       return;
     }
 
-    await fulfillJson(route, {});
+    console.warn(`[runtime-hosts.spec] Unmocked API route: ${method} ${url.pathname}`);
+    await fulfillJson(
+      route,
+      { error: `Unmocked API route: ${method} ${url.pathname}` },
+      404,
+    );
   });
 
   return state;
@@ -651,14 +818,14 @@ async function selectRuntimePolicy(
 }
 
 test.describe.serial("runtime hosts rollout smoke", () => {
-  let previousEnv: string | null;
+  let readyServer: ReadyRuntimeServer;
 
   test.beforeAll(async () => {
-    previousEnv = await writeReadyEnv();
+    readyServer = await startReadyRuntimeServer();
   });
 
   test.afterAll(async () => {
-    await restoreEnv(previousEnv);
+    await stopReadyRuntimeServer(readyServer);
   });
 
   test.beforeEach(async ({ page }) => {
@@ -673,7 +840,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
   }) => {
     const state = await installRuntimeRoutes(page);
 
-    await page.goto(`/dashboard/project?name=${PROJECT_ID}`);
+    await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
 
     await expect(page.getByTestId("runtime-picker")).toBeVisible();
     await expect(page.getByTestId("runtime-project-policy")).toHaveValue("local-only");
@@ -697,7 +864,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
   }) => {
     await installRuntimeRoutes(page);
 
-    await page.goto(`/dashboard/project?name=${PROJECT_ID}`);
+    await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
     await expect(page.getByTestId("runtime-picker")).toBeVisible();
     await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready for preview");
 
@@ -737,7 +904,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
   }) => {
     await installRuntimeRoutes(page);
 
-    await page.goto(`/dashboard/project?name=${PROJECT_ID}`);
+    await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
     await expect(page.getByTestId("runtime-picker")).toBeVisible();
     await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready for preview");
 
