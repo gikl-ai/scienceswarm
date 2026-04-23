@@ -475,6 +475,40 @@ function formatElapsedCompact(elapsedMs: number): string {
   return `${seconds}s`;
 }
 
+function millisecondsUntilNextSecond(nowMs: number): number {
+  const remainder = nowMs % 1000;
+  return remainder === 0 ? 1000 : 1000 - remainder;
+}
+
+function useLiveSecondTick(enabled: boolean): void {
+  const [, bumpElapsedTick] = useReducer((value: number) => value + 1, 0);
+
+  useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
+    let timeoutId: number | null = null;
+    const scheduleNextTick = () => {
+      timeoutId = window.setTimeout(() => {
+        bumpElapsedTick();
+        scheduleNextTick();
+      }, millisecondsUntilNextSecond(Date.now()));
+    };
+
+    timeoutId = window.setTimeout(() => {
+      bumpElapsedTick();
+      scheduleNextTick();
+    }, millisecondsUntilNextSecond(Date.now()));
+
+    return () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [enabled]);
+}
+
 function getProgressElapsedMs(timestamp: Date, isStreaming: boolean | undefined): number | null {
   if (!isStreaming) return null;
 
@@ -805,21 +839,7 @@ export function ChatMessage({
   steps,
   projectId = "",
 }: ChatMessageProps) {
-  const [, bumpElapsedTick] = useReducer((value: number) => value + 1, 0);
-
-  useEffect(() => {
-    if (!isStreaming) {
-      return undefined;
-    }
-
-    const timerId = window.setInterval(() => {
-      bumpElapsedTick();
-    }, 1000);
-
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [isStreaming, timestamp]);
+  useLiveSecondTick(Boolean(isStreaming));
 
   const badge = channel ? CHANNEL_BADGES[channel] : undefined;
   const isCrossChannel = channel && channel !== "web";

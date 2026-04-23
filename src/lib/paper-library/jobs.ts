@@ -1,0 +1,331 @@
+import { randomUUID } from "node:crypto";
+import { readdir, realpath, stat } from "node:fs/promises";
+import path from "node:path";
+
+import {
+  PAPER_LIBRARY_STATE_VERSION,
+  PaperLibraryScanSchema,
+  type PaperLibraryScan,
+  type PaperReviewItem,
+} from "./contracts";
+import {
+  getPaperLibraryIdempotencyPath,
+  getPaperLibraryReviewShardPath,
+  getPaperLibraryScanPath,
+  readPersistedState,
+} from "./state";
+import {
+  createIdentityCandidateFromEvidence,
+  extractPaperIdentityEvidence,
+} from "./identity";
+import { snapshotFile } from "./fs-safety";
+import { readJsonFile, writeJsonFile } from "@/lib/state/atomic-json";
+import { isPathAllowed } from "@/lib/import/background-import-job";
+import { shouldSkipImportDirectory, shouldSkipImportFile } from "@/lib/import/ignore";
+import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
+
+const STALE_HEARTBEAT_MS = 30_000;
+const REVIEW_SHARD_SIZE = 250;
+const runningScanJobs = new Set<string>();
+type PartialScanCounters = Partial<PaperLibraryScan["counters"]>;
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function isPdf(name: string): boolean {
+  return name.toLowerCase().endsWith(".pdf");
+}
+
+function normalizeScan(scan: unknown): PaperLibraryScan {
+  const parsed = PaperLibraryScanSchema.parse(scan);
+  return {
+    ...parsed,
+    counters: scanCounters(parsed as { counters?: PartialScanCounters }),
+    warnings: scanWarnings(parsed as { warnings?: string[] }),
+    currentPath: parsed.currentPath ?? null,
+    reviewShardIds: parsed.reviewShardIds ?? [],
+  } as PaperLibraryScan;
+}
+
+async function writeScan(scan: PaperLibraryScan, stateRoot: string): Promise<PaperLibraryScan> {
+  const parsed = normalizeScan(scan);
+  await writeJsonFile(getPaperLibraryScanPath(parsed.project, parsed.id, stateRoot), parsed);
+  return parsed;
+}
+
+function scanWarnings(scan: { warnings?: string[] }): string[] {
+  return scan.warnings ?? [];
+}
+
+function scanCounters(scan: { counters?: PartialScanCounters }): PaperLibraryScan["counters"] {
+  const counters = scan.counters ?? {};
+  return {
+    detectedFiles: counters.detectedFiles ?? 0,
+    identified: counters.identified ?? 0,
+    needsReview: counters.needsReview ?? 0,
+    readyForApply: counters.readyForApply ?? 0,
+    failed: counters.failed ?? 0,
+  };
+}
+
+export async function readPaperLibraryScan(
+  project: string,
+  scanId: string,
+  brainRoot: string,
+): Promise<PaperLibraryScan | null> {
+  const stateRoot = getProjectStateRootForBrainRoot(project, brainRoot);
+  const parsed = await readPersistedState(
+    getPaperLibraryScanPath(project, scanId, stateRoot),
+    PaperLibraryScanSchema,
+    "paper-library scan",
+  );
+  if (!parsed.ok) return null;
+
+  const scan = normalizeScan(parsed.data);
+  if (
+    ["queued", "scanning", "identifying", "enriching"].includes(scan.status)
+    && scan.heartbeatAt
+    && Date.now() - Date.parse(scan.heartbeatAt) > STALE_HEARTBEAT_MS
+  ) {
+    return writeScan({
+      ...scan,
+      status: "failed",
+      updatedAt: nowIso(),
+      warnings: [...scanWarnings(scan), "scan_worker_stale"],
+      counters: scanCounters(scan),
+    }, stateRoot);
+  }
+
+  return scan;
+}
+
+export async function cancelPaperLibraryScan(project: string, scanId: string, brainRoot: string): Promise<PaperLibraryScan | null> {
+  const scan = await readPaperLibraryScan(project, scanId, brainRoot);
+  if (!scan) return null;
+  const stateRoot = getProjectStateRootForBrainRoot(project, brainRoot);
+  return writeScan({
+      ...scan,
+      cancelRequestedAt: nowIso(),
+      updatedAt: nowIso(),
+      warnings: scanWarnings(scan),
+      counters: scanCounters(scan),
+  }, stateRoot);
+}
+
+async function findExistingScanForIdempotency(
+  project: string,
+  idempotencyKey: string | undefined,
+  stateRoot: string,
+): Promise<PaperLibraryScan | null> {
+  if (!idempotencyKey) return null;
+  const record = await readJsonFile<{ scanId: string }>(getPaperLibraryIdempotencyPath(project, idempotencyKey, stateRoot));
+  if (!record?.scanId) return null;
+  const parsed = await readPersistedState(
+    getPaperLibraryScanPath(project, record.scanId, stateRoot),
+    PaperLibraryScanSchema,
+    "paper-library scan",
+  );
+  return parsed.ok ? normalizeScan(parsed.data) : null;
+}
+
+export async function startPaperLibraryScan(input: {
+  project: string;
+  rootPath: string;
+  brainRoot: string;
+  idempotencyKey?: string;
+}): Promise<PaperLibraryScan> {
+  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
+  const existing = await findExistingScanForIdempotency(input.project, input.idempotencyKey, stateRoot);
+  if (existing) return existing;
+
+  if (!(await isPathAllowed(input.rootPath))) {
+    throw new Error("Path not allowed. Must be under your home directory and not in sensitive directories.");
+  }
+  const rootStat = await stat(input.rootPath);
+  if (!rootStat.isDirectory()) {
+    throw new Error("Root path is not a directory.");
+  }
+
+  const createdAt = nowIso();
+  const scan: PaperLibraryScan = {
+    version: PAPER_LIBRARY_STATE_VERSION,
+    id: randomUUID(),
+    project: input.project,
+    rootPath: input.rootPath,
+    rootRealpath: await realpath(input.rootPath),
+    status: "queued",
+    createdAt,
+    updatedAt: createdAt,
+    heartbeatAt: createdAt,
+    idempotencyKey: input.idempotencyKey,
+    counters: {
+      detectedFiles: 0,
+      identified: 0,
+      needsReview: 0,
+      readyForApply: 0,
+      failed: 0,
+    },
+    warnings: [],
+    currentPath: null,
+    reviewShardIds: [],
+  };
+  await writeScan(scan, stateRoot);
+  if (input.idempotencyKey) {
+    await writeJsonFile(getPaperLibraryIdempotencyPath(input.project, input.idempotencyKey, stateRoot), { scanId: scan.id });
+  }
+
+  setTimeout(() => {
+    void runPaperLibraryScanJob(input.project, scan.id, input.brainRoot);
+  }, 0);
+
+  return scan;
+}
+
+async function updateScan(
+  project: string,
+  scanId: string,
+  brainRoot: string,
+  updater: (scan: PaperLibraryScan) => PaperLibraryScan,
+): Promise<PaperLibraryScan> {
+  const scan = await readPaperLibraryScan(project, scanId, brainRoot);
+  if (!scan) throw new Error(`Paper library scan ${scanId} not found.`);
+  const stateRoot = getProjectStateRootForBrainRoot(project, brainRoot);
+  return writeScan(updater(scan), stateRoot);
+}
+
+async function walkPdfFiles(rootPath: string): Promise<string[]> {
+  const files: string[] = [];
+  async function walk(dir: string): Promise<void> {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (!shouldSkipImportDirectory(entry.name)) await walk(path.join(dir, entry.name));
+        continue;
+      }
+      if (!entry.isFile() || shouldSkipImportFile(entry.name) || !isPdf(entry.name)) continue;
+      files.push(path.join(dir, entry.name));
+    }
+  }
+  await walk(rootPath);
+  return files;
+}
+
+export async function runPaperLibraryScanJob(
+  project: string,
+  scanId: string,
+  brainRoot: string,
+): Promise<void> {
+  if (runningScanJobs.has(scanId)) return;
+  runningScanJobs.add(scanId);
+  const claimId = randomUUID();
+
+  try {
+    let scan = await updateScan(project, scanId, brainRoot, (current) => ({
+      ...current,
+      status: "scanning",
+      claimId,
+      heartbeatAt: nowIso(),
+      updatedAt: nowIso(),
+    }));
+
+    const stateRoot = getProjectStateRootForBrainRoot(project, brainRoot);
+    const rootRealpath = scan.rootRealpath ?? await realpath(scan.rootPath);
+    const files = await walkPdfFiles(rootRealpath);
+    const reviewItems: PaperReviewItem[] = [];
+    let identified = 0;
+    let failed = 0;
+
+    for (const [index, absolutePath] of files.entries()) {
+      const fresh = await readPaperLibraryScan(project, scanId, brainRoot);
+      if (fresh?.cancelRequestedAt) {
+        await writeScan({ ...fresh, status: "canceled", updatedAt: nowIso(), heartbeatAt: nowIso() }, stateRoot);
+        return;
+      }
+
+      const relativePath = path.relative(rootRealpath, absolutePath);
+      const snapshot = await snapshotFile(rootRealpath, absolutePath);
+      if (!snapshot.ok) {
+        failed += 1;
+        continue;
+      }
+
+      const evidence = extractPaperIdentityEvidence({ relativePath });
+      const candidate = createIdentityCandidateFromEvidence(evidence, relativePath);
+      const needsReview = candidate.confidence < 0.9 || candidate.conflicts.length > 0;
+      if (!needsReview) identified += 1;
+      reviewItems.push({
+        id: randomUUID(),
+        scanId,
+        paperId: candidate.id,
+        state: needsReview ? "needs_review" : "accepted",
+        reasonCodes: needsReview ? (candidate.conflicts.length ? candidate.conflicts : ["low_confidence"]) : [],
+        candidates: [candidate],
+        selectedCandidateId: needsReview ? undefined : candidate.id,
+        version: 0,
+        updatedAt: nowIso(),
+      });
+
+      if (index % 20 === 0 || Date.now() - Date.parse(scan.heartbeatAt ?? scan.updatedAt) > 250) {
+        scan = await updateScan(project, scanId, brainRoot, (current) => ({
+          ...current,
+          status: "identifying",
+          rootRealpath,
+          heartbeatAt: nowIso(),
+          updatedAt: nowIso(),
+          currentPath: relativePath,
+          counters: {
+            ...scanCounters(current),
+            detectedFiles: files.length,
+            identified,
+            needsReview: reviewItems.filter((item) => item.state === "needs_review").length,
+            failed,
+          },
+        }));
+      }
+    }
+
+    const shardIds: string[] = [];
+    for (let start = 0; start < reviewItems.length; start += REVIEW_SHARD_SIZE) {
+      const shardId = String(shardIds.length + 1).padStart(4, "0");
+      shardIds.push(shardId);
+      await writeJsonFile(getPaperLibraryReviewShardPath(project, scanId, shardId, stateRoot), {
+        version: PAPER_LIBRARY_STATE_VERSION,
+        scanId,
+        items: reviewItems.slice(start, start + REVIEW_SHARD_SIZE),
+      });
+    }
+
+    await updateScan(project, scanId, brainRoot, (current) => ({
+      ...current,
+      status: reviewItems.some((item) => item.state === "needs_review") ? "ready_for_review" : "ready_for_apply",
+      rootRealpath,
+      claimId: undefined,
+      heartbeatAt: nowIso(),
+      updatedAt: nowIso(),
+      currentPath: null,
+      reviewShardIds: shardIds,
+      counters: {
+        detectedFiles: files.length,
+        identified,
+        needsReview: reviewItems.filter((item) => item.state === "needs_review").length,
+        readyForApply: reviewItems.filter((item) => item.state === "accepted").length,
+        failed,
+      },
+    }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Paper library scan failed.";
+    await updateScan(project, scanId, brainRoot, (current) => ({
+      ...current,
+      status: "failed",
+      claimId: undefined,
+      heartbeatAt: nowIso(),
+      updatedAt: nowIso(),
+      warnings: [...scanWarnings(current), message],
+      counters: scanCounters(current),
+    })).catch(() => undefined);
+  } finally {
+    runningScanJobs.delete(scanId);
+  }
+}
