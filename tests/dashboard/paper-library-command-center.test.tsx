@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
 import type { AnchorHTMLAttributes, ReactNode } from "react";
+import { act } from "react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -201,6 +204,147 @@ describe("PaperLibraryCommandCenter", () => {
     expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
     expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"rootPath\":\"/tmp/library\"");
     expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"scanId\":\"scan-1\"");
+  });
+
+  it("hydrates SSR markup before restoring a browser session", async () => {
+    let serverHtml = "";
+    const originalWindow = window;
+    vi.stubGlobal("window", undefined);
+    try {
+      serverHtml = renderToString(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+    } finally {
+      vi.stubGlobal("window", originalWindow);
+    }
+
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "history",
+        rootPath: "/tmp/library",
+        templateFormat: "papers/{year}/{title}.pdf",
+        scanId: "scan-1",
+        applyPlanId: "plan-1",
+        manifestId: "manifest-1",
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            status: "ready_for_apply",
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 0,
+              readyForApply: 1,
+              failed: 0,
+            },
+            applyPlanId: "plan-1",
+          }),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/apply-plan?")) {
+        return Response.json({
+          ok: true,
+          plan: {
+            version: 1,
+            id: "plan-1",
+            scanId: "scan-1",
+            project: "demo-project",
+            status: "applied",
+            rootPath: "/tmp/library",
+            rootRealpath: "/tmp/library",
+            templateFormat: "papers/{year}/{title}.pdf",
+            operationCount: 1,
+            conflictCount: 0,
+            operationShardIds: ["0001"],
+            planDigest: "digest",
+            manifestId: "manifest-1",
+            createdAt: "2026-04-23T12:20:00.000Z",
+            updatedAt: "2026-04-23T12:20:00.000Z",
+          },
+          operations: [
+            {
+              id: "operation-1",
+              paperId: "paper-1",
+              kind: "rename",
+              source: baseReviewItem().source,
+              destinationRelativePath: "papers/2024/Interesting Paper.pdf",
+              reason: "Paper library template proposal",
+              confidence: 0.82,
+              conflictCodes: [],
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/manifest?")) {
+        return Response.json({
+          ok: true,
+          manifest: {
+            version: 1,
+            id: "manifest-1",
+            project: "demo-project",
+            applyPlanId: "plan-1",
+            status: "applied",
+            rootRealpath: "/tmp/library",
+            planDigest: "digest",
+            operationCount: 1,
+            appliedCount: 1,
+            failedCount: 0,
+            undoneCount: 0,
+            operationShardIds: ["0001"],
+            warnings: [],
+            createdAt: "2026-04-23T12:31:00.000Z",
+            updatedAt: "2026-04-23T12:31:00.000Z",
+          },
+          operations: [
+            {
+              operationId: "operation-1",
+              paperId: "paper-1",
+              sourceRelativePath: "2024 - Smith - Interesting Paper.pdf",
+              destinationRelativePath: "papers/2024/Interesting Paper.pdf",
+              status: "applied",
+              appliedAt: "2026-04-23T12:31:00.000Z",
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const container = document.createElement("div");
+    container.innerHTML = serverHtml;
+    document.body.appendChild(container);
+    let root: ReturnType<typeof hydrateRoot> | null = null;
+
+    await act(async () => {
+      root = hydrateRoot(container, <PaperLibraryCommandCenter projectSlug="demo-project" />);
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("Manifest and undo")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([request]) => String(request).includes("latest=1"))).toBe(false);
+    expect(
+      consoleErrorSpy.mock.calls.filter(([message]) => String(message).includes("Hydration failed")),
+    ).toHaveLength(0);
+
+    await act(async () => {
+      root?.unmount();
+    });
+    container.remove();
   });
 
   it("does not override a manual root-path edit while latest-scan restore is in flight", async () => {
