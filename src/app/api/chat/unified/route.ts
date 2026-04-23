@@ -7966,7 +7966,7 @@ async function handleExplicitOpenClawSlashCommand(params: {
   }
 
   const {
-    healthCheck: openClawHealthCheck,
+    gatewayHealthCheck: openClawHealthCheck,
     sendOpenClawChatMessage: sendToOpenClaw,
   } = await import("@/lib/openclaw");
   const openClawStatus = await openClawHealthCheck().catch(() => ({
