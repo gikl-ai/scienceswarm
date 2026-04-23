@@ -8,6 +8,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.resetModules();
   vi.doUnmock("@/brain/store");
+  vi.doUnmock("@/lib/gbrain/project-query-fast-path");
 });
 
 describe("GET /api/brain/list", () => {
@@ -55,5 +56,41 @@ describe("GET /api/brain/list", () => {
       },
     ]);
     expect(dbQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns an empty degraded list when the brain backend is unavailable", async () => {
+    class MockBrainBackendUnavailableError extends Error {
+      constructor() {
+        super("Brain backend unavailable");
+        this.name = "BrainBackendUnavailableError";
+      }
+    }
+
+    vi.doMock("@/lib/gbrain/project-query-fast-path", () => ({
+      listProjectPageSummariesFast: vi.fn(async () => null),
+    }));
+
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {
+        throw new MockBrainBackendUnavailableError();
+      }),
+      getBrainStore: vi.fn(),
+      isBrainBackendUnavailableError: (error: unknown) => error instanceof MockBrainBackendUnavailableError,
+    }));
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { GET } = await importRoute();
+    const response = await GET(
+      new Request("http://localhost/api/brain/list?project=alpha-project"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-scienceswarm-degraded")).toBe("brain_backend_unavailable");
+    await expect(response.json()).resolves.toEqual([]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "GET /api/brain/list degraded:",
+      "Brain backend unavailable",
+    );
   });
 });
