@@ -418,14 +418,14 @@ wait for the merge, then measure and report the `Hi` response time.
     - Validation: full relevant test suite, typecheck, lint, and final `Hi`
       benchmark.
 
-29. **Project-Load Preconnect PR**
+45. **Project-Load Preconnect PR**
     - Start the OpenClaw gateway warm-up when the project chat surface loads and
       OpenClaw is the selected backend, instead of waiting for the first send.
     - Validation: hook or integration test proves a successful health probe
       triggers non-blocking preconnect before the first message and a benchmark
       shows improved time to first gateway event.
 
-30. **Warm Session Retention PR**
+46. **Warm Session Retention PR**
     - Keep an already authenticated OpenClaw gateway session warm across short
       idle windows and project/settings navigation so the first follow-up turn
       does not pay the full reconnect path.
@@ -559,6 +559,16 @@ these groups are safe to overlap after their shared contracts merge:
 - Transport cleanup follow-up: PRs 41 to 44. PR #41 depends on PRs 29 and 30,
   PR #42 can start after PR #31, PR #43 depends on PRs 31 and 42, and PR #44
   should wait until the earlier transport measurements exist.
+- Codex comparison transport follow-up: PRs 45 to 49. PR #46 depends on PR
+  #45, PR #47 depends on PRs 45 and 46, and PRs 48 to 49 should follow the
+  earlier transcript-transport contracts so the later UI work has one stable
+  event shape.
+- Codex comparison presentation follow-up: PRs 50 to 53. PR #50 should follow
+  the deduped progress work from PR #49, PR #51 should follow the typed
+  transcript envelope from PR #48, PR #52 depends on PRs 50 and 51, and PR
+  #53 should layer on top of the same compact assistant-lane geometry.
+- Codex comparison post-rollup: PR #54 after PRs 45 to 53 land and fresh
+  benchmark plus transcript evidence exists.
 
 ## Validation Standard
 
@@ -613,40 +623,40 @@ Append these PRs after the current sequence:
    - Validation: gateway client test proves back-to-back turns reuse the same
      connection while expired idle sessions reconnect cleanly.
 
-31. **Send-Path Health Elision PR**
+47. **Send-Path Health Elision PR**
    - Remove nonessential health fetches from the hot send path once a live
      gateway connection already exists and can prove readiness directly.
    - Validation: route or hook test proves a healthy warmed connection skips
      the extra health call while a broken connection still falls back to the
      explicit error path.
 
-32. **Typed Transcript Envelope PR**
+48. **Typed Transcript Envelope PR**
    - Replace mixed generic SSE payload inference with a typed transcript event
      envelope for progress, reasoning summary, tool progress, and final answer
      deltas.
    - Validation: parser tests prove each event kind is reconstructed without
      string heuristics or duplicate visible rows.
 
-33. **Progress Dedupe PR**
+49. **Progress Dedupe PR**
    - Collapse repeated lifecycle text and duplicate progress state writes so one
      logical action produces one visible transcript update.
    - Validation: hook test feeds duplicate gateway and server progress events
      and asserts the rendered transcript only shows the coalesced row.
 
-34. **Primary Run-State Surface PR**
+50. **Primary Run-State Surface PR**
    - Move live run-state display to one compact top-of-turn surface and keep
      the bubble transcript focused on the chronological narrative.
    - Validation: component test proves active run state is visible once and is
      removed from duplicate locations.
 
-35. **Full Markdown Transcript PR**
+51. **Full Markdown Transcript PR**
    - Promote the assistant progress transcript from markdown-lite spans to the
      same safe markdown renderer used for richer emphasis, lists, and code
      formatting.
    - Validation: component tests cover emphasis, lists, code spans, and link
      rendering in progress rows without exposing unsafe HTML.
 
-36. **Assistant Lane Geometry PR**
+52. **Assistant Lane Geometry PR**
    - Reshape the assistant transcript so it reads like a real chat surface:
      tighter content column, clearer user and assistant separation, and less
      dashboard-style chrome.
@@ -654,14 +664,14 @@ Append these PRs after the current sequence:
      inside the chat lane, user turns remain visually distinct, and media still
      scales responsively.
 
-37. **Transcript Detail Expansion PR**
+53. **Transcript Detail Expansion PR**
    - Add expandable detail blocks for commands and tool artifacts so the
      default transcript stays compact while deeper execution detail remains one
      click away.
    - Validation: component test proves collapsed summaries show by default and
      expanded content preserves file paths, commands, and result snippets.
 
-38. **Codex Gap Review PR**
+54. **Codex Gap Review PR**
    - Re-run the timing and transcript comparison after the earlier PRs merge,
      then capture any remaining user-visible gaps versus Codex and the OpenClaw
      TUI in a follow-up plan update.
