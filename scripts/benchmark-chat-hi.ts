@@ -44,7 +44,7 @@ export interface ChatBenchmarkSummary {
   progressEventCount: number;
   finalEventCount: number;
   finalTextSample: string;
-  timingArtifact?: ChatBenchmarkTimingArtifactSummary | null;
+  timingArtifact?: ChatBenchmarkTimingArtifactResult | null;
 }
 
 export interface ChatBenchmarkTimingPhaseSummary {
@@ -64,6 +64,22 @@ export interface ChatBenchmarkTimingArtifactSummary {
   phases: ChatBenchmarkTimingPhaseSummary[];
   promptCharCounts: Record<string, number>;
 }
+
+export type ChatBenchmarkTimingArtifactUnavailableReason =
+  | "endpoint_unreachable_or_non_ok"
+  | "timeout"
+  | "no_matching_recent_artifact"
+  | "endpoint_disabled_or_no_timings";
+
+export interface ChatBenchmarkTimingArtifactUnavailableSummary {
+  available: false;
+  reason: ChatBenchmarkTimingArtifactUnavailableReason;
+  detail?: string;
+}
+
+export type ChatBenchmarkTimingArtifactResult =
+  | ChatBenchmarkTimingArtifactSummary
+  | ChatBenchmarkTimingArtifactUnavailableSummary;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -256,6 +272,32 @@ function formatPromptCharCountsForSummary(
     : entries.map(([key, value]) => `${key} ${value}`).join(", ");
 }
 
+function isTimingArtifactUnavailable(
+  timingArtifact: ChatBenchmarkTimingArtifactResult | null | undefined,
+): timingArtifact is ChatBenchmarkTimingArtifactUnavailableSummary {
+  return (
+    timingArtifact !== null &&
+    timingArtifact !== undefined &&
+    "available" in timingArtifact &&
+    timingArtifact.available === false
+  );
+}
+
+function formatTimingArtifactUnavailableReason(
+  reason: ChatBenchmarkTimingArtifactUnavailableReason,
+): string {
+  switch (reason) {
+    case "endpoint_unreachable_or_non_ok":
+      return "timing endpoint unreachable or non-OK";
+    case "timeout":
+      return "timing endpoint timed out";
+    case "no_matching_recent_artifact":
+      return "no matching recent artifact";
+    case "endpoint_disabled_or_no_timings":
+      return "artifact endpoint disabled or no timings";
+  }
+}
+
 export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
   const timingArtifact = summary.timingArtifact;
   return [
@@ -274,6 +316,14 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
       ? []
       : timingArtifact === null
         ? ["Timing artifact: unavailable"]
+        : isTimingArtifactUnavailable(timingArtifact)
+          ? [
+              `Timing artifact: unavailable (${formatTimingArtifactUnavailableReason(
+                timingArtifact.reason,
+              )}${
+                timingArtifact.detail ? `; ${timingArtifact.detail}` : ""
+              })`,
+            ]
         : [
             `Timing artifact: ${timingArtifact.totalDurationMs} ms, outcome ${
               timingArtifact.outcome ?? "unknown"
@@ -452,10 +502,28 @@ function timingArtifactStartedAtMs(
   return null;
 }
 
-async function fetchLatestTimingArtifact(
+function isAbortError(error: unknown): boolean {
+  return (
+    isRecord(error) &&
+    asString(error.name) === "AbortError"
+  );
+}
+
+function unavailableTimingArtifact(
+  reason: ChatBenchmarkTimingArtifactUnavailableReason,
+  detail?: string,
+): ChatBenchmarkTimingArtifactUnavailableSummary {
+  return {
+    available: false,
+    reason,
+    ...(detail ? { detail } : {}),
+  };
+}
+
+export async function fetchLatestTimingArtifact(
   baseUrl: string,
   options: { minStartedAtMs?: number } = {},
-): Promise<ChatBenchmarkTimingArtifactSummary | null> {
+): Promise<ChatBenchmarkTimingArtifactResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5_000);
   try {
@@ -464,11 +532,51 @@ async function fetchLatestTimingArtifact(
       signal: controller.signal,
     });
     if (!response.ok) {
-      return null;
+      return unavailableTimingArtifact(
+        "endpoint_unreachable_or_non_ok",
+        `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`.trim(),
+      );
     }
-    return summarizeLatestTimingArtifact(await response.json(), options);
-  } catch {
-    return null;
+    let responseJson: unknown;
+    try {
+      responseJson = await response.json();
+    } catch (error) {
+      return unavailableTimingArtifact(
+        "endpoint_unreachable_or_non_ok",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    if (!isRecord(responseJson) || !Array.isArray(responseJson.timings)) {
+      return unavailableTimingArtifact(
+        "endpoint_disabled_or_no_timings",
+        "timings array was missing",
+      );
+    }
+    if (responseJson.timings.length === 0) {
+      return unavailableTimingArtifact(
+        "endpoint_disabled_or_no_timings",
+        "timings array was empty",
+      );
+    }
+    const latest = summarizeLatestTimingArtifact(responseJson, options);
+    if (latest === null) {
+      return unavailableTimingArtifact(
+        "no_matching_recent_artifact",
+        typeof options.minStartedAtMs === "number"
+          ? `no timings started at or after ${options.minStartedAtMs} ms`
+          : "no recent artifact matched this benchmark turn",
+      );
+    }
+    return latest;
+  } catch (error) {
+    return unavailableTimingArtifact(
+      isAbortError(error) || controller.signal.aborted
+        ? "timeout"
+        : "endpoint_unreachable_or_non_ok",
+      isAbortError(error) || controller.signal.aborted
+        ? "timing endpoint did not respond before the 5000 ms timeout"
+        : "timing endpoint was unreachable",
+    );
   } finally {
     clearTimeout(timeout);
   }
