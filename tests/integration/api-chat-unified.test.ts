@@ -1283,6 +1283,51 @@ describe("GET /api/chat/unified", () => {
     }
   });
 
+  it("keeps configuredLocalModel available when strict local-only mode is the only explicit runtime signal", async () => {
+    const originalCwd = process.cwd();
+    const isolatedCwd = mkdtempSync(
+      path.join(tmpdir(), "scienceswarm-chat-health-"),
+    );
+
+    process.chdir(isolatedCwd);
+    try {
+      vi.stubEnv("SCIENCESWARM_STRICT_LOCAL_ONLY", "1");
+      resolveAgentConfig.mockReturnValue({
+        type: "openclaw",
+        url: "http://localhost:19002",
+      });
+      openClawGatewayHealthCheck.mockResolvedValueOnce({
+        status: "connected",
+        gateway: "ws://127.0.0.1:19002",
+      });
+      localHealthCheck.mockResolvedValueOnce({
+        running: true,
+        models: ["gemma4:latest"],
+        url: "http://localhost:11434",
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
+      );
+
+      const request = new Request(
+        "http://localhost/api/chat/unified?action=health",
+      );
+      const response = await GET(request);
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.llmProvider).toBe("local");
+      expect(body.strictLocalOnly).toBe(true);
+      expect(body.configuredLocalModel).toBe("gemma4:latest");
+      expect(body.ready).toBe(true);
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(isolatedCwd, { recursive: true, force: true });
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("returns a strict-local-only poll response when the mode is enabled", async () => {
     vi.stubEnv("SCIENCESWARM_STRICT_LOCAL_ONLY", "1");
 
