@@ -47,6 +47,19 @@ const { mockPaths, mockWebSockets } = vi.hoisted(() => {
       const frame = JSON.parse(data) as Record<string, unknown>;
       this.sentFrames.push(frame);
       queueMicrotask(() => {
+        const method = typeof frame.method === "string" ? frame.method : "";
+        if (mockWebSockets.requestFailures.has(method)) {
+          this.emit(
+            "message",
+            JSON.stringify({
+              type: "res",
+              id: frame.id,
+              ok: false,
+              error: mockWebSockets.requestFailures.get(method),
+            }),
+          );
+          return;
+        }
         this.emit(
           "message",
           JSON.stringify({
@@ -81,8 +94,13 @@ const { mockPaths, mockWebSockets } = vi.hoisted(() => {
     mockWebSockets: {
       MockWebSocket,
       instances: [] as MockWebSocket[],
+      requestFailures: new Map<string, unknown>(),
+      failMethod(method: string, error: unknown) {
+        this.requestFailures.set(method, error);
+      },
       reset() {
         this.instances.length = 0;
+        this.requestFailures.clear();
       },
     },
   };
@@ -286,10 +304,13 @@ describe("gateway-ws-client", () => {
       sendChatViaGateway,
     } = await import("@/lib/openclaw/gateway-ws-client");
 
-    const turn = sendChatViaGateway("session-alpha", "hello", {
+    const turnResult = sendChatViaGateway("session-alpha", "hello", {
       timeoutMs: 60_000,
       idempotencyKey: "run-alpha",
-    });
+    }).then(
+      (value) => ({ status: "resolved" as const, value }),
+      (error) => ({ status: "rejected" as const, error }),
+    );
 
     await waitUntil(() => {
       const socket = mockWebSockets.instances.at(-1);
@@ -312,10 +333,47 @@ describe("gateway-ws-client", () => {
       }),
     );
 
-    await expect(turn).rejects.toBeInstanceOf(GatewayPostAckError);
-    await expect(turn).rejects.toMatchObject({
-      message: expect.stringContaining("model failed"),
+    const outcome = await turnResult;
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status === "rejected") {
+      expect(outcome.error).toBeInstanceOf(GatewayPostAckError);
+      expect(outcome.error).toMatchObject({
+        message: expect.stringContaining("model failed"),
+      });
+    }
+  });
+
+  it("surfaces chat.send pre-ACK failures without post-ACK wrapping", async () => {
+    const {
+      GatewayPostAckError,
+      sendChatViaGateway,
+    } = await import("@/lib/openclaw/gateway-ws-client");
+    mockWebSockets.failMethod("chat.send", { message: "gateway rejected send" });
+
+    const turnResult = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+    }).then(
+      (value) => ({ status: "resolved" as const, value }),
+      (error) => ({ status: "rejected" as const, error }),
+    );
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
     });
+
+    await expect(turnResult).resolves.toMatchObject({
+      status: "rejected",
+      error: expect.objectContaining({
+        message: expect.stringContaining("gateway rejected send"),
+      }),
+    });
+    const outcome = await turnResult;
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status === "rejected") {
+      expect(outcome.error).not.toBeInstanceOf(GatewayPostAckError);
+    }
   });
 
   it("rejects a dropped turn before a reconnect can reuse stale listeners", async () => {
