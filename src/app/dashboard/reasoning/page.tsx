@@ -767,8 +767,7 @@ function getFindingTitle(finding: Finding): string {
 
 function formatConfidence(value?: number): string | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  const normalized = value <= 1 ? value * 100 : value;
-  return `${Math.round(normalized)}%`;
+  return `${Math.round(value * 100)}%`;
 }
 
 function buildFindingFilterOptions(findings: Finding[]): FindingFilterOption[] {
