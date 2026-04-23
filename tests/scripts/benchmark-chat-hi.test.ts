@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   benchmarkHelpText,
   buildBenchmarkPayload,
+  fetchLatestTimingArtifact,
   chatTimingArtifactUrl,
   chatBenchmarkUrl,
   formatBenchmarkSummary,
@@ -11,9 +12,15 @@ import {
   parseSseEvents,
   summarizeChatBenchmarkResponse,
   summarizeLatestTimingArtifact,
+  runChatHiBenchmark,
 } from "../../scripts/benchmark-chat-hi";
 
 describe("benchmark-chat-hi", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
   it("builds the benchmark payload through OpenClaw with streaming phases", () => {
     expect(
       buildBenchmarkPayload({
@@ -274,6 +281,191 @@ describe("benchmark-chat-hi", () => {
       }),
     ).toContain("Timing artifact: unavailable");
   });
+
+  it("classifies a 404 timing response as disabled/no timings with a human hint", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/chat/unified")) {
+        return Promise.resolve(
+          new Response('data: {"type":"final","text":"Hi there."}\n\n', {
+            status: 200,
+            headers: {
+              "content-type": "text/event-stream; charset=utf-8",
+              "x-chat-backend": "openclaw",
+            },
+          }),
+        );
+      }
+      if (url.endsWith("/api/chat/timing")) {
+        return Promise.resolve(
+          new Response("", {
+            status: 404,
+            statusText: "Not Found",
+          }),
+        );
+      }
+      throw new Error(`Unexpected fetch target: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const summary = await runChatHiBenchmark({
+      baseUrl: "http://127.0.0.1:3001",
+      projectId: "project-alpha",
+      message: "Hi",
+      conversationId: "bench-diagnostic",
+      timeoutMs: 10_000,
+      streamPhases: true,
+      includeTimingArtifact: true,
+      json: true,
+    });
+
+    expect(summary.timingArtifact).toMatchObject({
+      available: false,
+      reason: "endpoint_disabled_or_no_timings",
+      detail:
+        "HTTP 404 Not Found; enable SCIENCESWARM_CHAT_TIMING=1 and ensure the app is running locally with current code",
+    });
+    expect(JSON.stringify(summary, null, 2)).toContain(
+      '"reason": "endpoint_disabled_or_no_timings"',
+    );
+    expect(formatBenchmarkSummary(summary)).toContain(
+      "Timing artifact: unavailable (artifact endpoint disabled or no timings; HTTP 404 Not Found; enable SCIENCESWARM_CHAT_TIMING=1 and ensure the app is running locally with current code)",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("times out waiting for the timing artifact instead of hanging", async () => {
+    vi.useFakeTimers();
+
+    const abortError = () => {
+      const error = new Error("The operation was aborted.");
+      error.name = "AbortError";
+      return error;
+    };
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (!url.endsWith("/api/chat/timing")) {
+        throw new Error(`Unexpected fetch target: ${url}`);
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+        signal?.addEventListener(
+          "abort",
+          () => {
+            reject(abortError());
+          },
+          { once: true },
+        );
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const summaryPromise = fetchLatestTimingArtifact("http://127.0.0.1:3001");
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await expect(summaryPromise).resolves.toMatchObject({
+      available: false,
+      reason: "timeout",
+      detail: "timing endpoint did not respond before the 5000 ms timeout",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      name: "classifies a 404 timing response as disabled/no timings",
+      response: new Response("", {
+        status: 404,
+        statusText: "Not Found",
+      }),
+      expected: {
+        reason: "endpoint_disabled_or_no_timings",
+        detail:
+          "HTTP 404 Not Found; enable SCIENCESWARM_CHAT_TIMING=1 and ensure the app is running locally with current code",
+      },
+      minStartedAtMs: undefined,
+    },
+    {
+      name: "classifies a non-OK timing response as unreachable/non-OK",
+      response: new Response("", {
+        status: 503,
+        statusText: "Service Unavailable",
+      }),
+      expected: {
+        reason: "endpoint_unreachable_or_non_ok",
+        detail: "HTTP 503 Service Unavailable",
+      },
+      minStartedAtMs: undefined,
+    },
+    {
+      name: "classifies an empty timings array as disabled/no timings",
+      response: new Response(JSON.stringify({ timings: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+      expected: {
+        reason: "endpoint_disabled_or_no_timings",
+        detail: "timings array was empty",
+      },
+      minStartedAtMs: undefined,
+    },
+    {
+      name: "classifies older timing artifacts as no matching recent artifact",
+      response: new Response(
+        JSON.stringify({
+          timings: [
+            {
+              turnId: "older",
+              totalDurationMs: 12,
+              outcome: "streamed",
+              status: 200,
+              phases: [
+                { name: "request_parse", startedAtMs: 10, durationMs: 1 },
+              ],
+              promptCharCounts: { total: 1 },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+      expected: {
+        reason: "no_matching_recent_artifact",
+        detail: "no timings started at or after 1000 ms",
+      },
+      minStartedAtMs: 1_000,
+    },
+  ] as const)(
+    "$name",
+    async ({ response, expected, minStartedAtMs }) => {
+      const fetchMock = vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (!url.endsWith("/api/chat/timing")) {
+          throw new Error(`Unexpected fetch target: ${url}`);
+        }
+        return Promise.resolve(response.clone());
+      });
+
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(
+        fetchLatestTimingArtifact("http://127.0.0.1:3001", { minStartedAtMs }),
+      ).resolves.toMatchObject({
+        available: false,
+        ...expected,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("summarizes the latest sanitized chat timing artifact", () => {
     expect(

@@ -5,7 +5,9 @@ import path from "node:path";
 import {
   PAPER_LIBRARY_STATE_VERSION,
   PaperLibraryScanSchema,
+  PaperReviewShardSchema,
   type PaperLibraryScan,
+  type PaperLibraryScanStatus,
   type PaperReviewItem,
 } from "./contracts";
 import {
@@ -25,9 +27,17 @@ import { shouldSkipImportDirectory, shouldSkipImportFile } from "@/lib/import/ig
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 const STALE_HEARTBEAT_MS = 30_000;
+const HEARTBEAT_WRITE_INTERVAL_MS = 5_000;
 const REVIEW_SHARD_SIZE = 250;
 const runningScanJobs = new Set<string>();
 type PartialScanCounters = Partial<PaperLibraryScan["counters"]>;
+
+const ACTIVE_SCAN_STATUSES = new Set<PaperLibraryScanStatus>([
+  "queued",
+  "scanning",
+  "identifying",
+  "enriching",
+]);
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -69,6 +79,11 @@ function scanCounters(scan: { counters?: PartialScanCounters }): PaperLibrarySca
   };
 }
 
+function scanIsStale(scan: PaperLibraryScan): boolean {
+  if (!ACTIVE_SCAN_STATUSES.has(scan.status) || !scan.heartbeatAt) return false;
+  return Date.now() - Date.parse(scan.heartbeatAt) > STALE_HEARTBEAT_MS;
+}
+
 export async function readPaperLibraryScan(
   project: string,
   scanId: string,
@@ -82,30 +97,37 @@ export async function readPaperLibraryScan(
   );
   if (!parsed.ok) return null;
 
-  const scan = normalizeScan(parsed.data);
-  if (
-    ["queued", "scanning", "identifying", "enriching"].includes(scan.status)
-    && scan.heartbeatAt
-    && Date.now() - Date.parse(scan.heartbeatAt) > STALE_HEARTBEAT_MS
-  ) {
-    return writeScan({
-      ...scan,
-      status: "failed",
-      updatedAt: nowIso(),
-      warnings: [...scanWarnings(scan), "scan_worker_stale"],
-      counters: scanCounters(scan),
-    }, stateRoot);
-  }
+  return normalizeScan(parsed.data);
+}
 
-  return scan;
+export async function reconcileStalePaperLibraryScan(
+  project: string,
+  scanId: string,
+  brainRoot: string,
+): Promise<PaperLibraryScan | null> {
+  const scan = await readPaperLibraryScan(project, scanId, brainRoot);
+  if (!scan || !scanIsStale(scan)) return scan;
+
+  const stateRoot = getProjectStateRootForBrainRoot(project, brainRoot);
+  return writeScan({
+    ...scan,
+    status: scan.cancelRequestedAt ? "canceled" : "failed",
+    claimId: undefined,
+    updatedAt: nowIso(),
+    warnings: scan.cancelRequestedAt ? scanWarnings(scan) : [...scanWarnings(scan), "scan_worker_stale"],
+    counters: scanCounters(scan),
+  }, stateRoot);
 }
 
 export async function cancelPaperLibraryScan(project: string, scanId: string, brainRoot: string): Promise<PaperLibraryScan | null> {
   const scan = await readPaperLibraryScan(project, scanId, brainRoot);
   if (!scan) return null;
+  if (!ACTIVE_SCAN_STATUSES.has(scan.status)) return scan;
+
   const stateRoot = getProjectStateRootForBrainRoot(project, brainRoot);
   return writeScan({
       ...scan,
+      claimId: undefined,
       cancelRequestedAt: nowIso(),
       updatedAt: nowIso(),
       warnings: scanWarnings(scan),
@@ -182,7 +204,7 @@ export async function startPaperLibraryScan(input: {
   return scan;
 }
 
-async function updateScan(
+export async function updatePaperLibraryScan(
   project: string,
   scanId: string,
   brainRoot: string,
@@ -222,7 +244,7 @@ export async function runPaperLibraryScanJob(
   const claimId = randomUUID();
 
   try {
-    let scan = await updateScan(project, scanId, brainRoot, (current) => ({
+    let scan = await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
       ...current,
       status: "scanning",
       claimId,
@@ -261,14 +283,15 @@ export async function runPaperLibraryScanJob(
         paperId: candidate.id,
         state: needsReview ? "needs_review" : "accepted",
         reasonCodes: needsReview ? (candidate.conflicts.length ? candidate.conflicts : ["low_confidence"]) : [],
+        source: snapshot.snapshot,
         candidates: [candidate],
         selectedCandidateId: needsReview ? undefined : candidate.id,
         version: 0,
         updatedAt: nowIso(),
       });
 
-      if (index % 20 === 0 || Date.now() - Date.parse(scan.heartbeatAt ?? scan.updatedAt) > 250) {
-        scan = await updateScan(project, scanId, brainRoot, (current) => ({
+      if (index % 20 === 0 || Date.now() - Date.parse(scan.heartbeatAt ?? scan.updatedAt) > HEARTBEAT_WRITE_INTERVAL_MS) {
+        scan = await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
           ...current,
           status: "identifying",
           rootRealpath,
@@ -290,14 +313,14 @@ export async function runPaperLibraryScanJob(
     for (let start = 0; start < reviewItems.length; start += REVIEW_SHARD_SIZE) {
       const shardId = String(shardIds.length + 1).padStart(4, "0");
       shardIds.push(shardId);
-      await writeJsonFile(getPaperLibraryReviewShardPath(project, scanId, shardId, stateRoot), {
+      await writeJsonFile(getPaperLibraryReviewShardPath(project, scanId, shardId, stateRoot), PaperReviewShardSchema.parse({
         version: PAPER_LIBRARY_STATE_VERSION,
         scanId,
         items: reviewItems.slice(start, start + REVIEW_SHARD_SIZE),
-      });
+      }));
     }
 
-    await updateScan(project, scanId, brainRoot, (current) => ({
+    await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
       ...current,
       status: reviewItems.some((item) => item.state === "needs_review") ? "ready_for_review" : "ready_for_apply",
       rootRealpath,
@@ -316,7 +339,7 @@ export async function runPaperLibraryScanJob(
     }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Paper library scan failed.";
-    await updateScan(project, scanId, brainRoot, (current) => ({
+    await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
       ...current,
       status: "failed",
       claimId: undefined,

@@ -1,54 +1,60 @@
+import { readFileSync } from "node:fs";
+
 /**
  * Runtime bridge for the installed gbrain package.
  *
- * `createRuntimeEngine` and the command wrappers below reach into internal
- * gbrain modules until upstream exports stable package subpaths for them.
+ * gbrain does not currently export the engine factory or command wrappers
+ * through its package exports map, so this bridge centralizes the deep imports
+ * until upstream exposes stable subpaths.
  */
 
-export async function createRuntimeEngine(config) {
-  const { createEngine } = await import(
-    "../../../node_modules/gbrain/src/core/engine-factory.ts"
-  );
-  const engine = await createEngine(config);
-  return withScienceSwarmCompat(engine);
+function timelineDateKey(date) {
+  if (date instanceof Date) return date.toISOString().slice(0, 10);
+  return String(date).slice(0, 10);
 }
 
-function withScienceSwarmCompat(engine) {
+function wrapRuntimeEngine(engine) {
   return new Proxy(engine, {
     get(target, prop, receiver) {
       if (prop === "searchKeyword" && typeof target.searchKeyword === "function") {
         return async (...args) => {
           const results = await target.searchKeyword(...args);
           return Array.isArray(results)
-            ? results.map((result) =>
-                result && typeof result === "object" && !("source_id" in result)
-                  ? { ...result, source_id: "default" }
-                  : result,
-              )
+            ? results.map((result) => ({
+                ...result,
+                source_id: result.source_id ?? "default",
+              }))
             : results;
         };
       }
-
-      if (prop === "addTimelineEntry" && typeof target.addTimelineEntry === "function") {
+      if (
+        prop === "addTimelineEntry"
+        && typeof target.addTimelineEntry === "function"
+      ) {
         return async (slug, entry) => {
-          const rows = typeof target.getTimeline === "function"
-            ? await target.getTimeline(slug, { limit: 1000 }).catch(() => [])
-            : [];
-          const entryDate = String(entry.date).slice(0, 10);
-          const alreadyPresent = rows.some((row) => {
-            const rowDate = row.date instanceof Date
-              ? row.date.toISOString().slice(0, 10)
-              : String(row.date).slice(0, 10);
-            return rowDate === entryDate && row.summary === entry.summary;
-          });
-          if (alreadyPresent) return;
+          const existing = await target.getTimeline(slug, { limit: 100000 }).catch(() => []);
+          const entryKey = `${timelineDateKey(entry.date)}::${entry.summary}`;
+          if (
+            existing.some(
+              (row) => `${timelineDateKey(row.date)}::${row.summary}` === entryKey,
+            )
+          ) {
+            return undefined;
+          }
           return target.addTimelineEntry(slug, entry);
         };
       }
-
+      if (prop === "addLink" && typeof target.addLink === "function") {
+        return async (from, to, context, linkType) => target.addLink(
+          from,
+          to,
+          context,
+          linkType === "mention" ? "mentions" : linkType,
+        );
+      }
       if (prop === "transaction" && typeof target.transaction === "function") {
         return async (fn) =>
-          target.transaction((tx) => fn(withScienceSwarmCompat(tx)));
+          target.transaction((tx) => fn(wrapRuntimeEngine(tx)));
       }
 
       const value = Reflect.get(target, prop, receiver);
@@ -57,29 +63,104 @@ function withScienceSwarmCompat(engine) {
   });
 }
 
+export async function createRuntimeEngine(config) {
+  const { createEngine } = await import("../../../node_modules/gbrain/src/core/engine-factory.ts");
+  return wrapRuntimeEngine(await createEngine(config));
+}
+
 export async function runRuntimeExtract(engine, args) {
-  const { runExtract } = await import("../../../node_modules/gbrain/src/commands/extract.ts");
+  const extractModule = await import("../../../node_modules/gbrain/src/commands/extract.ts");
+  const runExtractCore = extractModule.runExtractCore;
   const mode = args[0];
+  const dirIdx = args.indexOf("--dir");
+  const dir = dirIdx >= 0 && dirIdx + 1 < args.length ? args[dirIdx + 1] : ".";
   if (mode !== "links" && mode !== "timeline" && mode !== "all") {
     throw new Error(
       `Invalid gbrain extract mode "${String(mode)}"; expected links, timeline, or all.`,
     );
   }
-  const captured = [];
-  const originalLog = console.log;
-  try {
-    console.log = (...values) => {
-      captured.push(values.map(String).join(" "));
-    };
-    await runExtract(engine, args);
-  } finally {
-    console.log = originalLog;
+  if (typeof runExtractCore === "function") {
+    return runExtractCore(engine, {
+      mode,
+      dir,
+      dryRun: args.includes("--dry-run"),
+      jsonMode: args.includes("--json"),
+    });
   }
-  if (!args.includes("--json")) {
-    return undefined;
+
+  return runRuntimeExtractFallback(engine, extractModule, mode, dir, args.includes("--dry-run"));
+}
+
+async function runRuntimeExtractFallback(engine, extractModule, mode, dir, dryRun) {
+  const {
+    walkMarkdownFiles,
+    extractLinksFromFile,
+    extractTimelineFromContent,
+  } = extractModule;
+  if (
+    typeof walkMarkdownFiles !== "function"
+    || typeof extractLinksFromFile !== "function"
+    || typeof extractTimelineFromContent !== "function"
+  ) {
+    throw new Error("Installed gbrain package does not expose extract helpers.");
   }
-  const output = captured.join("\n").trim();
-  return output ? JSON.parse(output) : undefined;
+
+  const files = walkMarkdownFiles(dir);
+  const allSlugs = new Set(files.map((file) => file.relPath.replace(/\.md$/, "")));
+  const result = {
+    links_created: 0,
+    timeline_entries_created: 0,
+    pages_processed: files.length,
+  };
+
+  for (const file of files) {
+    let content;
+    try {
+      content = readFileSync(file.path, "utf-8");
+    } catch {
+      continue;
+    }
+
+    const slug = file.relPath.replace(/\.md$/, "");
+    if (mode === "links" || mode === "all") {
+      const links = extractLinksFromFile(content, file.relPath, allSlugs);
+      for (const link of links) {
+        if (dryRun) {
+          result.links_created += 1;
+          continue;
+        }
+        try {
+          await engine.addLink(link.from_slug, link.to_slug, link.context, link.link_type);
+          result.links_created += 1;
+        } catch {
+          // Match gbrain's CLI behavior: skip duplicate or missing-page links.
+        }
+      }
+    }
+
+    if (mode === "timeline" || mode === "all") {
+      const entries = extractTimelineFromContent(content, slug);
+      for (const entry of entries) {
+        if (dryRun) {
+          result.timeline_entries_created += 1;
+          continue;
+        }
+        try {
+          await engine.addTimelineEntry(entry.slug, {
+            date: entry.date,
+            source: entry.source,
+            summary: entry.summary,
+            detail: entry.detail,
+          });
+          result.timeline_entries_created += 1;
+        } catch {
+          // Match gbrain's CLI behavior: skip duplicate or missing-page entries.
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
 export async function runRuntimeEmbed(engine, args) {
