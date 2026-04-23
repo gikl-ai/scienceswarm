@@ -19,17 +19,17 @@ import { TelegramOpenClawSection } from "./sections/telegram-openclaw";
 import { FrontierWatchSection } from "./sections/frontier-watch";
 import { ResearchRadarSection } from "./sections/research-radar";
 import { WorkspaceDisplaySection } from "./sections/workspace-display";
+import { ProjectRuntimeSection } from "./sections/project-runtime";
 import { useFilePreviewLocation } from "@/hooks/use-file-preview-location";
 import {
   RuntimeHostMatrix,
-  runtimeHostSelectableForDefault,
   type RuntimeHealthResponse,
 } from "@/components/runtime/RuntimeHostMatrix";
-import {
-  RuntimeDefaultsForm,
-  type RuntimeSettingsPolicy,
-} from "@/components/runtime/RuntimeDefaultsForm";
 import { RuntimeSetupCallouts } from "@/components/runtime/RuntimeSetupCallouts";
+import {
+  readLastProjectSlug,
+  safeProjectSlugOrNull,
+} from "@/lib/project-navigation";
 
 /* ---------- types ---------- */
 
@@ -198,9 +198,7 @@ export default function SettingsPage() {
   const [llmProviderDraft, setLlmProviderDraft] = useState<LlmProvider>("local");
   const [llmModelDraft, setLlmModelDraft] = useState(DEFAULT_OPENAI_MODEL);
   const [openAiKeyDraft, setOpenAiKeyDraft] = useState("");
-  const [runtimeDefaultHostId, setRuntimeDefaultHostId] = useState("openclaw");
-  const [runtimePolicyDraft, setRuntimePolicyDraft] =
-    useState<RuntimeSettingsPolicy>("local-only");
+  const [runtimeProject, setRuntimeProject] = useState("");
   const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
   const [watchProject, setWatchProject] = useState("");
   const [watchConfig, setWatchConfig] = useState<ProjectWatchConfig>(createDefaultWatchConfig());
@@ -362,17 +360,25 @@ export default function SettingsPage() {
               name: project.name.trim(),
             }))
         : [];
+      const rememberedProject = readLastProjectSlug();
+      const initialProject = projects.some((project) => project.id === rememberedProject)
+        ? rememberedProject ?? ""
+        : projects[0]?.id ?? "";
       setProjectOptions(projects);
-      setWatchProject((current) => current || projects[0]?.id || "");
+      setRuntimeProject((current) => current || initialProject);
+      setWatchProject((current) => current || initialProject);
     } catch {
       // ignore
     }
   }, []);
 
   useEffect(() => {
-    const project = new URLSearchParams(window.location.search).get("project");
-    if (project?.trim()) {
-      setWatchProject(project.trim());
+    const project = safeProjectSlugOrNull(
+      new URLSearchParams(window.location.search).get("project"),
+    );
+    if (project) {
+      setRuntimeProject(project);
+      setWatchProject(project);
     }
   }, []);
 
@@ -635,42 +641,6 @@ export default function SettingsPage() {
 
   const strictLocalOnlyEnabled = settings?.strictLocalOnly ?? health?.strictLocalOnly ?? false;
 
-  const chooseRuntimeDefaultFallback = useCallback((
-    policy: RuntimeSettingsPolicy,
-    preferredHostId?: string,
-  ) => {
-    const hosts = runtimeHealth?.hosts ?? [];
-    const preferredHost = preferredHostId
-      ? hosts.find((host) => host.profile.id === preferredHostId)
-      : null;
-    if (preferredHost && runtimeHostSelectableForDefault(preferredHost, policy)) {
-      return preferredHost.profile.id;
-    }
-    const openclaw = hosts.find((host) => host.profile.id === "openclaw");
-    if (openclaw && runtimeHostSelectableForDefault(openclaw, policy)) {
-      return openclaw.profile.id;
-    }
-    return hosts.find((host) => runtimeHostSelectableForDefault(host, policy))?.profile.id
-      ?? preferredHostId
-      ?? "openclaw";
-  }, [runtimeHealth]);
-
-  const handleRuntimePolicyChange = useCallback((policy: RuntimeSettingsPolicy) => {
-    setRuntimePolicyDraft(policy);
-    setRuntimeDefaultHostId((current) =>
-      chooseRuntimeDefaultFallback(policy, current),
-    );
-  }, [chooseRuntimeDefaultFallback]);
-
-  const handleRuntimeDefaultHostChange = useCallback((hostId: string) => {
-    const host = runtimeHealth?.hosts.find((item) => item.profile.id === hostId);
-    if (!host || !runtimeHostSelectableForDefault(host, runtimePolicyDraft)) {
-      setRuntimeDefaultHostId(chooseRuntimeDefaultFallback(runtimePolicyDraft, hostId));
-      return;
-    }
-    setRuntimeDefaultHostId(hostId);
-  }, [chooseRuntimeDefaultFallback, runtimeHealth, runtimePolicyDraft]);
-
   const persistActiveOllamaPull = useCallback((model: string | null) => {
     try {
       if (model) {
@@ -784,17 +754,16 @@ export default function SettingsPage() {
   }, [resumeOllamaPull]);
 
   useEffect(() => {
-    if (strictLocalOnlyEnabled) {
-      handleRuntimePolicyChange("local-only");
+    if (!runtimeProject && projectOptions.length > 0) {
+      const rememberedProject = readLastProjectSlug();
+      const fallbackProject = projectOptions.some((project) => project.id === rememberedProject)
+        ? rememberedProject ?? ""
+        : projectOptions[0]?.id ?? "";
+      if (fallbackProject) {
+        setRuntimeProject(fallbackProject);
+      }
     }
-  }, [handleRuntimePolicyChange, strictLocalOnlyEnabled]);
-
-  useEffect(() => {
-    if (!runtimeHealth) return;
-    setRuntimeDefaultHostId((current) =>
-      chooseRuntimeDefaultFallback(runtimePolicyDraft, current),
-    );
-  }, [chooseRuntimeDefaultFallback, runtimeHealth, runtimePolicyDraft]);
+  }, [projectOptions, runtimeProject]);
 
   async function saveWatchConfig() {
     if (!watchProject.trim()) {
@@ -1047,20 +1016,18 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      <ProjectRuntimeSection
+        key={runtimeProject || "no-project"}
+        projectOptions={projectOptions}
+        projectId={runtimeProject}
+        runtimeHealth={runtimeHealth}
+        onProjectChange={setRuntimeProject}
+      />
+
       <RuntimeHostMatrix runtimeHealth={runtimeHealth} />
 
       {runtimeHealth && (
-        <>
-          <RuntimeDefaultsForm
-            hosts={runtimeHealth.hosts}
-            selectedHostId={runtimeDefaultHostId}
-            policy={runtimePolicyDraft}
-            onSelectedHostIdChange={handleRuntimeDefaultHostChange}
-            onPolicyChange={handleRuntimePolicyChange}
-          />
-
-          <RuntimeSetupCallouts hosts={runtimeHealth.hosts} />
-        </>
+        <RuntimeSetupCallouts hosts={runtimeHealth.hosts} />
       )}
 
       <FrontierWatchSection

@@ -87,6 +87,62 @@ function stubSettingsFetch() {
       });
     }
 
+    if (url === "/api/runtime/health") {
+      return Response.json({
+        checkedAt: "2026-04-23T01:00:00.000Z",
+        hosts: [
+          {
+            profile: {
+              id: "openclaw",
+              label: "OpenClaw",
+              authMode: "local",
+              authProvider: "openclaw",
+              privacyClass: "local-network",
+              transport: { kind: "cli", protocol: "stdio" },
+              capabilities: ["chat", "task", "artifact-import"],
+              lifecycle: {
+                canStream: true,
+                canCancel: true,
+                canResumeNativeSession: false,
+                canListNativeSessions: false,
+                cancelSemantics: "kill-wrapper-process",
+                resumeSemantics: "scienceSwarm-wrapper-session",
+              },
+              accountDisclosure: {
+                storesTokensInScienceSwarm: false,
+                requiresProjectPrivacy: "local-only",
+              },
+              mcpTools: [],
+            },
+            health: {
+              status: "ready",
+              checkedAt: "2026-04-23T01:00:00.000Z",
+            },
+            auth: {
+              status: "not-required",
+              authMode: "local",
+              provider: "openclaw",
+            },
+            privacy: {
+              privacyClass: "local-network",
+              adapterProof: "declared-local",
+            },
+          },
+        ],
+      });
+    }
+
+    if (url.startsWith("/api/runtime/sessions?")) {
+      return Response.json({ sessions: [] });
+    }
+
+    if (url.startsWith("/api/runtime/sessions/")) {
+      if (url.endsWith("/events")) {
+        return Response.json({ events: [] });
+      }
+      return Response.json({ session: null });
+    }
+
     if (url === "/api/projects") {
       return Response.json({
         projects: [{ slug: "alpha-project", name: "Alpha Project" }],

@@ -46,21 +46,14 @@ import {
 } from "@/hooks/use-unified-chat";
 import type {
   RuntimeDataIncluded,
-  RuntimeProjectPolicy,
   TurnPreview,
 } from "@/lib/runtime-hosts/contracts";
-import { RuntimePicker } from "@/components/runtime/runtime-picker";
 import { TurnPreviewSheet } from "@/components/runtime/turn-preview-sheet";
-import { RuntimeTaskBoard } from "@/components/runtime/runtime-task-board";
-import { SessionDetail } from "@/components/runtime/session-detail";
 import { CompareResults } from "@/components/runtime/compare-results";
 import {
-  chooseRuntimeHostFallback,
-  type RuntimeComposerMode,
   useRuntimeHosts,
-  useRuntimeSessionDetail,
-  useRuntimeSessions,
 } from "@/hooks/use-runtime-hosts";
+import { useProjectRuntimePreferences } from "@/hooks/use-project-runtime-preferences";
 import { useVoiceChat, type VoiceState } from "@/hooks/use-voice-chat";
 import { useFilePreviewLocation } from "@/hooks/use-file-preview-location";
 import {
@@ -1639,44 +1632,21 @@ function ProjectPageContent() {
     clearRuntimeCompareResult,
   } = useUnifiedChat(projectName);
   const runtimeHosts = useRuntimeHosts();
-  const [runtimeProjectPolicy, setRuntimeProjectPolicy] =
-    useState<RuntimeProjectPolicy>("local-only");
-  const [runtimeMode, setRuntimeMode] = useState<RuntimeComposerMode>("chat");
-  const [selectedRuntimeHostId, setSelectedRuntimeHostId] =
-    useState<string>("openclaw");
-  const [compareHostIds, setCompareHostIds] = useState<string[]>(["openclaw"]);
+  const {
+    projectPolicy: runtimeProjectPolicy,
+    mode: runtimeMode,
+    selectedHostId: selectedRuntimeHostId,
+    compareHostIds,
+  } = useProjectRuntimePreferences(activeProjectSlug, runtimeHosts.hosts);
   const [pendingRuntimeSend, setPendingRuntimeSend] =
     useState<PendingRuntimeSend | null>(null);
   const [runtimePreviewBusy, setRuntimePreviewBusy] = useState(false);
   const [runtimePreviewError, setRuntimePreviewError] = useState<string | null>(null);
-  const runtimeSessions = useRuntimeSessions(activeProjectSlug);
-  const [selectedRuntimeSessionId, setSelectedRuntimeSessionId] = useState<string | null>(null);
-  const runtimeSessionDetail = useRuntimeSessionDetail(selectedRuntimeSessionId);
   useEffect(() => {
-    if (runtimeHosts.hosts.length === 0) return;
-    const nextHostId = chooseRuntimeHostFallback({
-      hosts: runtimeHosts.hosts,
-      policy: runtimeProjectPolicy,
-      mode: runtimeMode === "compare" ? "chat" : runtimeMode,
-      preferredHostId: selectedRuntimeHostId,
-    });
-    if (nextHostId !== selectedRuntimeHostId) {
-      setSelectedRuntimeHostId(nextHostId);
+    if (runtimeMode !== "compare") {
+      clearRuntimeCompareResult();
     }
-  }, [
-    runtimeHosts.hosts,
-    runtimeMode,
-    runtimeProjectPolicy,
-    selectedRuntimeHostId,
-  ]);
-  useEffect(() => {
-    if (runtimeMode !== "compare") return;
-    if (compareHostIds.length === 0 || !compareHostIds.includes("openclaw")) {
-      setCompareHostIds((current) =>
-        current.length === 0 ? ["openclaw"] : Array.from(new Set(["openclaw", ...current])),
-      );
-    }
-  }, [compareHostIds, runtimeMode]);
+  }, [clearRuntimeCompareResult, runtimeMode]);
   const activeAssistantMessageId = isStreaming
     ? [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null
     : null;
@@ -3602,9 +3572,8 @@ function ProjectPageContent() {
     ) => {
       await sendMessage(prompt, options);
       if (clearInputAfterSend) setInput("");
-      void runtimeSessions.refresh();
     },
-    [runtimeSessions, sendMessage],
+    [sendMessage],
   );
 
   const prepareRuntimePreviewAndSend = useCallback(
@@ -4330,31 +4299,28 @@ function ProjectPageContent() {
                     <ChatCircleText size={15} />
                     Chat
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPaneMode("visualizer-only")}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded border border-border bg-white text-muted transition-colors hover:border-accent hover:text-foreground"
-                    title="Close chat"
-                    aria-label="Close chat"
-                  >
-                    <X size={14} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={
+                        activeProjectSlug
+                          ? `/dashboard/settings?project=${encodeURIComponent(activeProjectSlug)}`
+                          : "/dashboard/settings"
+                      }
+                      className="inline-flex min-h-8 items-center rounded border border-border bg-white px-2.5 text-[11px] font-semibold text-muted transition-colors hover:border-accent hover:text-foreground"
+                    >
+                      Runtime settings
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setPaneMode("visualizer-only")}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded border border-border bg-white text-muted transition-colors hover:border-accent hover:text-foreground"
+                      title="Close chat"
+                      aria-label="Close chat"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
-                <RuntimePicker
-                  hosts={runtimeHosts.hosts}
-                  selectedHostId={selectedRuntimeHostId}
-                  projectPolicy={runtimeProjectPolicy}
-                  mode={runtimeMode}
-                  compareHostIds={compareHostIds}
-                  loading={runtimeHosts.loading}
-                  onSelectedHostIdChange={setSelectedRuntimeHostId}
-                  onProjectPolicyChange={setRuntimeProjectPolicy}
-                  onModeChange={(mode) => {
-                    setRuntimeMode(mode);
-                    if (mode !== "compare") clearRuntimeCompareResult();
-                  }}
-                  onCompareHostIdsChange={setCompareHostIds}
-                />
                 <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-4 bg-surface/30 select-text">
                   {!activeProjectSlug && messages.length === 0 && (
                     <section className="rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">
@@ -4830,27 +4796,6 @@ function ProjectPageContent() {
                   </div>
                 </div>
                 <CompareResults result={runtimeCompareResult} />
-                <RuntimeTaskBoard
-                  sessions={runtimeSessions.sessions}
-                  loading={runtimeSessions.loading}
-                  error={runtimeSessions.error}
-                  selectedSessionId={selectedRuntimeSessionId}
-                  onRefresh={() => void runtimeSessions.refresh()}
-                  onSelectSession={setSelectedRuntimeSessionId}
-                  onCancelSession={(sessionId) => {
-                    void fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/cancel`, {
-                      method: "POST",
-                    }).then(() => runtimeSessions.refresh());
-                  }}
-                />
-                <SessionDetail
-                  session={runtimeSessionDetail.session}
-                  events={runtimeSessionDetail.events}
-                  loading={runtimeSessionDetail.loading}
-                  error={runtimeSessionDetail.error}
-                  onClose={() => setSelectedRuntimeSessionId(null)}
-                  onRefresh={() => void runtimeSessionDetail.refresh()}
-                />
               </div>
             )}
           </div>
