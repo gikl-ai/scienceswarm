@@ -45,6 +45,14 @@ export interface SavedLlmRuntimeEnv {
   openclawInternalApiKey: string | null;
 }
 
+export interface ExplicitLlmRuntimeConfig {
+  strictLocalOnly: boolean;
+  llmProvider: boolean;
+  llmModel: boolean;
+  ollamaModel: boolean;
+  openaiApiKey: boolean;
+}
+
 function parseMutableRuntimeValues(envFileContents: string | null): MutableRuntimeValues {
   if (!envFileContents) return {};
 
@@ -73,6 +81,17 @@ function isTruthyRuntimeFlag(value: string | undefined): boolean {
   if (!value) return false;
   const normalized = value.trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function hasExplicitMutableRuntimeValue(
+  savedValues: MutableRuntimeValues,
+  processEnv: NodeJS.ProcessEnv,
+  key: MutableRuntimeKey,
+): boolean {
+  const savedValue = savedValues[key]?.trim();
+  if (savedValue) return true;
+  const processValue = processEnv[key]?.trim();
+  return Boolean(processValue);
 }
 
 export function resolveSavedLlmRuntimeEnv(
@@ -123,6 +142,23 @@ export function resolveSavedLlmRuntimeEnv(
   };
 }
 
+export function resolveExplicitLlmRuntimeConfig(
+  processEnv: NodeJS.ProcessEnv = process.env,
+  envFileContents: string | null = null,
+): ExplicitLlmRuntimeConfig {
+  const savedValues = parseMutableRuntimeValues(envFileContents);
+
+  return {
+    strictLocalOnly:
+      isTruthyRuntimeFlag(processEnv.SCIENCESWARM_STRICT_LOCAL_ONLY)
+      || isTruthyRuntimeFlag(savedValues.SCIENCESWARM_STRICT_LOCAL_ONLY),
+    llmProvider: hasExplicitMutableRuntimeValue(savedValues, processEnv, "LLM_PROVIDER"),
+    llmModel: hasExplicitMutableRuntimeValue(savedValues, processEnv, "LLM_MODEL"),
+    ollamaModel: hasExplicitMutableRuntimeValue(savedValues, processEnv, "OLLAMA_MODEL"),
+    openaiApiKey: hasExplicitMutableRuntimeValue(savedValues, processEnv, "OPENAI_API_KEY"),
+  };
+}
+
 export function readSavedLlmRuntimeEnv(
   processEnv: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
@@ -137,6 +173,20 @@ export function readSavedLlmRuntimeEnv(
   return resolveSavedLlmRuntimeEnv(processEnv, envFileContents);
 }
 
+export function readExplicitLlmRuntimeConfig(
+  processEnv: NodeJS.ProcessEnv = process.env,
+  cwd = process.cwd(),
+): ExplicitLlmRuntimeConfig {
+  let envFileContents: string | null = null;
+  try {
+    envFileContents = readFileSync(path.join(cwd, ".env"), "utf8");
+  } catch {
+    envFileContents = null;
+  }
+
+  return resolveExplicitLlmRuntimeConfig(processEnv, envFileContents);
+}
+
 export function getCurrentLlmRuntimeEnv(
   processEnv: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
@@ -144,4 +194,13 @@ export function getCurrentLlmRuntimeEnv(
   return processEnv.NODE_ENV === "test"
     ? resolveSavedLlmRuntimeEnv(processEnv, null)
     : readSavedLlmRuntimeEnv(processEnv, cwd);
+}
+
+export function getCurrentExplicitLlmRuntimeConfig(
+  processEnv: NodeJS.ProcessEnv = process.env,
+  cwd = process.cwd(),
+): ExplicitLlmRuntimeConfig {
+  return processEnv.NODE_ENV === "test"
+    ? resolveExplicitLlmRuntimeConfig(processEnv, null)
+    : readExplicitLlmRuntimeConfig(processEnv, cwd);
 }

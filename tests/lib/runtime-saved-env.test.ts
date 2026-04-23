@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveSavedLlmRuntimeEnv } from "@/lib/runtime-saved-env";
+import {
+  resolveExplicitLlmRuntimeConfig,
+  resolveSavedLlmRuntimeEnv,
+} from "@/lib/runtime-saved-env";
 
 describe("resolveSavedLlmRuntimeEnv", () => {
   it("prefers saved .env values over stale process env for mutable llm settings", () => {
@@ -108,5 +111,26 @@ describe("resolveSavedLlmRuntimeEnv", () => {
 
     expect(runtime.strictLocalOnly).toBe(true);
     expect(runtime.llmProvider).toBe("local");
+  });
+
+  it("tracks which runtime controls were explicitly configured", () => {
+    const explicit = resolveExplicitLlmRuntimeConfig(
+      {
+        NODE_ENV: "test",
+        LLM_MODEL: "gpt-5.4",
+      },
+      [
+        "LLM_PROVIDER=openai",
+        "OPENAI_API_KEY=sk-saved",
+      ].join("\n"),
+    );
+
+    expect(explicit).toEqual({
+      strictLocalOnly: false,
+      llmProvider: true,
+      llmModel: true,
+      ollamaModel: false,
+      openaiApiKey: true,
+    });
   });
 });
