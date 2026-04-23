@@ -219,6 +219,45 @@ describe("gateway-ws-client", () => {
     });
   });
 
+  it("accepts agent-scoped session keys on chat.send events", async () => {
+    const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const turn = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+    });
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
+    });
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "agent:main:session-alpha",
+          runId: "run-alpha",
+          state: "final",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "visible reply" }],
+          },
+        },
+      }),
+    );
+
+    await expect(turn).resolves.toMatchObject({
+      runId: "run-alpha",
+      text: "visible reply",
+    });
+  });
+
   it("does not treat chat.final tool-role content as assistant text", async () => {
     const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
 
@@ -528,6 +567,49 @@ describe("gateway-ws-client", () => {
       });
       expect(outcome.error).not.toBeInstanceOf(GatewayPostAckError);
     }
+  });
+
+  it("accepts agent-scoped session keys on sessions.send events", async () => {
+    const { sendMessageViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const turn = sendMessageViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+    });
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "sessions.send"));
+    });
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          key: "agent:main:session-alpha",
+          stream: "assistant",
+          data: { text: "legacy reply" },
+        },
+      }),
+    );
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          key: "agent:main:session-alpha",
+          stream: "lifecycle",
+          data: { phase: "end" },
+        },
+      }),
+    );
+
+    await expect(turn).resolves.toMatchObject({ text: "legacy reply" });
   });
 
   it("rejects a dropped turn before a reconnect can reuse stale listeners", async () => {
