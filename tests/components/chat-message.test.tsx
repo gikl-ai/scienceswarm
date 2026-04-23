@@ -188,6 +188,14 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("log")).toHaveTextContent(
       "Working (6s • esc to interrupt)",
     );
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(screen.getByRole("log")).toHaveTextContent(
+      "Working (7s • esc to interrupt)",
+    );
   });
 
   it("renders streaming thinking rows as markdown in the assistant transcript", () => {

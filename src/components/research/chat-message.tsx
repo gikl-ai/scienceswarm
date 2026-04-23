@@ -488,18 +488,22 @@ function useLiveSecondTick(enabled: boolean): void {
       return undefined;
     }
 
-    let intervalId: number | null = null;
-    const timeoutId = window.setTimeout(() => {
-      bumpElapsedTick();
-      intervalId = window.setInterval(() => {
+    let timeoutId: number | null = null;
+    const scheduleNextTick = () => {
+      timeoutId = window.setTimeout(() => {
         bumpElapsedTick();
-      }, 1000);
+        scheduleNextTick();
+      }, millisecondsUntilNextSecond(Date.now()));
+    };
+
+    timeoutId = window.setTimeout(() => {
+      bumpElapsedTick();
+      scheduleNextTick();
     }, millisecondsUntilNextSecond(Date.now()));
 
     return () => {
-      window.clearTimeout(timeoutId);
-      if (intervalId !== null) {
-        window.clearInterval(intervalId);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
       }
     };
   }, [enabled]);
