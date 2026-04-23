@@ -202,6 +202,93 @@ describe("paper-library review and apply routes", () => {
     expect(await exists(originalPath)).toBe(true);
   });
 
+  it("re-approves an already approved plan and invalidates the previous token", async () => {
+    const originalPath = path.join(paperRoot, "2024 - Smith - Interesting Paper.pdf");
+    await writeFile(originalPath, "fake pdf", "utf-8");
+
+    const scanRoute = await import("@/app/api/brain/paper-library/scan/route");
+    const scanResponse = await scanRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/scan", {
+      action: "start",
+      project: "project-alpha",
+      rootPath: paperRoot,
+      mode: "dry-run",
+      idempotencyKey: "route-review-reapprove-start",
+    }));
+    expect(scanResponse.status).toBe(200);
+    const scanStarted = await scanResponse.json() as { scanId: string };
+    await waitForReady(scanRoute.GET, "project-alpha", scanStarted.scanId);
+
+    const reviewRoute = await import("@/app/api/brain/paper-library/review/route");
+    const reviewResponse = await reviewRoute.GET(new Request(
+      `http://localhost/api/brain/paper-library/review?project=project-alpha&scanId=${scanStarted.scanId}&limit=10`,
+    ));
+    expect(reviewResponse.status).toBe(200);
+    const reviewPage = await reviewResponse.json() as {
+      items: Array<{ id: string; candidates: Array<{ id: string }> }>;
+    };
+    expect(reviewPage.items).toHaveLength(1);
+
+    const acceptedResponse = await reviewRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/review", {
+      project: "project-alpha",
+      scanId: scanStarted.scanId,
+      itemId: reviewPage.items[0]?.id,
+      action: "accept",
+      selectedCandidateId: reviewPage.items[0]?.candidates[0]?.id,
+    }));
+    expect(acceptedResponse.status).toBe(200);
+
+    const applyPlanRoute = await import("@/app/api/brain/paper-library/apply-plan/route");
+    const createdResponse = await applyPlanRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply-plan", {
+      project: "project-alpha",
+      scanId: scanStarted.scanId,
+      templateFormat: "{year} - {title}.pdf",
+    }));
+    expect(createdResponse.status).toBe(200);
+    const created = await createdResponse.json() as { applyPlanId: string };
+
+    const approveRoute = await import("@/app/api/brain/paper-library/apply-plan/approve/route");
+    const firstApprovalResponse = await approveRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply-plan/approve", {
+      project: "project-alpha",
+      applyPlanId: created.applyPlanId,
+      userConfirmation: true,
+    }));
+    expect(firstApprovalResponse.status).toBe(200);
+    const firstApproval = await firstApprovalResponse.json() as { approvalToken: string };
+
+    const secondApprovalResponse = await approveRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply-plan/approve", {
+      project: "project-alpha",
+      applyPlanId: created.applyPlanId,
+      userConfirmation: true,
+    }));
+    expect(secondApprovalResponse.status).toBe(200);
+    const secondApproval = await secondApprovalResponse.json() as { approvalToken: string };
+    expect(secondApproval.approvalToken).toBeTruthy();
+    expect(secondApproval.approvalToken).not.toBe(firstApproval.approvalToken);
+
+    const applyRoute = await import("@/app/api/brain/paper-library/apply/route");
+    const staleApplyResponse = await applyRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply", {
+      project: "project-alpha",
+      applyPlanId: created.applyPlanId,
+      approvalToken: firstApproval.approvalToken,
+      idempotencyKey: "route-review-reapprove-stale-token",
+    }));
+    expect(staleApplyResponse.status).toBe(409);
+    await expect(staleApplyResponse.json()).resolves.toMatchObject({
+      error: { code: "apply_blocked_conflicts" },
+    });
+
+    const applyResponse = await applyRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply", {
+      project: "project-alpha",
+      applyPlanId: created.applyPlanId,
+      approvalToken: secondApproval.approvalToken,
+      idempotencyKey: "route-review-reapprove-fresh-token",
+    }));
+    expect(applyResponse.status).toBe(200);
+    await expect(applyResponse.json()).resolves.toMatchObject({
+      status: "applied",
+    });
+  });
+
   it("returns 409 and leaves every file in place when an approved source changes", async () => {
     const alphaPath = path.join(paperRoot, "2024 - Alpha Paper.pdf");
     const betaPath = path.join(paperRoot, "2025 - Beta Paper.pdf");
