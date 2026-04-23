@@ -15,6 +15,10 @@ import matter from "gray-matter";
 import type { GbrainClient, GbrainPutError } from "./gbrain-client";
 import type { CaptureKind } from "./types";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import {
+  validateRuntimeGbrainProvenance,
+  type RuntimeGbrainProvenance,
+} from "@/lib/runtime-hosts/gbrain-writeback";
 
 export type BrainCaptureKind = CaptureKind;
 
@@ -26,6 +30,10 @@ export interface BrainCaptureParams {
   tags?: string[];
   channel?: string;
   userId?: string;
+  runtimeOriginated?: boolean;
+  runtimeSessionId?: string;
+  runtimeHostId?: string;
+  runtimeProvenance?: RuntimeGbrainProvenance;
 }
 
 export type BrainCaptureToolResponse = {
@@ -117,6 +125,16 @@ export function buildCapturePage(
   if (params.tags && params.tags.length > 0) frontmatter.tags = params.tags;
   if (params.channel) frontmatter.channel = params.channel;
   if (params.userId) frontmatter.userId = params.userId;
+  if (params.runtimeProvenance) {
+    frontmatter.runtime_gbrain_provenance = {
+      runtimeSessionId: params.runtimeProvenance.runtimeSessionId,
+      hostId: params.runtimeProvenance.hostId,
+      sourceArtifactId: params.runtimeProvenance.sourceArtifactId,
+      promptHash: params.runtimeProvenance.promptHash,
+      inputFileRefs: params.runtimeProvenance.inputFileRefs,
+      approvalState: params.runtimeProvenance.approvalState,
+    };
+  }
 
   const sourceLocator = `${params.channel ?? "mcp"}:${params.userId ?? "unknown"}`;
   const sourceLine = `[Source: ${userHandle} via ${sourceLocator}, ${date}]`;
@@ -153,12 +171,33 @@ function errorResponse(message: string): BrainCaptureToolResponse {
   };
 }
 
+function validateRuntimeCapture(params: BrainCaptureParams): string | null {
+  if (!params.runtimeOriginated) return null;
+  if (!params.runtimeProvenance) {
+    return "Runtime-originated gbrain_capture requires RuntimeGbrainProvenance.";
+  }
+  if (!params.runtimeSessionId || !params.runtimeHostId) {
+    return "Runtime-originated gbrain_capture requires runtime session and host scope.";
+  }
+
+  const error = validateRuntimeGbrainProvenance({
+    provenance: params.runtimeProvenance,
+    runtimeSessionId: params.runtimeSessionId,
+    hostId: params.runtimeHostId,
+  });
+  return error?.message ?? null;
+}
+
 export function createBrainCaptureHandler(
   deps: BrainCaptureHandlerDeps,
 ): (params: BrainCaptureParams) => Promise<BrainCaptureToolResponse> {
   return async function handleBrainCapture(params) {
     if (!params.content || params.content.trim() === "") {
       return errorResponse("Error: content is required and cannot be empty.");
+    }
+    const runtimeCaptureError = validateRuntimeCapture(params);
+    if (runtimeCaptureError) {
+      return errorResponse(`Error: ${runtimeCaptureError}`);
     }
 
     const now = deps.now ? deps.now() : new Date();

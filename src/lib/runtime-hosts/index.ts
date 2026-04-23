@@ -8,3 +8,6 @@ export * from "./retention";
 export * from "./registry";
 export * from "./router";
 export * from "./sessions";
+export * from "./mcp/tokens";
+export * from "./mcp/tool-profiles";
+export * from "./mcp/tools";
