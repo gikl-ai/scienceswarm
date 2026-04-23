@@ -349,7 +349,7 @@ describe("openclawTask upstream onboarding", () => {
     expect(workspace.isDirectory()).toBe(true);
   });
 
-  it("replaces malformed state-dir config when runner timeout recovery runs", async () => {
+  it("fails safely when timeout recovery encounters malformed state-dir config", async () => {
     await fs.mkdir(STATE_DIR, { recursive: true });
     await fs.writeFile(`${STATE_DIR}/openclaw.json`, "{not-json", "utf8");
     mockRunOpenClaw.mockImplementation(async (args) => {
@@ -370,15 +370,17 @@ describe("openclawTask upstream onboarding", () => {
     });
 
     const events = await runTask();
-    const config = JSON.parse(
-      await fs.readFile(`${STATE_DIR}/openclaw.json`, "utf8"),
-    ) as { gateway?: { mode?: string; port?: number } };
 
-    expect(events.some((e) => e.status === "succeeded")).toBe(true);
-    expect(config.gateway).toMatchObject({
-      mode: "local",
-      port: 18789,
-    });
+    expect(events.some((e) => e.status === "succeeded")).toBe(false);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        status: "failed",
+        error: expect.stringContaining("is not valid JSON5"),
+      }),
+    );
+    expect(await fs.readFile(`${STATE_DIR}/openclaw.json`, "utf8")).toBe(
+      "{not-json",
+    );
   });
 
   it("honors OPENCLAW_PORT override when running onboarding", async () => {

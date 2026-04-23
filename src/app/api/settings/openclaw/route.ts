@@ -30,6 +30,7 @@ import {
 import {
   ensureOpenClawGatewayAuthConfig,
   getOpenClawGatewayAuthStatus,
+  OpenClawGatewayAuthConfigError,
 } from "@/lib/openclaw/gateway-auth";
 import { getOpenClawStatus } from "@/lib/openclaw-status";
 import { parseEnvFile } from "@/lib/setup/env-writer";
@@ -169,6 +170,13 @@ async function waitForOpenClawReady(timeoutMs = 10_000): Promise<boolean> {
   return false;
 }
 
+function openClawConfigErrorResponse(error: unknown, fallback: string): Response {
+  if (error instanceof OpenClawGatewayAuthConfigError) {
+    return Response.json({ error: error.message }, { status: 400 });
+  }
+  return Response.json({ error: fallback }, { status: 500 });
+}
+
 async function activateOpenClawBackendOrResponse(
   detail: { alreadyRunning?: boolean } = {},
 ): Promise<Response | null> {
@@ -284,10 +292,14 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json({ error: "Configure failed" }, { status: 500 });
       }
 
-      ensureOpenClawGatewayAuthConfig({
-        mode: resolveOpenClawMode(),
-        port: getOpenClawPort(),
-      });
+      try {
+        ensureOpenClawGatewayAuthConfig({
+          mode: resolveOpenClawMode(),
+          port: getOpenClawPort(),
+        });
+      } catch (error) {
+        return openClawConfigErrorResponse(error, "Configure failed");
+      }
 
       const validateStep = configureSteps[configureSteps.length - 1];
       const validateResult = await runOpenClaw(validateStep, { timeoutMs: 5000 });
@@ -341,7 +353,11 @@ export async function POST(request: Request): Promise<Response> {
         const mode = resolveOpenClawMode();
 
         if (mode.kind === "state-dir") {
-          ensureOpenClawGatewayAuthConfig({ mode, port: getOpenClawPort() });
+          try {
+            ensureOpenClawGatewayAuthConfig({ mode, port: getOpenClawPort() });
+          } catch (error) {
+            return openClawConfigErrorResponse(error, "Start failed");
+          }
           // `openclaw gateway start` can daemonize into upstream's default
           // user-global state instead of preserving OPENCLAW_STATE_DIR. In
           // ScienceSwarm-managed state-dir mode, run the gateway process

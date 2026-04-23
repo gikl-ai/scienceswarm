@@ -21,6 +21,8 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
+import JSON5 from "json5";
+
 import { getOpenClawPort } from "@/lib/config/ports";
 import { ensureOpenClawGatewayAuthConfig } from "@/lib/openclaw/gateway-auth";
 import {
@@ -239,11 +241,22 @@ async function* applyStateDirOnboarding(
         detail:
           "OpenClaw onboarding timed out; writing minimal local gateway config…",
       };
-      await writeMinimalStateDirOnboarding({
-        mode,
-        port: Number(port),
-        workspace,
-      });
+      try {
+        await writeMinimalStateDirOnboarding({
+          mode,
+          port: Number(port),
+          workspace,
+        });
+      } catch (error) {
+        yield {
+          status: "failed",
+          error:
+            error instanceof Error
+              ? error.message
+              : "OpenClaw onboarding recovery could not update the local gateway config.",
+        };
+        return false;
+      }
       return true;
     }
 
@@ -284,7 +297,7 @@ async function stateDirOnboardingExists(
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(rawConfig);
+    parsed = JSON5.parse(rawConfig);
   } catch {
     return false;
   }

@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import JSON5 from "json5";
+
 import { getOpenClawPort } from "@/lib/config/ports";
 import {
   getScienceSwarmOpenClawConfigPath,
@@ -17,6 +19,13 @@ export interface OpenClawGatewayAuthStatus {
   configured: boolean;
   configPath: string | null;
   searchedPaths: string[];
+}
+
+export class OpenClawGatewayAuthConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OpenClawGatewayAuthConfigError";
+  }
 }
 
 function defaultOpenClawConfigPath(): string {
@@ -55,8 +64,57 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function tokenFromConfig(raw: string): string | null {
-  const config = JSON.parse(raw) as unknown;
+function parseOpenClawConfig(
+  raw: string,
+  configPath: string,
+): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON5.parse(raw) as unknown;
+  } catch {
+    throw new OpenClawGatewayAuthConfigError(
+      `OpenClaw config at ${configPath} is not valid JSON5. Fix or remove it, then retry.`,
+    );
+  }
+
+  if (!isRecord(parsed)) {
+    throw new OpenClawGatewayAuthConfigError(
+      `OpenClaw config at ${configPath} must contain a top-level object.`,
+    );
+  }
+
+  return parsed;
+}
+
+function readConfigFromPath(
+  configPath: string,
+  options: { tolerateInvalid?: boolean } = {},
+): Record<string, unknown> | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(configPath, "utf8");
+  } catch (error) {
+    const errno = error as NodeJS.ErrnoException;
+    if (errno.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+
+  try {
+    return parseOpenClawConfig(raw, configPath);
+  } catch (error) {
+    if (
+      options.tolerateInvalid === true &&
+      error instanceof OpenClawGatewayAuthConfigError
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function tokenFromConfig(config: unknown): string | null {
   if (!isRecord(config)) return null;
   const gateway = config.gateway;
   if (!isRecord(gateway)) return null;
@@ -74,7 +132,8 @@ function readTokenFromPaths(paths: readonly string[]): {
 } {
   for (const configPath of paths) {
     try {
-      const token = tokenFromConfig(fs.readFileSync(configPath, "utf8"));
+      const config = readConfigFromPath(configPath, { tolerateInvalid: true });
+      const token = tokenFromConfig(config);
       if (token) return { token, configPath };
     } catch {
       // Missing, malformed, or unreadable configs are not terminal here. Try
@@ -128,13 +187,7 @@ export function ensureOpenClawGatewayAuthConfig(options: {
   const configPath = mode.configPath;
   fs.mkdirSync(stateDir, { recursive: true });
 
-  let config: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(fs.readFileSync(configPath, "utf8")) as unknown;
-    if (isRecord(parsed)) config = parsed;
-  } catch {
-    config = {};
-  }
+  const config = readConfigFromPath(configPath) ?? {};
 
   const existingGateway = isRecord(config.gateway) ? config.gateway : {};
   const existingAuth = isRecord(existingGateway.auth)
