@@ -340,6 +340,16 @@ export const ApplyManifestOperationStatusSchema = z.enum([
 ]);
 export type ApplyManifestOperationStatus = z.infer<typeof ApplyManifestOperationStatusSchema>;
 
+export const AppliedPaperMetadataSchema = z.object({
+  pageSlug: z.string().min(1),
+  title: z.string().min(1),
+  identifiers: PaperIdentifierSchema.default({}),
+  authors: z.array(z.string()).default([]),
+  year: z.number().int().min(1000).max(3000).optional(),
+  venue: z.string().optional(),
+});
+export type AppliedPaperMetadata = z.infer<typeof AppliedPaperMetadataSchema>;
+
 export const ApplyManifestOperationSchema = z.object({
   operationId: z.string().min(1),
   paperId: z.string().min(1),
@@ -348,6 +358,7 @@ export const ApplyManifestOperationSchema = z.object({
   status: ApplyManifestOperationStatusSchema,
   source: PaperLibraryFileSnapshotSchema.optional(),
   destinationSnapshot: PaperLibraryFileSnapshotSchema.optional(),
+  appliedMetadata: AppliedPaperMetadataSchema.optional(),
   appliedAt: IsoDateStringSchema.optional(),
   undoneAt: IsoDateStringSchema.optional(),
   error: z.string().optional(),

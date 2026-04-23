@@ -16,6 +16,7 @@ import {
   type PaperIdentityCandidate,
   type PaperReviewItem,
 } from "./contracts";
+import { buildAppliedPaperMetadata } from "./applied-metadata";
 import {
   compareSnapshot,
   isPathInsideRoot,
@@ -305,7 +306,10 @@ function validateApproval(plan: ApplyPlan, approvalToken: string): void {
   }
 }
 
-function manifestOperationsFromPlan(operations: ApplyOperation[]): ApplyManifestOperation[] {
+function manifestOperationsFromPlan(
+  operations: ApplyOperation[],
+  reviewItemsByPaperId: Map<string, PaperReviewItem>,
+): ApplyManifestOperation[] {
   return operations.map((operation) => ({
     operationId: operation.id,
     paperId: operation.paperId,
@@ -313,6 +317,7 @@ function manifestOperationsFromPlan(operations: ApplyOperation[]): ApplyManifest
     destinationRelativePath: operation.destinationRelativePath,
     status: "pending",
     source: operation.source,
+    appliedMetadata: buildAppliedPaperMetadata(operation, reviewItemsByPaperId.get(operation.paperId)),
   }));
 }
 
@@ -430,14 +435,20 @@ async function applyOneOperation(rootRealpath: string, operation: ApplyOperation
   const destinationValidation = validateRelativeDestination(operation.destinationRelativePath);
   if (!destinationValidation.ok) throw new Error(destinationValidation.problems[0]?.message ?? "Destination is unsafe.");
   await assertDestinationParentInsideRoot(rootRealpath, destinationAbsolutePath);
+  const baseOperation = {
+    operationId: operation.id,
+    paperId: operation.paperId,
+    sourceRelativePath: operation.source.relativePath,
+    destinationRelativePath: operation.destinationRelativePath,
+    source: operation.source,
+  } satisfies Pick<
+    ApplyManifestOperation,
+    "operationId" | "paperId" | "sourceRelativePath" | "destinationRelativePath" | "source"
+  >;
   if (operation.source.relativePath === operation.destinationRelativePath) {
     return {
-      operationId: operation.id,
-      paperId: operation.paperId,
-      sourceRelativePath: operation.source.relativePath,
-      destinationRelativePath: operation.destinationRelativePath,
+      ...baseOperation,
       status: "verified",
-      source: operation.source,
       destinationSnapshot: currentSnapshot.snapshot,
       appliedAt: nowIso(),
     };
@@ -450,12 +461,8 @@ async function applyOneOperation(rootRealpath: string, operation: ApplyOperation
   const destinationSnapshot = await snapshotFile(rootRealpath, destinationAbsolutePath);
   if (!destinationSnapshot.ok) throw new Error(destinationSnapshot.problems[0]?.message ?? "Moved file cannot be verified.");
   return {
-    operationId: operation.id,
-    paperId: operation.paperId,
-    sourceRelativePath: operation.source.relativePath,
-    destinationRelativePath: operation.destinationRelativePath,
+    ...baseOperation,
     status: "verified",
-    source: operation.source,
     destinationSnapshot: destinationSnapshot.snapshot,
     appliedAt: nowIso(),
   };
@@ -467,7 +474,7 @@ export interface PersistAppliedPaperLocationsInput {
   manifestId: string;
   plan: ApplyPlan;
   operations: ApplyOperation[];
-  reviewItems: PaperReviewItem[];
+  reviewItems?: PaperReviewItem[];
   manifestOperations: ApplyManifestOperation[];
 }
 
@@ -534,8 +541,11 @@ export async function applyApprovedPlan(input: {
   if (plan.conflictCount > 0) throw new Error("Cannot apply a plan with unresolved conflicts.");
 
   const operations = await readApplyOperations(input.project, input.applyPlanId, input.brainRoot);
+  const review = await readAllPaperReviewItems(input.project, plan.scanId, input.brainRoot);
+  const reviewItems = review?.items ?? [];
+  const reviewItemsByPaperId = new Map(reviewItems.map((item) => [item.paperId, item]));
   const manifestId = plan.manifestId ?? randomUUID();
-  const manifestOperations = manifestOperationsFromPlan(operations);
+  const manifestOperations = manifestOperationsFromPlan(operations, reviewItemsByPaperId);
   const createdAt = nowIso();
   const planDigest = plan.planDigest ?? hashJson({
     scanId: plan.scanId,
@@ -580,7 +590,10 @@ export async function applyApprovedPlan(input: {
 
   for (const [index, operation] of operations.entries()) {
     try {
-      manifestOperations[index] = await applyOneOperation(plan.rootRealpath, operation);
+      manifestOperations[index] = {
+        ...manifestOperations[index],
+        ...(await applyOneOperation(plan.rootRealpath, operation)),
+      };
     } catch (error) {
       manifestOperations[index] = {
         ...manifestOperations[index],
@@ -598,14 +611,13 @@ export async function applyApprovedPlan(input: {
 
   if (status === "applied" && input.persistLocations) {
     try {
-      const review = await readAllPaperReviewItems(input.project, plan.scanId, input.brainRoot);
       await input.persistLocations({
         project: input.project,
         brainRoot: input.brainRoot,
         manifestId,
         plan,
         operations,
-        reviewItems: review?.items ?? [],
+        reviewItems,
         manifestOperations,
       });
     } catch (error) {
@@ -660,8 +672,10 @@ export async function repairAppliedManifest(input: {
   if (appliedOperationCount === 0) {
     throw new Error("Apply manifest has no verified operations to repair.");
   }
-
-  const review = await readAllPaperReviewItems(input.project, plan.scanId, input.brainRoot);
+  const needsReviewFallback = manifestOperations.some((operation) => !operation.appliedMetadata);
+  const review = needsReviewFallback
+    ? await readAllPaperReviewItems(input.project, plan.scanId, input.brainRoot)
+    : null;
 
   try {
     await input.persistLocations({

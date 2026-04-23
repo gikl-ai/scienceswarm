@@ -101,6 +101,12 @@ describe("paper-library gbrain writer", () => {
         sourceRelativePath: "messy.pdf",
         destinationRelativePath: "2024 - Existing Paper.pdf",
         status: "verified",
+        appliedMetadata: {
+          pageSlug: "wiki/entities/papers/local-paper-1",
+          title: "Existing Paper",
+          identifiers: {},
+          authors: [],
+        },
         appliedAt: "2026-04-23T00:00:00.000Z",
       }],
     });
@@ -117,5 +123,64 @@ describe("paper-library gbrain writer", () => {
       project: "project-alpha",
       apply_manifest_id: "manifest-1",
     });
+  });
+
+  it("does not duplicate the timeline entry when repair retries the same manifest", async () => {
+    const input: Parameters<typeof persistAppliedPaperLocations>[0] = {
+      project: "project-alpha",
+      brainRoot,
+      manifestId: "manifest-1",
+      plan: {
+        version: 1,
+        id: "plan-1",
+        scanId: "scan-1",
+        project: "project-alpha",
+        status: "applied",
+        rootPath: "/Users/example/papers",
+        rootRealpath: "/Users/example/papers",
+        templateFormat: "{year} - {title}.pdf",
+        operationCount: 1,
+        conflictCount: 0,
+        operationShardIds: [],
+        createdAt: "2026-04-23T00:00:00.000Z",
+        updatedAt: "2026-04-23T00:00:00.000Z",
+      },
+      operations: [{
+        id: "operation-1",
+        paperId: "paper-1",
+        kind: "rename",
+        destinationRelativePath: "2024 - Existing Paper.pdf",
+        reason: "test",
+        confidence: 0.95,
+        conflictCodes: [],
+      }],
+      manifestOperations: [{
+        operationId: "operation-1",
+        paperId: "paper-1",
+        sourceRelativePath: "messy.pdf",
+        destinationRelativePath: "2024 - Existing Paper.pdf",
+        status: "verified",
+        appliedMetadata: {
+          pageSlug: "wiki/entities/papers/local-paper-1",
+          title: "Existing Paper",
+          identifiers: {},
+          authors: ["Ada Lovelace"],
+          year: 2024,
+          venue: "Journal of Tests",
+        },
+        appliedAt: "2026-04-23T00:00:00.000Z",
+      }],
+    };
+
+    await persistAppliedPaperLocations(input);
+    await persistAppliedPaperLocations(input);
+
+    const store = getBrainStore({ root: brainRoot }) as unknown as {
+      health(): Promise<unknown>;
+      engine: { getPage(slug: string): Promise<{ timeline: string } | null> };
+    };
+    await store.health();
+    const page = await store.engine.getPage("wiki/entities/papers/local-paper-1");
+    expect(page?.timeline.match(/Applied local PDF path/g) ?? []).toHaveLength(1);
   });
 });
