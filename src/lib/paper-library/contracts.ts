@@ -11,6 +11,7 @@ export const paperLibraryErrorCodes = [
   "apply_blocked_conflicts",
   "job_not_found",
   "job_already_running",
+  "manifest_not_found",
   "manifest_not_repairable",
   "unsafe_path",
   "invalid_project",
@@ -340,6 +341,16 @@ export const ApplyManifestOperationStatusSchema = z.enum([
 ]);
 export type ApplyManifestOperationStatus = z.infer<typeof ApplyManifestOperationStatusSchema>;
 
+export const AppliedPaperMetadataSchema = z.object({
+  pageSlug: z.string().min(1),
+  title: z.string().min(1),
+  identifiers: PaperIdentifierSchema.default({}),
+  authors: z.array(z.string()).default([]),
+  year: z.number().int().min(1000).max(3000).optional(),
+  venue: z.string().optional(),
+});
+export type AppliedPaperMetadata = z.infer<typeof AppliedPaperMetadataSchema>;
+
 export const ApplyManifestOperationSchema = z.object({
   operationId: z.string().min(1),
   paperId: z.string().min(1),
@@ -348,6 +359,7 @@ export const ApplyManifestOperationSchema = z.object({
   status: ApplyManifestOperationStatusSchema,
   source: PaperLibraryFileSnapshotSchema.optional(),
   destinationSnapshot: PaperLibraryFileSnapshotSchema.optional(),
+  appliedMetadata: AppliedPaperMetadataSchema.optional(),
   appliedAt: IsoDateStringSchema.optional(),
   undoneAt: IsoDateStringSchema.optional(),
   error: z.string().optional(),
@@ -385,6 +397,12 @@ export const UndoStartRequestSchema = z.object({
   manifestId: z.string().min(1),
 });
 export type UndoStartRequest = z.infer<typeof UndoStartRequestSchema>;
+
+export const RepairManifestRequestSchema = z.object({
+  project: ProjectSlugSchema,
+  manifestId: z.string().min(1),
+});
+export type RepairManifestRequest = z.infer<typeof RepairManifestRequestSchema>;
 
 export const CursorWindowSchema = z.object({
   cursor: z.string().optional(),

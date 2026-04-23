@@ -36,6 +36,9 @@ The core system is:
   `generic_scientist` preset for broader workflows
 - A searchable `gbrain`-backed research memory that enriches chat with project
   context
+- A local-first Paper Library workflow that scans messy PDF archives, proposes
+  better metadata, previews rename and move plans, and keeps citation graph,
+  cluster, and gap-finder views tied to the same project corpus
 - Deterministic literature-packet runs across PubMed, arXiv, OpenAlex, and
   Crossref, with durable `research_packet` and `overnight_journal` artifacts
 - Direct chat plus OpenClaw-routed chat when the agent runtime is available
@@ -126,6 +129,26 @@ Important:
 4. Start chatting with a project that already has context
 5. Run a literature packet from chat or MCP when you want a deterministic
    multi-source landscape review with durable packet/journal outputs
+
+### Paper Library
+
+ScienceSwarm includes a Paper Library workflow for turning a large local PDF
+archive into something you can actually work with.
+
+From the `Paper Library` view inside a project, you can:
+
+1. Run a dry-run scan against a local folder of PDFs, even when filenames are
+   inconsistent or metadata is incomplete
+2. Review candidate identities, accept or correct the matches, and choose a
+   rename template such as `{year} - {title}.pdf`
+3. Preview the full apply plan before any files move
+4. Apply the approved plan, then inspect the same corpus through graph,
+   semantic cluster, and gap-finder views
+5. Use manifest history to undo a move set or retry metadata writeback if the
+   local file operations finished before a gbrain update did
+
+The workflow is project-scoped, so each project can organize and explore its
+own paper archive without treating every imported folder as one global library.
 
 ### Runtime Hosts
 

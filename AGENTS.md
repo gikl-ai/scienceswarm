@@ -29,6 +29,12 @@ that shape.
 - `src/app/api/` public HTTP routes
 - `src/app/dashboard/` main UI surfaces
 - `src/lib/` integration clients, setup logic, and shared helpers
+- `src/app/api/brain/paper-library/` local-first paper-library scan, review,
+  apply, graph, clustering, gap, undo, and repair routes
+- `src/components/research/paper-library/` the project-facing command center
+  for scans, rename plans, history, graph, clusters, and gap tracking
+- `src/lib/paper-library/` paper identity, metadata merge, filesystem safety,
+  apply/undo, graph, clustering, and gap-ranking logic
 - `skills/` and `.openclaw/skills/` public product skill definitions
 - `tests/` contract, integration, and UI coverage
 - `sandbox/` the audit-revise sandbox image and gbrain HTTP shim
@@ -64,6 +70,10 @@ npm run quality
 - Do not commit secrets, private local paths, local runtime state, or private
   workspace content.
 - Use hypothetical placeholders such as `project-alpha` in tests and docs.
+- Keep Paper Library changes project-scoped and local-first. Public docs should
+  describe the user-facing scan, review, apply, undo, repair, graph, cluster,
+  and gap-finder flow without exposing internal planning notes or private
+  corpus details.
 - Treat `openhands/` as an upstream boundary. Prefer changes in
   `src/lib/openhands.ts` and the Next.js proxy routes before touching the
   submodule.

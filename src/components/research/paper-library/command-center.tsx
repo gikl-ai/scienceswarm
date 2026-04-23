@@ -297,6 +297,7 @@ export function PaperLibraryCommandCenter({
   const [manifestLoadingMore, setManifestLoadingMore] = useState(false);
   const [manifestError, setManifestError] = useState<string | null>(null);
   const [manifestPage, setManifestPage] = useState<ManifestPage | null>(null);
+  const [repairingManifest, setRepairingManifest] = useState(false);
   const [undoing, setUndoing] = useState(false);
 
   const [graphLoading, setGraphLoading] = useState(false);
@@ -880,6 +881,40 @@ export function PaperLibraryCommandCenter({
       setUndoing(false);
     }
   }, [loadManifest, projectSlug, session.manifestId]);
+
+  const handleRepairManifest = useCallback(async () => {
+    if (!session.manifestId) return;
+    setRepairingManifest(true);
+    setCommandError(null);
+    try {
+      const payload = await paperLibraryFetchJson<{
+        ok: true;
+        repaired: boolean;
+        manifest: ApplyManifest;
+      }>(
+        "/api/brain/paper-library/repair",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project: projectSlug,
+            manifestId: session.manifestId,
+          }),
+        },
+      );
+      await loadManifest({ manifestId: session.manifestId });
+      if (session.applyPlanId) {
+        await loadApplyPlan({ applyPlanId: session.applyPlanId });
+      }
+      if (!payload.repaired && payload.manifest.warnings.length > 0) {
+        setCommandError(payload.manifest.warnings[payload.manifest.warnings.length - 1] ?? "Could not repair the manifest.");
+      }
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : "Could not repair the apply manifest.");
+    } finally {
+      setRepairingManifest(false);
+    }
+  }, [loadApplyPlan, loadManifest, projectSlug, session.applyPlanId, session.manifestId]);
 
   const handleGapAction = useCallback(async (
     suggestionId: string,
@@ -1720,14 +1755,26 @@ export function PaperLibraryCommandCenter({
                 Inspect the manifest written before apply, verify outcomes, and undo ScienceSwarm-managed moves when you need to roll back.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void handleUndo()}
-              disabled={undoing || activeManifest.undoneCount === activeManifest.operationCount}
-              className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-            >
-              {undoing ? "Undoing..." : "Undo changes"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {activeManifest.status === "applied_with_repair_required" && (
+                <button
+                  type="button"
+                  onClick={() => void handleRepairManifest()}
+                  disabled={repairingManifest}
+                  className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                >
+                  {repairingManifest ? "Repairing..." : "Retry gbrain repair"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleUndo()}
+                disabled={undoing || repairingManifest || activeManifest.undoneCount === activeManifest.operationCount}
+                className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+              >
+                {undoing ? "Undoing..." : "Undo changes"}
+              </button>
+            </div>
           </div>
 
           {manifestError && (
@@ -1753,6 +1800,11 @@ export function PaperLibraryCommandCenter({
                 <span className="text-sm text-muted">{activeManifest.failedCount} failed</span>
                 <span className="text-sm text-muted">{activeManifest.undoneCount} undone</span>
               </div>
+              {activeManifest.status === "applied_with_repair_required" && (
+                <p className="mt-3 text-sm text-muted">
+                  Local filesystem changes are already applied. Retry the gbrain repair to finish writing the paper pages and timeline updates.
+                </p>
+              )}
               {activeManifest.warnings.length > 0 && (
                 <div className="mt-3 space-y-2">
                   {activeManifest.warnings.map((warning) => (
@@ -1985,6 +2037,7 @@ export function PaperLibraryCommandCenter({
     handleCancelScan,
     handleCreateApplyPlan,
     handleGapAction,
+    handleRepairManifest,
     handleReviewAction,
     handleStartScan,
     handleUndo,
@@ -1999,6 +2052,7 @@ export function PaperLibraryCommandCenter({
     manifestLoadingMore,
     manifestPage,
     patchSession,
+    repairingManifest,
     reviewActionItemId,
     reviewError,
     reviewFilter,

@@ -16,6 +16,7 @@ import {
   type PaperIdentityCandidate,
   type PaperReviewItem,
 } from "./contracts";
+import { buildAppliedPaperMetadata } from "./applied-metadata";
 import {
   compareSnapshot,
   isPathInsideRoot,
@@ -305,7 +306,10 @@ function validateApproval(plan: ApplyPlan, approvalToken: string): void {
   }
 }
 
-function manifestOperationsFromPlan(operations: ApplyOperation[]): ApplyManifestOperation[] {
+function manifestOperationsFromPlan(
+  operations: ApplyOperation[],
+  reviewItemsByPaperId: Map<string, PaperReviewItem>,
+): ApplyManifestOperation[] {
   return operations.map((operation) => ({
     operationId: operation.id,
     paperId: operation.paperId,
@@ -313,6 +317,7 @@ function manifestOperationsFromPlan(operations: ApplyOperation[]): ApplyManifest
     destinationRelativePath: operation.destinationRelativePath,
     status: "pending",
     source: operation.source,
+    appliedMetadata: buildAppliedPaperMetadata(operation, reviewItemsByPaperId.get(operation.paperId)),
   }));
 }
 
@@ -430,14 +435,20 @@ async function applyOneOperation(rootRealpath: string, operation: ApplyOperation
   const destinationValidation = validateRelativeDestination(operation.destinationRelativePath);
   if (!destinationValidation.ok) throw new Error(destinationValidation.problems[0]?.message ?? "Destination is unsafe.");
   await assertDestinationParentInsideRoot(rootRealpath, destinationAbsolutePath);
+  const baseOperation = {
+    operationId: operation.id,
+    paperId: operation.paperId,
+    sourceRelativePath: operation.source.relativePath,
+    destinationRelativePath: operation.destinationRelativePath,
+    source: operation.source,
+  } satisfies Pick<
+    ApplyManifestOperation,
+    "operationId" | "paperId" | "sourceRelativePath" | "destinationRelativePath" | "source"
+  >;
   if (operation.source.relativePath === operation.destinationRelativePath) {
     return {
-      operationId: operation.id,
-      paperId: operation.paperId,
-      sourceRelativePath: operation.source.relativePath,
-      destinationRelativePath: operation.destinationRelativePath,
+      ...baseOperation,
       status: "verified",
-      source: operation.source,
       destinationSnapshot: currentSnapshot.snapshot,
       appliedAt: nowIso(),
     };
@@ -450,12 +461,8 @@ async function applyOneOperation(rootRealpath: string, operation: ApplyOperation
   const destinationSnapshot = await snapshotFile(rootRealpath, destinationAbsolutePath);
   if (!destinationSnapshot.ok) throw new Error(destinationSnapshot.problems[0]?.message ?? "Moved file cannot be verified.");
   return {
-    operationId: operation.id,
-    paperId: operation.paperId,
-    sourceRelativePath: operation.source.relativePath,
-    destinationRelativePath: operation.destinationRelativePath,
+    ...baseOperation,
     status: "verified",
-    source: operation.source,
     destinationSnapshot: destinationSnapshot.snapshot,
     appliedAt: nowIso(),
   };
@@ -467,7 +474,7 @@ export interface PersistAppliedPaperLocationsInput {
   manifestId: string;
   plan: ApplyPlan;
   operations: ApplyOperation[];
-  reviewItems: PaperReviewItem[];
+  reviewItems?: PaperReviewItem[];
   manifestOperations: ApplyManifestOperation[];
 }
 
@@ -534,8 +541,11 @@ export async function applyApprovedPlan(input: {
   if (plan.conflictCount > 0) throw new Error("Cannot apply a plan with unresolved conflicts.");
 
   const operations = await readApplyOperations(input.project, input.applyPlanId, input.brainRoot);
+  const review = await readAllPaperReviewItems(input.project, plan.scanId, input.brainRoot);
+  const reviewItems = review?.items ?? [];
+  const reviewItemsByPaperId = new Map(reviewItems.map((item) => [item.paperId, item]));
   const manifestId = plan.manifestId ?? randomUUID();
-  const manifestOperations = manifestOperationsFromPlan(operations);
+  const manifestOperations = manifestOperationsFromPlan(operations, reviewItemsByPaperId);
   const createdAt = nowIso();
   const planDigest = plan.planDigest ?? hashJson({
     scanId: plan.scanId,
@@ -580,7 +590,10 @@ export async function applyApprovedPlan(input: {
 
   for (const [index, operation] of operations.entries()) {
     try {
-      manifestOperations[index] = await applyOneOperation(plan.rootRealpath, operation);
+      manifestOperations[index] = {
+        ...manifestOperations[index],
+        ...(await applyOneOperation(plan.rootRealpath, operation)),
+      };
     } catch (error) {
       manifestOperations[index] = {
         ...manifestOperations[index],
@@ -598,14 +611,13 @@ export async function applyApprovedPlan(input: {
 
   if (status === "applied" && input.persistLocations) {
     try {
-      const review = await readAllPaperReviewItems(input.project, plan.scanId, input.brainRoot);
       await input.persistLocations({
         project: input.project,
         brainRoot: input.brainRoot,
         manifestId,
         plan,
         operations,
-        reviewItems: review?.items ?? [],
+        reviewItems,
         manifestOperations,
       });
     } catch (error) {
@@ -629,6 +641,81 @@ export async function applyApprovedPlan(input: {
     updatedAt: nowIso(),
   }));
   return { manifest, operations: manifestOperations };
+}
+
+export async function repairAppliedManifest(input: {
+  project: string;
+  manifestId: string;
+  brainRoot: string;
+  persistLocations: (input: PersistAppliedPaperLocationsInput) => Promise<void>;
+}): Promise<{ manifest: ApplyManifest; operations: ApplyManifestOperation[]; repaired: boolean } | null> {
+  const manifest = await readApplyManifest(input.project, input.manifestId, input.brainRoot);
+  if (!manifest) return null;
+  if (manifest.status !== "applied_with_repair_required") {
+    throw new Error("Apply manifest does not require repair.");
+  }
+
+  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
+  const plan = await readApplyPlan(input.project, manifest.applyPlanId, input.brainRoot);
+  if (!plan) {
+    throw new Error("Apply plan not found for this manifest.");
+  }
+
+  const operations = await readApplyOperations(input.project, manifest.applyPlanId, input.brainRoot);
+  const manifestOperations = await readManifestOperations(input.project, input.manifestId, input.brainRoot);
+  const appliedOperationCount = manifestOperations.filter((operation) => (
+    operation.status === "applied" || operation.status === "verified"
+  )).length;
+  if (manifestOperations.length > 0 && appliedOperationCount === 0) {
+    throw new Error("Apply manifest has no verified operations to repair.");
+  }
+  const needsReviewFallback = manifestOperations.some((operation) => !operation.appliedMetadata);
+  const review = needsReviewFallback
+    ? await readAllPaperReviewItems(input.project, plan.scanId, input.brainRoot)
+    : null;
+
+  try {
+    await input.persistLocations({
+      project: input.project,
+      brainRoot: input.brainRoot,
+      manifestId: manifest.id,
+      plan,
+      operations,
+      reviewItems: review?.items ?? [],
+      manifestOperations,
+    });
+
+    const updatedManifest = await writeManifest({
+      ...manifest,
+      status: "applied",
+      warnings: [],
+      updatedAt: nowIso(),
+    }, stateRoot);
+    await writeJsonFile(getPaperLibraryApplyPlanPath(input.project, manifest.applyPlanId, stateRoot), ApplyPlanSchema.parse({
+      ...plan,
+      status: "applied",
+      manifestId: manifest.id,
+      updatedAt: nowIso(),
+    }));
+
+    return { manifest: updatedManifest, operations: manifestOperations, repaired: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "gbrain update failed after filesystem apply.";
+    const updatedManifest = await writeManifest({
+      ...manifest,
+      status: "applied_with_repair_required",
+      warnings: Array.from(new Set([...manifest.warnings, message])),
+      updatedAt: nowIso(),
+    }, stateRoot);
+    await writeJsonFile(getPaperLibraryApplyPlanPath(input.project, manifest.applyPlanId, stateRoot), ApplyPlanSchema.parse({
+      ...plan,
+      status: "applied_with_repair_required",
+      manifestId: manifest.id,
+      updatedAt: nowIso(),
+    }));
+
+    return { manifest: updatedManifest, operations: manifestOperations, repaired: false };
+  }
 }
 
 export async function undoApplyManifest(input: {

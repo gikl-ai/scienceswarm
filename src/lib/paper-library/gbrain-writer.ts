@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 
@@ -7,9 +5,11 @@ import type { PersistAppliedPaperLocationsInput } from "./apply";
 import type {
   ApplyManifestOperation,
   ApplyOperation,
+  AppliedPaperMetadata,
   PaperIdentityCandidate,
   PaperReviewItem,
 } from "./contracts";
+import { buildAppliedPaperMetadata, paperLibraryPageSlugForMetadata } from "./applied-metadata";
 
 function compactObject(value: Record<string, unknown>): Record<string, unknown> {
   const compacted: Record<string, unknown> = {};
@@ -24,21 +24,15 @@ function compactObject(value: Record<string, unknown>): Record<string, unknown> 
   return compacted;
 }
 
-function slugSegment(value: string): string {
-  return value
-    .normalize("NFKD")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 120) || "paper";
-}
-
 function candidateForReviewItem(item: PaperReviewItem | undefined): PaperIdentityCandidate | undefined {
   if (!item) return undefined;
   return item.candidates.find((candidate) => candidate.id === item.selectedCandidateId) ?? item.candidates[0];
 }
 
-export function paperLibraryPageSlug(operation: ApplyOperation, candidate: PaperIdentityCandidate | undefined): string {
+export function paperLibraryPageSlug(
+  operation: ApplyOperation,
+  candidate: PaperIdentityCandidate | undefined,
+): string {
   return paperLibraryPageSlugForPaperId(operation.paperId, candidate);
 }
 
@@ -46,21 +40,7 @@ export function paperLibraryPageSlugForPaperId(
   paperId: string,
   candidate: PaperIdentityCandidate | undefined,
 ): string {
-  if (candidate?.identifiers.doi) return `wiki/entities/papers/doi-${slugSegment(candidate.identifiers.doi)}`;
-  if (candidate?.identifiers.arxivId) return `wiki/entities/papers/arxiv-${slugSegment(candidate.identifiers.arxivId)}`;
-  if (candidate?.identifiers.pmid) return `wiki/entities/papers/pmid-${slugSegment(candidate.identifiers.pmid)}`;
-  return `wiki/entities/papers/local-${slugSegment(paperId)}`;
-}
-
-function paperTitle(
-  operation: ApplyOperation,
-  reviewItem: PaperReviewItem | undefined,
-  candidate: PaperIdentityCandidate | undefined,
-): string {
-  const correctedTitle = typeof reviewItem?.correction?.title === "string" ? reviewItem.correction.title.trim() : "";
-  if (correctedTitle) return correctedTitle;
-  if (candidate?.title) return candidate.title;
-  return path.basename(operation.destinationRelativePath, path.extname(operation.destinationRelativePath));
+  return paperLibraryPageSlugForMetadata(paperId, candidate?.identifiers ?? {});
 }
 
 function appendTimeline(existingTimeline: string, entry: string): string {
@@ -73,7 +53,7 @@ function appendTimeline(existingTimeline: string, entry: string): string {
 function formatPaperLibraryBlock(input: {
   operation: ApplyOperation;
   manifestOperation: ApplyManifestOperation;
-  candidate?: PaperIdentityCandidate;
+  metadata: AppliedPaperMetadata;
 }): string {
   const lines = [
     "## Paper Library",
@@ -81,12 +61,12 @@ function formatPaperLibraryBlock(input: {
     `Local PDF: \`${input.manifestOperation.destinationRelativePath}\``,
     `Paper library confidence: ${input.operation.confidence.toFixed(2)}`,
   ];
-  if (input.candidate?.year) lines.push(`Year: ${input.candidate.year}`);
-  if (input.candidate?.authors.length) lines.push(`Authors: ${input.candidate.authors.join(", ")}`);
-  if (input.candidate?.venue) lines.push(`Venue: ${input.candidate.venue}`);
-  if (input.candidate?.identifiers.doi) lines.push(`DOI: ${input.candidate.identifiers.doi}`);
-  if (input.candidate?.identifiers.arxivId) lines.push(`arXiv: ${input.candidate.identifiers.arxivId}`);
-  if (input.candidate?.identifiers.pmid) lines.push(`PMID: ${input.candidate.identifiers.pmid}`);
+  if (input.metadata.year) lines.push(`Year: ${input.metadata.year}`);
+  if (input.metadata.authors.length) lines.push(`Authors: ${input.metadata.authors.join(", ")}`);
+  if (input.metadata.venue) lines.push(`Venue: ${input.metadata.venue}`);
+  if (input.metadata.identifiers.doi) lines.push(`DOI: ${input.metadata.identifiers.doi}`);
+  if (input.metadata.identifiers.arxivId) lines.push(`arXiv: ${input.metadata.identifiers.arxivId}`);
+  if (input.metadata.identifiers.pmid) lines.push(`PMID: ${input.metadata.identifiers.pmid}`);
   return lines.join("\n");
 }
 
@@ -112,7 +92,7 @@ export async function persistAppliedPaperLocations(input: PersistAppliedPaperLoc
   const userHandle = getCurrentUserHandle();
   const client = createInProcessGbrainClient({ root: input.brainRoot });
   const operationsById = new Map(input.operations.map((operation) => [operation.id, operation]));
-  const reviewItemsByPaperId = new Map(input.reviewItems.map((item) => [item.paperId, item]));
+  const reviewItemsByPaperId = new Map((input.reviewItems ?? []).map((item) => [item.paperId, item]));
   const nowIso = new Date().toISOString();
 
   for (const manifestOperation of input.manifestOperations) {
@@ -120,10 +100,11 @@ export async function persistAppliedPaperLocations(input: PersistAppliedPaperLoc
     const operation = operationsById.get(manifestOperation.operationId);
     if (!operation) continue;
     const reviewItem = reviewItemsByPaperId.get(operation.paperId);
-    const candidate = candidateForReviewItem(reviewItem);
-    const slug = paperLibraryPageSlug(operation, candidate);
-    const title = paperTitle(operation, reviewItem, candidate);
-    const timelineEntry = `- **${nowIso.slice(0, 10)}** | ScienceSwarm paper library - Applied local PDF path \`${manifestOperation.destinationRelativePath}\` (manifest ${input.manifestId}).`;
+    const fallbackCandidate = candidateForReviewItem(reviewItem);
+    const metadata = manifestOperation.appliedMetadata ?? buildAppliedPaperMetadata(operation, reviewItem);
+    const slug = metadata.pageSlug || paperLibraryPageSlug(operation, fallbackCandidate);
+    const timelineDay = manifestOperation.appliedAt?.slice(0, 10) ?? nowIso.slice(0, 10);
+    const timelineEntry = `- **${timelineDay}** | ScienceSwarm paper library - Applied local PDF path \`${manifestOperation.destinationRelativePath}\` (manifest ${input.manifestId}).`;
 
     await client.persistTransaction(slug, async (existing) => {
       const previousFrontmatter = existing?.frontmatter ?? {};
@@ -148,10 +129,10 @@ export async function persistAppliedPaperLocations(input: PersistAppliedPaperLoc
         ...previousFrontmatter,
         entity_type: "paper",
         paper_library: paperLibrary,
-        identifiers: candidate?.identifiers,
-        authors: candidate?.authors,
-        year: candidate?.year,
-        venue: candidate?.venue,
+        identifiers: metadata.identifiers,
+        authors: metadata.authors,
+        year: metadata.year,
+        venue: metadata.venue,
         captured_by: previousFrontmatter.captured_by ?? userHandle,
         updated_by: userHandle,
         updated_at: nowIso,
@@ -160,10 +141,10 @@ export async function persistAppliedPaperLocations(input: PersistAppliedPaperLoc
       return {
         page: {
           type: "paper",
-          title,
+          title: metadata.title,
           compiledTruth: mergeCompiledTruth(
             existing?.compiledTruth,
-            formatPaperLibraryBlock({ operation, manifestOperation, candidate }),
+            formatPaperLibraryBlock({ operation, manifestOperation, metadata }),
           ),
           timeline: appendTimeline(existing?.timeline ?? "", timelineEntry),
           frontmatter,

@@ -315,6 +315,147 @@ describe("PaperLibraryCommandCenter", () => {
     expect(await screen.findAllByText("undone")).toHaveLength(2);
   });
 
+  it("repairs a manifest that still needs gbrain writeback", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "history",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+        applyPlanId: "plan-1",
+        manifestId: "manifest-1",
+      }),
+    );
+
+    let repaired = false;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            status: "ready_for_apply",
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 0,
+              readyForApply: 1,
+              failed: 0,
+            },
+            applyPlanId: "plan-1",
+          }),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/apply-plan?")) {
+        return Response.json({
+          ok: true,
+          plan: {
+            version: 1,
+            id: "plan-1",
+            scanId: "scan-1",
+            project: "demo-project",
+            status: repaired ? "applied" : "applied_with_repair_required",
+            rootPath: "/tmp/library",
+            rootRealpath: "/tmp/library",
+            templateFormat: "{year} - {title}.pdf",
+            operationCount: 1,
+            conflictCount: 0,
+            operationShardIds: ["0001"],
+            planDigest: "digest",
+            manifestId: "manifest-1",
+            createdAt: "2026-04-23T12:20:00.000Z",
+            updatedAt: "2026-04-23T12:20:00.000Z",
+          },
+          operations: [
+            {
+              id: "operation-1",
+              paperId: "paper-1",
+              kind: "rename",
+              source: baseReviewItem().source,
+              destinationRelativePath: "2024 - Interesting Paper.pdf",
+              reason: "Paper library template proposal",
+              confidence: 0.82,
+              conflictCodes: [],
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/manifest?")) {
+        return Response.json({
+          ok: true,
+          manifest: {
+            version: 1,
+            id: "manifest-1",
+            project: "demo-project",
+            applyPlanId: "plan-1",
+            status: repaired ? "applied" : "applied_with_repair_required",
+            rootRealpath: "/tmp/library",
+            planDigest: "digest",
+            operationCount: 1,
+            appliedCount: 1,
+            failedCount: 0,
+            undoneCount: 0,
+            operationShardIds: ["0001"],
+            warnings: repaired ? [] : ["gbrain writer offline"],
+            createdAt: "2026-04-23T12:31:00.000Z",
+            updatedAt: "2026-04-23T12:31:00.000Z",
+          },
+          operations: [
+            {
+              operationId: "operation-1",
+              paperId: "paper-1",
+              sourceRelativePath: "2024 - Smith - Interesting Paper.pdf",
+              destinationRelativePath: "2024 - Interesting Paper.pdf",
+              status: "verified",
+              appliedAt: "2026-04-23T12:31:00.000Z",
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      if (url === "/api/brain/paper-library/repair" && method === "POST") {
+        repaired = true;
+        return Response.json({
+          ok: true,
+          repaired: true,
+          status: "applied",
+          manifest: {
+            id: "manifest-1",
+            status: "applied",
+            warnings: [],
+          },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByText("applied with repair required")).toBeInTheDocument();
+    expect(screen.getByText("gbrain writer offline")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry gbrain repair" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry gbrain repair" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("applied")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("gbrain writer offline")).not.toBeInTheDocument();
+  });
+
   it("resets the review filter when starting a new scan", async () => {
     window.localStorage.setItem(
       "scienceswarm.paperLibrary.session.demo-project",

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initBrain } from "@/brain/init";
+import { getBrainStore } from "@/brain/store";
 import {
   readPaperLibraryScan,
   startPaperLibraryScan,
@@ -11,12 +12,14 @@ import {
   approveApplyPlan,
   applyApprovedPlan,
   createApplyPlan,
+  repairAppliedManifest,
   undoApplyManifest,
 } from "@/lib/paper-library/apply";
 import {
   listPaperReviewItems,
   updatePaperReviewItem,
 } from "@/lib/paper-library/review";
+import { persistAppliedPaperLocations } from "@/lib/paper-library/gbrain-writer";
 
 const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
 const ORIGINAL_SCIENCESWARM_USER_HANDLE = process.env.SCIENCESWARM_USER_HANDLE;
@@ -221,5 +224,211 @@ describe("paper-library review and apply", () => {
     const afterCorrection = await readPaperLibraryScan("project-alpha", scan.id, brainRoot);
     expect(afterCorrection?.applyPlanId).toBeUndefined();
     expect(afterCorrection?.status).toBe("ready_for_apply");
+  });
+
+  it("repairs an applied manifest after gbrain writeback fails", async () => {
+    const originalPath = path.join(paperRoot, "2024 - Interesting Paper.pdf");
+    await writeFile(originalPath, "fake pdf", "utf-8");
+
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const reviewPage = await listPaperReviewItems({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      limit: 10,
+    });
+    const item = reviewPage?.items[0];
+    if (!item) throw new Error("expected review item");
+
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: item.id,
+      action: "accept",
+      selectedCandidateId: item.candidates[0]?.id,
+      brainRoot,
+    });
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{year} - {title}.pdf",
+    });
+    const approval = await approveApplyPlan({
+      project: "project-alpha",
+      applyPlanId: created?.plan.id ?? "",
+      brainRoot,
+    });
+
+    const applied = await applyApprovedPlan({
+      project: "project-alpha",
+      applyPlanId: approval?.plan.id ?? "",
+      approvalToken: approval?.approvalToken ?? "",
+      brainRoot,
+      persistLocations: async () => {
+        throw new Error("gbrain writer offline");
+      },
+    });
+    expect(applied?.manifest.status).toBe("applied_with_repair_required");
+    expect(applied?.manifest.warnings).toContain("gbrain writer offline");
+
+    const destination = path.join(paperRoot, applied?.operations[0]?.destinationRelativePath ?? "");
+    expect(await exists(originalPath)).toBe(false);
+    expect(await exists(destination)).toBe(true);
+
+    let repairedCalls = 0;
+    const repaired = await repairAppliedManifest({
+      project: "project-alpha",
+      manifestId: applied?.manifest.id ?? "",
+      brainRoot,
+      persistLocations: async () => {
+        repairedCalls += 1;
+      },
+    });
+    expect(repairedCalls).toBe(1);
+    expect(repaired?.repaired).toBe(true);
+    expect(repaired?.manifest.status).toBe("applied");
+    expect(repaired?.manifest.warnings).toEqual([]);
+    expect(await exists(originalPath)).toBe(false);
+    expect(await exists(destination)).toBe(true);
+  });
+
+  it("repairs zero-operation manifests after a writeback-only failure", async () => {
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{year} - {title}.pdf",
+    });
+    expect(created?.plan.operationCount).toBe(0);
+
+    const approval = await approveApplyPlan({
+      project: "project-alpha",
+      applyPlanId: created?.plan.id ?? "",
+      brainRoot,
+    });
+
+    const applied = await applyApprovedPlan({
+      project: "project-alpha",
+      applyPlanId: approval?.plan.id ?? "",
+      approvalToken: approval?.approvalToken ?? "",
+      brainRoot,
+      persistLocations: async () => {
+        throw new Error("gbrain writer offline");
+      },
+    });
+    expect(applied?.manifest.status).toBe("applied_with_repair_required");
+    expect(applied?.operations).toHaveLength(0);
+
+    const repaired = await repairAppliedManifest({
+      project: "project-alpha",
+      manifestId: applied?.manifest.id ?? "",
+      brainRoot,
+      persistLocations: async () => {},
+    });
+
+    expect(repaired?.repaired).toBe(true);
+    expect(repaired?.manifest.status).toBe("applied");
+    expect(repaired?.operations).toHaveLength(0);
+  });
+
+  it("repairs with the metadata captured at apply time even if the review item changes later", async () => {
+    const originalPath = path.join(paperRoot, "2024 - Interesting Paper.pdf");
+    await writeFile(originalPath, "fake pdf", "utf-8");
+
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const reviewPage = await listPaperReviewItems({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      limit: 10,
+    });
+    const item = reviewPage?.items[0];
+    if (!item) throw new Error("expected review item");
+
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: item.id,
+      action: "accept",
+      selectedCandidateId: item.candidates[0]?.id,
+      brainRoot,
+    });
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{year} - {title}.pdf",
+    });
+    const approval = await approveApplyPlan({
+      project: "project-alpha",
+      applyPlanId: created?.plan.id ?? "",
+      brainRoot,
+    });
+
+    const applied = await applyApprovedPlan({
+      project: "project-alpha",
+      applyPlanId: approval?.plan.id ?? "",
+      approvalToken: approval?.approvalToken ?? "",
+      brainRoot,
+      persistLocations: async () => {
+        throw new Error("gbrain writer offline");
+      },
+    });
+    expect(applied?.manifest.status).toBe("applied_with_repair_required");
+    const capturedTitle = applied?.operations[0]?.appliedMetadata?.title;
+    expect(capturedTitle).toBeTruthy();
+
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: item.id,
+      action: "correct",
+      selectedCandidateId: item.candidates[0]?.id,
+      correction: {
+        title: "Retitled After Apply Failure",
+      },
+      brainRoot,
+    });
+
+    const repaired = await repairAppliedManifest({
+      project: "project-alpha",
+      manifestId: applied?.manifest.id ?? "",
+      brainRoot,
+      persistLocations: persistAppliedPaperLocations,
+    });
+
+    expect(repaired?.repaired).toBe(true);
+    expect(repaired?.operations[0]?.appliedMetadata?.title).toBe(capturedTitle);
+
+    const pageSlug = repaired?.operations[0]?.appliedMetadata?.pageSlug;
+    if (!pageSlug) throw new Error("expected applied metadata page slug");
+    const page = await getBrainStore({ root: brainRoot }).getPage(pageSlug);
+    expect(page?.title).toBe(capturedTitle);
+    expect(page?.title).not.toBe("Retitled After Apply Failure");
   });
 });
