@@ -493,11 +493,9 @@ function buildProgressSectionChanges(blocks: ProgressTranscriptBlock[]): ReactNo
     // like the live OpenClaw transcript order instead of two detached panels.
     if (nextSection !== lastSection) {
       const sectionMeta = PROGRESS_SECTION_META[nextSection];
-      const sectionTitleId = `openclaw-progress-section-${nextSection}-${index}`;
       elements.push(
         <div
           key={`section-${nextSection}-${index}`}
-          id={sectionTitleId}
           className={`mb-2 inline-flex w-fit items-center gap-2 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.1em] ${sectionMeta.className}`}
         >
           <span aria-hidden="true">{sectionMeta.icon}</span>
