@@ -269,6 +269,25 @@ async function writeReadyEnv(): Promise<string | null> {
 
 async function restoreEnv(previous: string | null): Promise<void> {
   if (previous === null) {
+    if (process.env.CI) {
+      // Next dev reloads `.env` into the shared smoke server process. If this
+      // spec simply deletes the ready file, already-loaded readiness keys can
+      // leak into later smoke files. Leave CI in an explicit unready state so
+      // the fresh-install redirect smoke remains a real fresh-install check.
+      await fs.writeFile(
+        ENV_PATH,
+        [
+          "AGENT_BACKEND=none",
+          "LLM_PROVIDER=",
+          "OLLAMA_MODEL=",
+          "OPENAI_API_KEY=",
+          "SCIENCESWARM_DIR=",
+          "",
+        ].join("\n"),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return;
+    }
     await fs.rm(ENV_PATH, { force: true });
     return;
   }
