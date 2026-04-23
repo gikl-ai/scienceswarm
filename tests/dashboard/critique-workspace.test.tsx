@@ -410,6 +410,62 @@ describe("Critique workspace", () => {
       "href",
       "/dashboard/project?name=pasted-text&brain_slug=newest-text-critique",
     );
+    expect(screen.getByText("Saved in brain")).toBeInTheDocument();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("does not render saved gbrain pages as browser run replicas", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        makeCompletedJob({
+          id: "brain:hubble-1929-critique",
+          pdf_filename: "hubble-1929.pdf",
+          saved_at: "2026-04-18T07:02:34.000Z",
+        }),
+      ]),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/health") {
+          return makeHealthResponse(true);
+        }
+        if (isAuthStatusRequest(input)) {
+          return makeAuthStatusResponse();
+        }
+        if (isPersistedCritiqueList(input)) {
+          return Response.json({
+            audits: [
+              {
+                brain_slug: "hubble-1929-critique",
+                parent_slug: "hubble-1929",
+                project_slug: "hubble-1929",
+                title: "Hubble critique",
+                uploaded_at: "2026-04-18T07:02:34.000Z",
+                source_filename: "hubble-1929.pdf",
+                descartes_job_id: "job-hubble",
+                finding_count: 3,
+                url: "/dashboard/reasoning?brain_slug=hubble-1929-critique",
+                project_url:
+                  "/dashboard/project?name=hubble-1929&brain_slug=hubble-1929-critique",
+              },
+            ],
+          });
+        }
+        if (isHostedCritiqueHistoryRequest(input)) {
+          return makeEmptyHostedCritiqueHistory();
+        }
+        throw new Error(`Unexpected fetch in test: ${url}`);
+      }),
+    );
+
+    render(<StructuredCritiquePage />);
+
+    expect(await screen.findByText("Saved in brain")).toBeInTheDocument();
+    expect(screen.queryByText("Run history")).not.toBeInTheDocument();
+    expect(screen.getAllByText("hubble-1929.pdf")).toHaveLength(1);
   });
 
   it("rehydrates hosted history when browser-local history is empty", async () => {
@@ -529,7 +585,7 @@ describe("Critique workspace", () => {
       "href",
       "/dashboard/project?name=paper&brain_slug=paper-critique",
     );
-    expect(screen.getByRole("link", { name: "Analysis link" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open saved analysis" })).toHaveAttribute(
       "href",
       "/dashboard/reasoning?brain_slug=paper-critique",
     );
