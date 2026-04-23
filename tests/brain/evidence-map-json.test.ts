@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseEvidenceMapModelJson } from "@/app/api/brain/evidence-map/route";
+import { parseEvidenceMapModelJson } from "@/lib/evidence-map-json";
 
 describe("parseEvidenceMapModelJson", () => {
   it("parses direct JSON objects", () => {
