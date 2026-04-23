@@ -127,9 +127,34 @@ describe("ChatMessage", () => {
     expect(progressLog).toHaveTextContent("└ Read docs/results_table.csv");
     expect(progressLog).toHaveTextContent("Search activityLog in use-unified-chat.ts");
     expect(progressLog).toHaveTextContent(/• Working \(\d+s • esc to interrupt\)/);
-    expect(screen.queryByText("Thinking Trace")).not.toBeInTheDocument();
-    expect(screen.queryByText("OpenClaw Activity")).not.toBeInTheDocument();
+    expect(screen.getByText("Thinking Trace")).toBeInTheDocument();
+    expect(screen.getByText("OpenClaw Activity")).toBeInTheDocument();
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
+  });
+
+  it("renders thinking and activity sections in chronological order", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "thinking", text: "Plan: inspect files" },
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "thinking", text: "Now summarize findings" },
+          { kind: "activity", text: "Read docs/notes.md" },
+        ]}
+        timestamp={new Date("2026-04-20T10:20:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    const text = progressLog.textContent ?? "";
+    expect(text.indexOf("Thinking Trace")).toBeGreaterThan(-1);
+    expect(text.indexOf("OpenClaw Activity")).toBeGreaterThan(-1);
+    expect(text.indexOf("Thinking Trace")).toBeLessThan(text.indexOf("OpenClaw Activity"));
+    expect(text).toContain("Plan: inspect files");
+    expect(text).toContain("Now summarize findings");
   });
 
   it("increments the live Working elapsed row every second under fake timers", () => {
@@ -335,7 +360,8 @@ describe("ChatMessage", () => {
     expect(progressLog).not.toHaveTextContent("Tool read_file:");
     expect(progressLog).not.toHaveTextContent("Tool read_file result:");
     expect(progressLog).toHaveTextContent(/• Working \(\d+s • esc to interrupt\)/);
-    expect(screen.queryByText("Thinking Trace")).not.toBeInTheDocument();
+    expect(screen.getByText("Thinking Trace")).toBeInTheDocument();
+    expect(screen.getByText("OpenClaw Activity")).toBeInTheDocument();
   });
 
   it("renders restored legacy thinking and activity after a completed assistant turn", () => {
