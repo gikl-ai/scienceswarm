@@ -5,7 +5,12 @@ import {
   normalizeCliOutput,
   type NormalizedCliOutput,
 } from "./output-normalizer";
-import type { CliTransport, CliTransportRunRequest, CliTransportRunResult } from "./cli";
+import {
+  RuntimeCliAuthRequiredError,
+  type CliTransport,
+  type CliTransportRunRequest,
+  type CliTransportRunResult,
+} from "./cli";
 
 interface OptionalPtyProcess {
   onData(callback: (data: string) => void): void;
@@ -132,6 +137,38 @@ export class PtyCliTransport implements CliTransport {
         clearTimeout(timer);
         if (settled) return;
         settled = true;
+        const output = normalizeCliOutput({
+          stdout: chunks.join(""),
+          requireJson: request.requireJson,
+        });
+        if (output.authChallenge) {
+          reject(
+            new RuntimeCliAuthRequiredError({
+              hostId: request.hostId,
+              command: request.command,
+              detail: output.text,
+            }),
+          );
+          return;
+        }
+        if (event.signal) {
+          reject(
+            new RuntimeHostError({
+              code: "RUNTIME_TRANSPORT_ERROR",
+              status: 502,
+              message: `PTY runtime command exited due to signal ${event.signal}.`,
+              userMessage: "Runtime host command was interrupted.",
+              recoverable: true,
+              context: {
+                hostId: request.hostId,
+                command: request.command,
+                signal: event.signal,
+                transportError: "SIGNAL",
+              },
+            }),
+          );
+          return;
+        }
         if (event.exitCode !== 0) {
           reject(
             new RuntimeHostError({
@@ -150,12 +187,7 @@ export class PtyCliTransport implements CliTransport {
           );
           return;
         }
-        resolve(
-          normalizeCliOutput({
-            stdout: chunks.join(""),
-            requireJson: request.requireJson,
-          }),
-        );
+        resolve(output);
       });
 
       if (request.input) {

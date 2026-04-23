@@ -62,6 +62,10 @@ export function normalizeCliText(input: string | Buffer | undefined): string {
     .trim();
 }
 
+export function isCliAuthChallengeText(input: string): boolean {
+  return AUTH_CHALLENGE_PATTERN.test(input);
+}
+
 function parseJsonLine(line: string): unknown | null {
   const trimmed = line.trim();
   if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) {
@@ -136,6 +140,6 @@ export function normalizeCliOutput(
     lines,
     json,
     jsonLines,
-    authChallenge: AUTH_CHALLENGE_PATTERN.test(combined),
+    authChallenge: isCliAuthChallengeText(combined),
   };
 }

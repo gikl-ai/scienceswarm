@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import type { RuntimeHostAuthStatus, RuntimeHostHealth } from "../contracts";
 import { RuntimeHostError } from "../errors";
 import {
+  isCliAuthChallengeText,
   normalizeCliOutput,
   type NormalizedCliOutput,
 } from "./output-normalizer";
@@ -96,27 +97,52 @@ export class LocalCliTransport implements CliTransport {
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       let settled = false;
+      let timer: NodeJS.Timeout | null = null;
+      let forceKillTimer: NodeJS.Timeout | null = null;
+
+      const clearTimers = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        if (forceKillTimer) {
+          clearTimeout(forceKillTimer);
+          forceKillTimer = null;
+        }
+      };
 
       const finishReject = (error: Error) => {
         if (settled) return;
         settled = true;
+        clearTimers();
         reject(error);
       };
-      const timer = setTimeout(() => {
-        child.kill("SIGTERM");
-        finishReject(
+      const finishTimeout = () => {
+        if (settled) return;
+        settled = true;
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        reject(
           new RuntimeCliTimeoutError({
             hostId: request.hostId,
             command: request.command,
             timeoutMs,
           }),
         );
+      };
+      timer = setTimeout(() => {
+        child.kill("SIGTERM");
+        forceKillTimer = setTimeout(() => child.kill("SIGKILL"), 250);
+        forceKillTimer.unref?.();
+        finishTimeout();
       }, timeoutMs);
 
       child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
       child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
       child.on("error", (error) => {
-        clearTimeout(timer);
+        clearTimers();
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
           finishReject(
             new RuntimeCliMissingError({
@@ -129,7 +155,7 @@ export class LocalCliTransport implements CliTransport {
         finishReject(error);
       });
       child.on("close", (exitCode, signal) => {
-        clearTimeout(timer);
+        clearTimers();
         if (settled) return;
         settled = true;
 
@@ -138,7 +164,9 @@ export class LocalCliTransport implements CliTransport {
           stderr: Buffer.concat(stderr),
           requireJson: request.requireJson,
         });
-        if (output.authChallenge) {
+        const authChallenge = isCliAuthChallengeText(output.stderr)
+          || (exitCode !== null && exitCode !== 0 && output.authChallenge);
+        if (authChallenge) {
           reject(
             new RuntimeCliAuthRequiredError({
               hostId: request.hostId,
@@ -148,7 +176,26 @@ export class LocalCliTransport implements CliTransport {
           );
           return;
         }
-        if (exitCode && exitCode !== 0) {
+        if (signal) {
+          reject(
+            new RuntimeHostError({
+              code: "RUNTIME_TRANSPORT_ERROR",
+              status: 502,
+              message: `Runtime CLI exited due to signal ${signal}: ${request.command}`,
+              userMessage: "Runtime host command was interrupted.",
+              recoverable: true,
+              context: {
+                hostId: request.hostId,
+                command: request.command,
+                signal,
+                stderr: output.stderr,
+                transportError: "SIGNAL",
+              },
+            }),
+          );
+          return;
+        }
+        if (exitCode !== null && exitCode !== 0) {
           reject(
             new RuntimeHostError({
               code: "RUNTIME_TRANSPORT_ERROR",

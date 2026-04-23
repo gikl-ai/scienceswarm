@@ -107,6 +107,37 @@ describe("runtime host CLI transport", () => {
     ).rejects.toThrow(RuntimeCliAuthRequiredError);
   });
 
+  it("allows successful stdout that mentions login text in model content", async () => {
+    const transport = new LocalCliTransport();
+
+    await expect(
+      transport.run({
+        hostId: "codex",
+        command: process.execPath,
+        args: ["-e", "process.stdout.write('The answer mentions login required as text')"],
+        timeoutMs: 2_000,
+      }),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      output: {
+        text: "The answer mentions login required as text",
+      },
+    });
+  });
+
+  it("maps signal-terminated subprocesses to transport errors", async () => {
+    const transport = new LocalCliTransport();
+
+    await expect(
+      transport.run({
+        hostId: "codex",
+        command: process.execPath,
+        args: ["-e", "process.kill(process.pid, 'SIGTERM')"],
+        timeoutMs: 2_000,
+      }),
+    ).rejects.toThrow("signal SIGTERM");
+  });
+
   it("times out hung subprocesses with a typed timeout error", async () => {
     const transport = new LocalCliTransport();
 
@@ -129,5 +160,36 @@ describe("runtime host CLI transport", () => {
         command: "codex",
       }),
     ).rejects.toThrow(RuntimePtyUnavailableError);
+  });
+
+  it("maps PTY auth challenge output before generic non-zero failures", async () => {
+    const transport = createPtyCliTransport({
+      module: {
+        spawn() {
+          let onData: (data: string) => void = () => {};
+          return {
+            onData(callback: (data: string) => void) {
+              onData = callback;
+            },
+            onExit(callback: (event: { exitCode: number; signal?: number }) => void) {
+              queueMicrotask(() => {
+                onData("Authentication required");
+                callback({ exitCode: 1 });
+              });
+            },
+            write() {},
+            kill() {},
+          };
+        },
+      },
+    });
+
+    await expect(
+      transport.run({
+        hostId: "gemini-cli",
+        command: "gemini",
+        timeoutMs: 2_000,
+      }),
+    ).rejects.toThrow(RuntimeCliAuthRequiredError);
   });
 });

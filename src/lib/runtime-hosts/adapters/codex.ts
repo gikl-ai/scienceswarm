@@ -45,6 +45,7 @@ export class CodexRuntimeHostAdapter implements ResearchRuntimeHost {
   private readonly sessionIdGenerator: () => string;
   private readonly healthArgs: string[];
   private readonly authArgs?: string[];
+  private messageEventSequence = 0;
 
   constructor(options: CodexRuntimeHostAdapterOptions = {}) {
     this.runtimeProfile = options.profile ?? requireRuntimeHostProfile("codex");
@@ -174,8 +175,9 @@ export class CodexRuntimeHostAdapter implements ResearchRuntimeHost {
   }
 
   private messageEvent(input: { sessionId: string; text: string }): RuntimeEvent {
+    this.messageEventSequence += 1;
     return {
-      id: `${input.sessionId}:final-message`,
+      id: `${input.sessionId}:message-${this.messageEventSequence}`,
       sessionId: input.sessionId,
       hostId: this.runtimeProfile.id,
       type: "message",

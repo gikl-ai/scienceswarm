@@ -69,6 +69,7 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
   private readonly client?: ApiKeyRuntimeClient;
   private readonly fetchImpl: typeof fetch;
   private readonly sessionIdGenerator: () => string;
+  private messageEventSequence = 0;
 
   constructor(options: ApiKeyRuntimeHostAdapterOptions) {
     this.provider = options.provider;
@@ -144,7 +145,7 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
       message: result.message,
       events: [
         {
-          id: `${sessionId}:final-message`,
+          id: `${sessionId}:message-${this.nextMessageEventSequence()}`,
           sessionId,
           hostId: this.runtimeProfile.id,
           type: "message",
@@ -195,6 +196,11 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
     );
   }
 
+  private nextMessageEventSequence(): number {
+    this.messageEventSequence += 1;
+    return this.messageEventSequence;
+  }
+
   private hasConfiguredCredential(): boolean {
     return Boolean(this.credential());
   }
@@ -205,7 +211,7 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
     if (this.provider === "google-ai") {
       return this.env.googleAiApiKey ?? this.env.googleApiKey;
     }
-    return this.env.vertexAiApiKey ?? this.env.googleAiApiKey ?? this.env.googleApiKey;
+    return this.env.vertexAiApiKey;
   }
 
   private async sendViaFetch(
@@ -264,12 +270,14 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
   private async sendGoogleAi(
     request: RuntimeTurnRequest,
   ): Promise<{ message: string }> {
-    const key = encodeURIComponent(this.requireCredential());
     const response = await this.fetchJson(
-      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${key}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": this.requireCredential(),
+        },
         body: JSON.stringify({
           contents: [{ parts: [{ text: request.prompt }] }],
         }),
@@ -298,12 +306,14 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
       });
     }
 
-    const key = encodeURIComponent(this.requireCredential());
     const response = await this.fetchJson(
-      `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${this.model}:generateContent?key=${key}`,
+      `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${this.model}:generateContent`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": this.requireCredential(),
+        },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: request.prompt }] }],
         }),

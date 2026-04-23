@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createApiKeyRuntimeHostAdapter, createApiKeyRuntimeHostProfile } from "@/lib/runtime-hosts/adapters/api-key";
 import { createClaudeCodeRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/claude-code";
@@ -139,6 +139,18 @@ describe("runtime host adapters", () => {
     });
   });
 
+  it("emits unique message event ids for repeated wrapper turns in one session", async () => {
+    const transport = new FakeCliTransport((request) => fakeResult(request, "answer"));
+    const adapter = createClaudeCodeRuntimeHostAdapter({ transport });
+    const request = requestFor(requireRuntimeHostProfile("claude-code"), "chat");
+
+    const first = await adapter.sendTurn(request);
+    const second = await adapter.sendTurn(request);
+
+    expect(first.events?.[0]?.id).toBe("conversation-alpha:message-1");
+    expect(second.events?.[0]?.id).toBe("conversation-alpha:message-2");
+  });
+
   it("surfaces Codex auth-required and timeout transport failures as typed errors", async () => {
     const authTransport = new FakeCliTransport((request) => {
       throw new RuntimeCliAuthRequiredError({
@@ -273,6 +285,66 @@ describe("runtime host adapters", () => {
     });
     await expect(adapter.executeTask(requestFor(profile, "task"))).rejects.toThrow(
       RuntimeHostCapabilityUnsupported,
+    );
+  });
+
+  it("sends Google AI API keys in headers instead of URL query parameters", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const profile = createApiKeyRuntimeHostProfile("google-ai");
+    const fetchImpl = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return new Response(
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ text: "Google answer" }] } }],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    });
+    const adapter = createApiKeyRuntimeHostAdapter({
+      provider: "google-ai",
+      profile,
+      env: {
+        ...baseEnv,
+        googleAiApiKey: "placeholder-google-key",
+      },
+      fetch: fetchImpl,
+    });
+
+    await expect(adapter.sendTurn(requestFor(profile, "chat"))).resolves.toMatchObject({
+      message: "Google answer",
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).not.toContain("placeholder-google-key");
+    expect(calls[0]?.url).not.toContain("key=");
+    expect(new Headers(calls[0]?.init.headers).get("x-goog-api-key")).toBe(
+      "placeholder-google-key",
+    );
+  });
+
+  it("does not treat Google AI credentials as Vertex AI credentials", async () => {
+    const profile = createApiKeyRuntimeHostProfile("vertex-ai");
+    const adapter = createApiKeyRuntimeHostAdapter({
+      provider: "vertex-ai",
+      profile,
+      env: {
+        ...baseEnv,
+        googleAiApiKey: "placeholder-google-key",
+        googleApiKey: "placeholder-legacy-google-key",
+        vertexAiProject: "project-alpha",
+      },
+    });
+
+    await expect(adapter.health()).resolves.toMatchObject({ status: "unavailable" });
+    await expect(adapter.authStatus()).resolves.toMatchObject({
+      status: "missing",
+      provider: "vertex-ai",
+    });
+    await expect(adapter.sendTurn(requestFor(profile, "chat"))).rejects.toThrow(
+      "Missing vertex-ai API key",
     );
   });
 

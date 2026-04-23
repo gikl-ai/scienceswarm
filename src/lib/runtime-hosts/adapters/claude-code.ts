@@ -45,6 +45,7 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
   private readonly sessionIdGenerator: () => string;
   private readonly healthArgs: string[];
   private readonly authArgs?: string[];
+  private messageEventSequence = 0;
 
   constructor(options: ClaudeCodeRuntimeHostAdapterOptions = {}) {
     this.runtimeProfile = options.profile ?? requireRuntimeHostProfile("claude-code");
@@ -174,8 +175,9 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
   }
 
   private messageEvent(input: { sessionId: string; text: string }): RuntimeEvent {
+    this.messageEventSequence += 1;
     return {
-      id: `${input.sessionId}:final-message`,
+      id: `${input.sessionId}:message-${this.messageEventSequence}`,
       sessionId: input.sessionId,
       hostId: this.runtimeProfile.id,
       type: "message",
