@@ -721,6 +721,84 @@ describe("PaperLibraryCommandCenter", () => {
         });
       }
 
+      if (url.startsWith("/api/brain/paper-library/gaps?")) {
+        const search = new URL(url, "http://localhost");
+        const cursor = search.searchParams.get("cursor");
+        return Response.json({
+          ok: true,
+          suggestions: cursor
+            ? [
+                {
+                  id: "gap-2",
+                  scanId: "scan-1",
+                  nodeId: "node-gap-2",
+                  title: "Cluster Bridge Candidate",
+                  authors: ["Lee"],
+                  year: 2022,
+                  venue: "Bridge Journal",
+                  identifiers: { doi: "10.2000/bridge" },
+                  sources: ["semantic_scholar"],
+                  state: "watching",
+                  reasonCodes: ["bridge_position"],
+                  score: {
+                    overall: 0.61,
+                    citationFrequency: 0.25,
+                    bridgePosition: 0.5,
+                    clusterGap: 0.2,
+                    recentConnected: 0.1,
+                    disagreementPenalty: 0,
+                  },
+                  localConnectionCount: 2,
+                  evidencePaperIds: ["paper-1"],
+                  evidenceClusterIds: ["cluster-2"],
+                  evidenceNodeIds: ["node-2"],
+                  createdAt: "2026-04-23T12:00:00.000Z",
+                  updatedAt: "2026-04-23T12:00:00.000Z",
+                },
+              ]
+            : [
+                {
+                  id: "gap-1",
+                  scanId: "scan-1",
+                  nodeId: "node-gap-1",
+                  title: "Missing Seminal Paper",
+                  authors: ["Smith"],
+                  year: 2025,
+                  venue: "Nature",
+                  identifiers: { doi: "10.1000/missing" },
+                  sources: ["semantic_scholar"],
+                  state: "open",
+                  reasonCodes: ["citation_frequency", "cluster_gap"],
+                  score: {
+                    overall: 0.88,
+                    citationFrequency: 0.75,
+                    bridgePosition: 0.25,
+                    clusterGap: 0.5,
+                    recentConnected: 1,
+                    disagreementPenalty: 0,
+                  },
+                  localConnectionCount: 3,
+                  evidencePaperIds: ["paper-1"],
+                  evidenceClusterIds: ["cluster-1"],
+                  evidenceNodeIds: ["node-1"],
+                  createdAt: "2026-04-23T12:00:00.000Z",
+                  updatedAt: "2026-04-23T12:00:00.000Z",
+                },
+              ],
+          stateCounts: {
+            open: 1,
+            watching: 1,
+            ignored: 0,
+            saved: 0,
+            imported: 0,
+          },
+          warnings: ["Gap suggestions are still suggestions until you save or import them."],
+          totalCount: 2,
+          filteredCount: 2,
+          nextCursor: cursor ? undefined : "MQ",
+        });
+      }
+
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
 
@@ -737,6 +815,9 @@ describe("PaperLibraryCommandCenter", () => {
 
     expect(await screen.findByText("Bridge Paper")).toBeInTheDocument();
     expect(await screen.findByText("Protein folding")).toBeInTheDocument();
-    expect(screen.getByText(/Gap suggestions land here in the next phase/i)).toBeInTheDocument();
+    expect(screen.getByText("Gap suggestions")).toBeInTheDocument();
+    expect(screen.getByText("Missing Seminal Paper (2025)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load more suggestions" }));
+    expect(await screen.findByText("Cluster Bridge Candidate (2022)")).toBeInTheDocument();
   });
 });
