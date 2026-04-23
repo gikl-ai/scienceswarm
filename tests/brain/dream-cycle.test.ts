@@ -149,6 +149,7 @@ afterEach(async () => {
   await resetBrainStore();
   rmSync(TEST_ROOT, { recursive: true, force: true });
   vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllEnvs();
 });
 
@@ -570,6 +571,9 @@ describe("runDreamCycle", () => {
     );
 
     try {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-04-22T12:00:00.000Z"));
+
       const result = await runDreamCycle(config, llm, "sweep-only");
 
       expect(result.journalSlug).toBe("journals/2026-04-22-dream-cycle-sweep-only");
@@ -585,6 +589,7 @@ describe("runDreamCycle", () => {
       expect(journal).toContain("Mode: sweep-only");
     } finally {
       globalThis.fetch = originalFetch;
+      vi.useRealTimers();
     }
   });
 
