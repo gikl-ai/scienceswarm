@@ -453,7 +453,9 @@ describe("OpenClaw prewarmGatewayConnectionIfHealthy", () => {
 
     prewarmGatewayConnectionIfHealthy();
 
-    await waitUntil(() => prewarmGatewayConnectionMock.mock.calls.length === 1);
+    await vi.waitFor(() => {
+      expect(prewarmGatewayConnectionMock).toHaveBeenCalledTimes(1);
+    }, { timeout: 2_000 });
     expect(prewarmGatewayConnectionMock).toHaveBeenCalledTimes(1);
   });
 
@@ -472,7 +474,9 @@ describe("OpenClaw prewarmGatewayConnectionIfHealthy", () => {
 
     prewarmGatewayConnectionIfHealthy(true);
 
-    await waitUntil(() => prewarmGatewayConnectionMock.mock.calls.length === 1);
+    await vi.waitFor(() => {
+      expect(prewarmGatewayConnectionMock).toHaveBeenCalledTimes(1);
+    }, { timeout: 2_000 });
     expect(prewarmGatewayConnectionMock).toHaveBeenCalledTimes(1);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
