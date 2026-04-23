@@ -569,11 +569,10 @@ export async function fetchLatestTimingArtifact(
     }
     return latest;
   } catch (error) {
+    const isTimeout = isAbortError(error) || controller.signal.aborted;
     return unavailableTimingArtifact(
-      isAbortError(error) || controller.signal.aborted
-        ? "timeout"
-        : "endpoint_unreachable_or_non_ok",
-      isAbortError(error) || controller.signal.aborted
+      isTimeout ? "timeout" : "endpoint_unreachable_or_non_ok",
+      isTimeout
         ? "timing endpoint did not respond before the 5000 ms timeout"
         : "timing endpoint was unreachable",
     );

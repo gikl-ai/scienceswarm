@@ -283,7 +283,7 @@ describe("benchmark-chat-hi", () => {
   });
 
   it("exposes unavailable timing diagnostics in JSON and human output", async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/chat/unified")) {
         return Promise.resolve(
@@ -297,7 +297,6 @@ describe("benchmark-chat-hi", () => {
         );
       }
       if (url.endsWith("/api/chat/timing")) {
-        void init;
         return Promise.resolve(
           new Response(JSON.stringify({ timings: [] }), {
             status: 200,
