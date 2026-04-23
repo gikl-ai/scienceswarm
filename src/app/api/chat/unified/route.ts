@@ -406,7 +406,11 @@ function configuredLocalModelForSavedRuntime(
 ): string | null {
   const shouldValidateLocalRuntime =
     savedRuntimeEnv.llmProvider === "local"
-    && (explicitRuntimeConfig.llmProvider || explicitRuntimeConfig.ollamaModel);
+    && (
+      explicitRuntimeConfig.llmProvider ||
+      explicitRuntimeConfig.ollamaModel ||
+      explicitRuntimeConfig.strictLocalOnly
+    );
   if (!shouldValidateLocalRuntime) {
     return null;
   }
