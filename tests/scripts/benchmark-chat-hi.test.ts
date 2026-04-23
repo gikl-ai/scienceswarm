@@ -197,6 +197,37 @@ describe("benchmark-chat-hi", () => {
       "http://localhost:4000/api/chat/unified",
     );
     expect(benchmarkHelpText()).toContain("path/query/hash are stripped");
+    const formattedWithTiming = formatBenchmarkSummary({
+      status: 200,
+      ok: true,
+      backend: "openclaw",
+      contentType: "text/event-stream",
+      conversationId: "bench-fixed",
+      headersMs: 5,
+      firstChunkMs: 10,
+      totalMs: 100,
+      bytes: 200,
+      eventCount: 3,
+      progressEventCount: 1,
+      finalEventCount: 1,
+      finalTextSample: "Hello.",
+      timingArtifact: {
+        turnId: "turn-1",
+        startedAtMs: 1000,
+        totalDurationMs: 100,
+        outcome: "streamed",
+        status: 200,
+        phaseCount: 1,
+        phases: [{ name: "chat_readiness", durationMs: 7 }],
+        promptCharCounts: { user_text: 2, guardrails: 40, total: 42 },
+      },
+    });
+    expect(formattedWithTiming).toContain("Total: 100 ms");
+    expect(formattedWithTiming).toContain("Timing phases: chat_readiness 7 ms");
+    expect(formattedWithTiming).toContain(
+      "Prompt chars: user_text 2, guardrails 40, total 42",
+    );
+
     expect(
       formatBenchmarkSummary({
         status: 200,
@@ -218,12 +249,12 @@ describe("benchmark-chat-hi", () => {
           totalDurationMs: 100,
           outcome: "streamed",
           status: 200,
-          phaseCount: 1,
-          phases: [{ name: "chat_readiness", durationMs: 7 }],
-          promptCharCounts: { total: 42 },
+          phaseCount: 0,
+          phases: [],
+          promptCharCounts: {},
         },
       }),
-    ).toContain("Total: 100 ms");
+    ).toContain("Timing phases: none\nPrompt chars: none");
     expect(
       formatBenchmarkSummary({
         status: 200,

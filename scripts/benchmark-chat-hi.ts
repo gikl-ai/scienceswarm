@@ -237,6 +237,25 @@ export function buildBenchmarkPayload(
   };
 }
 
+function formatTimingPhasesForSummary(
+  phases: ChatBenchmarkTimingPhaseSummary[],
+): string {
+  return phases.length === 0
+    ? "none"
+    : phases
+        .map((phase) => `${phase.name} ${phase.durationMs} ms`)
+        .join(", ");
+}
+
+function formatPromptCharCountsForSummary(
+  promptCharCounts: Record<string, number>,
+): string {
+  const entries = Object.entries(promptCharCounts);
+  return entries.length === 0
+    ? "none"
+    : entries.map(([key, value]) => `${key} ${value}`).join(", ");
+}
+
 export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
   const timingArtifact = summary.timingArtifact;
   return [
@@ -259,10 +278,10 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
             `Timing artifact: ${timingArtifact.totalDurationMs} ms, outcome ${
               timingArtifact.outcome ?? "unknown"
             }, status ${timingArtifact.status ?? "unknown"}`,
-            `Timing phases: ${timingArtifact.phases
-              .map((phase) => `${phase.name} ${phase.durationMs} ms`)
-              .join(", ")}`,
-            `Prompt chars: total ${timingArtifact.promptCharCounts.total ?? 0}`,
+            `Timing phases: ${formatTimingPhasesForSummary(timingArtifact.phases)}`,
+            `Prompt chars: ${formatPromptCharCountsForSummary(
+              timingArtifact.promptCharCounts,
+            )}`,
           ]),
     summary.finalTextSample
       ? `Final sample: ${summary.finalTextSample}`
