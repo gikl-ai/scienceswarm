@@ -19,6 +19,7 @@ export const paperLibraryErrorCodes = [
   "malformed_state",
   "model_unavailable",
   "resource_budget_exhausted",
+  "suggestion_not_found",
 ] as const;
 
 export const PaperLibraryErrorCodeSchema = z.enum(paperLibraryErrorCodes);
@@ -592,6 +593,91 @@ export const PaperLibraryClustersResponseSchema = CursorWindowResponseSchema.ext
   warnings: z.array(z.string()).default([]),
 });
 export type PaperLibraryClustersResponse = z.infer<typeof PaperLibraryClustersResponseSchema>;
+
+export const GapSuggestionStateSchema = z.enum([
+  "open",
+  "watching",
+  "ignored",
+  "saved",
+  "imported",
+]);
+export type GapSuggestionState = z.infer<typeof GapSuggestionStateSchema>;
+
+export const GapSuggestionReasonCodeSchema = z.enum([
+  "citation_frequency",
+  "bridge_position",
+  "cluster_gap",
+  "recent_connected",
+  "source_disagreement",
+]);
+export type GapSuggestionReasonCode = z.infer<typeof GapSuggestionReasonCodeSchema>;
+
+export const GapSuggestionScoreSchema = z.object({
+  overall: z.number().min(0).max(1),
+  citationFrequency: z.number().min(0).max(1).default(0),
+  bridgePosition: z.number().min(0).max(1).default(0),
+  clusterGap: z.number().min(0).max(1).default(0),
+  recentConnected: z.number().min(0).max(1).default(0),
+  disagreementPenalty: z.number().min(0).max(1).default(0),
+});
+export type GapSuggestionScore = z.infer<typeof GapSuggestionScoreSchema>;
+
+export const GapSuggestionSchema = z.object({
+  id: z.string().min(1),
+  scanId: z.string().min(1),
+  nodeId: z.string().min(1),
+  title: z.string().min(1),
+  authors: z.array(z.string()).default([]),
+  year: z.number().int().min(1000).max(3000).optional(),
+  venue: z.string().optional(),
+  identifiers: PaperIdentifierSchema.default({}),
+  sources: z.array(PaperMetadataSourceSchema).default([]),
+  state: GapSuggestionStateSchema.default("open"),
+  reasonCodes: z.array(GapSuggestionReasonCodeSchema).default([]),
+  score: GapSuggestionScoreSchema,
+  localConnectionCount: z.number().int().nonnegative().default(0),
+  evidencePaperIds: z.array(z.string().min(1)).default([]),
+  evidenceClusterIds: z.array(z.string().min(1)).default([]),
+  evidenceNodeIds: z.array(z.string().min(1)).default([]),
+  createdAt: IsoDateStringSchema,
+  updatedAt: IsoDateStringSchema,
+});
+export type GapSuggestion = z.infer<typeof GapSuggestionSchema>;
+
+export const PaperLibraryGapStateCountsSchema = z.object({
+  open: z.number().int().nonnegative().default(0),
+  watching: z.number().int().nonnegative().default(0),
+  ignored: z.number().int().nonnegative().default(0),
+  saved: z.number().int().nonnegative().default(0),
+  imported: z.number().int().nonnegative().default(0),
+});
+export type PaperLibraryGapStateCounts = z.infer<typeof PaperLibraryGapStateCountsSchema>;
+
+export const PaperLibraryGapsSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1),
+  createdAt: IsoDateStringSchema,
+  updatedAt: IsoDateStringSchema,
+  suggestions: z.array(GapSuggestionSchema).default([]),
+  warnings: z.array(z.string()).default([]),
+});
+export type PaperLibraryGaps = z.infer<typeof PaperLibraryGapsSchema>;
+
+export const PaperLibraryGapsResponseSchema = CursorWindowResponseSchema.extend({
+  suggestions: z.array(GapSuggestionSchema),
+  stateCounts: PaperLibraryGapStateCountsSchema,
+  warnings: z.array(z.string()).default([]),
+});
+export type PaperLibraryGapsResponse = z.infer<typeof PaperLibraryGapsResponseSchema>;
+
+export const PaperLibraryGapActionRequestSchema = z.object({
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1),
+  suggestionId: z.string().min(1),
+  action: z.enum(["watch", "ignore", "save", "import", "reopen"]),
+});
+export type PaperLibraryGapActionRequest = z.infer<typeof PaperLibraryGapActionRequestSchema>;
 
 export const RepairableStateSchema = z.object({
   ok: z.literal(false),
