@@ -335,6 +335,7 @@ export function PaperLibraryCommandCenter({
     setClustersError(null);
     setGapPage(null);
     setGapsError(null);
+    setGapFilter("all");
     setApprovalToken(null);
     setReviewFilter(DEFAULT_REVIEW_FILTER);
     setDraftsByItemId({});
@@ -634,8 +635,12 @@ export function PaperLibraryCommandCenter({
     if (session.step !== "graph" || !session.scanId) return;
     void loadGraph();
     void loadClusters();
+  }, [loadClusters, loadGraph, session.scanId, session.step]);
+
+  useEffect(() => {
+    if (session.step !== "graph" || !session.scanId) return;
     void loadGaps();
-  }, [loadClusters, loadGaps, loadGraph, session.scanId, session.step]);
+  }, [loadGaps, session.scanId, session.step]);
 
   useEffect(() => {
     if (scan?.applyPlanId && scan.applyPlanId !== session.applyPlanId) {
@@ -897,7 +902,7 @@ export function PaperLibraryCommandCenter({
           }),
         },
       );
-      await loadGaps({ refresh: true });
+      await loadGaps();
     } catch (error) {
       setGapsError(error instanceof Error ? error.message : "Could not update the gap suggestion.");
     } finally {
