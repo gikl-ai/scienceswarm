@@ -581,6 +581,8 @@ For transcript PRs, the PR body must include:
 - Whether the benchmark should target the browser UI, the route API, or both.
 - Whether OpenClaw gateway events already include enough structured timing to
   avoid client-side inference for first assistant text.
+- Whether the web run-state surface should live inside the active assistant turn
+  or at the chat composer boundary once the dedicated status widget work starts.
 
 ## Codex Comparison Follow-Up
 
@@ -665,5 +667,3 @@ Append these PRs after the current sequence:
      TUI in a follow-up plan update.
    - Validation: updated timing report, transcript screenshots, and a short gap
      table tied to specific code areas.
-- Whether the web run-state surface should live inside the active assistant turn
-  or at the chat composer boundary once the dedicated status widget work starts.
