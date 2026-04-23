@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   LocalCliTransport,
@@ -194,6 +194,7 @@ describe("runtime host CLI transport", () => {
   });
 
   it("force kills PTY subprocesses after timeout grace period", async () => {
+    vi.useFakeTimers();
     const signals: string[] = [];
     const transport = createPtyCliTransport({
       module: {
@@ -210,15 +211,22 @@ describe("runtime host CLI transport", () => {
       },
     });
 
-    await expect(
-      transport.run({
+    try {
+      const run = transport.run({
         hostId: "gemini-cli",
         command: "gemini",
         timeoutMs: 10,
-      }),
-    ).rejects.toThrow("timed out");
+      });
+      const rejection = expect(run).rejects.toThrow("timed out");
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
+      await vi.advanceTimersByTimeAsync(10);
+      await rejection;
+      expect(signals).toEqual(["SIGTERM"]);
+
+      await vi.advanceTimersByTimeAsync(250);
+      expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
