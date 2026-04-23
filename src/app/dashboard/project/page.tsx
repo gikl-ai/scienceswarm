@@ -3580,11 +3580,9 @@ function ProjectPageContent() {
           setInput((current) => (current.length === 0 ? prompt : current));
         }
         throw error;
-      } finally {
-        void runtimeSessions.refresh();
       }
     },
-    [runtimeSessions, sendMessage],
+    [sendMessage],
   );
 
   const prepareRuntimePreviewAndSend = useCallback(
