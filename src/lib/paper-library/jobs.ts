@@ -12,6 +12,7 @@ import {
 } from "./contracts";
 import {
   getPaperLibraryIdempotencyPath,
+  getPaperLibraryStateDir,
   getPaperLibraryReviewShardPath,
   getPaperLibraryScanPath,
   readPersistedState,
@@ -121,6 +122,45 @@ export async function readPaperLibraryScan(
   if (!parsed.ok) return null;
 
   return normalizeScan(parsed.data);
+}
+
+export async function findLatestPaperLibraryScan(
+  project: string,
+  brainRoot: string,
+): Promise<PaperLibraryScan | null> {
+  const stateRoot = getProjectStateRootForBrainRoot(project, brainRoot);
+  const scansDir = path.join(getPaperLibraryStateDir(project, stateRoot), "scans");
+  const entries = await readdir(scansDir, { withFileTypes: true }).catch(() => []);
+  if (entries.length === 0) return null;
+
+  const scans = await Promise.all(
+    entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map(async (entry) => {
+        let scanId: string;
+        try {
+          scanId = decodeURIComponent(entry.name.slice(0, -".json".length));
+        } catch {
+          return null;
+        }
+        const parsed = await readPersistedState(
+          getPaperLibraryScanPath(project, scanId, stateRoot),
+          PaperLibraryScanSchema,
+          "paper-library scan",
+        );
+        return parsed.ok ? normalizeScan(parsed.data) : null;
+      }),
+  );
+
+  const ordered = scans
+    .filter((scan): scan is PaperLibraryScan => scan !== null)
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.updatedAt);
+      const rightTime = Date.parse(right.updatedAt);
+      return rightTime - leftTime;
+    });
+
+  return ordered[0] ?? null;
 }
 
 export async function reconcileStalePaperLibraryScan(

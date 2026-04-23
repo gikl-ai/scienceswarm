@@ -6,6 +6,7 @@ import {
 } from "@/lib/paper-library/contracts";
 import {
   cancelPaperLibraryScan,
+  findLatestPaperLibraryScan,
   reconcileStalePaperLibraryScan,
   startPaperLibraryScan,
 } from "@/lib/paper-library/jobs";
@@ -43,6 +44,21 @@ export async function GET(request: Request) {
   if (isErrorResponse(configOrError)) return configOrError;
 
   const url = new URL(request.url);
+  const latestParam = url.searchParams.get("latest");
+  const wantsLatest = latestParam === "1" || latestParam === "true";
+
+  if (wantsLatest) {
+    const project = ProjectSlugSchema.safeParse(url.searchParams.get("project"));
+    if (!project.success) return badRequest(project.error);
+
+    const scan = await findLatestPaperLibraryScan(project.data, configOrError.root);
+    if (!scan) {
+      return Response.json(paperLibraryError("job_not_found", "Paper library scan not found."), { status: 404 });
+    }
+
+    return Response.json({ ok: true, scan });
+  }
+
   const lookup = ScanLookupRequestSchema.safeParse({
     project: url.searchParams.get("project"),
     id: url.searchParams.get("id"),
