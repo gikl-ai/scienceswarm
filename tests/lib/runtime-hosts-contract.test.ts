@@ -81,8 +81,27 @@ describe("runtime host contracts and registry", () => {
     expect(hasRuntimeHostCapability(openclaw, "chat")).toBe(true);
     expect(hasRuntimeHostCapability(openclaw, "task")).toBe(false);
     expect(hasRuntimeHostCapability(codex, "task")).toBe(true);
+    expect(hasRuntimeHostCapability(codex, "resume")).toBe(false);
     expect(hasRuntimeHostCapability(openhands, "chat")).toBe(false);
     expect(openhands.controlSurface.supportsNativeSessionList).toBe(true);
+  });
+
+  it("describes local CLI adapters as ScienceSwarm wrapper sessions", () => {
+    for (const hostId of ["claude-code", "codex", "gemini-cli"] as const) {
+      const profile = requireRuntimeHostProfile(hostId);
+
+      expect(profile.controlSurface).toMatchObject({
+        owner: "scienceSwarm-wrapper",
+        sessionIdSource: "scienceSwarm",
+        supportsResume: false,
+        supportsNativeSessionList: false,
+      });
+      expect(profile.lifecycle).toMatchObject({
+        canResumeNativeSession: false,
+        canListNativeSessions: false,
+        resumeSemantics: "scienceSwarm-wrapper-session",
+      });
+    }
   });
 
   it("tolerates unknown historical host ids as read-only records", () => {
