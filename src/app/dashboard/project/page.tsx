@@ -79,6 +79,7 @@ import {
 } from "@/components/research/inline-chart";
 import { SchedulerPanel } from "@/components/research/scheduler-panel";
 import {
+  buildPaperLibraryHrefForSlug,
   buildWorkspaceHrefForSlug,
   persistLastProjectSlug,
   readLastProjectSlug,
@@ -4213,6 +4214,14 @@ function ProjectPageContent() {
               <span className="text-[10px] text-muted bg-surface px-2 py-0.5 rounded border border-border">
                 {uploadedFiles.length} files
               </span>
+            )}
+            {activeProjectSlug && (
+              <Link
+                href={buildPaperLibraryHrefForSlug(activeProjectSlug)}
+                className="inline-flex h-8 items-center rounded border border-border bg-white px-3 text-[11px] font-medium text-foreground transition-colors hover:border-accent hover:text-accent"
+              >
+                Paper Library
+              </Link>
             )}
           </div>
         </div>
