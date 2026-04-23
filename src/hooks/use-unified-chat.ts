@@ -8,6 +8,14 @@ import {
   useCallback,
   type SetStateAction,
 } from "react";
+import type {
+  RuntimeApprovalState,
+  RuntimeDataIncluded,
+  RuntimeHostId,
+  RuntimeProjectPolicy,
+  RuntimeTurnMode,
+} from "@/lib/runtime-hosts/contracts";
+import type { RuntimeCompareResult } from "@/components/runtime/compare-results";
 import {
   mergeArtifactProvenanceEntries,
   normalizeArtifactProvenanceEntries,
@@ -107,7 +115,7 @@ interface PolledOpenClawMessage {
   taskPhases?: unknown;
 }
 
-export type Backend = "openclaw";
+export type Backend = RuntimeHostId | "compare";
 export type ChatMode = "reasoning" | "openclaw-tools";
 
 interface StoredMessage {
@@ -145,10 +153,24 @@ export interface ActiveFileContext {
   content: string;
 }
 
+export interface RuntimeSendOptions {
+  activeFile?: ActiveFileContext;
+  runtimeHostId?: Backend;
+  runtimeMode?: Extract<RuntimeTurnMode, "chat" | "task" | "compare">;
+  projectPolicy?: RuntimeProjectPolicy;
+  approvalState?: RuntimeApprovalState;
+  selectedHostIds?: string[];
+  synthesisHostId?: string;
+  dataIncluded?: RuntimeDataIncluded[];
+}
+
 export interface UseUnifiedChat {
   messages: Message[];
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
-  sendMessage: (content: string, activeFile?: ActiveFileContext) => Promise<void>;
+  sendMessage: (
+    content: string,
+    activeFileOrOptions?: ActiveFileContext | RuntimeSendOptions,
+  ) => Promise<void>;
   isStreaming: boolean;
   error: string | null;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
@@ -171,6 +193,8 @@ export interface UseUnifiedChat {
   clearError: () => void;
   conversationId: string | null;
   artifactProvenance: ArtifactProvenanceEntry[];
+  runtimeCompareResult: RuntimeCompareResult | null;
+  clearRuntimeCompareResult: () => void;
   /**
    * true = confirmed reachable, false = confirmed disconnected,
    * null = unknown (first probe still in flight).
@@ -299,13 +323,23 @@ function removeEmptyAssistantPlaceholder(messages: Message[], assistantId: strin
   return messages;
 }
 
+const RUNTIME_BACKENDS = new Set<string>([
+  "openclaw",
+  "claude-code",
+  "codex",
+  "gemini-cli",
+  "openhands",
+  "compare",
+]);
+
 // Accepts legacy "agent"/"direct" values from persisted threads so old local
-// storage and server-side thread JSON replay correctly. All non-null legacy
-// values are collapsed to "openclaw" because the chat pipeline now routes
-// every turn through OpenClaw; delegation to OpenHands/Ollama happens inside
-// OpenClaw, not at the hook boundary.
+// storage and server-side thread JSON replay correctly. New runtime host ids
+// are preserved so project sends can resume their selected host identity.
 function normalizeBackend(value: unknown): Backend | null {
-  if (value === "openclaw" || value === "agent" || value === "direct") {
+  if (typeof value === "string" && RUNTIME_BACKENDS.has(value)) {
+    return value as Backend;
+  }
+  if (value === "agent" || value === "direct") {
     return "openclaw";
   }
   return null;
@@ -329,19 +363,12 @@ function deriveChatModeFromMessages(messages: Message[]): ChatMode | null {
 }
 
 // The server's X-Chat-Backend header can include diagnostic values
-// ("brain-setup", "slash-commands", "none") alongside "openclaw". Since the
-// hook's Backend union is now "openclaw" only, every server-reported value
-// that indicates a real chat response collapses to "openclaw". Non-chat
+// ("brain-setup", "slash-commands", "none") alongside runtime ids. Non-chat
 // diagnostics return null so the hook preserves its existing backend.
 function mapResponseBackend(value: string | null): Backend | null {
-  if (
-    value === "openclaw"
-    || value === "openhands"
-    || value === "agent"
-    || value === "nanoclaw"
-    || value === "hermes"
-    || value === "direct"
-  ) {
+  const normalized = normalizeBackend(value);
+  if (normalized) return normalized;
+  if (value === "nanoclaw" || value === "hermes") {
     return "openclaw";
   }
   return null;
@@ -1435,6 +1462,12 @@ type SendContext = {
   projectName: string;
   projectVersion: number;
   userBackendOverrideVersion: number;
+  runtimeMode: Extract<RuntimeTurnMode, "chat" | "task" | "compare">;
+  projectPolicy: RuntimeProjectPolicy;
+  approvalState: RuntimeApprovalState;
+  selectedHostIds: string[];
+  synthesisHostId: string | null;
+  dataIncluded?: RuntimeDataIncluded[];
 };
 
 type QueuedSend = {
@@ -1939,6 +1972,81 @@ function getUploadedFileReference(file: Pick<UploadedFile, "workspacePath" | "na
   return typeof file.name === "string" ? file.name.trim() : "";
 }
 
+function textBytes(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+function buildRuntimeApiDataIncluded(
+  content: string,
+  activeFile: ActiveFileContext | undefined,
+  files: UploadedFile[],
+  explicit?: RuntimeDataIncluded[],
+): RuntimeDataIncluded[] {
+  if (explicit) return explicit;
+
+  const data: RuntimeDataIncluded[] = [
+    {
+      kind: "prompt",
+      label: "User prompt",
+      bytes: textBytes(content),
+    },
+  ];
+
+  if (activeFile) {
+    data.push({
+      kind: "workspace-file",
+      label: activeFile.path,
+      bytes: textBytes(activeFile.content),
+    });
+  }
+
+  for (const file of files) {
+    const label = getUploadedFileReference(file);
+    if (!label) continue;
+    data.push({
+      kind: file.source === "gbrain" ? "gbrain-excerpt" : "workspace-file",
+      label,
+    });
+  }
+
+  return data;
+}
+
+function buildRuntimeApiInputFileRefs(
+  content: string,
+  files: UploadedFile[],
+): string[] {
+  return Array.from(
+    new Set([
+      ...extractPromptSourceFiles(content),
+      ...files
+        .map(getUploadedFileReference)
+        .filter((value) => value.length > 0),
+    ]),
+  );
+}
+
+function isRuntimeSendOptions(
+  value: ActiveFileContext | RuntimeSendOptions | undefined,
+): value is RuntimeSendOptions {
+  if (!value || typeof value !== "object") return false;
+  return "runtimeHostId" in value
+    || "runtimeMode" in value
+    || "projectPolicy" in value
+    || "approvalState" in value
+    || "selectedHostIds" in value
+    || "synthesisHostId" in value
+    || "dataIncluded" in value
+    || "activeFile" in value;
+}
+
+function normalizeRuntimeSendOptions(
+  value: ActiveFileContext | RuntimeSendOptions | undefined,
+): RuntimeSendOptions {
+  if (isRuntimeSendOptions(value)) return value;
+  return value ? { activeFile: value } : {};
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -2277,6 +2385,7 @@ export function useUnifiedChat(
   const [conversationBackend, setConversationBackendState] = useState<Backend | null>(null);
   const [openClawConnected, setOpenClawConnected] = useState<boolean | null>(null);
   const [artifactProvenance, setArtifactProvenanceState] = useState<ArtifactProvenanceEntry[]>([]);
+  const [runtimeCompareResult, setRuntimeCompareResult] = useState<RuntimeCompareResult | null>(null);
   // Tracks whether hydration from localStorage/server has committed. The
   // cross-channel poll effect uses this to avoid registering a setInterval
   // whose closure captures a stale `scopedConversationId = null` on the
@@ -2992,6 +3101,166 @@ export function useUnifiedChat(
     }
   }, [applyMessagesUpdate, isSendContextCurrent, recordGeneratedArtifacts, setArtifactProvenance]);
 
+  const sendViaRuntimeApi = useCallback(
+    async (
+      content: string,
+      assistantId: string,
+      context: SendContext,
+      activeConversationId: string | null,
+      activeFile?: ActiveFileContext,
+    ) => {
+      if (!hasProjectScope(context.projectName)) {
+        throw new Error("Runtime host sends require an active project.");
+      }
+
+      const requestFiles = liveUploadedFilesRef.current;
+      const dataIncluded = buildRuntimeApiDataIncluded(
+        content,
+        activeFile,
+        requestFiles,
+        context.dataIncluded,
+      );
+      const inputFileRefs = buildRuntimeApiInputFileRefs(content, requestFiles);
+      const baseBody = {
+        projectId: context.projectName,
+        projectPolicy: context.projectPolicy,
+        prompt: content,
+        conversationId: activeConversationId,
+        approvalState: context.approvalState,
+        dataIncluded,
+        inputFileRefs,
+      };
+
+      if (context.runtimeMode === "compare") {
+        const selectedHostIds = context.selectedHostIds.length > 0
+          ? context.selectedHostIds
+          : context.backend === "compare"
+            ? ["openclaw"]
+            : [context.backend];
+        const response = await fetch("/api/runtime/compare", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...baseBody,
+            selectedHostIds,
+            synthesisHostId: context.synthesisHostId ?? "openclaw",
+          }),
+        });
+        const payload = await response.json().catch(() => null) as
+          | (RuntimeCompareResult & { error?: string })
+          | null;
+        if (!response.ok) {
+          throw new Error(payload?.error || `Runtime compare failed: ${response.status}`);
+        }
+        const compareResult: RuntimeCompareResult = {
+          parentSession: payload?.parentSession ?? null,
+          childResults: Array.isArray(payload?.childResults) ? payload.childResults : [],
+          partialFailure: payload?.partialFailure === true,
+          synthesisPreview: payload?.synthesisPreview ?? null,
+        };
+        setRuntimeCompareResult(compareResult);
+        const lines = [
+          compareResult.partialFailure
+            ? "Runtime compare completed with partial failures."
+            : "Runtime compare completed.",
+          ...compareResult.childResults.map((child) =>
+            `\n${child.hostId} (${child.status})\n${child.message ?? child.error ?? "No output returned."}`
+          ),
+        ];
+        applyMessagesUpdate((prev) =>
+          prev.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  content: lines.join("\n"),
+                  chatMode: context.chatMode,
+                }
+              : message,
+          ),
+        );
+        const parentSessionId = compareResult.parentSession?.id ?? null;
+        if (parentSessionId) {
+          liveConversationIdRef.current = parentSessionId;
+          liveConversationBackendRef.current = "compare";
+          setConversationId(parentSessionId);
+          setConversationBackend("compare");
+        }
+        liveBackendRef.current = "compare";
+        setBackend("compare");
+        return;
+      }
+
+      const response = await fetch("/api/runtime/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...baseBody,
+          hostId: context.backend,
+          mode: context.runtimeMode,
+        }),
+      });
+      const payload = await response.json().catch(() => null) as
+        | {
+            session?: {
+              id?: string;
+              conversationId?: string | null;
+              status?: string;
+            };
+            events?: Array<{
+              type?: string;
+              payload?: { text?: unknown; message?: unknown };
+            }>;
+            error?: string;
+          }
+        | null;
+      if (!response.ok) {
+        throw new Error(payload?.error || `Runtime session failed: ${response.status}`);
+      }
+
+      const messageEvent = [...(payload?.events ?? [])].reverse().find((event) =>
+        event.type === "message"
+        && event.payload
+        && typeof event.payload.text === "string"
+      );
+      const assistantText =
+        typeof messageEvent?.payload?.text === "string"
+          ? messageEvent.payload.text
+          : `Runtime session ${payload?.session?.status ?? "completed"}.`;
+      applyMessagesUpdate((prev) =>
+        prev.map((message) =>
+          message.id === assistantId
+            ? {
+                ...message,
+                content: sanitizeOpenClawUserVisibleResponse(assistantText),
+                chatMode: context.chatMode,
+              }
+            : message,
+        ),
+      );
+
+      const nextConversationId =
+        payload?.session?.conversationId
+        || payload?.session?.id
+        || activeConversationId;
+      if (nextConversationId) {
+        liveConversationIdRef.current = nextConversationId;
+        liveConversationBackendRef.current = context.backend;
+        setConversationId(nextConversationId);
+        setConversationBackend(context.backend);
+      }
+      liveBackendRef.current = context.backend;
+      setBackend(context.backend);
+      await syncWorkspaceTreeAfterChat();
+    },
+    [
+      applyMessagesUpdate,
+      setBackend,
+      setConversationBackend,
+      setConversationId,
+      syncWorkspaceTreeAfterChat,
+    ],
+  );
+
   const sendViaUnifiedChat = useCallback(
     async (
       content: string,
@@ -3278,27 +3547,42 @@ export function useUnifiedChat(
         );
 
         try {
-          const shouldReuseOpenClawConversation =
-            hasProjectScope(queued.context.projectName) ||
-            queued.context.chatMode === "openclaw-tools" ||
-            shouldForceOpenClawToolExecution(queued.content);
-          const activeConversationId = shouldReuseOpenClawConversation
+          const shouldUseRuntimeApi =
+            queued.context.backend !== "openclaw"
+            || queued.context.runtimeMode === "task"
+            || queued.context.runtimeMode === "compare";
+          const shouldReuseConversation =
+            shouldUseRuntimeApi
+            || hasProjectScope(queued.context.projectName)
+            || queued.context.chatMode === "openclaw-tools"
+            || shouldForceOpenClawToolExecution(queued.content);
+          const activeConversationId = shouldReuseConversation
             ? getScopedConversationId(
               liveConversationIdRef.current,
               liveConversationBackendRef.current,
-              "openclaw",
+              queued.context.backend,
             )
             : null;
           const historyMessages = buildQueuedHistory(liveMessagesRef.current, queued.assistantId);
 
-          await sendViaUnifiedChat(
-            queued.content,
-            queued.assistantId,
-            queued.context,
-            activeConversationId,
-            historyMessages,
-            queued.activeFile,
-          );
+          if (shouldUseRuntimeApi) {
+            await sendViaRuntimeApi(
+              queued.content,
+              queued.assistantId,
+              queued.context,
+              activeConversationId,
+              queued.activeFile,
+            );
+          } else {
+            await sendViaUnifiedChat(
+              queued.content,
+              queued.assistantId,
+              queued.context,
+              activeConversationId,
+              historyMessages,
+              queued.activeFile,
+            );
+          }
         } catch (err) {
           if (err instanceof Error && err.name === "AbortError") {
             // A newer project/backend context superseded this request.
@@ -3324,20 +3608,30 @@ export function useUnifiedChat(
     applyMessagesUpdate,
     isSendContextCurrent,
     isSendProjectCurrent,
+    sendViaRuntimeApi,
     sendViaUnifiedChat,
   ]);
 
   // ── Unified send ──
   const sendMessageFn = useCallback(
-    (content: string, activeFile?: ActiveFileContext): Promise<void> => {
+    (
+      content: string,
+      activeFileOrOptions?: ActiveFileContext | RuntimeSendOptions,
+    ): Promise<void> => {
       const requestContent = content.trim();
       if (!requestContent) return Promise.resolve();
 
-      if (openClawConnected === false) {
+      const runtimeOptions = normalizeRuntimeSendOptions(activeFileOrOptions);
+      const runtimeMode = runtimeOptions.runtimeMode ?? "chat";
+      const requestedBackend: Backend =
+        runtimeMode === "compare"
+          ? "compare"
+          : normalizeBackend(runtimeOptions.runtimeHostId) ?? "openclaw";
+
+      if (requestedBackend === "openclaw" && runtimeMode === "chat" && openClawConnected === false) {
         setError("OpenClaw is not reachable. Start it in Settings.");
         return Promise.resolve();
       }
-      const requestedBackend: Backend = "openclaw";
 
       const userMsg: Message = {
         id: makeId(),
@@ -3363,11 +3657,20 @@ export function useUnifiedChat(
         projectName,
         projectVersion: projectVersionRef.current,
         userBackendOverrideVersion: userBackendOverrideVersionRef.current,
+        runtimeMode,
+        projectPolicy: runtimeOptions.projectPolicy ?? "local-only",
+        approvalState: runtimeOptions.approvalState ?? "not-required",
+        selectedHostIds: runtimeOptions.selectedHostIds ?? [],
+        synthesisHostId: runtimeOptions.synthesisHostId ?? null,
+        dataIncluded: runtimeOptions.dataIncluded,
       };
 
       liveBackendRef.current = requestedBackend;
       liveChatModeRef.current = chatMode;
       setBackend(requestedBackend);
+      if (runtimeMode !== "compare") {
+        setRuntimeCompareResult(null);
+      }
       applyMessagesUpdate((prev) => [...prev, userMsg, assistantMsg]);
       setError(null);
 
@@ -3378,8 +3681,8 @@ export function useUnifiedChat(
           context,
           resolve,
         };
-        if (activeFile) {
-          queued.activeFile = activeFile;
+        if (runtimeOptions.activeFile) {
+          queued.activeFile = runtimeOptions.activeFile;
         }
         sendQueueRef.current.push(queued);
       });
@@ -3857,5 +4160,7 @@ export function useUnifiedChat(
     conversationId,
     openClawConnected,
     artifactProvenance,
+    runtimeCompareResult,
+    clearRuntimeCompareResult: () => setRuntimeCompareResult(null),
   };
 }
