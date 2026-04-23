@@ -258,8 +258,6 @@ export function parseBenchmarkArgs(
       options.json = true;
     } else if (arg === "--no-stream-phases") {
       options.streamPhases = false;
-    } else if (arg === "--help" || arg === "-h") {
-      throw new Error(benchmarkHelpText());
     }
   }
 
