@@ -81,13 +81,46 @@ function eventType(event: ParsedSseEvent): string {
   );
 }
 
+function eventRecord(event: ParsedSseEvent): Record<string, unknown> | null {
+  return isRecord(event.json) ? event.json : null;
+}
+
 function eventText(event: ParsedSseEvent): string {
-  const json = isRecord(event.json) ? event.json : null;
+  const json = eventRecord(event);
   return (
     asString(json?.text) ??
     asString(json?.response) ??
     asString(json?.content) ??
     ""
+  );
+}
+
+function isProgressEvent(event: ParsedSseEvent): boolean {
+  const type = eventType(event);
+  const json = eventRecord(event);
+  return (
+    type === "progress" ||
+    type === "activity" ||
+    type === "thinking" ||
+    isRecord(json?.progress)
+  );
+}
+
+function isFinalEvent(event: ParsedSseEvent): boolean {
+  const type = eventType(event);
+  if ((type === "final" || type === "done") && !isProgressEvent(event)) {
+    return true;
+  }
+  const json = eventRecord(event);
+  return (
+    eventText(event).length > 0 &&
+    !isProgressEvent(event) &&
+    (
+      typeof json?.conversationId === "string" ||
+      typeof json?.backend === "string" ||
+      Array.isArray(json?.generatedFiles) ||
+      Array.isArray(json?.taskPhases)
+    )
   );
 }
 
@@ -131,14 +164,8 @@ export function summarizeChatBenchmarkResponse(params: {
   bytes: number;
 }): ChatBenchmarkSummary {
   const events = parseSseEvents(params.rawBody);
-  const progressEventCount = events.filter((event) => {
-    const type = eventType(event);
-    return type === "progress" || type === "activity" || type === "thinking";
-  }).length;
-  const finalEvents = events.filter((event) => {
-    const type = eventType(event);
-    return type === "final" || type === "done";
-  });
+  const progressEventCount = events.filter(isProgressEvent).length;
+  const finalEvents = events.filter(isFinalEvent);
   const lastFinal = finalEvents.at(-1);
   const fallbackJson = events.length === 0 ? parseJson(params.rawBody) : null;
   const fallbackText = isRecord(fallbackJson)

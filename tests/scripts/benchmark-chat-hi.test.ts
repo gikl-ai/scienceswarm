@@ -71,6 +71,65 @@ describe("benchmark-chat-hi", () => {
     });
   });
 
+  it("summarizes real unified chat progress wrappers and final text events", () => {
+    const rawBody = [
+      'data: {"progress":{"type":"event","method":"agent","payload":{"stream":"assistant","data":{"text":"Hello"}}}}',
+      'data: {"progress":{"type":"event","method":"session.message","payload":{"message":{"role":"assistant","content":"Hello there."}}}}',
+      'data: {"taskPhases":[]}',
+      'data: {"text":"Hello there.","conversationId":"bench-real","backend":"openclaw","generatedFiles":[],"taskPhases":[]}',
+      "data: [DONE]",
+      "",
+    ].join("\n\n");
+
+    expect(
+      summarizeChatBenchmarkResponse({
+        status: 200,
+        ok: true,
+        backend: "openclaw",
+        contentType: "text/event-stream; charset=utf-8",
+        conversationId: "bench-real",
+        rawBody,
+        headersMs: 10,
+        firstChunkMs: 20,
+        totalMs: 100,
+        bytes: 500,
+      }),
+    ).toMatchObject({
+      eventCount: 5,
+      progressEventCount: 2,
+      finalEventCount: 1,
+      finalTextSample: "Hello there.",
+    });
+  });
+
+  it("does not double-count hybrid progress wrappers as final events", () => {
+    const rawBody = [
+      'data: {"type":"final","progress":{"type":"event","payload":{"data":{"text":"still streaming"}}},"text":"not final"}',
+      'data: {"type":"final","text":"Done."}',
+      "",
+    ].join("\n\n");
+
+    expect(
+      summarizeChatBenchmarkResponse({
+        status: 200,
+        ok: true,
+        backend: "openclaw",
+        contentType: "text/event-stream; charset=utf-8",
+        conversationId: "bench-hybrid",
+        rawBody,
+        headersMs: 10,
+        firstChunkMs: 20,
+        totalMs: 100,
+        bytes: 500,
+      }),
+    ).toMatchObject({
+      eventCount: 2,
+      progressEventCount: 1,
+      finalEventCount: 1,
+      finalTextSample: "Done.",
+    });
+  });
+
   it("supports JSON responses for non-streaming fallback measurements", () => {
     expect(
       summarizeChatBenchmarkResponse({
