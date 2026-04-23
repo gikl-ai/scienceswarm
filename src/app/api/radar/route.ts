@@ -1,7 +1,7 @@
 /**
  * GET/POST/PATCH /api/radar
  *
- * GET    — Return the active radar configuration
+ * GET    — Return the active radar configuration, or null if unconfigured
  * POST   — Create a new radar (from prompt or explicit topics/sources)
  * PATCH  — Update an existing radar by radarId
  */
@@ -16,7 +16,7 @@ export async function GET(_request: Request): Promise<Response> {
   const radar = await getActiveRadar(stateDir)
 
   if (!radar) {
-    return Response.json({ error: "No radar configured" }, { status: 404 })
+    return Response.json(null)
   }
 
   return Response.json(radar)

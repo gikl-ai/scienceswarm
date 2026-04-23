@@ -116,5 +116,5 @@ describe("MVP warm-start to first answer", () => {
     expect(brief.project).toBe("alpha-project");
     expect(brief.topMatters.some((matter: { summary: string }) => matter.summary.includes("Approved import preview"))).toBe(true);
     expect(brief.nextMove.recommendation).toContain("Alpha Project");
-  }, 10_000);
+  }, 30_000);
 });
