@@ -86,6 +86,7 @@ describe("PaperLibraryCommandCenter", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("starts a scan and routes into the review queue", async () => {
@@ -230,7 +231,7 @@ describe("PaperLibraryCommandCenter", () => {
         return Response.json({
           ok: true,
           approvalToken: "approval-token",
-          expiresAt: "2026-04-23T13:00:00.000Z",
+          expiresAt: "3026-04-23T13:00:00.000Z",
         });
       }
 
@@ -312,6 +313,283 @@ describe("PaperLibraryCommandCenter", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Undo changes" }));
     expect(await screen.findAllByText("undone")).toHaveLength(2);
+  });
+
+  it("resets the review filter when starting a new scan", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "review",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+      }),
+    );
+
+    let activeScanId = "scan-1";
+    const secondReviewItem = {
+      ...baseReviewItem(),
+      id: "review-2",
+      paperId: "paper-2",
+      candidates: [
+        {
+          ...baseReviewItem().candidates[0],
+          id: "candidate-2",
+          title: "Fresh Library Scan",
+          year: 2025,
+        },
+      ],
+      selectedCandidateId: "candidate-2",
+    };
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan" && method === "POST") {
+        activeScanId = "scan-2";
+        return Response.json({ ok: true, scanId: "scan-2" });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/scan?project=demo-project&id=")) {
+        return Response.json({
+          ok: true,
+          scan: baseScan({ id: activeScanId }),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/review?")) {
+        const search = new URL(url, "http://localhost");
+        const scanId = search.searchParams.get("scanId");
+        const filter = search.searchParams.get("filter");
+        const items = filter === "needs_review"
+          ? (scanId === "scan-2" ? [secondReviewItem] : [baseReviewItem()])
+          : [];
+
+        return Response.json({
+          ok: true,
+          items,
+          totalCount: items.length,
+          filteredCount: items.length,
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "accepted" }));
+    expect(await screen.findByText("Nothing in this review slice")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Scan/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Start dry-run scan" }));
+
+    expect(await screen.findByText("ready for review")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open review queue" }));
+    expect(await screen.findByText("Fresh Library Scan (2025)")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([request]) => {
+        const url = String(request);
+        return url.includes("scanId=scan-2") && url.includes("filter=needs_review");
+      }),
+    ).toBe(true);
+  });
+
+  it("disables applying when the approval token is already expired", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "apply",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+        applyPlanId: "plan-1",
+      }),
+    );
+
+    let approved = false;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            status: "ready_for_apply",
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 0,
+              readyForApply: 1,
+              failed: 0,
+            },
+            applyPlanId: "plan-1",
+          }),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/apply-plan?")) {
+        return Response.json({
+          ok: true,
+          plan: {
+            version: 1,
+            id: "plan-1",
+            scanId: "scan-1",
+            project: "demo-project",
+            status: approved ? "approved" : "validated",
+            rootPath: "/tmp/library",
+            rootRealpath: "/tmp/library",
+            templateFormat: "{year} - {title}.pdf",
+            operationCount: 1,
+            conflictCount: 0,
+            operationShardIds: ["0001"],
+            planDigest: "digest",
+            approvalTokenHash: approved ? "token-hash" : undefined,
+            approvalExpiresAt: approved ? "2026-04-23T13:00:00.000Z" : undefined,
+            approvedAt: approved ? "2026-04-23T12:30:00.000Z" : undefined,
+            createdAt: "2026-04-23T12:20:00.000Z",
+            updatedAt: "2026-04-23T12:20:00.000Z",
+          },
+          operations: [
+            {
+              id: "operation-1",
+              paperId: "paper-1",
+              kind: "rename",
+              source: baseReviewItem().source,
+              destinationRelativePath: "2024 - Interesting Paper.pdf",
+              reason: "Paper library template proposal",
+              confidence: 0.82,
+              conflictCodes: [],
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      if (url === "/api/brain/paper-library/apply-plan/approve" && method === "POST") {
+        approved = true;
+        return Response.json({
+          ok: true,
+          approvalToken: "approval-token",
+          expiresAt: "2000-04-23T13:00:00.000Z",
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByText("1 operations")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve plan" }));
+
+    const applyButton = await screen.findByRole("button", { name: "Apply approved plan" });
+    await waitFor(() => {
+      expect(applyButton).toBeDisabled();
+    });
+    expect(screen.getByText(/Approval expired at/i)).toBeInTheDocument();
+  });
+
+  it("shows command errors outside the scan step", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "apply",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+        applyPlanId: "plan-1",
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            status: "ready_for_apply",
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 0,
+              readyForApply: 1,
+              failed: 0,
+            },
+            applyPlanId: "plan-1",
+          }),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/apply-plan?")) {
+        return Response.json({
+          ok: true,
+          plan: {
+            version: 1,
+            id: "plan-1",
+            scanId: "scan-1",
+            project: "demo-project",
+            status: "validated",
+            rootPath: "/tmp/library",
+            rootRealpath: "/tmp/library",
+            templateFormat: "{year} - {title}.pdf",
+            operationCount: 1,
+            conflictCount: 0,
+            operationShardIds: ["0001"],
+            planDigest: "digest",
+            createdAt: "2026-04-23T12:20:00.000Z",
+            updatedAt: "2026-04-23T12:20:00.000Z",
+          },
+          operations: [
+            {
+              id: "operation-1",
+              paperId: "paper-1",
+              kind: "rename",
+              source: baseReviewItem().source,
+              destinationRelativePath: "2024 - Interesting Paper.pdf",
+              reason: "Paper library template proposal",
+              confidence: 0.82,
+              conflictCodes: [],
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      if (url === "/api/brain/paper-library/apply-plan/approve" && method === "POST") {
+        return Response.json(
+          { error: { message: "Approval failed." } },
+          { status: 500 },
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByText("1 operations")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve plan" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Approval failed.");
   });
 
   it("renders bounded graph and cluster windows with visible failure states", async () => {

@@ -22,6 +22,7 @@ import { buildWorkspaceHrefForSlug } from "@/lib/project-navigation";
 
 type PaperLibraryStep = "scan" | "review" | "apply" | "graph" | "history";
 type ReviewFilter = Extract<PaperReviewItemState, "needs_review" | "accepted" | "ignored" | "unresolved">;
+const DEFAULT_REVIEW_FILTER: ReviewFilter = "needs_review";
 
 interface PaperLibrarySession {
   step: PaperLibraryStep;
@@ -266,7 +267,7 @@ export function PaperLibraryCommandCenter({
   const [scanError, setScanError] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
 
-  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("needs_review");
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>(DEFAULT_REVIEW_FILTER);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewLoadingMore, setReviewLoadingMore] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
@@ -298,16 +299,6 @@ export function PaperLibraryCommandCenter({
   const [draftsByItemId, setDraftsByItemId] = useState<Record<string, PaperLibrarySessionDraft>>({});
   const [selectedCandidatesByItemId, setSelectedCandidatesByItemId] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    setSession(readStoredSession(projectSlug));
-    setApprovalToken(null);
-    setCommandError(null);
-  }, [projectSlug]);
-
-  useEffect(() => {
-    persistStoredSession(projectSlug, session);
-  }, [projectSlug, session]);
-
   const patchSession = useCallback((patch: Partial<PaperLibrarySession>) => {
     setSession((current) => ({ ...current, ...patch }));
   }, []);
@@ -324,9 +315,22 @@ export function PaperLibraryCommandCenter({
     setClustersPage(null);
     setClustersError(null);
     setApprovalToken(null);
+    setReviewFilter(DEFAULT_REVIEW_FILTER);
     setDraftsByItemId({});
     setSelectedCandidatesByItemId({});
   }, []);
+
+  useEffect(() => {
+    setSession(readStoredSession(projectSlug));
+    setScan(null);
+    setScanError(null);
+    resetDownstreamState();
+    setCommandError(null);
+  }, [projectSlug, resetDownstreamState]);
+
+  useEffect(() => {
+    persistStoredSession(projectSlug, session);
+  }, [projectSlug, session]);
 
   const loadScan = useCallback(async (scanId: string) => {
     setScanLoading(true);
@@ -820,6 +824,9 @@ export function PaperLibraryCommandCenter({
   const applyReadyCount = activePlan?.operationCount ?? scan?.counters.readyForApply ?? 0;
   const graphCount = graphPage?.filteredCount ?? graphPage?.totalCount ?? 0;
   const historyCount = activeManifest?.appliedCount ?? 0;
+  const approvalTokenExpired = approvalToken
+    ? Date.parse(approvalToken.expiresAt) <= Date.now()
+    : false;
 
   const stepContent = useMemo(() => {
     if (session.step === "review") {
@@ -1166,7 +1173,7 @@ export function PaperLibraryCommandCenter({
                 <button
                   type="button"
                   onClick={() => void handleApplyPlan()}
-                  disabled={!approvalToken}
+                  disabled={!approvalToken || approvalTokenExpired}
                   className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
                 >
                   Apply approved plan
@@ -1183,8 +1190,16 @@ export function PaperLibraryCommandCenter({
               </div>
 
               {approvalToken && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                  Plan approved until {new Date(approvalToken.expiresAt).toLocaleString()}.
+                <div
+                  className={`rounded-lg border px-3 py-2 text-sm ${
+                    approvalTokenExpired
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {approvalTokenExpired
+                    ? `Approval expired at ${new Date(approvalToken.expiresAt).toLocaleString()}. Approve the plan again to apply it.`
+                    : `Plan approved until ${new Date(approvalToken.expiresAt).toLocaleString()}.`}
                 </div>
               )}
 
@@ -1559,12 +1574,6 @@ export function PaperLibraryCommandCenter({
           </div>
         </div>
 
-        {commandError && (
-          <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {commandError}
-          </div>
-        )}
-
         {scanError && (
           <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {scanError}
@@ -1676,6 +1685,7 @@ export function PaperLibraryCommandCenter({
     activeManifest,
     activePlan,
     approvalToken,
+    approvalTokenExpired,
     applyPlanError,
     applyPlanLoading,
     applyPlanLoadingMore,
@@ -1684,7 +1694,6 @@ export function PaperLibraryCommandCenter({
     clustersLoading,
     clustersLoadingMore,
     clustersPage,
-    commandError,
     draftsByItemId,
     graphError,
     graphLoading,
@@ -1784,6 +1793,14 @@ export function PaperLibraryCommandCenter({
           />
         </div>
       </section>
+
+      {commandError && (
+        <div className="border-b border-border bg-white px-4 py-4">
+          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {commandError}
+          </div>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-white">
         {stepContent}

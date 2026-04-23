@@ -274,7 +274,7 @@ function GbrainPageContent() {
   }, [activeView, brainBootstrapState.status, router]);
 
   useEffect(() => {
-    if (!activeProjectSlug || activeView === "skills") {
+    if (!activeProjectSlug || activeView !== "pages") {
       setProjectBrief(null);
       return;
     }

@@ -999,10 +999,6 @@ description: Updated PubMed description
         return Response.json({ pageCount: 4, backend: "gbrain" });
       }
 
-      if (url.startsWith("/api/brain/brief?project=")) {
-        return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
-      }
-
       if (url === "/api/brain/dream") {
         return Response.json({ lastRun: null });
       }
@@ -1047,5 +1043,31 @@ description: Updated PubMed description
     expect(await screen.findByText("Paper Library needs local setup.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Local research library operator" })).toBeInTheDocument();
     expect(replaceMock).not.toHaveBeenCalledWith("/setup");
+  });
+
+  it("does not load the project brief in the paper library view", async () => {
+    searchParamsValue = "name=demo-project&view=paper-library";
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 4, backend: "gbrain" });
+      }
+
+      return Response.json({});
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GbrainPage />);
+
+    expect(await screen.findByRole("heading", { name: "Local research library operator" })).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([request]) => {
+        const url = typeof request === "string" ? request : request instanceof URL ? request.toString() : request.url;
+        return url.startsWith("/api/brain/brief?project=");
+      }),
+    ).toBe(false);
   });
 });
