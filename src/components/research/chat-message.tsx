@@ -844,15 +844,17 @@ export function ChatMessage({
   const visibleStreamProgressLog =
     role === "assistant" && isStreaming
       ? storedProgressLog.length > 0
-        ? storedProgressLog.filter((entry) => entry.kind === "activity")
-        : buildFallbackProgressLog(undefined, visibleActivityLog)
+        ? storedProgressLog
+        : buildFallbackProgressLog(thinking, visibleActivityLog)
       : [];
   const visibleProgressLog =
     role === "assistant"
       ? isStreaming
         ? visibleStreamProgressLog
-        : storedProgressLog.length > 0 && !hasLegacyProgressFields
+        : storedProgressLog.length > 0
           ? storedProgressLog
+          : hasLegacyProgressFields
+            ? buildFallbackProgressLog(thinking, visibleActivityLog)
           : []
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
