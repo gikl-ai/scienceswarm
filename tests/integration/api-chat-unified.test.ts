@@ -1959,6 +1959,18 @@ describe("POST /api/chat/unified", () => {
         message: "Hi",
         projectId: "alpha-project",
         mode: "reasoning",
+        messages: [
+          {
+            role: "user",
+            content:
+              "Please audit every uploaded microscopy result and prepare a full revision plan.",
+          },
+          {
+            role: "assistant",
+            content: "I can do that after reading the project files.",
+          },
+          { role: "user", content: "Hi" },
+        ],
       }),
     });
 
@@ -1975,6 +1987,10 @@ describe("POST /api/chat/unified", () => {
     const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
     expect(openClawMessage).toContain(
       "Keep ordinary conversational replies brief; for greetings, acknowledgements, or short status questions, answer in 1-2 sentences",
+    );
+    expect(openClawMessage).not.toContain("Recent web chat context for continuity");
+    expect(openClawMessage).not.toContain(
+      "Please audit every uploaded microscopy result",
     );
     expect(streamChat).not.toHaveBeenCalled();
   });

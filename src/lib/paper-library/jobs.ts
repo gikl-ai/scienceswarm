@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   PAPER_LIBRARY_STATE_VERSION,
   PaperLibraryScanSchema,
+  PaperReviewShardSchema,
   type PaperLibraryScan,
   type PaperLibraryScanStatus,
   type PaperReviewItem,
@@ -203,7 +204,7 @@ export async function startPaperLibraryScan(input: {
   return scan;
 }
 
-async function updateScan(
+export async function updatePaperLibraryScan(
   project: string,
   scanId: string,
   brainRoot: string,
@@ -243,7 +244,7 @@ export async function runPaperLibraryScanJob(
   const claimId = randomUUID();
 
   try {
-    let scan = await updateScan(project, scanId, brainRoot, (current) => ({
+    let scan = await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
       ...current,
       status: "scanning",
       claimId,
@@ -282,6 +283,7 @@ export async function runPaperLibraryScanJob(
         paperId: candidate.id,
         state: needsReview ? "needs_review" : "accepted",
         reasonCodes: needsReview ? (candidate.conflicts.length ? candidate.conflicts : ["low_confidence"]) : [],
+        source: snapshot.snapshot,
         candidates: [candidate],
         selectedCandidateId: needsReview ? undefined : candidate.id,
         version: 0,
@@ -289,7 +291,7 @@ export async function runPaperLibraryScanJob(
       });
 
       if (index % 20 === 0 || Date.now() - Date.parse(scan.heartbeatAt ?? scan.updatedAt) > HEARTBEAT_WRITE_INTERVAL_MS) {
-        scan = await updateScan(project, scanId, brainRoot, (current) => ({
+        scan = await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
           ...current,
           status: "identifying",
           rootRealpath,
@@ -311,14 +313,14 @@ export async function runPaperLibraryScanJob(
     for (let start = 0; start < reviewItems.length; start += REVIEW_SHARD_SIZE) {
       const shardId = String(shardIds.length + 1).padStart(4, "0");
       shardIds.push(shardId);
-      await writeJsonFile(getPaperLibraryReviewShardPath(project, scanId, shardId, stateRoot), {
+      await writeJsonFile(getPaperLibraryReviewShardPath(project, scanId, shardId, stateRoot), PaperReviewShardSchema.parse({
         version: PAPER_LIBRARY_STATE_VERSION,
         scanId,
         items: reviewItems.slice(start, start + REVIEW_SHARD_SIZE),
-      });
+      }));
     }
 
-    await updateScan(project, scanId, brainRoot, (current) => ({
+    await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
       ...current,
       status: reviewItems.some((item) => item.state === "needs_review") ? "ready_for_review" : "ready_for_apply",
       rootRealpath,
@@ -337,7 +339,7 @@ export async function runPaperLibraryScanJob(
     }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Paper library scan failed.";
-    await updateScan(project, scanId, brainRoot, (current) => ({
+    await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
       ...current,
       status: "failed",
       claimId: undefined,

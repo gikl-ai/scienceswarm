@@ -2899,6 +2899,14 @@ describe("Project dashboard smoke test", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
+    const expectUserMessage = () => {
+      expect(
+        screen
+          .getAllByText("hi")
+          .some((element) => element.tagName.toLowerCase() !== "textarea"),
+      ).toBe(true);
+    };
+
     const firstRender = render(<ProjectPage />);
 
     expect(await screen.findByText(/Research workspace ready for/i)).toBeInTheDocument();
@@ -2910,14 +2918,14 @@ describe("Project dashboard smoke test", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("Persisted answer")).toBeInTheDocument();
-    expect(screen.getByText("hi")).toBeInTheDocument();
+    expectUserMessage();
 
     firstRender.unmount();
 
     render(<ProjectPage />);
 
     expect(await screen.findByText("Persisted answer")).toBeInTheDocument();
-    expect(screen.getByText("hi")).toBeInTheDocument();
+    expectUserMessage();
   });
 
 
