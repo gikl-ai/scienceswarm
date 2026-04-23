@@ -301,6 +301,53 @@ describe("paper-library review and apply", () => {
     expect(await exists(destination)).toBe(true);
   });
 
+  it("repairs zero-operation manifests after a writeback-only failure", async () => {
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{year} - {title}.pdf",
+    });
+    expect(created?.plan.operationCount).toBe(0);
+
+    const approval = await approveApplyPlan({
+      project: "project-alpha",
+      applyPlanId: created?.plan.id ?? "",
+      brainRoot,
+    });
+
+    const applied = await applyApprovedPlan({
+      project: "project-alpha",
+      applyPlanId: approval?.plan.id ?? "",
+      approvalToken: approval?.approvalToken ?? "",
+      brainRoot,
+      persistLocations: async () => {
+        throw new Error("gbrain writer offline");
+      },
+    });
+    expect(applied?.manifest.status).toBe("applied_with_repair_required");
+    expect(applied?.operations).toHaveLength(0);
+
+    const repaired = await repairAppliedManifest({
+      project: "project-alpha",
+      manifestId: applied?.manifest.id ?? "",
+      brainRoot,
+      persistLocations: async () => {},
+    });
+
+    expect(repaired?.repaired).toBe(true);
+    expect(repaired?.manifest.status).toBe("applied");
+    expect(repaired?.operations).toHaveLength(0);
+  });
+
   it("repairs with the metadata captured at apply time even if the review item changes later", async () => {
     const originalPath = path.join(paperRoot, "2024 - Interesting Paper.pdf");
     await writeFile(originalPath, "fake pdf", "utf-8");

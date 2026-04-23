@@ -647,15 +647,12 @@ export async function repairAppliedManifest(input: {
   project: string;
   manifestId: string;
   brainRoot: string;
-  persistLocations?: (input: PersistAppliedPaperLocationsInput) => Promise<void>;
+  persistLocations: (input: PersistAppliedPaperLocationsInput) => Promise<void>;
 }): Promise<{ manifest: ApplyManifest; operations: ApplyManifestOperation[]; repaired: boolean } | null> {
   const manifest = await readApplyManifest(input.project, input.manifestId, input.brainRoot);
   if (!manifest) return null;
   if (manifest.status !== "applied_with_repair_required") {
     throw new Error("Apply manifest does not require repair.");
-  }
-  if (!input.persistLocations) {
-    throw new Error("Repair handler is unavailable.");
   }
 
   const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
@@ -669,7 +666,7 @@ export async function repairAppliedManifest(input: {
   const appliedOperationCount = manifestOperations.filter((operation) => (
     operation.status === "applied" || operation.status === "verified"
   )).length;
-  if (appliedOperationCount === 0) {
+  if (manifestOperations.length > 0 && appliedOperationCount === 0) {
     throw new Error("Apply manifest has no verified operations to repair.");
   }
   const needsReviewFallback = manifestOperations.some((operation) => !operation.appliedMetadata);

@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       persistLocations: persistAppliedPaperLocations,
     });
     if (!result) {
-      return Response.json(paperLibraryError("job_not_found", "Apply manifest not found."), { status: 404 });
+      return Response.json(paperLibraryError("manifest_not_found", "Apply manifest not found."), { status: 404 });
     }
     return Response.json({
       ok: true,

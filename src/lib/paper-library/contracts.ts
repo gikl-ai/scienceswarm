@@ -11,6 +11,7 @@ export const paperLibraryErrorCodes = [
   "apply_blocked_conflicts",
   "job_not_found",
   "job_already_running",
+  "manifest_not_found",
   "manifest_not_repairable",
   "unsafe_path",
   "invalid_project",
