@@ -84,6 +84,11 @@ import { getTargetFolder } from "@/lib/workspace-manager";
 import { OPENHANDS_URL } from "@/lib/openhands";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { enforceCloudPrivacy } from "@/lib/privacy-policy";
+import {
+  buildPromptSizeBuckets,
+  createChatTimingTelemetry,
+  type ChatTimingTelemetry,
+} from "@/lib/chat-timing-telemetry";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 import {
   getProjectBrainRootForBrainRoot,
@@ -311,6 +316,45 @@ type SendOpenClawMessage = (
     onEvent?: (event: unknown) => void;
   },
 ) => Promise<string>;
+
+function finishChatTimingResponse(
+  timing: ChatTimingTelemetry,
+  response: Response,
+  outcome: string,
+): Response {
+  timing.finish({ outcome, status: response.status });
+  return response;
+}
+
+function instrumentOpenClawSender(
+  sendToOpenClaw: SendOpenClawMessage,
+  timing: ChatTimingTelemetry,
+): SendOpenClawMessage {
+  return async (message, options) => {
+    timing.beginGatewayConnectAuth();
+    try {
+      const response = await sendToOpenClaw(message, {
+        ...options,
+        onEvent: (event) => {
+          timing.observeGatewayEvent(event);
+          options?.onEvent?.(event);
+        },
+      });
+      timing.endGatewayConnectAuth({ inferred: true });
+      timing.recordChatSendAck({ inferred: true });
+      if (response.trim().length > 0) {
+        timing.markFirstAssistantText(response.length);
+      }
+      return response;
+    } catch (error) {
+      timing.endGatewayConnectAuth({
+        inferred: true,
+        detail: { failed: true },
+      });
+      throw error;
+    }
+  };
+}
 
 function isValidTimestamp(value: string | null): value is string {
   return value !== null && value !== "" && !Number.isNaN(Date.parse(value));
@@ -7286,10 +7330,12 @@ export function __getConfiguredAgentRuntimeStatusCacheSizeForTests(): number {
 
 function streamOpenClawResponse(params: {
   message: string;
+  preparedMessage?: string;
   userMessage: string;
   files: UploadedFileDescriptor[];
   projectId: string | null;
   referenceNotes: WorkspaceReferenceNotes | undefined;
+  workspaceFileContext?: WorkspaceFileContext | null;
   conversationId: string;
   workingDirectory: string | undefined;
   startedAtMs: number;
@@ -7297,11 +7343,13 @@ function streamOpenClawResponse(params: {
   forceToolExecution?: boolean;
   sendToOpenClaw: SendOpenClawMessage;
   enableArtifactRepair?: boolean;
+  timing?: ChatTimingTelemetry;
   onComplete?: () => void;
   onFail?: (errorCode?: string) => void;
 }): Response {
   const encoder = new TextEncoder();
   let streamClosed = false;
+  let timingFinish = { outcome: "stream_closed", status: 200 };
 
   return new Response(
     new ReadableStream({
@@ -7331,6 +7379,7 @@ function streamOpenClawResponse(params: {
             // The browser may have closed the SSE connection before OpenClaw finished.
           } finally {
             streamClosed = true;
+            params.timing?.finish(timingFinish);
           }
         };
 
@@ -7354,6 +7403,11 @@ function streamOpenClawResponse(params: {
                 sanitizedPayload.thinking,
               );
             }
+            if (typeof sanitizedPayload.text === "string") {
+              params.timing?.markFinalAssistantText(
+                sanitizedPayload.text.length,
+              );
+            }
             sendEvent(sanitizedPayload);
           };
           // Wrap the caller-provided sendToOpenClaw so any per-turn WS event
@@ -7375,7 +7429,8 @@ function streamOpenClawResponse(params: {
             });
 
             const workspaceFileContext =
-              shouldUseCompactOpenClawArtifactContext(
+              params.workspaceFileContext ??
+              (shouldUseCompactOpenClawArtifactContext(
                 params.userMessage,
                 params.files,
               )
@@ -7384,7 +7439,7 @@ function streamOpenClawResponse(params: {
                     params.files,
                     params.projectId,
                     params.referenceNotes,
-                  );
+                  ));
 
             if (
               params.taskPhases.some((phase) => phase.id === "reading-file")
@@ -7478,14 +7533,16 @@ function streamOpenClawResponse(params: {
 
             const response = await sendOpenClawMessageWithArtifactRetry({
               sendToOpenClaw: sendToOpenClawWithProgress,
-              message: buildOpenClawMessage(
-                params.message,
-                params.files,
-                params.projectId,
-                workspaceFileContext,
-                params.userMessage,
-                { forceToolExecution: params.forceToolExecution === true },
-              ),
+              message:
+                params.preparedMessage ??
+                buildOpenClawMessage(
+                  params.message,
+                  params.files,
+                  params.projectId,
+                  workspaceFileContext,
+                  params.userMessage,
+                  { forceToolExecution: params.forceToolExecution === true },
+                ),
               options: {
                 ...openClawAgentOptions(
                   params.conversationId,
@@ -7544,6 +7601,29 @@ function streamOpenClawResponse(params: {
               ),
             });
 
+            const artifactImportRepairPhase =
+              params.timing?.startPhase("artifact_import_repair");
+            let artifactImportRepairEnded = false;
+            const finishArtifactImportRepair = (detail?: {
+              generatedFiles?: number;
+              failed?: boolean;
+              missingPaths?: number;
+            }) => {
+              if (!artifactImportRepairPhase || artifactImportRepairEnded) {
+                return;
+              }
+              artifactImportRepairEnded = true;
+              params.timing?.endPhase(artifactImportRepairPhase, {
+                detail: detail
+                  ? {
+                      generated_files: detail.generatedFiles ?? null,
+                      failed: detail.failed === true,
+                      missing_paths: detail.missingPaths ?? null,
+                    }
+                  : undefined,
+              });
+            };
+
             let importedOutputs = await finalizeOpenClawResponseImports({
               response,
               projectId: params.projectId,
@@ -7554,6 +7634,9 @@ function streamOpenClawResponse(params: {
               sessionId: params.conversationId,
             });
             if (params.enableArtifactRepair === false) {
+              finishArtifactImportRepair({
+                generatedFiles: importedOutputs.generatedFiles.length,
+              });
               completedIds = new Set(params.taskPhases.map((phase) => phase.id));
               await sendFinalEvent({
                 text: sanitizeOpenClawUserVisibleResponse(
@@ -7613,8 +7696,13 @@ function streamOpenClawResponse(params: {
                 workingDirectory: params.workingDirectory,
                 sessionId: params.conversationId,
                 startedAtMs: params.startedAtMs,
-              });
+            });
             if (auditArtifactOutputs.missingPaths.length > 0) {
+              finishArtifactImportRepair({
+                generatedFiles: auditArtifactOutputs.generatedFiles.length,
+                failed: true,
+                missingPaths: auditArtifactOutputs.missingPaths.length,
+              });
               await sendFinalEvent({
                 text: sanitizeOpenClawUserVisibleResponse(
                   auditArtifactOutputs.response,
@@ -7647,8 +7735,13 @@ function streamOpenClawResponse(params: {
                 workingDirectory: params.workingDirectory,
                 sessionId: params.conversationId,
                 startedAtMs: params.startedAtMs,
-              });
+            });
             if (requestedArtifactOutputs.missingPaths.length > 0) {
+              finishArtifactImportRepair({
+                generatedFiles: requestedArtifactOutputs.generatedFiles.length,
+                failed: true,
+                missingPaths: requestedArtifactOutputs.missingPaths.length,
+              });
               await sendFinalEvent({
                 text: sanitizeOpenClawUserVisibleResponse(
                   requestedArtifactOutputs.response,
@@ -7670,6 +7763,9 @@ function streamOpenClawResponse(params: {
               response: requestedArtifactOutputs.response,
               generatedFiles: requestedArtifactOutputs.generatedFiles,
             };
+            finishArtifactImportRepair({
+              generatedFiles: importedOutputs.generatedFiles.length,
+            });
 
             completedIds = new Set(params.taskPhases.map((phase) => phase.id));
             await sendFinalEvent({
@@ -7689,6 +7785,7 @@ function streamOpenClawResponse(params: {
             });
             params.onComplete?.();
           } catch (err) {
+            timingFinish = { outcome: "stream_error", status: 500 };
             console.warn(
               "OpenClaw stream failed during unified response:",
               err instanceof Error ? err.message : String(err),
@@ -7714,6 +7811,10 @@ function streamOpenClawResponse(params: {
       },
       cancel() {
         streamClosed = true;
+        params.timing?.finish({
+          outcome: "client_disconnected",
+          status: 499,
+        });
         params.onFail?.(RUNTIME_CLIENT_DISCONNECTED_ERROR_CODE);
       },
     }),
@@ -7931,8 +8032,13 @@ export async function handleUnifiedChatPost(
   request: Request,
   options: HandleUnifiedChatPostOptions = {},
 ) {
+  const chatTiming = createChatTimingTelemetry();
   if (!(await isLocalRequest(request))) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
+    return finishChatTimingResponse(
+      chatTiming,
+      Response.json({ error: "Forbidden" }, { status: 403 }),
+      "forbidden",
+    );
   }
 
   const runtimeRouter = getDefaultRuntimeHostRouter();
@@ -7941,6 +8047,7 @@ export async function handleUnifiedChatPost(
   let attemptedOpenClawTurn = false;
 
   try {
+    const requestParsePhase = chatTiming.startPhase("request_parse");
     const body = await request.json();
     const {
       message: fallbackMessage = "",
@@ -7964,6 +8071,7 @@ export async function handleUnifiedChatPost(
       commandTransport && rawMessage
         ? parseOpenClawSlashCommandInput(rawMessage, slashCommands ?? [])
         : null;
+    chatTiming.endPhase(requestParsePhase);
     const ip =
       request.headers.get("x-real-ip") ||
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -7981,29 +8089,41 @@ export async function handleUnifiedChatPost(
 
     if (commandTransport) {
       if (!rawMessage) {
-        return Response.json({ error: "No message provided" }, { status: 400 });
+        return finishChatTimingResponse(
+          chatTiming,
+          Response.json({ error: "No message provided" }, { status: 400 }),
+          "missing_message",
+        );
       }
       const rateLimitResponse = enforceRateLimitOnce();
       if (rateLimitResponse) {
-        return rateLimitResponse;
+        return finishChatTimingResponse(
+          chatTiming,
+          rateLimitResponse,
+          "rate_limited",
+        );
       }
       if (
         parsedSlashCommand &&
         parsedSlashCommand.command.kind === "builtin" &&
         parsedSlashCommand.command.command === "help"
       ) {
-        return Response.json(
-          {
-            response: renderOpenClawSlashHelp(slashCommands ?? []),
-            backend: "slash-commands",
-            mode: chatMode,
-          },
-          {
-            headers: {
-              "X-Chat-Backend": "slash-commands",
-              "X-Chat-Mode": chatMode,
+        return finishChatTimingResponse(
+          chatTiming,
+          Response.json(
+            {
+              response: renderOpenClawSlashHelp(slashCommands ?? []),
+              backend: "slash-commands",
+              mode: chatMode,
             },
-          },
+            {
+              headers: {
+                "X-Chat-Backend": "slash-commands",
+                "X-Chat-Mode": chatMode,
+              },
+            },
+          ),
+          "slash_help",
         );
       }
     }
@@ -8042,7 +8162,11 @@ export async function handleUnifiedChatPost(
     const messages = withActiveFileContext(messagesRaw, activeFile);
 
     if (!message) {
-      return Response.json({ error: "No message provided" }, { status: 400 });
+      return finishChatTimingResponse(
+        chatTiming,
+        Response.json({ error: "No message provided" }, { status: 400 }),
+        "missing_message",
+      );
     }
 
     const validatedProjectId =
@@ -8051,13 +8175,20 @@ export async function handleUnifiedChatPost(
       try {
         assertSafeProjectSlug(validatedProjectId);
       } catch {
-        return Response.json(
-          { error: "projectId must be a safe bare slug" },
-          { status: 400 },
+        return finishChatTimingResponse(
+          chatTiming,
+          Response.json(
+            { error: "projectId must be a safe bare slug" },
+            { status: 400 },
+          ),
+          "invalid_project_id",
         );
       }
     }
 
+    const projectMaterializationPhase = chatTiming.startPhase(
+      "project_materialization",
+    );
     const shouldPreMaterializeProjectWorkspace =
       shouldPreMaterializeProjectWorkspaceForTurn({
         projectId: validatedProjectId,
@@ -8068,21 +8199,35 @@ export async function handleUnifiedChatPost(
       });
     if (shouldPreMaterializeProjectWorkspace) {
       await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
+      chatTiming.endPhase(projectMaterializationPhase, {
+        detail: { materialized: true },
+      });
+    } else {
+      chatTiming.endPhase(projectMaterializationPhase, {
+        skipped: true,
+        detail: { materialized: false },
+      });
     }
 
     // Use rawMessage (the original user text) for reference extraction so
     // path-like tokens inside the injected active-file content don't trigger
     // spurious workspace file resolution.
-    const { files: mergedFiles, referenceNotes } =
-      await mergeReferencedWorkspaceFiles(
+    const { files: mergedFiles, referenceNotes } = await chatTiming.measure(
+      "file_reference_merge",
+      () => mergeReferencedWorkspaceFiles(
         rawMessage ?? "",
         files,
         validatedProjectId,
-      );
+      ),
+    );
 
     const rateLimitResponse = enforceRateLimitOnce();
     if (rateLimitResponse) {
-      return rateLimitResponse;
+      return finishChatTimingResponse(
+        chatTiming,
+        rateLimitResponse,
+        "rate_limited",
+      );
     }
 
     if (commandTransport && parsedSlashCommand) {
@@ -8091,30 +8236,46 @@ export async function handleUnifiedChatPost(
         ? `${buildStructuredActiveFileContext(activeFile)}\n\nCurrent user request:\n${commandPrompt}`
         : commandPrompt;
 
-      return handleExplicitOpenClawSlashCommand({
-        parsedSlashCommand,
-        chatMode,
-        validatedProjectId,
-        conversationId,
-        commandMessage,
-        rawMessage,
-        messages,
-        mergedFiles,
-        referenceNotes,
-        streamPhases,
-      });
+      return finishChatTimingResponse(
+        chatTiming,
+        await handleExplicitOpenClawSlashCommand({
+          parsedSlashCommand,
+          chatMode,
+          validatedProjectId,
+          conversationId,
+          commandMessage,
+          rawMessage,
+          messages,
+          mergedFiles,
+          referenceNotes,
+          streamPhases,
+        }),
+        "slash_command",
+      );
     }
 
+    const shortcutDetectorsPhase = chatTiming.startPhase("shortcut_detectors");
     const setupResponse = await maybeHandleSetupConversation(messages);
     if (setupResponse) {
-      return Response.json(
-        { response: setupResponse, backend: "brain-setup", mode: "reasoning" },
-        {
-          headers: {
-            "X-Chat-Backend": "brain-setup",
-            "X-Chat-Mode": "reasoning",
+      chatTiming.endPhase(shortcutDetectorsPhase, {
+        detail: { matched: "brain_setup" },
+      });
+      return finishChatTimingResponse(
+        chatTiming,
+        Response.json(
+          {
+            response: setupResponse,
+            backend: "brain-setup",
+            mode: "reasoning",
           },
-        },
+          {
+            headers: {
+              "X-Chat-Backend": "brain-setup",
+              "X-Chat-Mode": "reasoning",
+            },
+          },
+        ),
+        "shortcut_brain_setup",
       );
     }
 
@@ -8127,7 +8288,14 @@ export async function handleUnifiedChatPost(
         projectId: validatedProjectId,
       });
     if (modelSystemApplicabilityResponse) {
-      return modelSystemApplicabilityResponse;
+      chatTiming.endPhase(shortcutDetectorsPhase, {
+        detail: { matched: "model_system_applicability" },
+      });
+      return finishChatTimingResponse(
+        chatTiming,
+        modelSystemApplicabilityResponse,
+        "shortcut_model_system_applicability",
+      );
     }
 
     const targetPrioritizationResponse =
@@ -8139,7 +8307,14 @@ export async function handleUnifiedChatPost(
         projectId: validatedProjectId,
       });
     if (targetPrioritizationResponse) {
-      return targetPrioritizationResponse;
+      chatTiming.endPhase(shortcutDetectorsPhase, {
+        detail: { matched: "target_prioritization" },
+      });
+      return finishChatTimingResponse(
+        chatTiming,
+        targetPrioritizationResponse,
+        "shortcut_target_prioritization",
+      );
     }
 
     const experimentDesignCritiqueResponse =
@@ -8152,8 +8327,18 @@ export async function handleUnifiedChatPost(
         projectId: validatedProjectId,
       });
     if (experimentDesignCritiqueResponse) {
-      return experimentDesignCritiqueResponse;
+      chatTiming.endPhase(shortcutDetectorsPhase, {
+        detail: { matched: "experiment_design_critique" },
+      });
+      return finishChatTimingResponse(
+        chatTiming,
+        experimentDesignCritiqueResponse,
+        "shortcut_experiment_design_critique",
+      );
     }
+    chatTiming.endPhase(shortcutDetectorsPhase, {
+      detail: { matched: "none" },
+    });
 
     const agentConfig = resolveAgentConfig();
     const strictLocalOnly = isStrictLocalOnlyEnabled();
@@ -8171,10 +8356,13 @@ export async function handleUnifiedChatPost(
     // or to OpenHands — the previous fallbacks surfaced hallucinated tool
     // calls in the UI because the fallback models ran without the tooling
     // the UI expected.
-    const selectedAgent = await getConfiguredAgentRuntimeStatus(
-      agentConfig,
-      strictLocalOnly,
-      { preferFastOpenClawGatewayProbe: true },
+    const selectedAgent = await chatTiming.measure(
+      "chat_readiness",
+      () => getConfiguredAgentRuntimeStatus(
+        agentConfig,
+        strictLocalOnly,
+        { preferFastOpenClawGatewayProbe: true },
+      ),
     );
 
     if (
@@ -8183,22 +8371,30 @@ export async function handleUnifiedChatPost(
     ) {
       const privacyError = await getPrivacyError();
       if (privacyError) {
-        return privacyError;
+        return finishChatTimingResponse(
+          chatTiming,
+          privacyError,
+          "privacy_blocked",
+        );
       }
-      return Response.json(
-        {
-          error: "Chat requires OpenClaw. Start OpenClaw in Settings.",
-          backend: "openclaw",
-          mode: chatMode,
-          strictLocalOnly,
-        },
-        {
-          status: 503,
-          headers: {
-            "X-Chat-Backend": "openclaw",
-            "X-Chat-Mode": chatMode,
+      return finishChatTimingResponse(
+        chatTiming,
+        Response.json(
+          {
+            error: "Chat requires OpenClaw. Start OpenClaw in Settings.",
+            backend: "openclaw",
+            mode: chatMode,
+            strictLocalOnly,
           },
-        },
+          {
+            status: 503,
+            headers: {
+              "X-Chat-Backend": "openclaw",
+              "X-Chat-Mode": chatMode,
+            },
+          },
+        ),
+        "openclaw_unavailable",
       );
     }
 
@@ -8208,7 +8404,11 @@ export async function handleUnifiedChatPost(
       // already enforced type === "openclaw" && status === "connected".
       const privacyError = await getPrivacyError();
       if (privacyError) {
-        return privacyError;
+        return finishChatTimingResponse(
+          chatTiming,
+          privacyError,
+          "privacy_blocked",
+        );
       }
 
       const preparedRuntimeTurn = runtimeRouter.prepareTurn({
@@ -8242,6 +8442,10 @@ export async function handleUnifiedChatPost(
 
       const { sendOpenClawChatMessage: sendToOpenClaw } =
         await import("@/lib/openclaw");
+      const timedSendToOpenClaw = instrumentOpenClawSender(
+        sendToOpenClaw,
+        chatTiming,
+      );
       const openClawConversationId = buildOpenClawSessionId(
         validatedProjectId,
         typeof conversationId === "string" ? conversationId : null,
@@ -8285,19 +8489,23 @@ export async function handleUnifiedChatPost(
             importedFiles: [approvalRecord],
           });
         }
-        return completeRuntimeTurn(await responseWithOpenClawResult({
-          responseText: buildPlanApprovalOnlyResponse({
-            workspacePath: approvedWorkspacePath,
-            approvalRecordPath: approvalRecord?.workspacePath ?? null,
-          }),
-          conversationId: openClawConversationId,
-          mode: chatMode,
-          taskPhases: [],
-          streamPhases: false,
-          generatedFiles: approvalRecord ? [approvalRecord] : [],
-          sourceFiles,
-          prompt: userIntentMessage,
-        }));
+        return finishChatTimingResponse(
+          chatTiming,
+          completeRuntimeTurn(await responseWithOpenClawResult({
+            responseText: buildPlanApprovalOnlyResponse({
+              workspacePath: approvedWorkspacePath,
+              approvalRecordPath: approvalRecord?.workspacePath ?? null,
+            }),
+            conversationId: openClawConversationId,
+            mode: chatMode,
+            taskPhases: [],
+            streamPhases: false,
+            generatedFiles: approvalRecord ? [approvalRecord] : [],
+            sourceFiles,
+            prompt: userIntentMessage,
+          })),
+          "plan_approval_only",
+        );
       }
       const taskPhases =
         streamPhases === true
@@ -8320,16 +8528,20 @@ export async function handleUnifiedChatPost(
             ? existsSync(path.join(projectRoot, paths.plan))
             : false;
         if (!planExists) {
-          return completeRuntimeTurn(await responseWithOpenClawResult({
-            responseText: buildMissingRevisionPlanResponse({ paths }),
-            conversationId: openClawConversationId,
-            mode: chatMode,
-            taskPhases: [],
-            streamPhases: false,
-            generatedFiles: [],
-            sourceFiles,
-            prompt: userIntentMessage,
-          }));
+          return finishChatTimingResponse(
+            chatTiming,
+            completeRuntimeTurn(await responseWithOpenClawResult({
+              responseText: buildMissingRevisionPlanResponse({ paths }),
+              conversationId: openClawConversationId,
+              mode: chatMode,
+              taskPhases: [],
+              streamPhases: false,
+              generatedFiles: [],
+              sourceFiles,
+              prompt: userIntentMessage,
+            })),
+            "missing_revision_plan",
+          );
         }
 
         const requestConfersApproval =
@@ -8361,56 +8573,106 @@ export async function handleUnifiedChatPost(
             : await getPersistentRevisionApprovalState({ projectRoot, paths }),
         );
         if (!approvalState.hasApproval || approvalState.needsFreshApproval) {
-          return completeRuntimeTurn(await responseWithOpenClawResult({
-            responseText: buildRevisionNeedsApprovalResponse({
-              paths,
-              hasApproval: approvalState.hasApproval,
-            }),
-            conversationId: openClawConversationId,
-            mode: chatMode,
-            taskPhases: [],
-            streamPhases: false,
-            generatedFiles: [],
-            sourceFiles,
-            prompt: userIntentMessage,
-          }));
+          return finishChatTimingResponse(
+            chatTiming,
+            completeRuntimeTurn(await responseWithOpenClawResult({
+              responseText: buildRevisionNeedsApprovalResponse({
+                paths,
+                hasApproval: approvalState.hasApproval,
+              }),
+              conversationId: openClawConversationId,
+              mode: chatMode,
+              taskPhases: [],
+              streamPhases: false,
+              generatedFiles: [],
+              sourceFiles,
+              prompt: userIntentMessage,
+            })),
+            "revision_needs_approval",
+          );
         }
       }
       const useCompactArtifactContext = shouldUseCompactOpenClawArtifactContext(
         userIntentMessage,
         mergedFiles,
       );
-      const augmentedOpenClawMessage = useCompactArtifactContext
-        ? userIntentMessage
-        : await prependScienceSwarmProjectPrompt({
-            message,
-            projectId: validatedProjectId,
-            backend: "openclaw",
-          });
-      const contextualOpenClawMessage = useCompactArtifactContext
-        ? augmentedOpenClawMessage
-        : withOpenClawRecentChatContext(
-            augmentedOpenClawMessage,
-            messages,
-            rawMessage ?? "",
-          );
       const forceToolExecution =
         chatMode === "openclaw-tools" ||
         shouldForceOpenClawToolExecution(userIntentMessage);
+      const promptContextPhase = chatTiming.startPhase(
+        "prompt_context_construction",
+      );
+      const projectPrompt = useCompactArtifactContext
+        ? ""
+        : await buildScienceSwarmPromptContextText({
+            projectId: validatedProjectId,
+            backend: "openclaw",
+          });
+      const augmentedOpenClawMessage = projectPrompt
+        ? `${projectPrompt}\n\nCurrent user request:\n${message}`
+        : useCompactArtifactContext
+          ? userIntentMessage
+          : message;
+      const recentChatContext = useCompactArtifactContext
+        ? null
+        : buildOpenClawRecentChatContext(messages, rawMessage ?? "");
+      const contextualOpenClawMessage = recentChatContext
+        ? `${recentChatContext}\n\nCurrent user request:\n${augmentedOpenClawMessage}`
+        : augmentedOpenClawMessage;
+      const workspaceFileContext = useCompactArtifactContext
+        ? null
+        : await buildWorkspaceFileContext(
+            mergedFiles,
+            validatedProjectId,
+            referenceNotes,
+          );
+      const projectRootForPrompt = validatedProjectId
+        ? getScienceSwarmProjectRoot(validatedProjectId)
+        : null;
+      const guardrailsForTiming = buildOpenClawWebTaskGuardrails(
+        projectRootForPrompt,
+        mergedFiles,
+        userIntentMessage,
+      );
+      const activeFileContextForTiming = activeFile
+        ? buildStructuredActiveFileContext(activeFile)
+        : "";
+      chatTiming.setPromptCharCounts(
+        buildPromptSizeBuckets({
+          user_text: userIntentMessage,
+          guardrails: guardrailsForTiming,
+          project_prompt: projectPrompt,
+          recent_chat_context: recentChatContext ?? "",
+          active_file: activeFileContextForTiming,
+          workspace_files: workspaceFileContext?.contextMessage ?? "",
+        }),
+      );
+      const preparedOpenClawMessage = buildOpenClawMessage(
+        contextualOpenClawMessage,
+        mergedFiles,
+        validatedProjectId,
+        workspaceFileContext,
+        userIntentMessage,
+        { forceToolExecution },
+      );
+      chatTiming.endPhase(promptContextPhase);
       if (streamPhases === true) {
         attemptedOpenClawTurn = true;
         return streamOpenClawResponse({
           message: contextualOpenClawMessage,
+          preparedMessage: preparedOpenClawMessage,
           userMessage: userIntentMessage,
           files: mergedFiles,
           projectId: validatedProjectId,
           referenceNotes,
+          workspaceFileContext,
           conversationId: openClawConversationId,
           workingDirectory: openClawWorkingDirectory,
           startedAtMs: openClawTurnStartedAtMs,
           taskPhases,
           forceToolExecution,
-          sendToOpenClaw,
+          sendToOpenClaw: timedSendToOpenClaw,
+          timing: chatTiming,
           onComplete: () => {
             markRuntimeTurn(runtimeRouter, runtimeTurnSessionId, "completed");
           },
@@ -8424,19 +8686,12 @@ export async function handleUnifiedChatPost(
           },
         });
       }
-      const workspaceFileContext = useCompactArtifactContext
-        ? null
-        : await buildWorkspaceFileContext(
-            mergedFiles,
-            validatedProjectId,
-            referenceNotes,
-          );
       const sourceFiles = extractSourceWorkspacePaths(mergedFiles);
       if (isRevisionRunRequest(userIntentMessage)) {
         attemptedOpenClawTurn = true;
       }
       const fastRevisionOutputs = await runOpenClawRevisionArtifactOnly({
-        sendToOpenClaw,
+        sendToOpenClaw: timedSendToOpenClaw,
         userMessage: userIntentMessage,
         files: mergedFiles,
         projectId: validatedProjectId,
@@ -8444,43 +8699,46 @@ export async function handleUnifiedChatPost(
         sessionId: openClawConversationId,
       });
       if (fastRevisionOutputs) {
-        return completeRuntimeTurn(Response.json(
-          {
-            response: sanitizeOpenClawUserVisibleResponse(
-              fastRevisionOutputs.response,
-            ),
-            conversationId: openClawConversationId,
-            backend: "openclaw",
-            mode: chatMode,
-            generatedFiles: fastRevisionOutputs.generatedFiles.map(
-              (file) => file.workspacePath,
-            ),
-            generatedArtifacts: buildArtifactProvenanceEntries(
-              fastRevisionOutputs.generatedFiles,
-              userIntentMessage,
-              sourceFiles,
-              "OpenClaw CLI",
-            ),
-          },
-          {
-            headers: {
-              "X-Chat-Backend": "openclaw",
-              "X-Chat-Mode": chatMode,
+        const fastRevisionResponseText = sanitizeOpenClawUserVisibleResponse(
+          fastRevisionOutputs.response,
+        );
+        chatTiming.markFinalAssistantText(fastRevisionResponseText.length);
+        chatTiming.recordSkippedPhase("artifact_import_repair", {
+          fast_revision_outputs: true,
+          generated_files: fastRevisionOutputs.generatedFiles.length,
+        });
+        return finishChatTimingResponse(
+          chatTiming,
+          completeRuntimeTurn(Response.json(
+            {
+              response: fastRevisionResponseText,
+              conversationId: openClawConversationId,
+              backend: "openclaw",
+              mode: chatMode,
+              generatedFiles: fastRevisionOutputs.generatedFiles.map(
+                (file) => file.workspacePath,
+              ),
+              generatedArtifacts: buildArtifactProvenanceEntries(
+                fastRevisionOutputs.generatedFiles,
+                userIntentMessage,
+                sourceFiles,
+                "OpenClaw CLI",
+              ),
             },
-          },
-        ));
+            {
+              headers: {
+                "X-Chat-Backend": "openclaw",
+                "X-Chat-Mode": chatMode,
+              },
+            },
+          )),
+          "completed",
+        );
       }
       attemptedOpenClawTurn = true;
       const response = await sendOpenClawMessageWithArtifactRetry({
-        sendToOpenClaw,
-        message: buildOpenClawMessage(
-          contextualOpenClawMessage,
-          mergedFiles,
-          validatedProjectId,
-          workspaceFileContext,
-          userIntentMessage,
-          { forceToolExecution },
-        ),
+        sendToOpenClaw: timedSendToOpenClaw,
+        message: preparedOpenClawMessage,
         options: openClawAgentOptions(
           openClawConversationId,
           openClawWorkingDirectory,
@@ -8491,47 +8749,57 @@ export async function handleUnifiedChatPost(
         projectId: validatedProjectId,
       });
       if (!response) {
-        return failRuntimeTurn(Response.json(
-          {
-            error: "OpenClaw returned an empty response. Check the agent logs.",
-            backend: "openclaw",
-            mode: chatMode,
-            strictLocalOnly,
-          },
-          {
-            status: 502,
-            headers: {
-              "X-Chat-Backend": "openclaw",
-              "X-Chat-Mode": chatMode,
-            },
-          },
-        ));
-      }
-      if (isOpenClawFailureOutput(response)) {
-        return failRuntimeTurn(
-          Response.json(
+        return finishChatTimingResponse(
+          chatTiming,
+          failRuntimeTurn(Response.json(
             {
-              response:
-                buildOpenClawVisibleFailureResponse(response) ??
-                "ScienceSwarm could not complete this request. Your workspace files are preserved. Check Settings, then retry.",
-              conversationId: openClawConversationId,
+              error: "OpenClaw returned an empty response. Check the agent logs.",
               backend: "openclaw",
               mode: chatMode,
-              generatedFiles: [],
-              sourceFiles,
               strictLocalOnly,
             },
             {
+              status: 502,
               headers: {
                 "X-Chat-Backend": "openclaw",
                 "X-Chat-Mode": chatMode,
               },
             },
+          )),
+          "openclaw_empty_response",
+        );
+      }
+      if (isOpenClawFailureOutput(response)) {
+        return finishChatTimingResponse(
+          chatTiming,
+          failRuntimeTurn(
+            Response.json(
+              {
+                response:
+                  buildOpenClawVisibleFailureResponse(response) ??
+                  "ScienceSwarm could not complete this request. Your workspace files are preserved. Check Settings, then retry.",
+                conversationId: openClawConversationId,
+                backend: "openclaw",
+                mode: chatMode,
+                generatedFiles: [],
+                sourceFiles,
+                strictLocalOnly,
+              },
+              {
+                headers: {
+                  "X-Chat-Backend": "openclaw",
+                  "X-Chat-Mode": chatMode,
+                },
+              },
+            ),
+            RUNTIME_HANDLER_ERROR_CODE,
           ),
-          RUNTIME_HANDLER_ERROR_CODE,
+          "openclaw_failure_output",
         );
       }
 
+      const artifactImportRepairPhase =
+        chatTiming.startPhase("artifact_import_repair");
       let importedOutputs = await finalizeOpenClawResponseImports({
         response,
         projectId: validatedProjectId,
@@ -8542,7 +8810,7 @@ export async function handleUnifiedChatPost(
         sessionId: openClawConversationId,
       });
       importedOutputs = await maybeRetryOpenClawRevisionArtifactCompleteness({
-        sendToOpenClaw,
+        sendToOpenClaw: timedSendToOpenClaw,
         response: importedOutputs.response,
         generatedFiles: importedOutputs.generatedFiles,
         userMessage: userIntentMessage,
@@ -8553,7 +8821,7 @@ export async function handleUnifiedChatPost(
       });
       if (streamPhases === true) {
         const auditArtifactOutputs = await maybeRepairOpenClawAuditArtifacts({
-          sendToOpenClaw,
+          sendToOpenClaw: timedSendToOpenClaw,
           response: importedOutputs.response,
           generatedFiles: importedOutputs.generatedFiles,
           userMessage: userIntentMessage,
@@ -8570,7 +8838,7 @@ export async function handleUnifiedChatPost(
       }
       const requestedArtifactOutputs =
         await maybeRepairMissingRequestedArtifacts({
-          sendToOpenClaw,
+          sendToOpenClaw: timedSendToOpenClaw,
           response: importedOutputs.response,
           generatedFiles: importedOutputs.generatedFiles,
           userMessage: userIntentMessage,
@@ -8584,32 +8852,46 @@ export async function handleUnifiedChatPost(
         response: requestedArtifactOutputs.response,
         generatedFiles: requestedArtifactOutputs.generatedFiles,
       };
+      chatTiming.endPhase(artifactImportRepairPhase, {
+        detail: {
+          generated_files: importedOutputs.generatedFiles.length,
+          missing_paths: requestedArtifactOutputs.missingPaths.length,
+        },
+      });
 
-      return completeRuntimeTurn(Response.json(
-        {
-          response: sanitizeOpenClawUserVisibleResponse(importedOutputs.response),
-          thinking:
-            (await readOpenClawThinkingTrace(openClawConversationId)) ?? undefined,
-          conversationId: openClawConversationId,
-          backend: "openclaw",
-          mode: chatMode,
-          generatedFiles: importedOutputs.generatedFiles.map(
-            (file) => file.workspacePath,
-          ),
-          generatedArtifacts: buildArtifactProvenanceEntries(
-            importedOutputs.generatedFiles,
-            userIntentMessage,
-            sourceFiles,
-            "OpenClaw CLI",
-          ),
-        },
-        {
-          headers: {
-            "X-Chat-Backend": "openclaw",
-            "X-Chat-Mode": chatMode,
+      const sanitizedImportedResponse = sanitizeOpenClawUserVisibleResponse(
+        importedOutputs.response,
+      );
+      chatTiming.markFinalAssistantText(sanitizedImportedResponse.length);
+      return finishChatTimingResponse(
+        chatTiming,
+        completeRuntimeTurn(Response.json(
+          {
+            response: sanitizedImportedResponse,
+            thinking:
+              (await readOpenClawThinkingTrace(openClawConversationId)) ?? undefined,
+            conversationId: openClawConversationId,
+            backend: "openclaw",
+            mode: chatMode,
+            generatedFiles: importedOutputs.generatedFiles.map(
+              (file) => file.workspacePath,
+            ),
+            generatedArtifacts: buildArtifactProvenanceEntries(
+              importedOutputs.generatedFiles,
+              userIntentMessage,
+              sourceFiles,
+              "OpenClaw CLI",
+            ),
           },
-        },
-      ));
+          {
+            headers: {
+              "X-Chat-Backend": "openclaw",
+              "X-Chat-Mode": chatMode,
+            },
+          },
+        )),
+        "completed",
+      );
     }
   } catch (err) {
     markRuntimeTurn(
@@ -8621,19 +8903,23 @@ export async function handleUnifiedChatPost(
     if (attemptedOpenClawTurn) {
       const visibleFailure = buildOpenClawVisibleFailureResponse(err);
       if (visibleFailure) {
-        return Response.json(
-          {
-            error: visibleFailure,
-            backend: "openclaw",
-            mode: responseChatMode,
-          },
-          {
-            status: 502,
-            headers: {
-              "X-Chat-Backend": "openclaw",
-              "X-Chat-Mode": responseChatMode,
+        return finishChatTimingResponse(
+          chatTiming,
+          Response.json(
+            {
+              error: visibleFailure,
+              backend: "openclaw",
+              mode: responseChatMode,
             },
-          },
+            {
+              status: 502,
+              headers: {
+                "X-Chat-Backend": "openclaw",
+                "X-Chat-Mode": responseChatMode,
+              },
+            },
+          ),
+          "openclaw_exception",
         );
       }
     }
@@ -8641,11 +8927,15 @@ export async function handleUnifiedChatPost(
       "Chat POST handler failed:",
       err instanceof Error ? `${err.name}: ${err.message}` : String(err),
     );
-    return Response.json(
-      {
-        error: "Failed to process chat request. Please try again.",
-      },
-      { status: 500 },
+    return finishChatTimingResponse(
+      chatTiming,
+      Response.json(
+        {
+          error: "Failed to process chat request. Please try again.",
+        },
+        { status: 500 },
+      ),
+      "handler_exception",
     );
   }
 }
