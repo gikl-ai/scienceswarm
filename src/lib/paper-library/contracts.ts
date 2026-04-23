@@ -164,6 +164,10 @@ export const PaperLibraryScanSchema = z.object({
   status: PaperLibraryScanStatusSchema,
   createdAt: IsoDateStringSchema,
   updatedAt: IsoDateStringSchema,
+  heartbeatAt: IsoDateStringSchema.optional(),
+  claimId: z.string().optional(),
+  idempotencyKey: z.string().min(1).optional(),
+  cancelRequestedAt: IsoDateStringSchema.optional(),
   counters: z.object({
     detectedFiles: z.number().int().nonnegative().default(0),
     identified: z.number().int().nonnegative().default(0),
@@ -177,6 +181,23 @@ export const PaperLibraryScanSchema = z.object({
   applyPlanId: z.string().optional(),
 });
 export type PaperLibraryScan = z.infer<typeof PaperLibraryScanSchema>;
+
+export const PaperLibraryScanStartRequestSchema = z.object({
+  project: ProjectSlugSchema,
+  rootPath: z.string().trim().min(1),
+  mode: z.literal("dry-run").default("dry-run"),
+  templateId: z.string().min(1).optional(),
+  idempotencyKey: z.string().min(1).optional(),
+});
+export type PaperLibraryScanStartRequest = z.infer<typeof PaperLibraryScanStartRequestSchema>;
+
+export const PaperLibraryScanStartResponseSchema = z.object({
+  ok: z.literal(true),
+  scanId: z.string().min(1),
+  status: PaperLibraryScanStatusSchema,
+  counters: PaperLibraryScanSchema.shape.counters,
+});
+export type PaperLibraryScanStartResponse = z.infer<typeof PaperLibraryScanStartResponseSchema>;
 
 export const RenameTemplateSchema = z.object({
   id: z.string().min(1),
@@ -250,3 +271,42 @@ export type RepairableState = z.infer<typeof RepairableStateSchema>;
 
 export type PaperLibraryResult<T> = { ok: true; data: T } | PaperLibraryErrorEnvelope;
 
+export const SourceRunStatusSchema = z.enum([
+  "success",
+  "negative",
+  "metadata_unavailable",
+  "rate_limited",
+  "auth_unavailable",
+  "paused",
+]);
+export type SourceRunStatus = z.infer<typeof SourceRunStatusSchema>;
+
+export const EnrichmentCacheEntrySchema = z.object({
+  key: z.string().min(1),
+  source: PaperMetadataSourceSchema,
+  status: SourceRunStatusSchema,
+  value: z.unknown().optional(),
+  errorCode: PaperLibraryErrorCodeSchema.optional(),
+  attempts: z.number().int().nonnegative().default(0),
+  fetchedAt: IsoDateStringSchema,
+  expiresAt: IsoDateStringSchema.optional(),
+  retryAfter: IsoDateStringSchema.optional(),
+});
+export type EnrichmentCacheEntry = z.infer<typeof EnrichmentCacheEntrySchema>;
+
+export const EnrichmentSourceHealthSchema = z.object({
+  source: PaperMetadataSourceSchema,
+  status: z.enum(["healthy", "degraded", "paused"]),
+  consecutiveFailures: z.number().int().nonnegative().default(0),
+  retryAfter: IsoDateStringSchema.optional(),
+  remainingBudget: z.number().nonnegative().optional(),
+  updatedAt: IsoDateStringSchema,
+});
+export type EnrichmentSourceHealth = z.infer<typeof EnrichmentSourceHealthSchema>;
+
+export const EnrichmentCacheStoreSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  entries: z.record(z.string(), EnrichmentCacheEntrySchema).default({}),
+  sourceHealth: z.record(z.string(), EnrichmentSourceHealthSchema).default({}),
+});
+export type EnrichmentCacheStore = z.infer<typeof EnrichmentCacheStoreSchema>;
