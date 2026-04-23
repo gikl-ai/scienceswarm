@@ -129,6 +129,7 @@ describe("paper-library jobs", () => {
       createdAt: "2000-01-01T00:00:00.000Z",
       updatedAt: "2000-01-01T00:00:00.000Z",
       heartbeatAt: "2000-01-01T00:00:00.000Z",
+      claimId: "worker-1",
       counters: {
         detectedFiles: 0,
         identified: 0,
@@ -182,6 +183,7 @@ describe("paper-library jobs", () => {
 
     const canceled = await cancelPaperLibraryScan("project-alpha", "stale-cancel-scan", path.join(dataRoot, "brain"));
     expect(canceled?.status).toBe("identifying");
+    expect(canceled?.claimId).toBeUndefined();
     expect(typeof canceled?.cancelRequestedAt).toBe("string");
     expect(canceled?.warnings).toEqual([]);
 

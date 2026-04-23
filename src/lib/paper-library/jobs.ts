@@ -126,6 +126,7 @@ export async function cancelPaperLibraryScan(project: string, scanId: string, br
   const stateRoot = getProjectStateRootForBrainRoot(project, brainRoot);
   return writeScan({
       ...scan,
+      claimId: undefined,
       cancelRequestedAt: nowIso(),
       updatedAt: nowIso(),
       warnings: scanWarnings(scan),
