@@ -783,7 +783,12 @@ export async function sendChatViaGateway(
           : typeof payload?.run_id === "string"
             ? payload.run_id
             : undefined;
-      if (eventRunId && eventRunId !== runId) return;
+      const isRunScopedEvent = method === "chat" || method === "agent";
+      if (isRunScopedEvent) {
+        if (!eventRunId || eventRunId !== runId) return;
+      } else if (eventRunId && eventRunId !== runId) {
+        return;
+      }
 
       const event: GatewayEvent = {
         type: frame.type,

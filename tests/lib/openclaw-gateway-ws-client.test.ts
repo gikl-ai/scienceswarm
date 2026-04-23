@@ -298,6 +298,78 @@ describe("gateway-ws-client", () => {
     );
   });
 
+  it("ignores run-scoped chat.send events without the active run id", async () => {
+    const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+    const onEvent = vi.fn();
+
+    const turn = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+      onEvent,
+    });
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
+    });
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          state: "final",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "wrong reply" }],
+          },
+        },
+      }),
+    );
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          sessionKey: "session-alpha",
+          stream: "assistant",
+          data: { text: "wrong progress" },
+        },
+      }),
+    );
+
+    expect(onEvent).not.toHaveBeenCalled();
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "run-alpha",
+          state: "final",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "visible reply" }],
+          },
+        },
+      }),
+    );
+
+    await expect(turn).resolves.toMatchObject({
+      text: "visible reply",
+      events: [expect.objectContaining({ method: "chat" })],
+    });
+    expect(onEvent).toHaveBeenCalledTimes(1);
+  });
+
   it("wraps chat.send failures after ACK as post-ACK errors", async () => {
     const {
       GatewayPostAckError,
