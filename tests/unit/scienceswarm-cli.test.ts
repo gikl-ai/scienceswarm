@@ -177,7 +177,6 @@ exit 1
       "-fsS --max-time 2 http://127.0.0.1:43997/api/health",
     ]);
   });
-
   it("prefers http probing by default when https mode is not enabled", () => {
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-http-fallback-"));
     const binRoot = path.join(tmpRoot, "bin");
