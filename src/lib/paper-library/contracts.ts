@@ -386,6 +386,12 @@ export const UndoStartRequestSchema = z.object({
 });
 export type UndoStartRequest = z.infer<typeof UndoStartRequestSchema>;
 
+export const RepairManifestRequestSchema = z.object({
+  project: ProjectSlugSchema,
+  manifestId: z.string().min(1),
+});
+export type RepairManifestRequest = z.infer<typeof RepairManifestRequestSchema>;
+
 export const CursorWindowSchema = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(250).default(50),

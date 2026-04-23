@@ -631,6 +631,82 @@ export async function applyApprovedPlan(input: {
   return { manifest, operations: manifestOperations };
 }
 
+export async function repairAppliedManifest(input: {
+  project: string;
+  manifestId: string;
+  brainRoot: string;
+  persistLocations?: (input: PersistAppliedPaperLocationsInput) => Promise<void>;
+}): Promise<{ manifest: ApplyManifest; operations: ApplyManifestOperation[]; repaired: boolean } | null> {
+  const manifest = await readApplyManifest(input.project, input.manifestId, input.brainRoot);
+  if (!manifest) return null;
+  if (manifest.status !== "applied_with_repair_required") {
+    throw new Error("Apply manifest does not require repair.");
+  }
+  if (!input.persistLocations) {
+    throw new Error("Repair handler is unavailable.");
+  }
+
+  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
+  const plan = await readApplyPlan(input.project, manifest.applyPlanId, input.brainRoot);
+  if (!plan) {
+    throw new Error("Apply plan not found for this manifest.");
+  }
+
+  const operations = await readApplyOperations(input.project, manifest.applyPlanId, input.brainRoot);
+  const manifestOperations = await readManifestOperations(input.project, input.manifestId, input.brainRoot);
+  const appliedOperationCount = manifestOperations.filter((operation) => (
+    operation.status === "applied" || operation.status === "verified"
+  )).length;
+  if (appliedOperationCount === 0) {
+    throw new Error("Apply manifest has no verified operations to repair.");
+  }
+
+  const review = await readAllPaperReviewItems(input.project, plan.scanId, input.brainRoot);
+
+  try {
+    await input.persistLocations({
+      project: input.project,
+      brainRoot: input.brainRoot,
+      manifestId: manifest.id,
+      plan,
+      operations,
+      reviewItems: review?.items ?? [],
+      manifestOperations,
+    });
+
+    const updatedManifest = await writeManifest({
+      ...manifest,
+      status: "applied",
+      warnings: [],
+      updatedAt: nowIso(),
+    }, stateRoot);
+    await writeJsonFile(getPaperLibraryApplyPlanPath(input.project, manifest.applyPlanId, stateRoot), ApplyPlanSchema.parse({
+      ...plan,
+      status: "applied",
+      manifestId: manifest.id,
+      updatedAt: nowIso(),
+    }));
+
+    return { manifest: updatedManifest, operations: manifestOperations, repaired: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "gbrain update failed after filesystem apply.";
+    const updatedManifest = await writeManifest({
+      ...manifest,
+      status: "applied_with_repair_required",
+      warnings: Array.from(new Set([...manifest.warnings, message])),
+      updatedAt: nowIso(),
+    }, stateRoot);
+    await writeJsonFile(getPaperLibraryApplyPlanPath(input.project, manifest.applyPlanId, stateRoot), ApplyPlanSchema.parse({
+      ...plan,
+      status: "applied_with_repair_required",
+      manifestId: manifest.id,
+      updatedAt: nowIso(),
+    }));
+
+    return { manifest: updatedManifest, operations: manifestOperations, repaired: false };
+  }
+}
+
 export async function undoApplyManifest(input: {
   project: string;
   manifestId: string;

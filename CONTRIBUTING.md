@@ -39,6 +39,10 @@ the merge candidate.
   code, docs, tests, PR bodies, or review replies. Use hypothetical examples
   such as `project-alpha`.
 - Keep the public README and public repo surface honest when behavior changes.
+- If you change Paper Library behavior, update the relevant public docs
+  (`README.md`, `AGENTS.md`, `src/AGENTS.md`, or other user-facing docs) so
+  the scan, review, apply, history, graph, cluster, and gap-finder workflow
+  stays accurate.
 - Treat `openhands/` as an upstream integration boundary. Prefer changes in
   `src/lib/openhands.ts` and `src/app/api/agent/*` before touching the
   submodule.
@@ -57,6 +61,9 @@ the merge candidate.
 - Keep PRs focused.
 - Include a non-empty PR body with summary, verification, and any env or
   rollout impact.
+- Include the Paper Library verification you ran when a PR changes that
+  subsystem. At minimum, cover the affected route, command-center, or e2e
+  surface rather than relying on unrelated repo-wide checks alone.
 - Do not leave `ci-defer` on a PR that is ready to merge.
 - Do not force-push unless a maintainer explicitly asks for it.
 
