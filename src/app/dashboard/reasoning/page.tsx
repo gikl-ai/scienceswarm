@@ -2147,6 +2147,7 @@ function StructuredCritiquePageContent() {
       const projects = await listProjectOptions();
       setProjectOptions(projects);
       setProjectListStatus("loaded");
+      setSavePanelError(null);
     } catch (err) {
       setProjectListStatus("error");
       setSavePanelError(err instanceof Error ? err.message : "Failed to load projects");
