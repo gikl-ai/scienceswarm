@@ -15,6 +15,7 @@ const {
   execFileSyncMock,
   sendMessageViaGatewayMock,
   sendChatViaGatewayMock,
+  isGatewayConnectedMock,
   MockGatewayPostAckError,
   mockIsGatewayPostAckError,
 } = vi.hoisted(() => {
@@ -35,6 +36,7 @@ const {
     execFileSyncMock: vi.fn(),
     sendMessageViaGatewayMock: vi.fn(),
     sendChatViaGatewayMock: vi.fn(),
+    isGatewayConnectedMock: vi.fn(() => false),
     MockGatewayPostAckError: _MockGatewayPostAckError,
     mockIsGatewayPostAckError: (err: unknown): err is InstanceType<typeof _MockGatewayPostAckError> =>
       err instanceof _MockGatewayPostAckError,
@@ -53,6 +55,7 @@ vi.mock("child_process", () => ({
 vi.mock("@/lib/openclaw/gateway-ws-client", () => ({
   sendMessageViaGateway: sendMessageViaGatewayMock,
   sendChatViaGateway: sendChatViaGatewayMock,
+  isGatewayConnected: isGatewayConnectedMock,
   GatewayPostAckError: MockGatewayPostAckError,
   isGatewayPostAckError: mockIsGatewayPostAckError,
 }));
@@ -95,6 +98,8 @@ describe("OpenClaw healthCheck", () => {
     execFileSyncMock.mockReset();
     sendMessageViaGatewayMock.mockReset();
     sendChatViaGatewayMock.mockReset();
+    isGatewayConnectedMock.mockReset();
+    isGatewayConnectedMock.mockReturnValue(false);
     // Prevent the HTTP fast path from hitting a real local gateway;
     // these tests exercise the CLI-based probes exclusively.
     globalThis.fetch = () => Promise.reject(new Error("mocked: no gateway"));
@@ -307,6 +312,8 @@ describe("OpenClaw gatewayHealthCheck", () => {
   beforeEach(() => {
     execFileMock.mockReset();
     execFileSyncMock.mockReset();
+    isGatewayConnectedMock.mockReset();
+    isGatewayConnectedMock.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -325,6 +332,31 @@ describe("OpenClaw gatewayHealthCheck", () => {
       gateway: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
     });
     expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("reports connected from an authenticated gateway WebSocket without probing HTTP", async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock;
+    isGatewayConnectedMock.mockReturnValue(true);
+
+    await expect(gatewayHealthCheck()).resolves.toEqual({
+      status: "connected",
+      gateway: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("does not hide runtime failures from the authenticated gateway check", async () => {
+    globalThis.fetch = vi.fn(async () => new Response("ok", { status: 200 }));
+    isGatewayConnectedMock.mockImplementation(() => {
+      throw new Error("gateway auth state unavailable");
+    });
+
+    await expect(gatewayHealthCheck()).rejects.toThrow(
+      "gateway auth state unavailable",
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it("reports disconnected when the gateway health endpoint is unavailable", async () => {

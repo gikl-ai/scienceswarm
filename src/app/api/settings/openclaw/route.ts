@@ -11,6 +11,7 @@ import { isLocalRequest } from "@/lib/local-guard";
 import { OLLAMA_RECOMMENDED_MODEL } from "@/lib/ollama-constants";
 import { getOpenClawPort } from "@/lib/config/ports";
 import { resolveOpenAIModel } from "@/lib/openai-models";
+import { activateOpenClawAgentBackend } from "@/lib/openclaw/agent-backend";
 import {
   configureOpenClawModel,
   normalizeOpenClawModel,
@@ -157,6 +158,25 @@ async function waitForOpenClawRunning(timeoutMs = 10_000): Promise<boolean> {
   return false;
 }
 
+async function activateOpenClawBackendOrResponse(
+  detail: { alreadyRunning?: boolean } = {},
+): Promise<Response | null> {
+  try {
+    await activateOpenClawAgentBackend();
+    return null;
+  } catch {
+    return Response.json(
+      {
+        error:
+          "OpenClaw is running, but ScienceSwarm could not save AGENT_BACKEND=openclaw. Check .env file permissions, then retry Start.",
+        running: true,
+        alreadyRunning: detail.alreadyRunning === true ? true : undefined,
+      },
+      { status: 500 },
+    );
+  }
+}
+
 export async function GET(): Promise<Response> {
   if (!(await isLocalRequest())) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -270,6 +290,12 @@ export async function POST(request: Request): Promise<Response> {
     case "start": {
       const alreadyRunning = await isOpenClawRunning();
       if (alreadyRunning) {
+        const activationError = await activateOpenClawBackendOrResponse({
+          alreadyRunning: true,
+        });
+        if (activationError) {
+          return activationError;
+        }
         return Response.json({ ok: true, running: true, alreadyRunning: true });
       }
 
@@ -335,6 +361,10 @@ export async function POST(request: Request): Promise<Response> {
               },
               { status: 503 },
             );
+          }
+          const activationError = await activateOpenClawBackendOrResponse();
+          if (activationError) {
+            return activationError;
           }
           return Response.json({ ok: true, running: true });
         }
@@ -405,6 +435,10 @@ export async function POST(request: Request): Promise<Response> {
             },
             { status: 503 },
           );
+        }
+        const activationError = await activateOpenClawBackendOrResponse();
+        if (activationError) {
+          return activationError;
         }
         return Response.json({ ok: true, running: true });
       } catch {
