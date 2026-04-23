@@ -817,6 +817,20 @@ async function selectRuntimePolicy(
   await expect(page.getByTestId("runtime-project-policy")).toHaveValue(value);
 }
 
+async function openProjectRuntimeSettings(page: Page, baseUrl: string): Promise<void> {
+  await page.goto(`${baseUrl}/dashboard/settings?project=${PROJECT_ID}`);
+  await expect(page.getByTestId("project-runtime-project-select")).toHaveValue(PROJECT_ID);
+  await expect(page.getByTestId("runtime-picker")).toBeVisible();
+}
+
+async function clearBrowserStorage(page: Page, baseUrl: string): Promise<void> {
+  await page.goto(baseUrl);
+  await page.evaluate(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
+}
+
 test.describe.serial("runtime hosts rollout smoke", () => {
   let readyServer: ReadyRuntimeServer;
 
@@ -828,21 +842,14 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await stopReadyRuntimeServer(readyServer);
   });
 
-  test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      window.localStorage.clear();
-      window.sessionStorage.clear();
-    });
-  });
-
   test("keeps OpenClaw as the local-only default and blocks hosted hosts", async ({
     page,
   }) => {
     const state = await installRuntimeRoutes(page);
+    await clearBrowserStorage(page, readyServer.baseUrl);
 
-    await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
+    await openProjectRuntimeSettings(page, readyServer.baseUrl);
 
-    await expect(page.getByTestId("runtime-picker")).toBeVisible();
     await expect(page.getByTestId("runtime-project-policy")).toHaveValue("local-only");
     await expect(page.getByTestId("runtime-host-select")).toHaveValue("openclaw");
     const codexOption = page.locator('[data-testid="runtime-host-select"] option[value="codex"]');
@@ -850,6 +857,11 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await expect(codexOption).toContainText("Requires cloud-ok");
     await expect(page.getByTestId("runtime-selected-summary")).toContainText("OpenClaw");
     await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready for preview");
+
+    await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
+
+    await expect(page.locator('[data-testid="runtime-picker"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="runtime-task-board"]')).toHaveCount(0);
 
     await page.getByTestId("chat-input").fill("Use the local OpenClaw path.");
     await page.getByRole("button", { name: "Send" }).click();
@@ -863,17 +875,17 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     page,
   }) => {
     await installRuntimeRoutes(page);
+    await clearBrowserStorage(page, readyServer.baseUrl);
 
-    await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
-    await expect(page.getByTestId("runtime-picker")).toBeVisible();
-    await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready for preview");
-
+    await openProjectRuntimeSettings(page, readyServer.baseUrl);
     await selectRuntimePolicy(page, "cloud-ok");
     await expect(page.locator('[data-testid="runtime-host-select"] option[value="codex"]'))
       .not.toHaveAttribute("disabled", "");
     await page.getByTestId("runtime-host-select").selectOption("codex");
     await expect(page.getByTestId("runtime-host-select")).toHaveValue("codex");
     await page.getByTestId("runtime-mode-task").click();
+
+    await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
     await page.getByTestId("chat-input").fill("Run a hosted task and write the summary.");
     await page.getByRole("button", { name: "Send" }).click();
 
@@ -887,6 +899,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await page.getByRole("button", { name: "Approve and send" }).click();
 
     await expect(preview).toBeHidden();
+    await openProjectRuntimeSettings(page, readyServer.baseUrl);
     const taskBoard = page.getByTestId("runtime-task-board");
     await expect(taskBoard).toContainText("Codex");
     await expect(taskBoard).toContainText("failed");
@@ -903,16 +916,16 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     page,
   }) => {
     await installRuntimeRoutes(page);
+    await clearBrowserStorage(page, readyServer.baseUrl);
 
-    await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
-    await expect(page.getByTestId("runtime-picker")).toBeVisible();
-    await expect(page.getByTestId("runtime-selected-summary")).toContainText("Ready for preview");
-
+    await openProjectRuntimeSettings(page, readyServer.baseUrl);
     await selectRuntimePolicy(page, "cloud-ok");
     await expect(page.locator('[data-testid="runtime-host-select"] option[value="codex"]'))
       .not.toHaveAttribute("disabled", "");
     await page.getByTestId("runtime-mode-compare").click();
     await page.getByTestId("runtime-compare-hosts").getByLabel("Codex").check();
+
+    await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
     await page.getByTestId("chat-input").fill("Compare the runtime host answers.");
     await page.getByRole("button", { name: "Send" }).click();
 
@@ -925,6 +938,8 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await expect(results).toContainText("OpenClaw answer");
     await expect(results).toContainText("Codex auth expired");
     await expect(results).toContainText("Synthesis preview");
+
+    await openProjectRuntimeSettings(page, readyServer.baseUrl);
     await expect(page.getByTestId("runtime-task-board")).toContainText("compare");
   });
 });
