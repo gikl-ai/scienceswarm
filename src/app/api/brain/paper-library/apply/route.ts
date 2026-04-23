@@ -39,7 +39,10 @@ export async function POST(request: Request) {
     if (/expired/i.test(message)) {
       return Response.json(paperLibraryError("approval_token_expired", message), { status: 409 });
     }
-    if (/conflict|approved|token/i.test(message)) {
+    if (/token does not match/i.test(message)) {
+      return Response.json(paperLibraryError("invalid_approval_token", message), { status: 403 });
+    }
+    if (/conflict|approved/i.test(message)) {
       return Response.json(paperLibraryError("apply_blocked_conflicts", message), { status: 409 });
     }
     if (/changed|source/i.test(message)) {

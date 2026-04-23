@@ -274,18 +274,20 @@ export async function approveApplyPlan(input: {
 }): Promise<{ plan: ApplyPlan; approvalToken: string; expiresAt: string } | null> {
   const plan = await readApplyPlan(input.project, input.applyPlanId, input.brainRoot);
   if (!plan) return null;
-  if (plan.status !== "validated" || plan.conflictCount > 0 || !plan.planDigest) {
-    throw new Error("Apply plan must be validated and conflict-free before approval.");
+  const canRefreshApprovedPlan = plan.status === "approved" && !plan.manifestId;
+  if ((plan.status !== "validated" && !canRefreshApprovedPlan) || plan.conflictCount > 0 || !plan.planDigest) {
+    throw new Error("Apply plan must be validated or already approved without manifest history before approval can be refreshed.");
   }
 
   const token = crypto.randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + APPROVAL_TTL_MS).toISOString();
+  const approvedAt = plan.approvedAt ?? nowIso();
   const approved = ApplyPlanSchema.parse({
     ...plan,
     status: "approved",
     approvalTokenHash: hashToken(token),
     approvalExpiresAt: expiresAt,
-    approvedAt: nowIso(),
+    approvedAt,
     updatedAt: nowIso(),
   });
   const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);

@@ -1031,6 +1031,41 @@ export function PaperLibraryCommandCenter({
   const approvalTokenExpired = approvalToken
     ? Date.parse(approvalToken.expiresAt) <= Date.now()
     : false;
+  const persistedApprovalExpiresAt = activePlan?.approvalExpiresAt ?? null;
+  const persistedApprovalExpired = persistedApprovalExpiresAt
+    ? Date.parse(persistedApprovalExpiresAt) <= Date.now()
+    : false;
+  const approvalNeedsRefresh = Boolean(
+    activePlan
+    && activePlan.status === "approved"
+    && !activePlan.manifestId
+    && (!approvalToken || approvalTokenExpired),
+  );
+  const canApprovePlan = Boolean(
+    activePlan
+    && activePlan.conflictCount === 0
+    && !activePlan.manifestId
+    && (activePlan.status === "validated" || approvalNeedsRefresh),
+  );
+  const approveButtonLabel = approvalNeedsRefresh ? "Refresh approval" : "Approve plan";
+  const approvalStatusMessage = approvalToken
+    ? (
+        approvalTokenExpired
+          ? `Approval expired at ${new Date(approvalToken.expiresAt).toLocaleString()}. Refresh approval to continue.`
+          : `Plan approved until ${new Date(approvalToken.expiresAt).toLocaleString()}.`
+      )
+    : activePlan?.status === "approved"
+      ? (
+          persistedApprovalExpiresAt
+            ? persistedApprovalExpired
+              ? `Approval expired at ${new Date(persistedApprovalExpiresAt).toLocaleString()}. Refresh approval to continue.`
+              : `Plan approved until ${new Date(persistedApprovalExpiresAt).toLocaleString()}, but this browser session no longer has the apply token. Refresh approval to continue.`
+            : "Plan is already approved, but this browser session needs a fresh apply token. Refresh approval to continue."
+        )
+      : null;
+  const approvalStatusTone = (approvalToken && !approvalTokenExpired)
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-amber-200 bg-amber-50 text-amber-700";
 
   const stepContent = useMemo(() => {
     if (session.step === "review") {
@@ -1369,10 +1404,10 @@ export function PaperLibraryCommandCenter({
                 <button
                   type="button"
                   onClick={() => void handleApprovePlan()}
-                  disabled={activePlan.status !== "validated" || activePlan.conflictCount > 0}
+                  disabled={!canApprovePlan}
                   className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                 >
-                  Approve plan
+                  {approveButtonLabel}
                 </button>
                 <button
                   type="button"
@@ -1393,17 +1428,11 @@ export function PaperLibraryCommandCenter({
                 )}
               </div>
 
-              {approvalToken && (
+              {approvalStatusMessage && (
                 <div
-                  className={`rounded-lg border px-3 py-2 text-sm ${
-                    approvalTokenExpired
-                      ? "border-amber-200 bg-amber-50 text-amber-700"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  }`}
+                  className={`rounded-lg border px-3 py-2 text-sm ${approvalStatusTone}`}
                 >
-                  {approvalTokenExpired
-                    ? `Approval expired at ${new Date(approvalToken.expiresAt).toLocaleString()}. Approve the plan again to apply it.`
-                    : `Plan approved until ${new Date(approvalToken.expiresAt).toLocaleString()}.`}
+                  {approvalStatusMessage}
                 </div>
               )}
 
@@ -2090,12 +2119,16 @@ export function PaperLibraryCommandCenter({
   }, [
     activeManifest,
     activePlan,
+    approvalStatusMessage,
+    approvalStatusTone,
     approvalToken,
     approvalTokenExpired,
     applyPlanError,
     applyPlanLoading,
     applyPlanLoadingMore,
     applyPlanPage,
+    approveButtonLabel,
+    canApprovePlan,
     clustersError,
     clustersLoading,
     clustersLoadingMore,

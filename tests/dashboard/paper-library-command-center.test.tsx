@@ -901,6 +901,164 @@ describe("PaperLibraryCommandCenter", () => {
     expect(screen.getByText(/Approval expired at/i)).toBeInTheDocument();
   });
 
+  it("refreshes approval for a restored approved plan when the browser token is missing", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "apply",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+        applyPlanId: "plan-1",
+      }),
+    );
+
+    let refreshed = false;
+    let applied = false;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            status: applied ? "applied" : "ready_for_apply",
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 0,
+              readyForApply: 1,
+              failed: 0,
+            },
+            applyPlanId: "plan-1",
+          }),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/apply-plan?")) {
+        return Response.json({
+          ok: true,
+          plan: {
+            version: 1,
+            id: "plan-1",
+            scanId: "scan-1",
+            project: "demo-project",
+            status: applied ? "applied" : "approved",
+            rootPath: "/tmp/library",
+            rootRealpath: "/tmp/library",
+            templateFormat: "{year} - {title}.pdf",
+            operationCount: 1,
+            conflictCount: 0,
+            operationShardIds: ["0001"],
+            planDigest: "digest",
+            approvalTokenHash: "token-hash",
+            approvalExpiresAt: refreshed ? "3026-04-23T13:00:00.000Z" : "3026-04-23T12:30:00.000Z",
+            approvedAt: "2026-04-23T12:20:00.000Z",
+            manifestId: applied ? "manifest-1" : undefined,
+            createdAt: "2026-04-23T12:20:00.000Z",
+            updatedAt: "2026-04-23T12:20:00.000Z",
+          },
+          operations: [
+            {
+              id: "operation-1",
+              paperId: "paper-1",
+              kind: "rename",
+              source: baseReviewItem().source,
+              destinationRelativePath: "2024 - Interesting Paper.pdf",
+              reason: "Paper library template proposal",
+              confidence: 0.82,
+              conflictCodes: [],
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      if (url === "/api/brain/paper-library/apply-plan/approve" && method === "POST") {
+        refreshed = true;
+        return Response.json({
+          ok: true,
+          approvalToken: "approval-token-refreshed",
+          expiresAt: "3026-04-23T13:00:00.000Z",
+        });
+      }
+
+      if (url === "/api/brain/paper-library/apply" && method === "POST") {
+        applied = true;
+        return Response.json({
+          ok: true,
+          manifestId: "manifest-1",
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/manifest?")) {
+        return Response.json({
+          ok: true,
+          manifest: {
+            version: 1,
+            id: "manifest-1",
+            project: "demo-project",
+            applyPlanId: "plan-1",
+            status: "applied",
+            rootRealpath: "/tmp/library",
+            planDigest: "digest",
+            operationCount: 1,
+            appliedCount: 1,
+            failedCount: 0,
+            undoneCount: 0,
+            operationShardIds: ["0001"],
+            warnings: [],
+            createdAt: "2026-04-23T12:31:00.000Z",
+            updatedAt: "2026-04-23T12:31:00.000Z",
+          },
+          operations: [
+            {
+              operationId: "operation-1",
+              paperId: "paper-1",
+              sourceRelativePath: "2024 - Smith - Interesting Paper.pdf",
+              destinationRelativePath: "2024 - Interesting Paper.pdf",
+              status: "verified",
+              appliedAt: "2026-04-23T12:31:00.000Z",
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByText("1 operations")).toBeInTheDocument();
+    expect(screen.getByText(/this browser session no longer has the apply token/i)).toBeInTheDocument();
+
+    const refreshButton = screen.getByRole("button", { name: "Refresh approval" });
+    await waitFor(() => {
+      expect(refreshButton).toBeEnabled();
+    });
+
+    const applyButton = screen.getByRole("button", { name: "Apply approved plan" });
+    expect(applyButton).toBeDisabled();
+
+    fireEvent.click(refreshButton);
+    expect(await screen.findByText(/Plan approved until/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Apply approved plan" })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply approved plan" }));
+    expect(await screen.findByText("Manifest and undo")).toBeInTheDocument();
+    expect(await screen.findByText("applied")).toBeInTheDocument();
+  });
+
   it("shows command errors outside the scan step", async () => {
     window.localStorage.setItem(
       "scienceswarm.paperLibrary.session.demo-project",
