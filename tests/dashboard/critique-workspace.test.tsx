@@ -755,7 +755,7 @@ describe("Critique workspace", () => {
     );
   });
 
-  it("filters the issue queue by finding kind", async () => {
+  it("filters the issue queue by flaw type", async () => {
     const completedJob = makeCompletedJob();
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
 
@@ -764,13 +764,38 @@ describe("Critique workspace", () => {
     await openRecentAnalysis("paper.pdf");
 
     expect((await screen.findAllByText("missing_assumption")).length).toBeGreaterThanOrEqual(1);
-    fireEvent.click(screen.getByRole("button", { name: "Fallacy" }));
+    expect(screen.queryByRole("button", { name: "Fallacy" })).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Filter issue queue by Causal Leap \(1 finding\)/,
+      }),
+    );
 
     expect((await screen.findAllByText("causal_leap")).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryAllByText("missing_assumption")).toHaveLength(0);
     expect(screen.queryAllByText("ignored_counterargument")).toHaveLength(0);
     expect(
       screen.getAllByText("The paper treats a correlational result as if it established causation.").length,
+    ).toBeGreaterThanOrEqual(1);
+    fireEvent.click(screen.getByRole("button", { name: "All 3" }));
+    expect((await screen.findAllByText("missing_assumption")).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("surfaces useful details for the selected issue", async () => {
+    const completedJob = makeCompletedJob();
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
+
+    render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
+
+    expect(await screen.findByRole("heading", { name: "Missing Assumption" })).toBeInTheDocument();
+    expect(screen.getByText("What is wrong")).toBeInTheDocument();
+    expect(screen.getByText("Evidence quoted")).toBeInTheDocument();
+    expect(screen.getByText("Why it matters")).toBeInTheDocument();
+    expect(screen.getByText("Suggested fix")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("The core claim is not yet justified by the described evidence.").length,
     ).toBeGreaterThanOrEqual(1);
   });
 

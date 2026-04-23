@@ -73,7 +73,6 @@ type BrainArtifactPage = {
 };
 
 type InputMode = "pdf" | "text";
-type FilterKind = "critique" | "fallacy" | "gap";
 type SubmittedReasoningInput =
   | { kind: "pdf"; name: string; size?: number }
   | { kind: "text"; charCount?: number; preview: string };
@@ -151,6 +150,13 @@ type BrainPageResponse = {
 };
 
 type StructuredCritiqueProgressLike = Record<string, unknown> | null | undefined;
+type FindingFilterOption = {
+  value: string;
+  label: string;
+  count: number;
+};
+
+const FALLBACK_FINDING_TYPE = "uncategorized";
 
 const EXAMPLE_REASONING_JOB: StructuredCritiqueJob = {
   id: "example-reasoning-report",
@@ -905,6 +911,69 @@ function severityLabel(severity: "error" | "warning" | "note"): string {
   }
 }
 
+function normalizeFindingTypeValue(value?: string): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return trimmed
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+    .replace(/_+/g, "_");
+}
+
+function getFindingTypeKey(finding: Finding): string {
+  return (
+    normalizeFindingTypeValue(finding.flaw_type) ??
+    normalizeFindingTypeValue(finding.finding_kind) ??
+    FALLBACK_FINDING_TYPE
+  );
+}
+
+function humanizeFindingType(value?: string): string {
+  const normalized = normalizeFindingTypeValue(value) ?? FALLBACK_FINDING_TYPE;
+  return normalized
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getFindingTypeLabel(finding: Finding): string {
+  return humanizeFindingType(
+    finding.flaw_type || finding.finding_kind || FALLBACK_FINDING_TYPE,
+  );
+}
+
+function getFindingTitle(finding: Finding): string {
+  const typeLabel = getFindingTypeLabel(finding);
+  return typeLabel === humanizeFindingType(FALLBACK_FINDING_TYPE)
+    ? "Reasoning issue"
+    : typeLabel;
+}
+
+function formatConfidence(value?: number): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return `${Math.round(value * 100)}%`;
+}
+
+function buildFindingFilterOptions(findings: Finding[]): FindingFilterOption[] {
+  const byKey = new Map<string, FindingFilterOption>();
+  for (const finding of findings) {
+    const value = getFindingTypeKey(finding);
+    const existing = byKey.get(value);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    byKey.set(value, {
+      value,
+      label: getFindingTypeLabel(finding),
+      count: 1,
+    });
+  }
+  return [...byKey.values()].sort((left, right) => {
+    if (right.count !== left.count) return right.count - left.count;
+    return left.label.localeCompare(right.label);
+  });
+}
+
 function findingKindChipClasses(kind?: string): string {
   switch (kind) {
     case "fallacy":
@@ -1019,7 +1088,7 @@ function SeverityDot({ severity }: { severity: "error" | "warning" | "note" }) {
 }
 
 function FindingKindChip({ kind }: { kind?: string }) {
-  const label = kind || "critique";
+  const label = humanizeFindingType(kind || "critique");
   return (
     <span
       className={`px-2 py-0.5 rounded text-xs ${findingKindChipClasses(kind)}`}
@@ -1187,6 +1256,9 @@ function IssueQueueItem({
   onKeyDown: (e: React.KeyboardEvent) => void;
 }) {
   const severity = normalizeSeverity(finding.severity);
+  const title = getFindingTitle(finding);
+  const confidence = formatConfidence(finding.confidence);
+  const rawType = finding.flaw_type?.trim();
   const selectedBg = isSelected
     ? "bg-teal-50 border-l-[3px] border-l-teal-500"
     : "border-l-[3px] border-l-transparent hover:bg-gray-50";
@@ -1197,26 +1269,53 @@ function IssueQueueItem({
       onClick={onSelect}
       onKeyDown={onKeyDown}
       tabIndex={0}
-      aria-label={`${severityLabel(severity)} finding: ${finding.flaw_type || finding.description || finding.finding_id || "finding"}`}
-      className={`w-full text-left py-2 px-3 transition-colors cursor-pointer ${selectedBg}`}
+      aria-label={`${severityLabel(severity)} ${title}: ${finding.description || finding.finding_id || "finding"}`}
+      className={`w-full text-left px-3 py-2.5 transition-colors cursor-pointer ${selectedBg}`}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-start gap-2">
         <SeverityDot severity={severity} />
-        <span
-          className={`text-xs font-medium uppercase ${severityTextClass(severity)}`}
-          aria-label={`${severityLabel(severity)} severity`}
-        >
-          {severity === "error" ? "ERR" : severity === "warning" ? "WRN" : "NOTE"}
-        </span>
-        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono text-gray-700">
-          {finding.flaw_type || finding.finding_id || "finding"}
-        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span
+              className={`text-xs font-semibold ${severityTextClass(severity)}`}
+              aria-label={`${severityLabel(severity)} severity`}
+            >
+              {severityLabel(severity)}
+            </span>
+            <span className="text-xs font-medium leading-5 text-foreground">
+              {title}
+            </span>
+          </div>
+          {finding.description ? (
+            <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted">
+              {finding.description}
+            </p>
+          ) : null}
+          {finding.impact ? (
+            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">
+              <span className="font-medium text-slate-600">Impact: </span>
+              {finding.impact}
+            </p>
+          ) : null}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {finding.argument_id ? (
+              <span className="rounded bg-white px-1.5 py-0.5 text-[10px] font-mono text-gray-600 ring-1 ring-gray-100">
+                {finding.argument_id}
+              </span>
+            ) : null}
+            {rawType ? (
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono text-gray-600">
+                {rawType}
+              </span>
+            ) : null}
+            {confidence ? (
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                {confidence}
+              </span>
+            ) : null}
+          </div>
+        </div>
       </div>
-      {finding.description ? (
-        <p className="text-xs text-muted truncate mt-0.5 pl-[18px]">
-          {finding.description}
-        </p>
-      ) : null}
     </button>
   );
 }
@@ -1663,32 +1762,48 @@ function BrainArtifactViewer({ artifact }: { artifact: BrainArtifactPage }) {
 
 function FilterChips({
   active,
+  options,
+  totalCount,
+  onClear,
   onToggle,
 }: {
-  active: Set<FilterKind>;
-  onToggle: (kind: FilterKind) => void;
+  active: Set<string>;
+  options: FindingFilterOption[];
+  totalCount: number;
+  onClear: () => void;
+  onToggle: (kind: string) => void;
 }) {
-  const chips: { kind: FilterKind; label: string }[] = [
-    { kind: "critique", label: "Critique" },
-    { kind: "fallacy", label: "Fallacy" },
-    { kind: "gap", label: "Gap" },
-  ];
+  const allActive = active.size === 0;
   return (
-    <div className="flex gap-2 px-3">
-      {chips.map((c) => {
-        const isActive = active.has(c.kind);
+    <div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto px-3">
+      <button
+        type="button"
+        onClick={onClear}
+        aria-pressed={allActive}
+        className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+          allActive
+            ? "border-accent bg-accent/10 font-medium text-accent"
+            : "border-gray-200 bg-white text-muted hover:border-gray-300"
+        }`}
+      >
+        All {totalCount}
+      </button>
+      {options.map((option) => {
+        const isActive = active.has(option.value);
         return (
           <button
-            key={c.kind}
+            key={option.value}
             type="button"
-            onClick={() => onToggle(c.kind)}
-            className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+            onClick={() => onToggle(option.value)}
+            aria-pressed={isActive}
+            aria-label={`Filter issue queue by ${option.label} (${option.count} finding${option.count !== 1 ? "s" : ""})`}
+            className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
               isActive
-                ? "border-accent bg-accent/10 text-accent font-medium"
+                ? "border-accent bg-accent/10 font-medium text-accent"
                 : "border-gray-200 bg-white text-muted hover:border-gray-300"
             }`}
           >
-            {c.label}
+            {option.label} {option.count}
           </button>
         );
       })}
@@ -1706,81 +1821,112 @@ function FindingDetail({
   finding: Finding;
 }) {
   const severity = normalizeSeverity(finding.severity);
+  const title = getFindingTitle(finding);
+  const confidence = formatConfidence(finding.confidence);
+  const rawType = finding.flaw_type?.trim();
+  const kind = finding.finding_kind?.trim();
+  const detailRows = [
+    finding.argument_id
+      ? { label: "Affected claim", value: finding.argument_id, mono: true }
+      : null,
+    finding.broken_link
+      ? { label: "Broken link", value: finding.broken_link, mono: false }
+      : null,
+    rawType ? { label: "Raw issue type", value: rawType, mono: true } : null,
+    kind
+      ? { label: "Broad group", value: humanizeFindingType(kind), mono: false }
+      : null,
+    confidence ? { label: "Confidence", value: confidence, mono: false } : null,
+    finding.finding_id
+      ? { label: "Finding ID", value: finding.finding_id, mono: true }
+      : null,
+  ].filter(
+    (row): row is { label: string; value: string; mono: boolean } => row !== null,
+  );
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      {/* Severity + type */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5">
-          <SeverityDot severity={severity} />
-          <span
-            className={`text-sm font-medium ${severityTextClass(severity)}`}
-            aria-label={`${severityLabel(severity)} severity`}
-          >
-            {severityLabel(severity)}
-          </span>
-        </span>
-        {finding.flaw_type ? (
-          <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-mono">
-            {finding.flaw_type}
-          </span>
-        ) : null}
-        <FindingKindChip kind={finding.finding_kind} />
-      </div>
-
-      {/* Description */}
-      {finding.description ? (
-        <p className="text-sm leading-relaxed text-foreground">{finding.description}</p>
-      ) : null}
-
-      {/* Evidence quote */}
-      {finding.evidence_quote ? (
-        <blockquote className="text-sm italic border-l-2 border-gray-200 bg-gray-50 pl-4 py-3 text-muted">
-          {finding.evidence_quote}
-        </blockquote>
-      ) : null}
-
-      {/* Meta fields */}
-      <div className="space-y-2">
-        {finding.argument_id ? (
-          <div className="text-xs">
-            <span className="font-medium text-muted">Affected claim: </span>
-            <span className="text-foreground font-mono">{finding.argument_id}</span>
-          </div>
-        ) : null}
-        {finding.broken_link ? (
-          <div className="text-xs">
-            <span className="font-medium text-muted">Broken link: </span>
-            <span className="text-foreground">{finding.broken_link}</span>
-          </div>
-        ) : null}
-        {finding.impact ? (
-          <div className="text-xs">
-            <span className="font-medium text-muted">Impact: </span>
-            <span className="text-foreground">{finding.impact}</span>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Suggested fix */}
-      {finding.suggested_fix ? (
+    <article className="border-b border-gray-100 px-6 py-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className={`${SECTION_LABEL} mb-1`}>
-            Suggested fix
-          </div>
-          <p className="text-sm leading-relaxed text-foreground bg-emerald-50 border border-emerald-100 rounded p-3">
-            {finding.suggested_fix}
-          </p>
+          <div className={SECTION_LABEL}>Selected issue</div>
+          <h2 className="mt-1 text-2xl font-semibold text-foreground">
+            {title}
+          </h2>
         </div>
-      ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5">
+            <SeverityDot severity={severity} />
+            <span
+              className={`text-sm font-medium ${severityTextClass(severity)}`}
+              aria-label={`${severityLabel(severity)} severity`}
+            >
+              {severityLabel(severity)}
+            </span>
+          </span>
+          {rawType ? (
+            <span className="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-700">
+              {rawType}
+            </span>
+          ) : null}
+          <FindingKindChip kind={finding.finding_kind} />
+        </div>
+      </div>
 
-      {/* Confidence */}
-      {finding.confidence != null ? (
-        <div className="text-xs text-muted">
-          Confidence: {Math.round(finding.confidence * 100)}%
+      <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
+        <div className="space-y-4">
+          <section>
+            <div className={`${SECTION_LABEL} mb-1`}>What is wrong</div>
+            <p className="text-sm leading-7 text-foreground">
+              {finding.description || "No description supplied for this finding."}
+            </p>
+          </section>
+
+          {finding.evidence_quote ? (
+            <section>
+              <div className={`${SECTION_LABEL} mb-1`}>Evidence quoted</div>
+              <blockquote className="border-l-2 border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-7 text-muted">
+                {finding.evidence_quote}
+              </blockquote>
+            </section>
+          ) : null}
+
+          {finding.impact ? (
+            <section>
+              <div className={`${SECTION_LABEL} mb-1`}>Why it matters</div>
+              <p className="rounded border border-amber-100 bg-amber-50/70 p-3 text-sm leading-7 text-amber-900">
+                {finding.impact}
+              </p>
+            </section>
+          ) : null}
+
+          {finding.suggested_fix ? (
+            <section>
+              <div className={`${SECTION_LABEL} mb-1`}>Suggested fix</div>
+              <p className="rounded border border-emerald-100 bg-emerald-50 p-3 text-sm leading-7 text-emerald-950">
+                {finding.suggested_fix}
+              </p>
+            </section>
+          ) : null}
         </div>
-      ) : null}
-    </div>
+
+        {detailRows.length > 0 ? (
+          <dl className="grid content-start gap-3 rounded-lg border border-gray-100 bg-gray-50/70 p-4 sm:grid-cols-2 xl:grid-cols-1">
+            {detailRows.map((row) => (
+              <div key={row.label}>
+                <dt className={SECTION_LABEL}>{row.label}</dt>
+                <dd
+                  className={`mt-1 break-words text-sm text-foreground ${
+                    row.mono ? "font-mono" : ""
+                  }`}
+                >
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -1865,7 +2011,7 @@ function StructuredCritiquePageContent() {
   const [inputMode, setInputMode] = useState<InputMode>("pdf");
   const [pasteText, setPasteText] = useState("");
   const [selectedFindingIndex, setSelectedFindingIndex] = useState<number>(0);
-  const [activeFilters, setActiveFilters] = useState<Set<FilterKind>>(new Set());
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [uploadAccepted, setUploadAccepted] = useState(false);
   const [submittedInput, setSubmittedInput] =
@@ -2185,14 +2331,14 @@ function StructuredCritiquePageContent() {
 
   const allFindings: Finding[] = activeJob?.result?.findings ?? [];
   const sorted = sortedFindings(allFindings);
+  const findingFilterOptions = buildFindingFilterOptions(sorted);
 
   // Apply filters
   const filteredFindings =
     activeFilters.size === 0
       ? sorted
       : sorted.filter((f) => {
-          const kind = (f.finding_kind || "critique") as FilterKind;
-          return activeFilters.has(kind);
+          return activeFilters.has(getFindingTypeKey(f));
         });
 
   const selectedFinding = filteredFindings[selectedFindingIndex] ?? null;
@@ -2224,10 +2370,11 @@ function StructuredCritiquePageContent() {
     prevFindingsLenRef.current = filteredFindings.length;
   }, [filteredFindings.length]);
 
-  // Reset finding index when job changes
+  // Reset selected finding and filters when the visible analysis changes.
   useEffect(() => {
     setSelectedFindingIndex(0);
-  }, [selectedJobId]);
+    setActiveFilters(new Set());
+  }, [selectedJobId, showExampleReport]);
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -2243,6 +2390,7 @@ function StructuredCritiquePageContent() {
       setUploadAccepted(false);
       setSubmittedInput(buildSubmittedInputFromJob(job));
       setSelectedFindingIndex(0);
+      setActiveFilters(new Set());
       if (!isTerminalStatus(job.status)) {
         void refreshJob(job.id).catch((err) => {
           setError(err instanceof Error ? err.message : "Structured critique refresh failed");
@@ -2263,6 +2411,7 @@ function StructuredCritiquePageContent() {
           : { kind: "text", charCount: 0, preview: summary.title || "Saved reasoning analysis" },
       );
       setSelectedFindingIndex(0);
+      setActiveFilters(new Set());
       void loadBrainSlug(summary.brain_slug, summary).catch((err) => {
         setError(err instanceof Error ? err.message : "brain critique load failed");
       });
@@ -2365,6 +2514,7 @@ function StructuredCritiquePageContent() {
     setIsSubmitting(true);
     setUploadAccepted(false);
     setSelectedFindingIndex(0);
+    setActiveFilters(new Set());
     setSubmittedInput(
       inputMode === "pdf" && selectedFile
         ? { kind: "pdf", name: selectedFile.name, size: selectedFile.size }
@@ -2428,6 +2578,7 @@ function StructuredCritiquePageContent() {
     setSubmittedInput(buildSubmittedInputFromJob(EXAMPLE_REASONING_JOB));
     setShowExampleReport(true);
     setSelectedFindingIndex(0);
+    setActiveFilters(new Set());
   };
 
   const handleClearHistory = () => {
@@ -2439,10 +2590,16 @@ function StructuredCritiquePageContent() {
     setSubmittedInput(null);
     setLoadedBrainJob(null);
     setShowExampleReport(false);
+    setActiveFilters(new Set());
     saveStoredHistory([]);
   };
 
-  const toggleFilter = (kind: FilterKind) => {
+  const clearFilters = () => {
+    setActiveFilters(new Set());
+    setSelectedFindingIndex(0);
+  };
+
+  const toggleFilter = (kind: string) => {
     setActiveFilters((prev) => {
       const next = new Set(prev);
       if (next.has(kind)) next.delete(kind);
@@ -3002,10 +3159,16 @@ function StructuredCritiquePageContent() {
               <div className="border-t border-gray-100 py-2">
                 <div className="px-3 pb-1">
                   <span className={SECTION_LABEL}>
-                    Filter
+                    Filter by issue type
                   </span>
                 </div>
-                <FilterChips active={activeFilters} onToggle={toggleFilter} />
+                <FilterChips
+                  active={activeFilters}
+                  options={findingFilterOptions}
+                  totalCount={allFindings.length}
+                  onClear={clearFilters}
+                  onToggle={toggleFilter}
+                />
               </div>
             ) : null}
 
@@ -3144,11 +3307,11 @@ function StructuredCritiquePageContent() {
               </div>
               {selectedFinding && activeJob ? (
                 <div className="flex h-full flex-col">
-                  <ReportOverview job={activeJob} />
                   <FindingDetail
                     key={`${activeJob.id}:${selectedFinding.finding_id ?? selectedFindingIndex}`}
                     finding={selectedFinding}
                   />
+                  <ReportOverview job={activeJob} />
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-64 text-sm text-muted">
@@ -3194,14 +3357,14 @@ function StructuredCritiquePageContent() {
           {hasCompletedResults && !isPartialFailure ? (
             selectedFinding && activeJob ? (
               <div className="flex h-full flex-col">
+                <FindingDetail
+                  key={`${activeJob.id}:${selectedFinding.finding_id ?? selectedFindingIndex}`}
+                  finding={selectedFinding}
+                />
                 <ReportOverview
                   job={activeJob}
                   brainSaveStatus={activeBrainSaveStatus}
                   saveControls={activeSaveControls}
-                />
-                <FindingDetail
-                  key={`${activeJob.id}:${selectedFinding.finding_id ?? selectedFindingIndex}`}
-                  finding={selectedFinding}
                 />
               </div>
             ) : (
