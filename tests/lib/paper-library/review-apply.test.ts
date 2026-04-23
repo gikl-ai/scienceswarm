@@ -127,12 +127,30 @@ describe("paper-library review and apply", () => {
       project: "project-alpha",
       applyPlanId: approval?.plan.id ?? "",
       approvalToken: approval?.approvalToken ?? "",
+      idempotencyKey: "apply-review-test",
       brainRoot: path.join(dataRoot, "brain"),
     });
     expect(applied?.manifest.status).toBe("applied");
     expect(await exists(originalPath)).toBe(false);
     const destination = path.join(paperRoot, applied?.operations[0]?.destinationRelativePath ?? "");
     expect(await exists(destination)).toBe(true);
+    await expect(readFile(path.join(
+      dataRoot,
+      "projects",
+      "project-alpha",
+      ".brain",
+      "state",
+      "paper-library",
+      "apply-idempotency",
+      "apply-review-test.json",
+    ), "utf-8")).resolves.toContain(applied?.manifest.id ?? "");
+
+    await expect(applyApprovedPlan({
+      project: "project-alpha",
+      applyPlanId: approval?.plan.id ?? "",
+      approvalToken: "wrong-approval-token",
+      brainRoot: path.join(dataRoot, "brain"),
+    })).rejects.toThrow(/token/i);
 
     const undone = await undoApplyManifest({
       project: "project-alpha",

@@ -84,6 +84,10 @@ export function getPaperLibraryIdempotencyPath(project: string, idempotencyKey: 
   return path.join(getPaperLibraryStateDir(project, stateRoot), "idempotency", `${encodeURIComponent(idempotencyKey)}.json`);
 }
 
+export function getPaperLibraryApplyIdempotencyPath(project: string, idempotencyKey: string, stateRoot?: string): string {
+  return path.join(getPaperLibraryStateDir(project, stateRoot), "apply-idempotency", `${encodeURIComponent(idempotencyKey)}.json`);
+}
+
 export function getPaperLibraryEnrichmentCachePath(project: string, stateRoot?: string): string {
   return path.join(getPaperLibraryStateDir(project, stateRoot), "enrichment-cache.json");
 }

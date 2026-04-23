@@ -86,9 +86,19 @@ function formatPaperLibraryBlock(input: {
 function mergeCompiledTruth(existingCompiledTruth: string | undefined, paperLibraryBlock: string): string {
   const trimmedExisting = (existingCompiledTruth ?? "").trim();
   if (!trimmedExisting) return paperLibraryBlock;
-  const sectionStart = trimmedExisting.indexOf("## Paper Library");
-  if (sectionStart === -1) return `${trimmedExisting}\n\n${paperLibraryBlock}`;
-  return `${trimmedExisting.slice(0, sectionStart).trim()}\n\n${paperLibraryBlock}`;
+  const sectionMatch = /^## Paper Library\s*$/m.exec(trimmedExisting);
+  if (!sectionMatch) return `${trimmedExisting}\n\n${paperLibraryBlock}`;
+  const sectionStart = sectionMatch.index;
+  const afterHeading = sectionStart + sectionMatch[0].length;
+  const nextSectionOffset = trimmedExisting.slice(afterHeading).search(/\n##\s+/);
+  const sectionEnd = nextSectionOffset === -1
+    ? trimmedExisting.length
+    : afterHeading + nextSectionOffset;
+  return [
+    trimmedExisting.slice(0, sectionStart).trim(),
+    paperLibraryBlock,
+    trimmedExisting.slice(sectionEnd).trim(),
+  ].filter(Boolean).join("\n\n");
 }
 
 export async function persistAppliedPaperLocations(input: PersistAppliedPaperLocationsInput): Promise<void> {
