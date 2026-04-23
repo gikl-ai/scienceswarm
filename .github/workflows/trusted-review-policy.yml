@@ -32,8 +32,8 @@ jobs:
           set -euo pipefail
 
           head_sha=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')
-          labels_json=$(gh api "repos/$REPO/issues/$PR_NUMBER/labels" --paginate --slurp | jq -c 'add')
-          reviews_json=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate --slurp | jq -c 'add')
+          labels_json=$(gh api "repos/$REPO/issues/$PR_NUMBER/labels" --paginate --slurp | jq -c 'add // []')
+          reviews_json=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate --slurp | jq -c 'add // []')
 
           ci_deferred=$(
             jq -r '
