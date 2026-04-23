@@ -40,6 +40,9 @@ The core system is:
   Crossref, with durable `research_packet` and `overnight_journal` artifacts
 - Direct chat plus OpenClaw-routed chat when the agent runtime is available
 - OpenHands-backed execution for code and longer-running agent tasks
+- Runtime host controls for OpenClaw, Claude Code, Codex, Gemini CLI, and
+  OpenHands, with per-project privacy policy gates and preview approval before
+  hosted or execution-capable sends
 - Dream Cycle and Research Radar overnight runs that leave auditable journal
   artifacts in the brain, including project-specific frontier matches that
   explain what changed and can be saved back into gbrain memory
@@ -123,6 +126,42 @@ Important:
 4. Start chatting with a project that already has context
 5. Run a literature packet from chat or MCP when you want a deterministic
    multi-source landscape review with durable packet/journal outputs
+
+### Runtime Hosts
+
+OpenClaw remains the local-first default runtime. The project composer starts
+with the `local-only` policy, which allows OpenClaw chat and blocks hosted
+Claude Code, Codex, and Gemini CLI sends before prompt construction. You can
+choose `cloud-ok` for turns where hosted subscription-native CLIs are
+acceptable, or `execution-ok` when OpenHands-style execution is acceptable.
+
+The project chat composer shows the current policy, mode, host, and compare
+targets. Any hosted, task, compare, or execution-capable turn is previewed before
+send: the preview lists destinations, account source, privacy class, and the
+prompt or project context that will leave the local workspace. ScienceSwarm does
+not store Claude Code, Codex, or Gemini subscription tokens; those hosts use
+your local CLI login. API-key runtime adapters read keys from `.env` only when
+configured and do not echo secret values back through the UI.
+
+Runtime-host sessions are visible from the project workspace after runtime
+sends. Session history keeps host, mode, status, events, and artifact/writeback
+state so failed artifact imports can be retried from the composer after changing
+host or policy. If a future rollback or host removal leaves old sessions with an
+unknown host id, ScienceSwarm keeps those rows as read-only history rather than
+deleting them.
+
+Rollback smoke after reverting or patching a runtime-host PR:
+
+```bash
+npm run test:e2e -- tests/e2e/runtime-hosts.spec.ts
+npm run test -- tests/integration/api-runtime-preview.test.ts tests/integration/api-runtime-sessions.test.ts tests/integration/api-runtime-compare.test.ts tests/integration/api-runtime-artifacts.test.ts
+```
+
+The minimum manual smoke is: confirm OpenClaw local chat still works with the
+default `gemma4:latest` model, local-only policy blocks hosted hosts, cloud-ok
+policy shows a preview and approval gate, runtime health renders missing or
+not-authenticated CLIs without crashing settings, and historical sessions remain
+readable.
 
 ### Private Market Plugins
 
