@@ -3703,6 +3703,87 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
+  it("normalizes JSON-shaped tool progress rows while preserving plain rows and markdown", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "session.message",
+              payload: {
+                text:
+                  "Use search: {\"pattern\":\"**needle**\",\"path\":\"/Users/example/.scienceswarm/projects/alpha-project/docs/results_table.csv\"}",
+              },
+            },
+          },
+          {
+            progress: {
+              method: "session.message",
+              payload: {
+                text: "Read docs/summary.md",
+              },
+            },
+          },
+          { text: "Done" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+
+    const progressLog = screen.getByTestId("progress-log").textContent ?? "";
+    expect(progressLog).toContain(
+      "assistant:activity:Search **needle** in docs/results_table.csv | activity:Read docs/summary.md",
+    );
+    expect(progressLog).not.toContain("Use search:");
+    expect(progressLog).not.toContain("/Users/example/.scienceswarm/projects/alpha-project/docs/results_table.csv");
+
+    const activityLog = screen.getByTestId("activity-log").textContent ?? "";
+    expect(activityLog).toContain("Search **needle** in docs/results_table.csv | Read docs/summary.md");
+  });
+
   it("formats structured image generation tool calls without dumping raw JSON into progress", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
