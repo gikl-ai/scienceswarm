@@ -12,7 +12,10 @@ import type {
   ApplyManifestOperation,
   ApplyOperation,
   ApplyPlan,
+  GapSuggestion,
+  GapSuggestionState,
   PaperLibraryClustersResponse,
+  PaperLibraryGapsResponse,
   PaperLibraryGraphResponse,
   PaperLibraryScan,
   PaperReviewItem,
@@ -23,6 +26,7 @@ import { buildWorkspaceHrefForSlug } from "@/lib/project-navigation";
 type PaperLibraryStep = "scan" | "review" | "apply" | "graph" | "history";
 type ReviewFilter = Extract<PaperReviewItemState, "needs_review" | "accepted" | "ignored" | "unresolved">;
 const DEFAULT_REVIEW_FILTER: ReviewFilter = "needs_review";
+type GapFilter = GapSuggestionState | "all";
 
 interface PaperLibrarySession {
   step: PaperLibraryStep;
@@ -54,6 +58,15 @@ interface ManifestPage {
   nextCursor?: string;
   totalCount: number;
   filteredCount: number;
+}
+
+interface GapPage {
+  suggestions: GapSuggestion[];
+  stateCounts: PaperLibraryGapsResponse["stateCounts"];
+  nextCursor?: string;
+  totalCount: number;
+  filteredCount: number;
+  warnings: string[];
 }
 
 interface PaperLibrarySessionDraft {
@@ -295,6 +308,12 @@ export function PaperLibraryCommandCenter({
   const [clustersError, setClustersError] = useState<string | null>(null);
   const [clustersPage, setClustersPage] = useState<PaperLibraryClustersResponse | null>(null);
   const [clustersLoadingMore, setClustersLoadingMore] = useState(false);
+  const [gapFilter, setGapFilter] = useState<GapFilter>("all");
+  const [gapsLoading, setGapsLoading] = useState(false);
+  const [gapsError, setGapsError] = useState<string | null>(null);
+  const [gapPage, setGapPage] = useState<GapPage | null>(null);
+  const [gapsLoadingMore, setGapsLoadingMore] = useState(false);
+  const [gapActionSuggestionId, setGapActionSuggestionId] = useState<string | null>(null);
 
   const [draftsByItemId, setDraftsByItemId] = useState<Record<string, PaperLibrarySessionDraft>>({});
   const [selectedCandidatesByItemId, setSelectedCandidatesByItemId] = useState<Record<string, string>>({});
@@ -314,6 +333,9 @@ export function PaperLibraryCommandCenter({
     setGraphError(null);
     setClustersPage(null);
     setClustersError(null);
+    setGapPage(null);
+    setGapsError(null);
+    setGapFilter("all");
     setApprovalToken(null);
     setReviewFilter(DEFAULT_REVIEW_FILTER);
     setDraftsByItemId({});
@@ -534,6 +556,43 @@ export function PaperLibraryCommandCenter({
     }
   }, [projectSlug, session.scanId]);
 
+  const loadGaps = useCallback(async ({ cursor, append = false, refresh = false }: {
+    cursor?: string;
+    append?: boolean;
+    refresh?: boolean;
+  } = {}) => {
+    if (!session.scanId) return;
+    if (append) setGapsLoadingMore(true);
+    else setGapsLoading(true);
+    setGapsError(null);
+    try {
+      const params = new URLSearchParams({
+        project: projectSlug,
+        scanId: session.scanId,
+        limit: "12",
+      });
+      if (gapFilter !== "all") params.set("state", gapFilter);
+      if (cursor) params.set("cursor", cursor);
+      if (refresh) params.set("refresh", "1");
+      const payload = await paperLibraryFetchJson<
+        { ok: true } & PaperLibraryGapsResponse
+      >(`/api/brain/paper-library/gaps?${params.toString()}`);
+      setGapPage((current) => ({
+        suggestions: append && current ? [...current.suggestions, ...payload.suggestions] : payload.suggestions,
+        stateCounts: payload.stateCounts,
+        warnings: payload.warnings,
+        nextCursor: payload.nextCursor,
+        totalCount: payload.totalCount,
+        filteredCount: payload.filteredCount,
+      }));
+    } catch (error) {
+      setGapsError(error instanceof Error ? error.message : "Could not load gap suggestions.");
+    } finally {
+      setGapsLoading(false);
+      setGapsLoadingMore(false);
+    }
+  }, [gapFilter, projectSlug, session.scanId]);
+
   useEffect(() => {
     if (!session.scanId) {
       setScan(null);
@@ -577,6 +636,11 @@ export function PaperLibraryCommandCenter({
     void loadGraph();
     void loadClusters();
   }, [loadClusters, loadGraph, session.scanId, session.step]);
+
+  useEffect(() => {
+    if (session.step !== "graph" || !session.scanId) return;
+    void loadGaps();
+  }, [loadGaps, session.scanId, session.step]);
 
   useEffect(() => {
     if (scan?.applyPlanId && scan.applyPlanId !== session.applyPlanId) {
@@ -816,6 +880,35 @@ export function PaperLibraryCommandCenter({
       setUndoing(false);
     }
   }, [loadManifest, projectSlug, session.manifestId]);
+
+  const handleGapAction = useCallback(async (
+    suggestionId: string,
+    action: "watch" | "ignore" | "save" | "import" | "reopen",
+  ) => {
+    if (!session.scanId) return;
+    setGapActionSuggestionId(suggestionId);
+    setGapsError(null);
+    try {
+      await paperLibraryFetchJson<{ ok: true; suggestion: GapSuggestion }>(
+        "/api/brain/paper-library/gaps",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project: projectSlug,
+            scanId: session.scanId,
+            suggestionId,
+            action,
+          }),
+        },
+      );
+      await loadGaps();
+    } catch (error) {
+      setGapsError(error instanceof Error ? error.message : "Could not update the gap suggestion.");
+    } finally {
+      setGapActionSuggestionId(null);
+    }
+  }, [loadGaps, projectSlug, session.scanId]);
 
   const activePlan = applyPlanPage?.plan ?? null;
   const activeManifest = manifestPage?.manifest ?? null;
@@ -1258,6 +1351,13 @@ export function PaperLibraryCommandCenter({
               >
                 Refresh clusters
               </button>
+              <button
+                type="button"
+                onClick={() => void loadGaps({ refresh: true })}
+                className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+              >
+                Refresh gaps
+              </button>
             </div>
           </div>
 
@@ -1270,6 +1370,12 @@ export function PaperLibraryCommandCenter({
           {clustersError && (
             <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {clustersError}
+            </div>
+          )}
+
+          {gapsError && (
+            <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {gapsError}
             </div>
           )}
 
@@ -1411,8 +1517,177 @@ export function PaperLibraryCommandCenter({
                   </button>
                 )}
 
-                <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-4 text-sm text-muted">
-                  Gap suggestions land here in the next phase. Once they ship, this panel will rank missing seminal papers, bridge papers, and watch/import actions against your local graph and clusters.
+                <div className="rounded-xl border border-border bg-white p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Gap suggestions</p>
+                      <p className="mt-1 text-xs text-muted">
+                        Missing seminal papers ranked from your local citation graph, cluster coverage, and recency cues.
+                      </p>
+                    </div>
+                    {gapPage && (
+                      <span className="text-xs text-muted">
+                        {gapPage.filteredCount} shown • {gapPage.totalCount} total
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {([
+                      ["all", gapPage?.totalCount ?? 0],
+                      ["open", gapPage?.stateCounts.open ?? 0],
+                      ["watching", gapPage?.stateCounts.watching ?? 0],
+                      ["saved", gapPage?.stateCounts.saved ?? 0],
+                      ["imported", gapPage?.stateCounts.imported ?? 0],
+                      ["ignored", gapPage?.stateCounts.ignored ?? 0],
+                    ] as const).map(([value, count]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setGapFilter(value)}
+                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                          gapFilter === value
+                            ? "border-accent bg-white text-foreground"
+                            : "border-border bg-surface text-muted hover:text-foreground"
+                        }`}
+                      >
+                        {value.replaceAll("_", " ")} {count}
+                      </button>
+                    ))}
+                  </div>
+
+                  {gapsLoading && !gapPage ? (
+                    <div className="mt-4 flex items-center gap-2 text-sm text-muted">
+                      <SpinnerGap className="animate-spin" size={16} />
+                      Loading gap suggestions...
+                    </div>
+                  ) : gapPage ? (
+                    <>
+                      {gapPage.warnings.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                          {gapPage.warnings.map((warning) => (
+                            <div key={warning} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                              {warning}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {gapPage.suggestions.length > 0 ? (
+                        <div className="mt-4 space-y-3">
+                          {gapPage.suggestions.map((suggestion) => (
+                            <div key={suggestion.id} className="rounded-xl border border-border bg-surface p-4">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-foreground">
+                                    {suggestion.title}
+                                    {suggestion.year ? ` (${suggestion.year})` : ""}
+                                  </p>
+                                  <p className="mt-1 text-xs text-muted">
+                                    score {Math.round(suggestion.score.overall * 100)}% • {suggestion.localConnectionCount} local links
+                                  </p>
+                                </div>
+                                <StatusBadge
+                                  tone={
+                                    suggestion.state === "ignored"
+                                      ? "warning"
+                                      : suggestion.state === "saved" || suggestion.state === "imported"
+                                        ? "success"
+                                        : "neutral"
+                                  }
+                                  value={suggestion.state}
+                                />
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {suggestion.reasonCodes.map((reason) => (
+                                  <span key={reason} className="rounded-full border border-border bg-white px-2 py-1 text-[11px] font-semibold text-muted">
+                                    {reason.replaceAll("_", " ")}
+                                  </span>
+                                ))}
+                              </div>
+
+                              <p className="mt-3 text-xs text-muted">
+                                Evidence papers: {suggestion.evidencePaperIds.join(", ") || "none"}
+                              </p>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {suggestion.state !== "watching" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleGapAction(suggestion.id, "watch")}
+                                    disabled={gapActionSuggestionId === suggestion.id}
+                                    className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                                  >
+                                    Watch
+                                  </button>
+                                )}
+                                {suggestion.state !== "ignored" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleGapAction(suggestion.id, "ignore")}
+                                    disabled={gapActionSuggestionId === suggestion.id}
+                                    className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                                  >
+                                    Ignore
+                                  </button>
+                                )}
+                                {suggestion.state !== "saved" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleGapAction(suggestion.id, "save")}
+                                    disabled={gapActionSuggestionId === suggestion.id}
+                                    className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                                  >
+                                    Save
+                                  </button>
+                                )}
+                                {suggestion.state !== "imported" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleGapAction(suggestion.id, "import")}
+                                    disabled={gapActionSuggestionId === suggestion.id}
+                                    className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                                  >
+                                    Mark imported
+                                  </button>
+                                )}
+                                {suggestion.state !== "open" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleGapAction(suggestion.id, "reopen")}
+                                    disabled={gapActionSuggestionId === suggestion.id}
+                                    className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                                  >
+                                    Reopen
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-4 text-sm text-muted">
+                          No gap suggestions match this filter yet.
+                        </p>
+                      )}
+
+                      {gapPage.nextCursor && (
+                        <button
+                          type="button"
+                          onClick={() => void loadGaps({ cursor: gapPage.nextCursor, append: true })}
+                          disabled={gapsLoadingMore}
+                          className="mt-4 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                        >
+                          {gapsLoadingMore ? "Loading..." : "Load more suggestions"}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <p className="mt-4 text-sm text-muted">
+                      Gap suggestions appear here after graph enrichment and clustering finish.
+                    </p>
+                  )}
                 </div>
               </section>
             </div>
@@ -1695,6 +1970,12 @@ export function PaperLibraryCommandCenter({
     clustersLoadingMore,
     clustersPage,
     draftsByItemId,
+    gapActionSuggestionId,
+    gapFilter,
+    gapPage,
+    gapsError,
+    gapsLoading,
+    gapsLoadingMore,
     graphError,
     graphLoading,
     graphLoadingMore,
@@ -1703,11 +1984,13 @@ export function PaperLibraryCommandCenter({
     handleApprovePlan,
     handleCancelScan,
     handleCreateApplyPlan,
+    handleGapAction,
     handleReviewAction,
     handleStartScan,
     handleUndo,
     loadApplyPlan,
     loadClusters,
+    loadGaps,
     loadGraph,
     loadManifest,
     loadReview,
