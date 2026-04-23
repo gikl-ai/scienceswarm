@@ -1016,7 +1016,7 @@ function appendActivityLog(
 ): string[] | undefined {
   const merged = existing ? [...existing] : [];
   for (const rawLine of nextLines) {
-    const line = collapseProgressWhitespace(rawLine);
+    const line = normalizeProgressEntryText(rawLine);
     if (!line) continue;
     if (merged.at(-1) === line) continue;
     merged.push(line);
@@ -1039,7 +1039,7 @@ function appendProgressLog(
   const merged = existing ? [...existing] : [];
 
   for (const entry of nextEntries) {
-    const text = entry.text.trim();
+    const text = normalizeProgressEntryText(entry.text);
     if (!text) continue;
     const normalizedEntry: MessageProgressEntry = {
       kind: entry.kind,
@@ -1056,6 +1056,33 @@ function appendProgressLog(
   }
 
   return merged.length > 0 ? merged.slice(-MAX_PROGRESS_LOG_ENTRIES) : existing;
+}
+
+function normalizeProgressEntryText(value: string): string {
+  const trimmed = collapseProgressWhitespace(value);
+  if (!trimmed) {
+    return "";
+  }
+
+  const legacyToolMatch = trimmed.match(/^(?:Use|Tool)\s+([a-z0-9_-]+):\s*(\{[\s\S]*\})$/i);
+  if (!legacyToolMatch) {
+    return trimmed;
+  }
+
+  const toolName = legacyToolMatch[1];
+  const detailText = legacyToolMatch[2];
+
+  try {
+    const detail = JSON.parse(detailText) as unknown;
+    const normalized = formatToolProgressEntry(undefined, toolName, detail);
+    if (normalized) {
+      return normalized;
+    }
+  } catch {
+    // Fall through to the original line below.
+  }
+
+  return trimmed;
 }
 
 function buildThinkingProgressEntries(value: string): MessageProgressEntry[] {
@@ -1096,7 +1123,7 @@ function buildThinkingProgressDeltaEntries(
 
 function buildActivityProgressEntries(lines: string[]): MessageProgressEntry[] {
   return lines
-    .map((line) => collapseProgressWhitespace(line))
+    .map((line) => normalizeProgressEntryText(line))
     .filter((line) => line.length > 0)
     .map((text) => ({
       kind: "activity" as const,
@@ -2077,7 +2104,7 @@ function restoreActivityLog(value: unknown): string[] | undefined {
 
   const lines = value
     .filter((entry): entry is string => typeof entry === "string")
-    .map((entry) => collapseProgressWhitespace(entry))
+    .map((entry) => normalizeProgressEntryText(entry))
     .filter(Boolean);
 
   return lines.length > 0 ? lines : undefined;
@@ -2108,7 +2135,7 @@ function restoreProgressLog(value: unknown): MessageProgressEntry[] | undefined 
 
       return {
         kind: entry.kind,
-        text,
+        text: normalizeProgressEntryText(text),
       } satisfies MessageProgressEntry;
     })
     .filter((entry): entry is MessageProgressEntry => entry !== null);
