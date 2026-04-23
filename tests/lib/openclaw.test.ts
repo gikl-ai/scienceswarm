@@ -450,18 +450,11 @@ describe("OpenClaw prewarmGatewayConnectionIfHealthy", () => {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }));
-    const releasePrewarm = vi.fn();
-    prewarmGatewayConnectionMock.mockImplementationOnce(
-      () => new Promise<void>((resolve) => {
-        releasePrewarm.mockImplementationOnce(resolve);
-      }),
-    );
 
     prewarmGatewayConnectionIfHealthy();
 
     await waitUntil(() => prewarmGatewayConnectionMock.mock.calls.length === 1);
     expect(prewarmGatewayConnectionMock).toHaveBeenCalledTimes(1);
-    releasePrewarm();
   });
 
   it("skips the background WS warmup when the fast health probe is disconnected", async () => {
@@ -471,6 +464,17 @@ describe("OpenClaw prewarmGatewayConnectionIfHealthy", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(prewarmGatewayConnectionMock).not.toHaveBeenCalled();
+  });
+
+  it("skips the extra fast probe when the caller already knows the gateway is connected", async () => {
+    const fetchSpy = vi.fn(async () => new Response("unexpected", { status: 500 }));
+    globalThis.fetch = fetchSpy;
+
+    prewarmGatewayConnectionIfHealthy(true);
+
+    await waitUntil(() => prewarmGatewayConnectionMock.mock.calls.length === 1);
+    expect(prewarmGatewayConnectionMock).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 

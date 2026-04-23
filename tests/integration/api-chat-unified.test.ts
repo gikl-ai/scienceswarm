@@ -943,11 +943,6 @@ describe("GET /api/chat/unified", () => {
       agents: 1,
       sessions: 2,
     });
-    prewarmGatewayConnectionIfHealthy.mockImplementationOnce(
-      () => new Promise<void>(() => {
-        // Keep the warmup pending to prove the health response does not await it.
-      }),
-    );
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValueOnce(new Response("ok", { status: 200 })),
@@ -960,6 +955,7 @@ describe("GET /api/chat/unified", () => {
     expect(response.status).toBe(200);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(prewarmGatewayConnectionIfHealthy).toHaveBeenCalledTimes(1);
+    expect(prewarmGatewayConnectionIfHealthy).toHaveBeenCalledWith(true);
   });
 
   it("does not start OpenClaw gateway prewarm when another agent is configured", async () => {
