@@ -16,6 +16,11 @@ const READY_ENV_LINES = [
   "LLM_PROVIDER=local",
   "OLLAMA_MODEL=gemma4:latest",
 ];
+const RESET_ENV_LINES = [
+  "AGENT_BACKEND=",
+  "LLM_PROVIDER=",
+  "OLLAMA_MODEL=",
+];
 const FAR_FUTURE_EXPIRY = "3026-04-23T13:00:00.000Z";
 const FAR_FUTURE_APPROVED_AT = "3026-04-23T12:30:00.000Z";
 let originalEnvContents: string | null = null;
@@ -32,6 +37,13 @@ test.beforeEach(async () => {
 });
 
 test.afterEach(async () => {
+  const cleanupEnv = originalEnvContents
+    ? `${originalEnvContents.trimEnd()}\n${RESET_ENV_LINES.join("\n")}\n`
+    : `${RESET_ENV_LINES.join("\n")}\n`;
+  writeFileSync(ENV_PATH, cleanupEnv);
+});
+
+test.afterAll(async () => {
   if (hadOriginalEnv && originalEnvContents !== null) {
     writeFileSync(ENV_PATH, originalEnvContents);
     return;
@@ -249,7 +261,7 @@ test("paper library command center supports review, apply, and undo flows", asyn
 
   await page.getByPlaceholder("/Users/you/Research Papers").fill("/tmp/library");
   await page.getByRole("button", { name: "Start dry-run scan" }).click();
-  await expect(page.getByText("ready for review")).toBeVisible();
+  await expect(page.getByText("ready for review", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Open review queue" }).click();
   await expect(page.getByText("Interesting Paper (2024)")).toBeVisible();
