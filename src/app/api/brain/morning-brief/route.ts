@@ -79,7 +79,12 @@ function getCachedBrief(
 ): MorningBriefCacheEntry | null {
   const cached = briefCache.get(key);
   if (!cached) return null;
-  if (Date.now() - cached.generatedAtMs > maxAgeMs) return null;
+  const ageMs = Date.now() - cached.generatedAtMs;
+  if (ageMs > MORNING_BRIEF_STALE_TTL_MS) {
+    briefCache.delete(key);
+    return null;
+  }
+  if (ageMs > maxAgeMs) return null;
   return cached;
 }
 
@@ -198,13 +203,36 @@ function llmUnavailableResponse(err: unknown): Response {
   );
 }
 
+function isLLMProviderError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  const providerCredential =
+    /\b(?:openai|anthropic|gemini|ollama)[_ -]?api[_ -]?key\b/.test(
+      normalized,
+    );
+  const providerAuthOrQuota =
+    /\b(?:openai|anthropic|gemini)\s+(?:api\s+)?(?:quota|rate[_ -]?limit)\b/.test(
+      normalized,
+    );
+  const localProviderFailure =
+    /\bollama\s+(?:chat|stream|pull|request)\s+failed\b/.test(normalized) ||
+    /\bollama\b.{0,80}\b(?:model host|no response body|connection refused|unavailable)\b/.test(
+      normalized,
+    );
+
+  return (
+    normalized.includes("llm provider") ||
+    normalized.includes("model provider") ||
+    normalized.includes("model host") ||
+    providerCredential ||
+    providerAuthOrQuota ||
+    localProviderFailure
+  );
+}
+
 function generationFailedResponse(err: unknown): Response {
   const message =
     err instanceof Error ? err.message : "Morning brief generation failed";
-  if (
-    message.includes("OPENAI_API_KEY") ||
-    message.toLowerCase().includes("llm provider")
-  ) {
+  if (isLLMProviderError(message)) {
     return llmUnavailableResponse(err);
   }
   return Response.json({ error: message }, { status: 500 });
