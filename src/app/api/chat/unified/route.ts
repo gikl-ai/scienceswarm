@@ -1909,6 +1909,16 @@ function createOpenClawThinkingTraceStreamer(params: {
     resolveStopWait = resolve;
   });
 
+  const primeLatestThinking = async (): Promise<void> => {
+    if (!sessionFile || params.isStreamClosed()) {
+      return;
+    }
+    // Reused web sessions already contain the previous assistant turn. Seed
+    // the baseline from that file snapshot so the next turn only streams fresh
+    // reasoning deltas instead of replaying stale prior-turn thinking.
+    latestThinking = (await readOpenClawThinkingTraceFromFile(sessionFile)) ?? "";
+  };
+
   const emitLatestThinking = async (): Promise<void> => {
     if (!sessionFile || params.isStreamClosed()) {
       return;
@@ -1947,6 +1957,7 @@ function createOpenClawThinkingTraceStreamer(params: {
   };
 
   const loop = (async () => {
+    await primeLatestThinking();
     while (!stopped && !params.isStreamClosed()) {
       await emitLatestThinking();
       if (stopped || params.isStreamClosed()) {
