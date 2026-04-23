@@ -24,6 +24,7 @@ import { promisify } from "node:util";
 
 import { runOpenClaw } from "@/lib/openclaw/runner";
 import { isOpenClawGatewayReachable } from "@/lib/openclaw/reachability";
+import { getOpenClawGatewayAuthStatus } from "@/lib/openclaw/gateway-auth";
 
 const exec = promisify(execFile);
 
@@ -85,13 +86,16 @@ async function getOpenClawModel(): Promise<string | null> {
 }
 
 async function isOpenClawRunning(): Promise<boolean> {
-  return await isOpenClawGatewayReachable();
+  const reachable = await isOpenClawGatewayReachable();
+  const auth = getOpenClawGatewayAuthStatus();
+  return reachable && auth.configured;
 }
 
 /**
  * Full status shape consumed by `GET /api/settings/openclaw`.
  */
 export async function getOpenClawStatus(): Promise<OpenClawFullStatus> {
+  const auth = getOpenClawGatewayAuthStatus();
   const [installed, running] = await Promise.all([
     hasCmd("openclaw"),
     isOpenClawRunning(),
@@ -122,7 +126,7 @@ export async function getOpenClawStatus(): Promise<OpenClawFullStatus> {
     ])
     : [null, null, null];
 
-  const configured = Boolean(model || running);
+  const configured = auth.configured && Boolean(model || running);
 
   return {
     installed: true,

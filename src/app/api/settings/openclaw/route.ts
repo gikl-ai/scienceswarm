@@ -27,6 +27,10 @@ import {
   spawnOpenClaw,
   writeGatewayPid,
 } from "@/lib/openclaw/runner";
+import {
+  ensureOpenClawGatewayAuthConfig,
+  getOpenClawGatewayAuthStatus,
+} from "@/lib/openclaw/gateway-auth";
 import { getOpenClawStatus } from "@/lib/openclaw-status";
 import { parseEnvFile } from "@/lib/setup/env-writer";
 
@@ -143,14 +147,21 @@ async function getSavedSetupState(): Promise<{
 async function isOpenClawRunning(): Promise<boolean> {
   return await isOpenClawGatewayReachable();
 }
+
+async function isOpenClawReady(): Promise<boolean> {
+  const reachable = await isOpenClawGatewayReachable();
+  const auth = getOpenClawGatewayAuthStatus();
+  return reachable && auth.configured;
+}
+
 async function wait(ms: number): Promise<void> {
   await new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 }
 
-async function waitForOpenClawRunning(timeoutMs = 10_000): Promise<boolean> {
+async function waitForOpenClawReady(timeoutMs = 10_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {
-    if (await isOpenClawRunning()) {
+    if (await isOpenClawReady()) {
       return true;
     }
     await wait(1_000);
@@ -273,6 +284,11 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json({ error: "Configure failed" }, { status: 500 });
       }
 
+      ensureOpenClawGatewayAuthConfig({
+        mode: resolveOpenClawMode(),
+        port: getOpenClawPort(),
+      });
+
       const validateStep = configureSteps[configureSteps.length - 1];
       const validateResult = await runOpenClaw(validateStep, { timeoutMs: 5000 });
       if (!validateResult.ok) {
@@ -288,7 +304,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     case "start": {
-      const alreadyRunning = await isOpenClawRunning();
+      const alreadyRunning = await isOpenClawReady();
       if (alreadyRunning) {
         const activationError = await activateOpenClawBackendOrResponse({
           alreadyRunning: true,
@@ -325,6 +341,7 @@ export async function POST(request: Request): Promise<Response> {
         const mode = resolveOpenClawMode();
 
         if (mode.kind === "state-dir") {
+          ensureOpenClawGatewayAuthConfig({ mode, port: getOpenClawPort() });
           // `openclaw gateway start` can daemonize into upstream's default
           // user-global state instead of preserving OPENCLAW_STATE_DIR. In
           // ScienceSwarm-managed state-dir mode, run the gateway process
@@ -351,12 +368,12 @@ export async function POST(request: Request): Promise<Response> {
             writeGatewayPid(runChild.pid, mode);
           }
           runChild.unref();
-          const running = await waitForOpenClawRunning(10_000);
+          const running = await waitForOpenClawReady(10_000);
           if (!running) {
             return Response.json(
               {
                 error:
-                  "OpenClaw start command ran, but the gateway did not become reachable. Check the OpenClaw logs or retry Start.",
+                  "OpenClaw start command ran, but the gateway did not become reachable or authenticated. Check the OpenClaw logs or retry Start.",
                 running: false,
               },
               { status: 503 },
@@ -425,12 +442,12 @@ export async function POST(request: Request): Promise<Response> {
           runChild.unref();
         }
 
-        const running = await waitForOpenClawRunning();
+        const running = await waitForOpenClawReady();
         if (!running) {
           return Response.json(
             {
               error:
-                "OpenClaw start command ran, but the gateway did not become reachable. Check the OpenClaw logs or retry Start.",
+                "OpenClaw start command ran, but the gateway did not become reachable or authenticated. Check the OpenClaw logs or retry Start.",
               running: false,
             },
             { status: 503 },
