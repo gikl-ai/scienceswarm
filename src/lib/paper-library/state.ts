@@ -48,6 +48,14 @@ export function getPaperLibraryApplyPlanPath(project: string, applyPlanId: strin
   return path.join(getPaperLibraryStateDir(project, stateRoot), "apply-plans", `${encodeURIComponent(applyPlanId)}.json`);
 }
 
+export function getPaperLibraryIdempotencyPath(project: string, idempotencyKey: string, stateRoot?: string): string {
+  return path.join(getPaperLibraryStateDir(project, stateRoot), "idempotency", `${encodeURIComponent(idempotencyKey)}.json`);
+}
+
+export function getPaperLibraryEnrichmentCachePath(project: string, stateRoot?: string): string {
+  return path.join(getPaperLibraryStateDir(project, stateRoot), "enrichment-cache.json");
+}
+
 export function parsePersistedState<T>(
   value: unknown,
   schema: z.ZodType<T>,
@@ -135,4 +143,3 @@ export function readCursorWindow<T>(
     filteredCount: items.length,
   };
 }
-
