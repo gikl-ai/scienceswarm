@@ -637,6 +637,9 @@ describe("SettingsPage runtime settings", () => {
     render(<SettingsPage />);
 
     await screen.findByText("API Keys & Model");
+    await waitFor(() => {
+      expect(screen.getByTestId("llm-provider-local")).toBeChecked();
+    });
 
     fireEvent.click(screen.getByTestId("llm-provider-openai"));
     fireEvent.change(await screen.findByTestId("openai-api-key-input"), {

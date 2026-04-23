@@ -67,6 +67,9 @@ describe("Project dashboard smoke test", () => {
     projectBrief?: Record<string, unknown>;
     importSummary?: LatestImportSummary | null;
     importSummaryStatus?: number;
+    gbrainPages?: Array<Record<string, unknown>>;
+    latestPaperLibraryScan?: Record<string, unknown> | null;
+    paperLibraryScanStatus?: number;
   }) {
     const brainReady = options?.brainReady ?? true;
     const projectBrief = options?.projectBrief ?? {
@@ -90,6 +93,11 @@ describe("Project dashboard smoke test", () => {
     };
     const importSummary = options?.importSummary ?? null;
     const importSummaryStatus = options?.importSummaryStatus ?? 200;
+    const gbrainPages = options?.gbrainPages ?? [];
+    const latestPaperLibraryScan = options?.latestPaperLibraryScan ?? null;
+    const paperLibraryScanStatus =
+      options?.paperLibraryScanStatus ??
+      (latestPaperLibraryScan ? 200 : 404);
 
     return vi.fn((url: string) => {
       if (url === "/api/health") {
@@ -163,6 +171,40 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json(projectBrief));
       }
 
+      if (url === "/api/brain/list?project=demo-project") {
+        return Promise.resolve(Response.json(gbrainPages));
+      }
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        if (paperLibraryScanStatus !== 200) {
+          return Promise.resolve(
+            Response.json(
+              {
+                ok: false,
+                error: {
+                  code:
+                    paperLibraryScanStatus === 404
+                      ? "job_not_found"
+                      : "paper_library_unavailable",
+                  message:
+                    paperLibraryScanStatus === 404
+                      ? "Paper library scan not found."
+                      : "Paper library lookup failed.",
+                },
+              },
+              { status: paperLibraryScanStatus },
+            ),
+          );
+        }
+
+        return Promise.resolve(
+          Response.json({
+            ok: true,
+            scan: latestPaperLibraryScan,
+          }),
+        );
+      }
+
       if (url === "/api/projects/demo-project/import-summary") {
         if (importSummaryStatus !== 200) {
           return Promise.resolve(
@@ -216,6 +258,46 @@ describe("Project dashboard smoke test", () => {
     expect(screen.queryByRole("button", { name: "Analyze evidence" })).not.toBeInTheDocument();
     expect(screen.queryByText("Project Understanding")).not.toBeInTheDocument();
     expect(screen.queryByText("Low-Confidence Project Read")).not.toBeInTheDocument();
+  });
+
+  it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
+    const fetchMock = stubDashboardFetch({
+      latestPaperLibraryScan: {
+        id: "scan-1",
+        project: "demo-project",
+        status: "ready_for_apply",
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    expect(await screen.findByRole("link", { name: "Paper Library" })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url]) =>
+            url === "/api/brain/paper-library/scan?project=demo-project&latest=1",
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("heading", { name: "Your workspace is empty" }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows the empty-state card when the project has no workspace, gbrain, import, or paper-library content", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    expect(await screen.findByRole("link", { name: "Paper Library" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Your workspace is empty" }),
+    ).toBeInTheDocument();
   });
 
   it("shows a paper library launcher for the active project", async () => {
@@ -565,6 +647,7 @@ describe("Project dashboard smoke test", () => {
 
     expect(await screen.findAllByText("Projects")).not.toHaveLength(0);
     expect(await screen.findByText("Brain Artifacts")).toBeInTheDocument();
+    expect(screen.queryByText("Your workspace is empty")).not.toBeInTheDocument();
     expect(screen.queryByText("hubble-1929.pdf")).not.toBeInTheDocument();
     await expandAllFolders();
     expect(await screen.findByText("hubble-1929.pdf")).toBeInTheDocument();
