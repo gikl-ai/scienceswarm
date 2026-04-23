@@ -330,7 +330,13 @@ beforeEach(() => {
     agents: 0,
     sessions: 0,
   });
-  openClawGatewayHealthCheck.mockImplementation(() => openClawHealthCheck());
+  openClawGatewayHealthCheck.mockImplementation(async () => {
+    const status = await openClawHealthCheck();
+    return {
+      status: status.status,
+      gateway: status.gateway,
+    };
+  });
   scienceswarmDir = null;
   delete process.env.SCIENCESWARM_DIR;
   delete process.env.BRAIN_ROOT;
