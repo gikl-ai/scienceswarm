@@ -1225,7 +1225,7 @@ describe("Project dashboard smoke test", () => {
         mode: "chat",
         projectId: "demo-project",
         projectPolicy: "cloud-ok",
-        approvalState: "approved",
+        approvalState: "not-required",
         prompt: "Talk to Codex directly",
       }),
     ]);

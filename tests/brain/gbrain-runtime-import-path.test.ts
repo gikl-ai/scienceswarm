@@ -1,17 +1,16 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("gbrain runtime bridge import paths", () => {
-  it("loads engine-factory through the gbrain package export", () => {
-    const source = readFileSync(
-      join(process.cwd(), "src/brain/stores/gbrain-runtime.mjs"),
-      "utf8",
-    );
+  it("loads engine-factory through the gbrain package export", async () => {
+    const specifier = ["gbrain", "engine-factory"].join("/");
+    const engineFactory = await import(specifier);
 
-    expect(source).toContain('import("gbrain/engine-factory")');
-    expect(source).not.toContain(
-      'import("../../../node_modules/gbrain/src/core/engine-factory.ts")',
-    );
+    expect(engineFactory.createEngine).toEqual(expect.any(Function));
+  });
+
+  it("keeps the runtime bridge importable from tests", async () => {
+    const runtimeBridge = await import("@/brain/stores/gbrain-runtime.mjs");
+
+    expect(runtimeBridge.createRuntimeEngine).toEqual(expect.any(Function));
   });
 });

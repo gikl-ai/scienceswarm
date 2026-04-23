@@ -3590,9 +3590,7 @@ function ProjectPageContent() {
         runtimeHostId,
         runtimeMode: mode,
         projectPolicy: runtimeProjectPolicy,
-        approvalState: sendChatDirect && runtimeHostId !== "openclaw"
-          ? "approved"
-          : "not-required",
+        approvalState: "not-required",
         selectedHostIds,
         synthesisHostId: mode === "compare" ? selectedRuntimeHostId : undefined,
         dataIncluded,

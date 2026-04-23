@@ -360,6 +360,8 @@ cmd_status() {
   if is_truthy "${FRONTEND_USE_HTTPS:-true}"; then
     if curl -kfsS --max-time 2 "https://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
       frontend_health="ok"
+    elif curl -fsS --max-time 2 "http://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
+      frontend_health="ok"
     fi
   elif curl -fsS --max-time 2 "http://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
     frontend_health="ok"
