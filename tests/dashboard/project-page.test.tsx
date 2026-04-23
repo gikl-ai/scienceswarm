@@ -40,6 +40,10 @@ vi.mock("next/link", () => ({
 import ProjectPage from "@/app/dashboard/project/page";
 import { FILE_PREVIEW_LOCATION_STORAGE_KEY } from "@/lib/file-preview-preferences";
 
+async function expandAllFolders() {
+  fireEvent.click(await screen.findByRole("button", { name: "Expand all folders" }));
+}
+
 describe("Project dashboard smoke test", () => {
   beforeAll(() => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -183,7 +187,7 @@ describe("Project dashboard smoke test", () => {
     });
   }
 
-  it("shows an honest low-confidence state when evidence does not justify a belief change", async () => {
+  it("does not render fixed reasoning panels on the project workspace", async () => {
     const fetchMock = stubDashboardFetch({
       projectBrief: {
         project: "demo-project",
@@ -207,15 +211,11 @@ describe("Project dashboard smoke test", () => {
 
     render(<ProjectPage />);
 
-    expect(
-      await screen.findByText("No Meaningful Belief Change Detected"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/does not yet justify a confident update/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Treat downstream guidance as low confidence/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Chat with your project")).toBeInTheDocument();
+    expect(screen.queryByText("Evidence Map")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Analyze evidence" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Project Understanding")).not.toBeInTheDocument();
+    expect(screen.queryByText("Low-Confidence Project Read")).not.toBeInTheDocument();
   });
 
 
@@ -554,8 +554,10 @@ describe("Project dashboard smoke test", () => {
     render(<ProjectPage />);
 
     expect(await screen.findAllByText("Projects")).not.toHaveLength(0);
-    expect(await screen.findByText("hubble-1929.pdf")).toBeInTheDocument();
     expect(await screen.findByText("Brain Artifacts")).toBeInTheDocument();
+    expect(screen.queryByText("hubble-1929.pdf")).not.toBeInTheDocument();
+    await expandAllFolders();
+    expect(await screen.findByText("hubble-1929.pdf")).toBeInTheDocument();
     expect(screen.getByText("Hubble 1929")).toBeInTheDocument();
     expect(screen.getByText("Critique for Hubble 1929")).toBeInTheDocument();
     expect(screen.getByText("Untyped Artifact")).toBeInTheDocument();
@@ -1650,6 +1652,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
+    await expandAllFolders();
     const fileButton = (await screen.findByText("analysis.py")).closest("button");
     expect(fileButton).not.toBeNull();
     fireEvent.click(fileButton as HTMLButtonElement);
@@ -2191,6 +2194,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
+    await expandAllFolders();
     const fileButton = (await screen.findByText("summary.md")).closest("button");
     expect(fileButton).not.toBeNull();
     fireEvent.click(fileButton as HTMLButtonElement);
@@ -2320,6 +2324,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
+    await expandAllFolders();
     const alphaButton = (await screen.findByText("alpha.md")).closest("button");
     const betaButton = (await screen.findByText("beta.md")).closest("button");
     expect(alphaButton).not.toBeNull();

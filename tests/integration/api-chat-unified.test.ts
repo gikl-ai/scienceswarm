@@ -86,6 +86,7 @@ vi.mock("@/lib/local-guard", () => ({
 
 vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
+  gatewayHealthCheck: openClawHealthCheck,
   sendAgentMessage: sendOpenClawMessage,
   getConversationMessagesSince,
 }));
@@ -157,7 +158,13 @@ vi.mock("@/lib/openhands", () => ({
 }));
 
 import { POST as commandPOST } from "@/app/api/chat/command/route";
-import { GET, POST } from "@/app/api/chat/unified/route";
+import {
+  __getConfiguredAgentRuntimeStatusCacheSizeForTests,
+  __resetConfiguredAgentRuntimeStatusCacheForTests,
+  GET,
+  POST,
+  shouldPreMaterializeProjectWorkspaceForTurn,
+} from "@/app/api/chat/unified/route";
 
 let scienceswarmDir: string | null = null;
 
@@ -233,6 +240,7 @@ function mockDirectLLMStream(text: string): void {
 }
 
 beforeEach(() => {
+  __resetConfiguredAgentRuntimeStatusCacheForTests();
   vi.unstubAllGlobals();
   isLocalRequest.mockReset();
   resolveAgentConfig.mockReset();
@@ -878,6 +886,90 @@ describe("GET /api/chat/unified", () => {
     // Legacy field
     expect(body.openclaw).toBe("connected");
     expect(body.channels).toEqual(["telegram"]);
+  });
+
+  it("reuses a fresh OpenClaw runtime status between the health probe and the next POST even when config key order differs", async () => {
+    resolveAgentConfig
+      .mockReturnValueOnce({
+        url: "http://localhost:19002",
+        type: "openclaw",
+      })
+      .mockReturnValueOnce({
+        type: "openclaw",
+        url: "http://localhost:19002",
+      });
+    openClawHealthCheck.mockResolvedValue({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: ["telegram"],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("Hello back");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
+    );
+
+    const healthResponse = await GET(
+      new Request("http://localhost/api/chat/unified?action=health"),
+    );
+    expect(healthResponse.status).toBe(200);
+
+    const postResponse = await POST(new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "runtime-status-cache-test",
+      },
+      body: JSON.stringify({
+        message: "Hi",
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    }));
+
+    expect(postResponse.status).toBe(200);
+    expect(openClawHealthCheck).toHaveBeenCalledTimes(1);
+    expect(sendOpenClawMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("prunes expired runtime-status cache entries before caching a new config", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-04-22T00:00:00Z"));
+      resolveAgentConfig.mockReturnValueOnce({
+        type: "openclaw",
+        url: "http://localhost:19002",
+      });
+      openClawHealthCheck.mockResolvedValue({
+        status: "connected",
+        gateway: "ws://127.0.0.1:19002",
+        channels: ["telegram"],
+        agents: 1,
+        sessions: 2,
+      });
+
+      const firstResponse = await GET(
+        new Request("http://localhost/api/chat/unified?action=health"),
+      );
+      expect(firstResponse.status).toBe(200);
+      expect(__getConfiguredAgentRuntimeStatusCacheSizeForTests()).toBe(1);
+
+      vi.setSystemTime(new Date("2026-04-22T00:00:06Z"));
+      resolveAgentConfig.mockReturnValueOnce({
+        type: "openclaw",
+        url: "http://localhost:19003",
+      });
+
+      const secondResponse = await GET(
+        new Request("http://localhost/api/chat/unified?action=health"),
+      );
+      expect(secondResponse.status).toBe(200);
+      expect(openClawHealthCheck).toHaveBeenCalledTimes(2);
+      expect(__getConfiguredAgentRuntimeStatusCacheSizeForTests()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reports ready from direct OpenAI availability when no local provider is selected", async () => {
@@ -1698,6 +1790,59 @@ describe("POST /api/chat/unified", () => {
     expect(body.response).toContain("What institution are you at?");
   });
 
+  it("routes trivial greetings through OpenClaw instead of answering locally", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw says hi");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Hi",
+        projectId: "alpha-project",
+        mode: "reasoning",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      backend: "openclaw",
+      mode: "reasoning",
+      response: "OpenClaw says hi",
+    });
+    expect(openClawHealthCheck).toHaveBeenCalledOnce();
+    expect(sendOpenClawMessage).toHaveBeenCalledOnce();
+    const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
+    expect(openClawMessage).toContain(
+      "Keep ordinary conversational replies brief; for greetings, acknowledgements, or short status questions, answer in 1-2 sentences",
+    );
+    expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it("pre-materializes openclaw-tools turns even without content hints", () => {
+    expect(
+      shouldPreMaterializeProjectWorkspaceForTurn({
+        projectId: "tools-project",
+        message: "run the tests",
+        chatMode: "openclaw-tools",
+        files: [],
+        activeFile: null,
+      }),
+    ).toBe(true);
+  });
+
   it("returns 503 when OpenClaw is not the configured agent", async () => {
     // Previously this returned 503 only after walking three fallback paths
     // (local direct, OpenHands, final streamDirectResponse). The new
@@ -1759,6 +1904,46 @@ describe("POST /api/chat/unified", () => {
     expect(sendOpenClawMessage).toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns an actionable OpenClaw error when the web gateway turn fails", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockRejectedValueOnce(
+      new Error("OpenClaw gateway unreachable"),
+    );
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "openclaw-gateway-failure",
+      },
+      body: JSON.stringify({
+        message: "Hello",
+        projectId: "alpha-project",
+        mode: "openclaw-tools",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
+    const body = await response.json();
+    expect(body.backend).toBe("openclaw");
+    expect(body.error).toContain("ScienceSwarm could not complete this request.");
+    expect(body.error).toContain("Technical detail: OpenClaw gateway unreachable");
+    expect(streamChat).not.toHaveBeenCalled();
   });
 
   // The two tests that used to live here ("returns an actionable settings

@@ -1,5 +1,4 @@
-import path from "node:path";
-import {
+import fs, {
   closeSync,
   existsSync,
   ftruncateSync,
@@ -12,6 +11,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
+import path from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
@@ -395,10 +395,71 @@ describe("GET /api/workspace?action=tree", () => {
     ).toBe(true);
   });
 
-  it("prefers the gbrain file-ref tree over pre-existing materialized cache files", async () => {
+  it("keeps disk workspace inputs visible when gbrain artifacts are present", async () => {
+    const projectId = "test-project";
+    const projectDir = path.join(ROOT, "projects", projectId);
+    mkdirSync(path.join(projectDir, "data"), { recursive: true });
+    mkdirSync(path.join(projectDir, "experiments"), { recursive: true });
+    writeFileSync(path.join(projectDir, "data", "observations.csv"), "condition,accuracy\nbaseline,0.77\n");
+    writeFileSync(path.join(projectDir, "experiments", "run_eval.py"), "print('eval')\n");
+    const sha = "b".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "note") return [];
+      return [
+        {
+          path: "rerun-result-page",
+          title: "Rerun Result",
+          type: "note",
+          content: "# Rerun Result",
+          frontmatter: {
+            type: "note",
+            project: projectId,
+            file_refs: [
+              {
+                role: "artifact",
+                fileObjectId: `sha256:${sha}`,
+                sha256: sha,
+                filename: "results/rerun-result.md",
+                mime: "text/markdown",
+                sizeBytes: 456,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+
+    const { GET } = await importRoute();
+    const res = await GET(
+      new Request(`http://localhost/api/workspace?action=tree&projectId=${projectId}`),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      totalFiles: number;
+      tree: Array<{ name: string; children?: Array<{ name: string }> }>;
+    };
+    expect(body.tree.find((node) => node.name === "data")?.children).toEqual([
+      expect.objectContaining({ name: "observations.csv" }),
+    ]);
+    expect(body.tree.find((node) => node.name === "experiments")?.children).toEqual([
+      expect.objectContaining({ name: "run_eval.py" }),
+    ]);
+    expect(body.tree.find((node) => node.name === "results")?.children).toEqual([
+      expect.objectContaining({ name: "rerun-result.md" }),
+    ]);
+    expect(body.totalFiles).toBe(3);
+  });
+
+  it("prefers gbrain metadata for exact path conflicts while preserving other disk files", async () => {
     const projectId = "test-project";
     const projectDir = path.join(ROOT, "projects", projectId);
     mkdirSync(path.join(projectDir, "papers"), { recursive: true });
+    writeFileSync(path.join(projectDir, "papers", "new-paper.pdf"), "%PDF-1.4 stale");
     writeFileSync(path.join(projectDir, "papers", "legacy.pdf"), "%PDF-1.4 legacy");
     const sha = "b".repeat(64);
     const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
@@ -439,11 +500,14 @@ describe("GET /api/workspace?action=tree", () => {
     expect(res.status).toBe(200);
     const body = await res.json() as {
       totalFiles: number;
-      tree: Array<{ name: string; children?: Array<{ name: string }> }>;
+      tree: Array<{ name: string; children?: Array<{ name: string; size?: string }> }>;
     };
     const papersDir = body.tree.find((node) => node.name === "papers");
-    expect(papersDir?.children?.map((child) => child.name)).toEqual(["new-paper.pdf"]);
-    expect(body.totalFiles).toBe(1);
+    expect(papersDir?.children).toEqual([
+      expect.objectContaining({ name: "legacy.pdf" }),
+      expect.objectContaining({ name: "new-paper.pdf", size: "456 B" }),
+    ]);
+    expect(body.totalFiles).toBe(2);
   });
 
   it("does not let legacy cache files conflict with the gbrain project view", async () => {
@@ -554,6 +618,219 @@ describe("GET /api/workspace?action=tree", () => {
     const watchBody = await watchRes.json() as { totalFiles: number };
     expect(treeBody.totalFiles).toBe(1);
     expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
+  });
+
+  it("computes gbrain watch totals without rebuilding the disk tree", async () => {
+    const projectId = "test-project";
+    const projectDir = path.join(ROOT, "projects", projectId);
+    const papersDir = path.join(projectDir, "papers");
+    mkdirSync(papersDir, { recursive: true });
+    writeFileSync(path.join(papersDir, "duplicate.pdf"), "%PDF-1.4 legacy");
+    writeFileSync(path.join(papersDir, "legacy.pdf"), "%PDF-1.4 legacy-only");
+    const sha = "e".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "paper") return [];
+      return [
+        {
+          path: "duplicate-paper-page",
+          title: "Duplicate Paper Page",
+          type: "paper",
+          content: "# Duplicate Paper Page",
+          frontmatter: {
+            type: "paper",
+            project: projectId,
+            file_refs: [
+              {
+                role: "source",
+                fileObjectId: `sha256:${sha}`,
+                sha256: sha,
+                filename: "duplicate.pdf",
+                mime: "application/pdf",
+                sizeBytes: 123,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+    const readdirSpy = vi.spyOn(fs, "readdirSync");
+
+    const { GET } = await importRoute();
+    const res = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { totalFiles: number };
+    expect(body.totalFiles).toBe(2);
+    const projectReads = readdirSpy.mock.calls
+      .map(([dir]) => String(dir))
+      .filter((dir) => dir === projectDir || dir.startsWith(`${projectDir}${path.sep}`));
+    expect(projectReads).toEqual([projectDir, papersDir]);
+  });
+
+  it("keeps watch totals aligned when gbrain replaces a legacy file with a directory", async () => {
+    const projectId = "test-project";
+    const projectDir = path.join(ROOT, "projects", projectId);
+    mkdirSync(projectDir, { recursive: true });
+    writeFileSync(path.join(projectDir, "papers"), "legacy non-directory entry");
+    const sha = "f".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "paper") return [];
+      return [
+        {
+          path: "nested-paper-page",
+          title: "Nested Paper Page",
+          type: "paper",
+          content: "# Nested Paper Page",
+          frontmatter: {
+            type: "paper",
+            project: projectId,
+            file_refs: [
+              {
+                role: "source",
+                fileObjectId: `sha256:${sha}`,
+                sha256: sha,
+                filename: "papers/nested.pdf",
+                mime: "application/pdf",
+                sizeBytes: 789,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+
+    const { GET } = await importRoute();
+    const treeRes = await GET(
+      new Request(`http://localhost/api/workspace?action=tree&projectId=${projectId}`),
+    );
+    const watchRes = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(treeRes.status).toBe(200);
+    expect(watchRes.status).toBe(200);
+    const treeBody = await treeRes.json() as { totalFiles: number };
+    const watchBody = await watchRes.json() as { totalFiles: number };
+    expect(treeBody.totalFiles).toBe(1);
+    expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
+  });
+
+  it("counts prefix-conflicting gbrain entries the same way as the merged tree", async () => {
+    const projectId = "test-project";
+    mkdirSync(path.join(ROOT, "projects", projectId), { recursive: true });
+    const firstSha = "1".repeat(64);
+    const secondSha = "2".repeat(64);
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "paper") return [];
+      return [
+        {
+          path: "prefix-conflict-page",
+          title: "Prefix Conflict Page",
+          type: "paper",
+          content: "# Prefix Conflict Page",
+          frontmatter: {
+            type: "paper",
+            project: projectId,
+            file_refs: [
+              {
+                role: "source",
+                fileObjectId: `sha256:${firstSha}`,
+                sha256: firstSha,
+                filename: "papers/a",
+                mime: "application/octet-stream",
+                sizeBytes: 12,
+              },
+              {
+                role: "source",
+                fileObjectId: `sha256:${secondSha}`,
+                sha256: secondSha,
+                filename: "papers/a/sub.pdf",
+                mime: "application/pdf",
+                sizeBytes: 34,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+
+    const { GET } = await importRoute();
+    const treeRes = await GET(
+      new Request(`http://localhost/api/workspace?action=tree&projectId=${projectId}`),
+    );
+    const watchRes = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(treeRes.status).toBe(200);
+    expect(watchRes.status).toBe(200);
+    const treeBody = await treeRes.json() as { totalFiles: number };
+    const watchBody = await watchRes.json() as { totalFiles: number };
+    expect(treeBody.totalFiles).toBe(2);
+    expect(watchBody.totalFiles).toBe(treeBody.totalFiles);
+  });
+
+  it("reports the newest gbrain timestamp in merged watch state", async () => {
+    const projectId = "test-project";
+    const projectDir = path.join(ROOT, "projects", projectId);
+    mkdirSync(path.join(projectDir, "data"), { recursive: true });
+    writeFileSync(path.join(projectDir, "data", "observations.csv"), "condition,accuracy\nbaseline,0.77\n");
+    const sha = "1".repeat(64);
+    const uploadedAt = "2026-04-24T10:00:00.000Z";
+    const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {
+      if (filters?.type !== "note") return [];
+      return [
+        {
+          path: "newer-result-page",
+          title: "Newer Result",
+          type: "note",
+          content: "# Newer Result",
+          frontmatter: {
+            type: "note",
+            project: projectId,
+            uploaded_at: uploadedAt,
+            file_refs: [
+              {
+                role: "artifact",
+                fileObjectId: `sha256:${sha}`,
+                sha256: sha,
+                filename: "results/newer-result.md",
+                mime: "text/markdown",
+                sizeBytes: 789,
+              },
+            ],
+          },
+        },
+      ];
+    });
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({ listPages })),
+    }));
+
+    const { GET } = await importRoute();
+    const res = await GET(
+      new Request(`http://localhost/api/workspace?action=watch&projectId=${projectId}`),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { totalFiles: number; lastModified: string | null };
+    expect(body.totalFiles).toBe(2);
+    expect(body.lastModified).toBe(uploadedAt);
   });
 
   it("deduplicates gbrain file refs by keeping the freshest artifact for a workspace path", async () => {

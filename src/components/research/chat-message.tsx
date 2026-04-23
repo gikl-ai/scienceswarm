@@ -107,6 +107,12 @@ function getAudioMimeType(ext: string): string | undefined {
       return "audio/ogg";
     case "m4a":
       return "audio/mp4";
+    case "flac":
+      return "audio/flac";
+    case "opus":
+      return "audio/ogg; codecs=opus";
+    case "aac":
+      return "audio/aac";
     default:
       return undefined;
   }
@@ -575,15 +581,28 @@ function parseEmbedDirective(part: string): {
 }
 
 function renderInlineMarkdownLite(value: string, keyPrefix: string) {
-  return value.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
-    part.startsWith("**") && part.endsWith("**") ? (
-      <strong key={`${keyPrefix}-bold-${index}`} className="font-semibold">
-        {part.slice(2, -2)}
-      </strong>
-    ) : (
-      <span key={`${keyPrefix}-text-${index}`}>{part}</span>
-    ),
-  );
+  return value.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={`${keyPrefix}-bold-${index}`} className="font-semibold">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code
+          key={`${keyPrefix}-code-${index}`}
+          className="rounded bg-slate-100 px-1 py-0.5 text-[0.95em] text-slate-800"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+
+    return <span key={`${keyPrefix}-text-${index}`}>{part}</span>;
+  });
 }
 
 function getCopyableMessageText(root: HTMLDivElement | null, fallback: string): string {
@@ -627,7 +646,7 @@ function renderContent(content: string, projectId: string) {
       const workspaceFilePath = normalizeMediaWorkspacePath(filePath);
       const ext = workspaceFilePath.split(".").pop()?.toLowerCase() || "";
       const src = `/api/workspace?action=raw&file=${encodeURIComponent(workspaceFilePath)}&projectId=${encodeURIComponent(projectId)}`;
-      if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) {
+      if (["png", "jpg", "jpeg", "gif", "webp", "avif"].includes(ext)) {
         return (
           <div key={i} className="my-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -644,6 +663,19 @@ function renderContent(content: string, projectId: string) {
               title={filePath}
               className="w-full min-w-0 h-[80vh] min-h-[700px] rounded-lg border border-border bg-white"
               sandbox="allow-scripts"
+            />
+            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+          </div>
+        );
+      }
+      if (ext === "pdf") {
+        return (
+          <div key={i} className="my-2">
+            <iframe
+              src={src}
+              title={filePath}
+              className="w-full min-w-0 h-[80vh] min-h-[600px] rounded-lg border border-border bg-white"
+              sandbox="allow-same-origin allow-downloads"
             />
             <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
           </div>
@@ -669,7 +701,7 @@ function renderContent(content: string, projectId: string) {
           </div>
         );
       }
-      if (["mp3", "wav", "ogg", "m4a"].includes(ext)) {
+      if (["mp3", "wav", "ogg", "m4a", "flac", "opus", "aac"].includes(ext)) {
         return (
           <div key={i} className="my-2">
             <audio controls className="w-full">
@@ -761,6 +793,7 @@ function renderContent(content: string, projectId: string) {
 export function ChatMessage({
   role,
   content,
+  thinking,
   activityLog,
   progressLog,
   chatMode,
@@ -798,15 +831,29 @@ export function ChatMessage({
     role === "assistant" && Array.isArray(activityLog) && activityLog.length > 0
       ? activityLog
       : [];
+  const storedProgressLog =
+    role === "assistant" && Array.isArray(progressLog) && progressLog.length > 0
+      ? progressLog
+      : [];
+  const hasLegacyProgressFields =
+    role === "assistant"
+    && (
+      Boolean(thinking?.trim().length)
+      || visibleActivityLog.length > 0
+    );
   const visibleStreamProgressLog =
     role === "assistant" && isStreaming
-      ? Array.isArray(progressLog) && progressLog.length > 0
-        ? progressLog.filter((entry) => entry.kind === "activity")
+      ? storedProgressLog.length > 0
+        ? storedProgressLog.filter((entry) => entry.kind === "activity")
         : buildFallbackProgressLog(undefined, visibleActivityLog)
       : [];
   const visibleProgressLog =
     role === "assistant"
-      ? visibleStreamProgressLog
+      ? isStreaming
+        ? visibleStreamProgressLog
+        : storedProgressLog.length > 0 && !hasLegacyProgressFields
+          ? storedProgressLog
+          : []
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
@@ -968,7 +1015,11 @@ export function ChatMessage({
                         key={`${index}-${lineIndex}-${line}`}
                         className="whitespace-pre-wrap"
                       >
-                        {lineIndex === 0 ? `└ ${line}` : `  ${line}`}
+                        {lineIndex === 0 ? "└ " : "  "}
+                        {renderInlineMarkdownLite(
+                          line,
+                          `progress-explored-${index}-${lineIndex}`,
+                        )}
                       </div>
                     ))}
                   </div>

@@ -2110,7 +2110,6 @@ describe("useUnifiedChat persistence", () => {
     );
     expect(pollUrl.searchParams.get("conversationId")).toBe("web-alpha-project-session-1");
   });
-
   it("tracks generated files returned directly from a chat turn before the workspace tabs refresh", async () => {
     let treeVersion = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

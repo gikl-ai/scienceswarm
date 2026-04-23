@@ -29,6 +29,17 @@ warn_wsl_path() {
   echo "  (for example ~/scienceswarm and ~/.scienceswarm) instead of /mnt/c/..."
 }
 
+is_truthy() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 pid_is_running() {
   local pid="$1"
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
@@ -128,6 +139,7 @@ INHERITED_BRAIN_ROOT_SET=false
 INHERITED_FRONTEND_PORT_SET=false
 INHERITED_FRONTEND_HOST_SET=false
 INHERITED_FRONTEND_PUBLIC_HOST_SET=false
+INHERITED_FRONTEND_USE_HTTPS_SET=false
 INHERITED_OPENCLAW_PORT_SET=false
 INHERITED_OPENCLAW_STATE_DIR_SET=false
 INHERITED_OPENCLAW_CONFIG_PATH_SET=false
@@ -137,6 +149,7 @@ if [ "${BRAIN_ROOT+x}" = "x" ]; then INHERITED_BRAIN_ROOT_SET=true; fi
 if [ "${FRONTEND_PORT+x}" = "x" ]; then INHERITED_FRONTEND_PORT_SET=true; fi
 if [ "${FRONTEND_HOST+x}" = "x" ]; then INHERITED_FRONTEND_HOST_SET=true; fi
 if [ "${FRONTEND_PUBLIC_HOST+x}" = "x" ]; then INHERITED_FRONTEND_PUBLIC_HOST_SET=true; fi
+if [ "${FRONTEND_USE_HTTPS+x}" = "x" ]; then INHERITED_FRONTEND_USE_HTTPS_SET=true; fi
 if [ "${OPENCLAW_PORT+x}" = "x" ]; then INHERITED_OPENCLAW_PORT_SET=true; fi
 if [ "${OPENCLAW_STATE_DIR+x}" = "x" ]; then INHERITED_OPENCLAW_STATE_DIR_SET=true; fi
 if [ "${OPENCLAW_CONFIG_PATH+x}" = "x" ]; then INHERITED_OPENCLAW_CONFIG_PATH_SET=true; fi
@@ -170,9 +183,38 @@ fi
 : "${FRONTEND_PORT:=3001}"
 : "${FRONTEND_HOST:=127.0.0.1}"
 : "${FRONTEND_PUBLIC_HOST:=$FRONTEND_HOST}"
+: "${FRONTEND_USE_HTTPS:=true}"
 : "${OPENHANDS_PORT:=3000}"
 : "${OPENHANDS_IMAGE:=docker.openhands.dev/openhands/openhands@sha256:5c0dc26f467bf8e47a6e76308edb7a30af4084b17e23a3460b5467008b12111b}"
 export FRONTEND_HOST FRONTEND_PUBLIC_HOST OPENHANDS_IMAGE
+
+FRONTEND_SCHEME="http"
+NEXT_FRONTEND_ARGS=()
+
+if is_truthy "${FRONTEND_USE_HTTPS}"; then
+  FRONTEND_SCHEME="https"
+  NEXT_FRONTEND_ARGS+=(--experimental-https)
+
+  if [ -n "${FRONTEND_HTTPS_KEY:-}" ] || [ -n "${FRONTEND_HTTPS_CERT:-}" ]; then
+    if [ -n "${FRONTEND_HTTPS_KEY:-}" ] && [ -n "${FRONTEND_HTTPS_CERT:-}" ]; then
+      NEXT_FRONTEND_ARGS+=(--experimental-https-key "${FRONTEND_HTTPS_KEY}" --experimental-https-cert "${FRONTEND_HTTPS_CERT}")
+      if [ ! -f "${FRONTEND_HTTPS_KEY}" ] || [ ! -f "${FRONTEND_HTTPS_CERT}" ]; then
+        echo "  ⚠ FRONTEND_HTTPS_KEY/CERT were provided but one path does not exist. Falling back to Next.js self-signed cert."
+        NEXT_FRONTEND_ARGS=(--experimental-https)
+      fi
+    else
+      echo "  ⚠ FRONTEND_USE_HTTPS is enabled but only one of FRONTEND_HTTPS_KEY/FRONTEND_HTTPS_CERT is set."
+      echo "    Next.js will fall back to its built-in self-signed certificate."
+    fi
+  fi
+fi
+
+NEXT_FRONTEND_ARGS+=(--webpack -H "${FRONTEND_HOST}" -p "${FRONTEND_PORT}")
+
+if [ -z "${APP_ORIGIN:-}" ] && [ "${FRONTEND_SCHEME}" = "https" ]; then
+  APP_ORIGIN="${FRONTEND_SCHEME}://${FRONTEND_PUBLIC_HOST}:${FRONTEND_PORT}"
+  export APP_ORIGIN
+fi
 
 is_placeholder_value() {
   case "${1:-}" in
@@ -215,8 +257,10 @@ echo "  ScienceSwarm data root: $DATA_ROOT"
 [ -n "${LAUNCHER_PID_FILE:-}" ] && echo "  Launcher pid file: $LAUNCHER_PID_FILE"
 [ -n "${BRAIN_ROOT:-}" ] && echo "  Brain root override: $BRAIN_ROOT"
 echo "  Frontend host: $FRONTEND_HOST"
+echo "  Frontend scheme: $FRONTEND_SCHEME"
 [ "$FRONTEND_PUBLIC_HOST" != "$FRONTEND_HOST" ] && echo "  Frontend public host: $FRONTEND_PUBLIC_HOST"
 echo "  Frontend port: $FRONTEND_PORT"
+echo "  Frontend origin: ${APP_ORIGIN:-${FRONTEND_SCHEME}://${FRONTEND_HOST}:${FRONTEND_PORT}}"
 echo "  OpenClaw port: ${OPENCLAW_PORT:-18789}"
 [ -n "${OPENCLAW_STATE_DIR:-}" ] && echo "  OpenClaw state dir: $OPENCLAW_STATE_DIR"
 [ -n "${OPENCLAW_CONFIG_PATH:-}" ] && echo "  OpenClaw config path: $OPENCLAW_CONFIG_PATH"
@@ -226,6 +270,7 @@ echo "  OpenClaw port: ${OPENCLAW_PORT:-18789}"
 [ "$INHERITED_FRONTEND_PORT_SET" = true ] && echo "  Note: FRONTEND_PORT came from the shell environment."
 [ "$INHERITED_FRONTEND_HOST_SET" = true ] && echo "  Note: FRONTEND_HOST came from the shell environment."
 [ "$INHERITED_FRONTEND_PUBLIC_HOST_SET" = true ] && echo "  Note: FRONTEND_PUBLIC_HOST came from the shell environment."
+[ "$INHERITED_FRONTEND_USE_HTTPS_SET" = true ] && echo "  Note: FRONTEND_USE_HTTPS came from the shell environment."
 [ "$INHERITED_OPENCLAW_PORT_SET" = true ] && echo "  Note: OPENCLAW_PORT came from the shell environment."
 [ "$INHERITED_OPENCLAW_STATE_DIR_SET" = true ] && echo "  Note: OPENCLAW_STATE_DIR came from the shell environment."
 [ "$INHERITED_OPENCLAW_CONFIG_PATH_SET" = true ] && echo "  Note: OPENCLAW_CONFIG_PATH came from the shell environment."
@@ -235,6 +280,7 @@ if [ "$INHERITED_SCIENCESWARM_DIR_SET" = true ] || \
    [ "$INHERITED_FRONTEND_PORT_SET" = true ] || \
    [ "$INHERITED_FRONTEND_HOST_SET" = true ] || \
    [ "$INHERITED_FRONTEND_PUBLIC_HOST_SET" = true ] || \
+   [ "$INHERITED_FRONTEND_USE_HTTPS_SET" = true ] || \
    [ "$INHERITED_OPENCLAW_PORT_SET" = true ] || \
    [ "$INHERITED_OPENCLAW_STATE_DIR_SET" = true ] || \
    [ "$INHERITED_OPENCLAW_CONFIG_PATH_SET" = true ] || \
@@ -242,7 +288,7 @@ if [ "$INHERITED_SCIENCESWARM_DIR_SET" = true ] || \
   echo "WARNING: inherited runtime overrides are active."
   echo "  start.sh only sources .env; exported shell vars stay live unless .env replaces them."
   echo "  If this was accidental, rerun from a clean shell or use:"
-  echo "  env -u SCIENCESWARM_DIR -u BRAIN_ROOT -u FRONTEND_PORT -u FRONTEND_HOST -u FRONTEND_PUBLIC_HOST -u OPENCLAW_PORT -u OPENCLAW_STATE_DIR -u OPENCLAW_CONFIG_PATH -u SCIENCESWARM_OPENCLAW_MODE ./start.sh"
+  echo "  env -u SCIENCESWARM_DIR -u BRAIN_ROOT -u FRONTEND_PORT -u FRONTEND_HOST -u FRONTEND_PUBLIC_HOST -u FRONTEND_USE_HTTPS -u OPENCLAW_PORT -u OPENCLAW_STATE_DIR -u OPENCLAW_CONFIG_PATH -u SCIENCESWARM_OPENCLAW_MODE ./start.sh"
 fi
 case "$FRONTEND_PUBLIC_HOST" in
   127.*|localhost|::1)
@@ -296,7 +342,7 @@ if [ "$API_KEY_OK" = false ]; then
   echo "No OPENAI_API_KEY in .env. That's fine for the default local path."
   echo "  ScienceSwarm setup uses Ollama + gemma4:latest first."
   echo "  OpenHands cloud-backed agent start is deferred until you configure an API-backed model."
-  echo "  Open http://localhost:${FRONTEND_PORT}/setup to connect OpenClaw and Telegram."
+  echo "  Open ${FRONTEND_SCHEME}://127.0.0.1:${FRONTEND_PORT}/setup to connect OpenClaw and Telegram."
   echo ""
 fi
 
@@ -498,4 +544,4 @@ echo ""
 # are enabled, so the EXIT trap above can clean up their process groups.
 # The cost is one extra shell process in the tree; the benefit is no
 # orphaned radar loops on dev-server restart.
-OPENHANDS_URL="http://localhost:${OPENHANDS_PORT}" npx next dev --webpack -H "${FRONTEND_HOST}" -p "${FRONTEND_PORT}"
+OPENHANDS_URL="http://localhost:${OPENHANDS_PORT}" npx next dev "${NEXT_FRONTEND_ARGS[@]}"

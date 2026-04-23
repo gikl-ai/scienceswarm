@@ -1,8 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileTreeNode, getNodePath, type FileNode } from "./file-tree";
+import {
+  FileTreeNode,
+  collectDirectoryPaths,
+  getNodePath,
+  type FileNode,
+} from "./file-tree";
 import { clearLastProjectSlug, readLastProjectSlug } from "@/lib/project-navigation";
 import { Spinner } from "@/components/spinner";
 
@@ -17,6 +22,8 @@ interface ProjectMeta {
 }
 
 type FetchStatus = "loading" | "ready" | "error";
+const EMPTY_EXPANDED_PATHS: string[] = [];
+const NO_ACTIVE_PROJECT_KEY = "__no_active_project__";
 
 export function ProjectList({
   activeSlug,
@@ -44,14 +51,51 @@ export function ProjectList({
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
   const [status, setStatus] = useState<FetchStatus>("loading");
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [expandedSlug, setExpandedSlug] = useState<string | null>(activeSlug);
+  const [collapsedProjectSlug, setCollapsedProjectSlug] = useState<string | null>(null);
+  const [expandedFilePathState, setExpandedFilePathState] = useState<{
+    key: string;
+    paths: string[];
+  }>({ key: activeSlug ?? NO_ACTIVE_PROJECT_KEY, paths: EMPTY_EXPANDED_PATHS });
   const [isDragOver, setIsDragOver] = useState(false);
+  const directoryPaths = useMemo(() => collectDirectoryPaths(files), [files]);
+  const hasDirectories = directoryPaths.length > 0;
+  const activeExpansionKey = activeSlug ?? NO_ACTIVE_PROJECT_KEY;
+  const expandedFilePaths = useMemo(
+    () =>
+      new Set(
+        expandedFilePathState.key === activeExpansionKey
+          ? expandedFilePathState.paths
+          : EMPTY_EXPANDED_PATHS,
+      ),
+    [activeExpansionKey, expandedFilePathState],
+  );
 
-  const loadProjects = useCallback(
-    async (signal?: AbortSignal) => {
-      try {
-        const res = await fetch("/api/projects", { signal });
-        if (signal?.aborted) {
+  const setExpandedFilePathsForActiveProject = (paths: string[]) => {
+    setExpandedFilePathState({ key: activeExpansionKey, paths });
+  };
+
+  const toggleDirectory = (path: string) => {
+    setExpandedFilePathState((current) => {
+      const next = new Set(
+        current.key === activeExpansionKey ? current.paths : EMPTY_EXPANDED_PATHS,
+      );
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return {
+        key: activeExpansionKey,
+        paths: [...next],
+      };
+    });
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/projects", { signal: controller.signal })
+      .then(async (res) => {
+        if (controller.signal.aborted) {
           return;
         }
         if (!res.ok) {
@@ -59,32 +103,22 @@ export function ProjectList({
           return;
         }
         const body = (await res.json()) as { projects?: ProjectMeta[] };
-        if (signal?.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
         setProjects(Array.isArray(body.projects) ? body.projects : []);
         setStatus("ready");
-      } catch (error) {
+      })
+      .catch((error) => {
         if (error instanceof Error && error.name === "AbortError") {
           return;
         }
         setStatus("error");
-      }
-    },
-    [],
-  );
-
-  // Keep expansion in sync with the active project when it changes.
-  useEffect(() => {
-    setExpandedSlug(activeSlug);
-  }, [activeSlug]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setStatus("loading");
-    void loadProjects(controller.signal);
+      });
     return () => {
       controller.abort();
     };
-  }, [activeSlug, loadProjects]);
+  }, []);
 
   const dragHandlers = onDropFiles
     ? {
@@ -123,50 +157,74 @@ export function ProjectList({
     >
       <div className="flex items-center justify-between px-3 py-2 border-b-2 border-border">
         <span className="text-xs font-bold text-muted uppercase tracking-wider">Projects</span>
-        <div className="relative">
-          <button
-            onClick={() => setAddMenuOpen(!addMenuOpen)}
-            className="text-xs text-accent hover:text-accent-hover transition-colors font-medium"
-            title="Add files to the active project"
-          >
-            + Add
-          </button>
-          {addMenuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-48 bg-white border-2 border-border rounded-lg shadow-lg z-20 overflow-hidden">
-              <button
-                onClick={() => { onUpload(); setAddMenuOpen(false); }}
-                className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2"
-              >
-                Upload Files
-              </button>
-              {onUploadFolder && (
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center overflow-hidden rounded border border-border bg-white">
+            <button
+              type="button"
+              onClick={() => setExpandedFilePathsForActiveProject([])}
+              disabled={!hasDirectories}
+              className="flex h-6 w-7 items-center justify-center text-[10px] text-muted transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              title="Collapse all folders"
+              aria-label="Collapse all folders"
+            >
+              ▸▸
+            </button>
+            <button
+              type="button"
+              onClick={() => setExpandedFilePathsForActiveProject(directoryPaths)}
+              disabled={!hasDirectories}
+              className="flex h-6 w-7 items-center justify-center border-l border-border text-[10px] text-muted transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              title="Expand all folders"
+              aria-label="Expand all folders"
+            >
+              ▾▾
+            </button>
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setAddMenuOpen(!addMenuOpen)}
+              className="text-xs text-accent hover:text-accent-hover transition-colors font-medium"
+              title="Add files to the active project"
+            >
+              + Add
+            </button>
+            {addMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-white border-2 border-border rounded-lg shadow-lg z-20 overflow-hidden">
                 <button
-                  onClick={() => { onUploadFolder(); setAddMenuOpen(false); }}
-                  className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2 border-t border-border"
+                  onClick={() => { onUpload(); setAddMenuOpen(false); }}
+                  className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2"
                 >
-                  <span>📁</span> Import Local Folder
+                  Upload Files
                 </button>
-              )}
-              {onCheckChanges && (
-                <button
-                  onClick={() => { onCheckChanges(); setAddMenuOpen(false); }}
-                  className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2 border-t border-border"
+                {onUploadFolder && (
+                  <button
+                    onClick={() => { onUploadFolder(); setAddMenuOpen(false); }}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2 border-t border-border"
+                  >
+                    <span>📁</span> Import Local Folder
+                  </button>
+                )}
+                {onCheckChanges && (
+                  <button
+                    onClick={() => { onCheckChanges(); setAddMenuOpen(false); }}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface transition-colors flex items-center gap-2 border-t border-border"
+                  >
+                    Check for Changes
+                  </button>
+                )}
+                <Link
+                  href="/dashboard?new=1"
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    onProjectNavigate?.();
+                  }}
+                  className="w-full block text-left text-xs px-3 py-2 hover:bg-surface transition-colors border-t border-border"
                 >
-                  Check for Changes
-                </button>
-              )}
-              <Link
-                href="/dashboard?new=1"
-                onClick={() => {
-                  setAddMenuOpen(false);
-                  onProjectNavigate?.();
-                }}
-                className="w-full block text-left text-xs px-3 py-2 hover:bg-surface transition-colors border-t border-border"
-              >
-                + New project
-              </Link>
-            </div>
-          )}
+                  + New project
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -194,7 +252,7 @@ export function ProjectList({
         <div className="flex-1 overflow-y-auto py-1">
           {projects.map((project) => {
             const isActive = activeSlug !== null && project.slug === activeSlug;
-            const isExpanded = expandedSlug === project.slug;
+            const isExpanded = isActive && collapsedProjectSlug !== project.slug;
             const handleArchive = async (e: React.MouseEvent) => {
               e.preventDefault();
               e.stopPropagation();
@@ -232,7 +290,11 @@ export function ProjectList({
                 <div className={`flex items-stretch ${isActive ? "border-l-2 border-accent" : "border-l-2 border-transparent"}`}>
                   <button
                     type="button"
-                    onClick={() => setExpandedSlug(isExpanded ? null : project.slug)}
+                    onClick={() => {
+                      if (isActive) {
+                        setCollapsedProjectSlug(isExpanded ? project.slug : null);
+                      }
+                    }}
                     className="flex items-center px-1 text-[10px] text-muted hover:text-foreground transition-colors"
                     title={isExpanded ? "Collapse" : "Expand"}
                     aria-label={isExpanded ? "Collapse project" : "Expand project"}
@@ -279,6 +341,8 @@ export function ProjectList({
                           selectedPath={selectedPath}
                           path=""
                           onDelete={onDeleteFile}
+                          expandedPaths={expandedFilePaths}
+                          onToggleDirectory={toggleDirectory}
                         />
                       ))
                     )}
