@@ -87,11 +87,11 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
 
   async health(): Promise<RuntimeHostHealth> {
     const checkedAt = new Date().toISOString();
-    if (!this.hasConfiguredCredential()) {
+    if (!this.hasRequiredConfiguration()) {
       return {
         status: "unavailable",
         checkedAt,
-        detail: "API-key runtime is missing .env credentials.",
+        detail: this.missingConfigurationDetail(),
         evidence: [{ label: "provider", value: this.provider }],
       };
     }
@@ -105,16 +105,17 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
   }
 
   async authStatus(): Promise<RuntimeHostAuthStatus> {
+    const ready = this.hasRequiredConfiguration();
     return {
-      status: this.hasConfiguredCredential() ? "authenticated" : "missing",
+      status: ready ? "authenticated" : "missing",
       authMode: "api-key",
       provider: this.runtimeProfile.authProvider,
-      accountLabel: this.hasConfiguredCredential()
+      accountLabel: ready
         ? `${this.provider} API key configured in .env`
         : undefined,
-      detail: this.hasConfiguredCredential()
+      detail: ready
         ? "ScienceSwarm found a configured API-key runtime credential without exposing the value."
-        : "Add the provider API key to .env to enable this runtime.",
+        : this.missingConfigurationDetail(),
     };
   }
 
@@ -203,6 +204,25 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
 
   private hasConfiguredCredential(): boolean {
     return Boolean(this.credential());
+  }
+
+  private hasRequiredConfiguration(): boolean {
+    if (this.provider === "vertex-ai") {
+      return Boolean(this.env.vertexAiApiKey && this.env.vertexAiProject);
+    }
+    return this.hasConfiguredCredential();
+  }
+
+  private missingConfigurationDetail(): string {
+    if (this.provider === "vertex-ai") {
+      if (!this.env.vertexAiApiKey) {
+        return "Add VERTEX_AI_API_KEY to .env to enable this runtime.";
+      }
+      if (!this.env.vertexAiProject) {
+        return "Add VERTEX_AI_PROJECT to .env to enable this runtime.";
+      }
+    }
+    return "Add the provider API key to .env to enable this runtime.";
   }
 
   private credential(): string | null {

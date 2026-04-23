@@ -111,10 +111,32 @@ export class PtyCliTransport implements CliTransport {
         rows: this.rows,
       });
       let settled = false;
-      const timer = setTimeout(() => {
-        process.kill("SIGTERM");
+      let timer: NodeJS.Timeout | null = null;
+      let forceKillTimer: NodeJS.Timeout | null = null;
+      const clearTimers = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        if (forceKillTimer) {
+          clearTimeout(forceKillTimer);
+          forceKillTimer = null;
+        }
+      };
+      const killProcess = (signal: string) => {
+        try {
+          process.kill(signal);
+        } catch {
+          // The PTY may have already exited between timeout scheduling and kill.
+        }
+      };
+      const rejectTimeout = () => {
         if (settled) return;
         settled = true;
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
         reject(
           new RuntimeHostError({
             code: "RUNTIME_TRANSPORT_ERROR",
@@ -130,11 +152,17 @@ export class PtyCliTransport implements CliTransport {
             },
           }),
         );
+      };
+      timer = setTimeout(() => {
+        killProcess("SIGTERM");
+        forceKillTimer = setTimeout(() => killProcess("SIGKILL"), 250);
+        forceKillTimer.unref?.();
+        rejectTimeout();
       }, timeoutMs);
 
       process.onData((data) => chunks.push(data));
       process.onExit((event) => {
-        clearTimeout(timer);
+        clearTimers();
         if (settled) return;
         settled = true;
         const output = normalizeCliOutput({

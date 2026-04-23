@@ -348,6 +348,31 @@ describe("runtime host adapters", () => {
     );
   });
 
+  it("marks Vertex AI unavailable until project configuration is present", async () => {
+    const profile = createApiKeyRuntimeHostProfile("vertex-ai");
+    const adapter = createApiKeyRuntimeHostAdapter({
+      provider: "vertex-ai",
+      profile,
+      env: {
+        ...baseEnv,
+        vertexAiApiKey: "placeholder-vertex-key",
+      },
+    });
+
+    await expect(adapter.health()).resolves.toMatchObject({
+      status: "unavailable",
+      detail: "Add VERTEX_AI_PROJECT to .env to enable this runtime.",
+    });
+    await expect(adapter.authStatus()).resolves.toMatchObject({
+      status: "missing",
+      provider: "vertex-ai",
+      detail: "Add VERTEX_AI_PROJECT to .env to enable this runtime.",
+    });
+    await expect(adapter.sendTurn(requestFor(profile, "chat"))).rejects.toThrow(
+      "VERTEX_AI_PROJECT",
+    );
+  });
+
   it("marks API-key hosts unavailable when their .env credential is absent", async () => {
     const adapter = createApiKeyRuntimeHostAdapter({
       provider: "anthropic",

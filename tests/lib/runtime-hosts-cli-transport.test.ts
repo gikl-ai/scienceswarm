@@ -192,4 +192,33 @@ describe("runtime host CLI transport", () => {
       }),
     ).rejects.toThrow(RuntimeCliAuthRequiredError);
   });
+
+  it("force kills PTY subprocesses after timeout grace period", async () => {
+    const signals: string[] = [];
+    const transport = createPtyCliTransport({
+      module: {
+        spawn() {
+          return {
+            onData() {},
+            onExit() {},
+            write() {},
+            kill(signal?: string) {
+              signals.push(signal ?? "");
+            },
+          };
+        },
+      },
+    });
+
+    await expect(
+      transport.run({
+        hostId: "gemini-cli",
+        command: "gemini",
+        timeoutMs: 10,
+      }),
+    ).rejects.toThrow("timed out");
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
+  });
 });
