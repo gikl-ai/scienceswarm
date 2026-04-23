@@ -48,6 +48,38 @@ export function getPaperLibraryApplyPlanPath(project: string, applyPlanId: strin
   return path.join(getPaperLibraryStateDir(project, stateRoot), "apply-plans", `${encodeURIComponent(applyPlanId)}.json`);
 }
 
+export function getPaperLibraryApplyOperationShardPath(
+  project: string,
+  applyPlanId: string,
+  shardId: string,
+  stateRoot?: string,
+): string {
+  return path.join(
+    getPaperLibraryStateDir(project, stateRoot),
+    "apply-plans",
+    encodeURIComponent(applyPlanId),
+    `${encodeURIComponent(shardId)}.json`,
+  );
+}
+
+export function getPaperLibraryManifestPath(project: string, manifestId: string, stateRoot?: string): string {
+  return path.join(getPaperLibraryStateDir(project, stateRoot), "manifests", `${encodeURIComponent(manifestId)}.json`);
+}
+
+export function getPaperLibraryManifestOperationShardPath(
+  project: string,
+  manifestId: string,
+  shardId: string,
+  stateRoot?: string,
+): string {
+  return path.join(
+    getPaperLibraryStateDir(project, stateRoot),
+    "manifests",
+    encodeURIComponent(manifestId),
+    `${encodeURIComponent(shardId)}.json`,
+  );
+}
+
 export function getPaperLibraryIdempotencyPath(project: string, idempotencyKey: string, stateRoot?: string): string {
   return path.join(getPaperLibraryStateDir(project, stateRoot), "idempotency", `${encodeURIComponent(idempotencyKey)}.json`);
 }

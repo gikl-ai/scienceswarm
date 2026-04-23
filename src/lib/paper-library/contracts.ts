@@ -134,6 +134,7 @@ export const PaperReviewItemSchema = z.object({
   paperId: z.string().min(1),
   state: PaperReviewItemStateSchema,
   reasonCodes: z.array(z.string()).default([]),
+  source: PaperLibraryFileSnapshotSchema.optional(),
   candidates: z.array(PaperIdentityCandidateSchema).default([]),
   selectedCandidateId: z.string().optional(),
   correction: z.record(z.string(), z.unknown()).optional(),
@@ -141,6 +142,23 @@ export const PaperReviewItemSchema = z.object({
   updatedAt: IsoDateStringSchema,
 });
 export type PaperReviewItem = z.infer<typeof PaperReviewItemSchema>;
+
+export const PaperReviewShardSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  scanId: z.string().min(1),
+  items: z.array(PaperReviewItemSchema).default([]),
+});
+export type PaperReviewShard = z.infer<typeof PaperReviewShardSchema>;
+
+export const PaperReviewUpdateRequestSchema = z.object({
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1),
+  itemId: z.string().min(1),
+  action: z.enum(["accept", "correct", "ignore", "unresolve"]),
+  selectedCandidateId: z.string().min(1).optional(),
+  correction: z.record(z.string(), z.unknown()).optional(),
+});
+export type PaperReviewUpdateRequest = z.infer<typeof PaperReviewUpdateRequestSchema>;
 
 export const PaperLibraryScanStatusSchema = z.enum([
   "queued",
@@ -233,19 +251,122 @@ export const ApplyOperationSchema = z.object({
 });
 export type ApplyOperation = z.infer<typeof ApplyOperationSchema>;
 
+export const ApplyOperationShardSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  applyPlanId: z.string().min(1),
+  operations: z.array(ApplyOperationSchema).default([]),
+});
+export type ApplyOperationShard = z.infer<typeof ApplyOperationShardSchema>;
+
 export const ApplyPlanSchema = z.object({
   version: z.literal(PAPER_LIBRARY_STATE_VERSION),
   id: z.string().min(1),
   scanId: z.string().min(1),
   project: ProjectSlugSchema,
   status: ApplyPlanStatusSchema,
+  rootPath: z.string().min(1),
+  rootRealpath: z.string().min(1),
+  templateFormat: z.string().min(1),
   operationCount: z.number().int().nonnegative(),
   conflictCount: z.number().int().nonnegative(),
+  operationShardIds: z.array(z.string()).default([]),
   planDigest: z.string().optional(),
+  approvalTokenHash: z.string().optional(),
+  approvalExpiresAt: IsoDateStringSchema.optional(),
+  approvedAt: IsoDateStringSchema.optional(),
+  manifestId: z.string().optional(),
   createdAt: IsoDateStringSchema,
   updatedAt: IsoDateStringSchema,
 });
 export type ApplyPlan = z.infer<typeof ApplyPlanSchema>;
+
+export const ApplyPlanCreateRequestSchema = z.object({
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1),
+  rootPath: z.string().trim().min(1).optional(),
+  templateFormat: z.string().trim().min(1).default("{year} - {title}.pdf"),
+});
+export type ApplyPlanCreateRequest = z.infer<typeof ApplyPlanCreateRequestSchema>;
+
+export const ApplyPlanApproveRequestSchema = z.object({
+  project: ProjectSlugSchema,
+  applyPlanId: z.string().min(1),
+  userConfirmation: z.literal(true),
+});
+export type ApplyPlanApproveRequest = z.infer<typeof ApplyPlanApproveRequestSchema>;
+
+export const ApplyStartRequestSchema = z.object({
+  project: ProjectSlugSchema,
+  applyPlanId: z.string().min(1),
+  approvalToken: z.string().min(16),
+  idempotencyKey: z.string().min(1).optional(),
+});
+export type ApplyStartRequest = z.infer<typeof ApplyStartRequestSchema>;
+
+export const ApplyManifestStatusSchema = z.enum([
+  "applying",
+  "applied",
+  "failed",
+  "applied_with_repair_required",
+  "undoing",
+  "undone",
+]);
+export type ApplyManifestStatus = z.infer<typeof ApplyManifestStatusSchema>;
+
+export const ApplyManifestOperationStatusSchema = z.enum([
+  "pending",
+  "applied",
+  "verified",
+  "failed",
+  "undone",
+]);
+export type ApplyManifestOperationStatus = z.infer<typeof ApplyManifestOperationStatusSchema>;
+
+export const ApplyManifestOperationSchema = z.object({
+  operationId: z.string().min(1),
+  paperId: z.string().min(1),
+  sourceRelativePath: z.string().min(1),
+  destinationRelativePath: z.string().min(1),
+  status: ApplyManifestOperationStatusSchema,
+  source: PaperLibraryFileSnapshotSchema.optional(),
+  destinationSnapshot: PaperLibraryFileSnapshotSchema.optional(),
+  appliedAt: IsoDateStringSchema.optional(),
+  undoneAt: IsoDateStringSchema.optional(),
+  error: z.string().optional(),
+});
+export type ApplyManifestOperation = z.infer<typeof ApplyManifestOperationSchema>;
+
+export const ApplyManifestOperationShardSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  manifestId: z.string().min(1),
+  operations: z.array(ApplyManifestOperationSchema).default([]),
+});
+export type ApplyManifestOperationShard = z.infer<typeof ApplyManifestOperationShardSchema>;
+
+export const ApplyManifestSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  id: z.string().min(1),
+  project: ProjectSlugSchema,
+  applyPlanId: z.string().min(1),
+  status: ApplyManifestStatusSchema,
+  rootRealpath: z.string().min(1),
+  planDigest: z.string().min(1),
+  operationCount: z.number().int().nonnegative(),
+  appliedCount: z.number().int().nonnegative().default(0),
+  failedCount: z.number().int().nonnegative().default(0),
+  undoneCount: z.number().int().nonnegative().default(0),
+  operationShardIds: z.array(z.string()).default([]),
+  warnings: z.array(z.string()).default([]),
+  createdAt: IsoDateStringSchema,
+  updatedAt: IsoDateStringSchema,
+});
+export type ApplyManifest = z.infer<typeof ApplyManifestSchema>;
+
+export const UndoStartRequestSchema = z.object({
+  project: ProjectSlugSchema,
+  manifestId: z.string().min(1),
+});
+export type UndoStartRequest = z.infer<typeof UndoStartRequestSchema>;
 
 export const CursorWindowSchema = z.object({
   cursor: z.string().optional(),
