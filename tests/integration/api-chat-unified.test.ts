@@ -1832,6 +1832,138 @@ describe("POST /api/chat/unified", () => {
     expect(streamChat).not.toHaveBeenCalled();
   });
 
+  it("emits opt-in chat timing logs without prompt contents", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockImplementationOnce(async (_message, options) => {
+      options?.onEvent?.({
+        method: "agent",
+        payload: {
+          stream: "assistant",
+          data: { delta: "private assistant delta" },
+        },
+      });
+      return "OpenClaw says hi";
+    });
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Secret prompt: EGFR timing window",
+        projectId: "alpha-project",
+        mode: "reasoning",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      backend: "openclaw",
+      response: "OpenClaw says hi",
+    });
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      phases: Array<{ name: string }>;
+      promptCharCounts: Record<string, number>;
+    };
+    expect(payload.phases.map((phase) => phase.name)).toEqual(
+      expect.arrayContaining([
+        "request_parse",
+        "project_materialization",
+        "file_reference_merge",
+        "shortcut_detectors",
+        "chat_readiness",
+        "prompt_context_construction",
+        "gateway_connect_auth",
+        "chat_send_ack",
+        "first_gateway_event",
+        "first_assistant_text",
+        "final_assistant_text",
+        "artifact_import_repair",
+      ]),
+    );
+    expect(payload.promptCharCounts.user_text).toBe(
+      "Secret prompt: EGFR timing window".length,
+    );
+    expect(payload.promptCharCounts.guardrails).toBeGreaterThan(0);
+    expect(payload.promptCharCounts.total).toBeGreaterThan(
+      payload.promptCharCounts.user_text,
+    );
+    expect(JSON.stringify(payload)).not.toContain(
+      "Secret prompt: EGFR timing window",
+    );
+    expect(JSON.stringify(payload)).not.toContain("private assistant delta");
+    infoSpy.mockRestore();
+  });
+
+  it("records streaming timing failures as stream errors", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockRejectedValueOnce(new Error("gateway exploded"));
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Trigger stream error",
+        projectId: "alpha-project",
+        mode: "reasoning",
+        streamPhases: true,
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const events = await readSseEvents(response);
+    expect(events.at(-1)).toMatchObject({
+      backend: "openclaw",
+      generatedFiles: [],
+    });
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      outcome?: string;
+      status?: number;
+    };
+    expect(payload).toMatchObject({
+      outcome: "stream_error",
+      status: 500,
+    });
+    infoSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
   it("pre-materializes openclaw-tools turns even without content hints", () => {
     expect(
       shouldPreMaterializeProjectWorkspaceForTurn({
