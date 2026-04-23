@@ -1964,7 +1964,6 @@ describe("POST /api/chat/unified", () => {
     });
     sendOpenClawMessage.mockImplementationOnce(async (_message, options) => {
       options?.onEvent?.({
-        method: "agent",
         payload: {
           stream: "assistant",
           data: { delta: "private assistant delta" },
@@ -1999,6 +1998,10 @@ describe("POST /api/chat/unified", () => {
       "first_gateway_event",
       "final_assistant_text",
     ]);
+    const firstGatewayEvent = timingEvents.find(
+      (event) => event.name === "first_gateway_event",
+    );
+    expect(firstGatewayEvent).not.toHaveProperty("detail");
     expect(timingEvents.every((event) => event.type === "chat_timing")).toBe(true);
     expect(timingEvents.every((event) => typeof event.elapsedMs === "number")).toBe(true);
     expect(JSON.stringify(timingEvents)).not.toContain(
