@@ -108,6 +108,58 @@ thinking and activity panels. It must:
   commands, and filenames.
 - Keep media previews inside the chat bubble width.
 
+## Codex Reference Learnings
+
+The local `~/code/codex` clone is useful as a reference for mechanics and
+information density, even though it is primarily a TUI rather than a browser
+chat surface. The concrete patterns worth borrowing are:
+
+- `codex-rs/tui/src/status_indicator_widget.rs`: a dedicated run-state widget
+  owns the spinner, elapsed timer, interrupt hint, and short inline context on
+  one stable line. The transcript is not responsible for faking this state from
+  plain strings.
+- `codex-rs/tui/src/bottom_pane/mod.rs` and `codex-rs/tui/src/chatwidget.rs`:
+  status lifecycle is explicit. The UI shows, hides, pauses, and restores the
+  run-state surface as streaming and tool phases change, instead of relying on
+  ad hoc bubble-local heuristics.
+- `codex-rs/tui/src/markdown_render.rs`: transcript rendering is real markdown,
+  including lists, links, code blocks, emphasis, and local path normalization.
+  This is richer than the current ScienceSwarm `renderInlineMarkdownLite`
+  approach.
+- `codex-rs/app-server-protocol/src/protocol/v2.rs`: the transport exposes
+  structured realtime transcript deltas and structured MCP tool progress
+  notifications. That allows the UI to render a coherent activity stream
+  without reverse-engineering raw strings.
+- `codex-rs/tui/src/app_backtrack.rs` and transcript overlay surfaces:
+  transcript is treated as a first-class artifact users can inspect in full.
+  The web analogue should be a single in-order transcript with an optional
+  expanded transcript view, not separate thinking/activity panels.
+
+ScienceSwarm should adapt these ideas to the web UI rather than mimic terminal
+layout literally. The goal is the same information hierarchy and timing
+behavior: stable run-state, structured live progress, rich markdown, compact
+tool summaries, and clear separation between transient activity and final
+assistant output.
+
+## Current Gap Summary
+
+Compared with the Codex reference and the current ScienceSwarm web UI:
+
+- Assistant turns still read like wide dashboard cards because
+  `chat-message.tsx` mixes bubble chrome, task rails, step cards, pills, and
+  transcript rows inside one large surface.
+- Run-state is duplicated across multiple places: the page-level "Thinking"
+  indicator, the in-bubble `Working (...)` row, and phase or step widgets. The
+  Codex reference keeps this information on one primary run-state surface.
+- The hook still manufactures too many low-signal progress lines because it
+  stores both legacy `activityLog` and richer `progressLog`, and it promotes
+  timing and lifecycle text into the visible transcript.
+- Progress markdown is still markdown-lite, so headings, lists, fenced code,
+  links, and path formatting are much flatter than the reference transcript.
+- Transcript inspection is not yet treated as a first-class view over the same
+  stream. The compact chat lane and any future expanded transcript need to
+  derive from one ordered event sequence.
+
 ## Sequential PR Plan
 
 Each PR below should be one small commit where feasible. After opening each PR,
@@ -276,6 +328,92 @@ wait for the merge, then measure and report the `Hi` response time.
     - Validation: full relevant test suite, typecheck, lint, and final `Hi`
       benchmark.
 
+29. **Project-Load Preconnect PR**
+    - Start the OpenClaw gateway warm-up when the project chat surface loads and
+      OpenClaw is the selected backend, instead of waiting for the first send.
+    - Validation: hook or integration test proves a successful health probe
+      triggers non-blocking preconnect before the first message and a benchmark
+      shows improved time to first gateway event.
+
+30. **Warm Session Retention PR**
+    - Keep an already authenticated OpenClaw gateway session warm across short
+      idle windows and project/settings navigation so the first follow-up turn
+      does not pay the full reconnect path.
+    - Validation: integration test proves a reused warm session survives the
+      expected navigation window and reconnects cleanly after expiry.
+
+31. **Structured Progress Payload PR**
+    - Start emitting structured progress metadata from the route and gateway
+      bridge using the Progress Contract fields instead of relying mostly on
+      plain text inference.
+    - Validation: route and hook tests prove source, phase, status, and
+      timestamp fields arrive in order for server and gateway phases.
+
+32. **Realtime Transcript Delta PR**
+    - Add a Codex-style delta/done transcript transport for the visible live
+      assistant narrative so progress rows and final answer streaming no longer
+      compete for the same untyped channel.
+    - Validation: SSE or parser tests prove transcript deltas append in order,
+      final transcript completion replaces partial state correctly, and duplicate
+      finals stay deduped.
+
+33. **Run-State Surface PR**
+    - Extract a dedicated web run-state surface modeled after the Codex status
+      widget: `Working` or `Thinking`, ticking timer, interrupt hint, and short
+      inline context such as active tool count.
+    - Validation: component tests prove the timer advances every second, the
+      label changes by phase, and the surface hides or restores cleanly when the
+      turn state changes.
+
+34. **Run-State Detail PR**
+    - Add an optional secondary detail line under the run-state surface for the
+      current summarized phase, instead of dumping every intermediate sentence
+      into the visible transcript.
+    - Validation: component tests prove long detail text wraps predictably and
+      collapses when the active phase changes.
+
+35. **Full Markdown Transcript PR**
+    - Replace the current markdown-lite progress rendering with a shared full
+      markdown renderer that supports emphasis, italic, lists, links, fenced
+      code, and normalized local file paths.
+    - Validation: component tests cover nested emphasis, fenced code, lists,
+      links, and path rendering without exposing unsafe HTML.
+
+36. **Activity Coalescing PR**
+    - Coalesce sequential reads, searches, writes, and command phases into
+      grouped summaries like the Codex transcript instead of one bullet per raw
+      event.
+    - Validation: snapshot tests show grouped summaries such as `Read a.ts,
+      b.ts` and `Searched src/ for openclaw` replacing noisy per-call rows.
+
+37. **Assistant Lane Geometry PR**
+    - Rework the web message layout so user turns remain clear bubbles while the
+      assistant lane reads like a structured answer stream, not one giant agent
+      bubble containing everything.
+    - Validation: browser or component tests prove user and assistant layout
+      remain visually distinct on desktop and mobile while embeds stay bounded.
+
+38. **Expanded Transcript View PR**
+    - Add a first-class expanded transcript view for the full progress log and
+      tool transcript, preserving the compact default chat view.
+    - Validation: browser test opens the expanded transcript from an active turn
+      and verifies ordering matches the inline condensed transcript.
+
+39. **Visual Hierarchy Tokens PR**
+    - Introduce dedicated tokens for run-state, tool summary, transcript detail,
+      and final answer typography and color so the conversation matches the
+      richer information hierarchy users expect from Codex or ChatGPT-style
+      interfaces.
+    - Validation: component snapshots prove the semantic tokens apply
+      consistently across assistant answer text, progress transcript, and media
+      captions.
+
+40. **Codex Gap Review PR**
+    - Add a short follow-up document comparing ScienceSwarm against the Codex
+      reference after the above slices merge, calling out remaining speed and
+      transcript gaps with benchmark evidence.
+    - Validation: docs inspection plus the latest `Hi` benchmark table.
+
 ## Merge Order
 
 The exact order is sequential because the user asked for many small PRs with a
@@ -290,6 +428,14 @@ these groups are safe to overlap after their shared contracts merge:
   before transcript-only rendering PRs.
 - Transcript rendering work: PRs 15 to 23.
 - Stability and cleanup work: PRs 24 to 28.
+- Warm-path follow-up speed work: PRs 29 to 32. PR #30 depends on the project
+  preconnect contract from PR #29; PR #32 depends on the structured progress
+  payload from PR #31.
+- Codex-inspired presentation work: PRs 33 to 39. PR #34 depends on PR #33, PR
+  #36 depends on PR #31, PR #38 depends on PRs 33 and 36, and PR #39 can start
+  after PR #33 lands.
+- Post-rollup comparison: PR #40 after the earlier groups merge and fresh
+  benchmark data exists.
 
 ## Validation Standard
 
@@ -312,3 +458,5 @@ For transcript PRs, the PR body must include:
 - Whether the benchmark should target the browser UI, the route API, or both.
 - Whether OpenClaw gateway events already include enough structured timing to
   avoid client-side inference for first assistant text.
+- Whether the web run-state surface should live inside the active assistant turn
+  or at the chat composer boundary once the dedicated status widget work starts.
