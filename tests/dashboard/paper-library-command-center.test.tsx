@@ -324,7 +324,7 @@ describe("PaperLibraryCommandCenter", () => {
     });
 
     vi.stubGlobal("fetch", fetchMock);
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleErrorSpy = vi.spyOn(console, "error");
     const container = document.createElement("div");
     container.innerHTML = serverHtml;
     document.body.appendChild(container);
