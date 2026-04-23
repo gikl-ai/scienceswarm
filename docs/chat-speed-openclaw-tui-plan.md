@@ -611,13 +611,13 @@ speed and communication quality versus Codex and the OpenClaw TUI:
 
 Append these PRs after the current sequence:
 
-29. **Project-Load Preconnect PR**
+45. **Project-Load Preconnect PR**
    - Start the OpenClaw gateway connection when the project page loads and the
      selected agent is OpenClaw, instead of waiting for the first send.
    - Validation: hook or route test proves project load triggers a warm
      connection exactly once and repeated loads reuse the active warm state.
 
-30. **Warm Session Retention PR**
+46. **Warm Session Retention PR**
    - Keep the warmed OpenClaw session alive for a short idle window so the
      first follow-up turn does not pay the full reconnect cost.
    - Validation: gateway client test proves back-to-back turns reuse the same
