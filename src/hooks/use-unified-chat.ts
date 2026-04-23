@@ -4016,7 +4016,7 @@ export function useUnifiedChat(
       activeFileOrOptions?: ActiveFileContext | RuntimeSendOptions,
     ): Promise<void> => {
       const requestContent = content.trim();
-      if (!requestContent) return Promise.resolve();
+      if (!requestContent) return;
 
       const runtimeOptions = normalizeRuntimeSendOptions(activeFileOrOptions);
       const runtimeMode = runtimeOptions.runtimeMode ?? "chat";
@@ -4032,7 +4032,7 @@ export function useUnifiedChat(
         const openClawReady = await refreshOpenClawHealth();
         if (!openClawReady) {
           setError(OPENCLAW_UNREACHABLE_ERROR);
-          return Promise.resolve();
+          return;
         }
       }
 
