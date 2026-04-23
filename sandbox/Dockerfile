@@ -1,8 +1,8 @@
 # scienceswarm/sandbox:latest
 #
-# Custom sandbox image that OpenHands 1.6 drives during audit-revise runs.
+# Custom sandbox image that current OpenHands drives during audit-revise runs.
 #
-# OpenHands 1.6 sandboxes are actually `agent-server` processes: they serve
+# OpenHands sandboxes are actually `agent-server` processes: they serve
 # an HTTP API the conversation orchestrator calls. We therefore MUST build
 # FROM the upstream agent-server base so the contract OpenHands expects
 # (port 8000 HTTP surface, workspace conventions, entrypoint) stays intact.
@@ -22,12 +22,12 @@
 # (http://host.docker.internal:3001) via the tiny `gbrain` HTTP shim
 # installed below.
 #
-# OpenHands 1.6 resolves the sandbox image via AGENT_SERVER_IMAGE_REPOSITORY
+# Current OpenHands resolves the sandbox image via AGENT_SERVER_IMAGE_REPOSITORY
 # + AGENT_SERVER_IMAGE_TAG on the main openhands container (the old 1.5
 # `SANDBOX_BASE_CONTAINER_IMAGE` contract no longer applies). See
 # docker-compose.yml for the current wiring.
 
-FROM ghcr.io/openhands/agent-server:1.15.0-python
+FROM ghcr.io/openhands/agent-server:1.17.0-python
 
 # Agent-server is Debian 13 with Python 3.13. `patch` is already
 # installed; we add TeX Live for pdflatex and nothing else apt-wise.

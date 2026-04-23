@@ -27,7 +27,7 @@ export async function startConversation(req: ConversationStartRequest) {
     OLLAMA_MODEL: runtime.ollamaModel ?? undefined,
   });
 
-  // OpenHands 1.6 takes a request with `initial_message` populated,
+  // OpenHands V1 takes a request with `initial_message` populated,
   // but that path goes through `_construct_initial_message_with_plugin_params`
   // and the sandbox's start-conversation endpoint which does NOT
   // dispatch the message to the agent loop in our headless setup.
@@ -39,10 +39,10 @@ export async function startConversation(req: ConversationStartRequest) {
   // initial_message in the start, then queue the prompt as a pending
   // message via `queuePendingMessage` immediately after.
   //
-  // See OpenHands 1.6 source:
-  //   openhands/app_server/app_conversation/live_status_app_conversation_service.py:1554-1593
+  // See OpenHands source:
+  //   openhands/app_server/app_conversation/live_status_app_conversation_service.py
   //   openhands/app_server/pending_messages/pending_message_router.py
-  //   frontend/src/contexts/conversation-websocket-context.tsx:849
+  //   frontend/src/contexts/conversation-websocket-context.tsx
   const res = await fetch(`${getOpenHandsUrl()}/api/v1/app-conversations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -179,16 +179,16 @@ export async function getEvents(
   limit = 50,
   sortOrder: "TIMESTAMP" | "TIMESTAMP_DESC" = "TIMESTAMP_DESC"
 ): Promise<unknown[]> {
-  // OpenHands 1.6 enum: must be "TIMESTAMP" or "TIMESTAMP_DESC".
+  // OpenHands V1 enum: must be "TIMESTAMP" or "TIMESTAMP_DESC".
   // Older 1.5 accepted "asc"/"desc"; passing those returns 422.
   //
   // Response-shape normalization: OH 1.5 returned the event list as a
-  // raw array; OH 1.6 wraps it in `{items: [...]}`. Every caller
+  // raw array; OH V1 wraps it in `{items: [...]}`. Every caller
   // wants an array, so unwrap here. This keeps all downstream
   // consumers (run-job waitForFinish, run-artifact poll, unified
   // chat fallback, /api/agent events proxy) version-agnostic and
   // avoids a `Array.isArray(events)` check that silently fails on
-  // OH 1.6.
+  // OH V1.
   const res = await fetch(
     `${getOpenHandsUrl()}/api/v1/conversation/${conversationId}/events/search?limit=${limit}&sort_order=${sortOrder}`
   );
@@ -210,7 +210,7 @@ export async function getEvents(
  * `getEvents`. Handles both:
  *
  * - OH 1.5: `{ source: "agent", message: "..." }` (flat)
- * - OH 1.6: `{ kind: "MessageEvent", source: "agent",
+ * - OH V1: `{ kind: "MessageEvent", source: "agent",
  *             llm_message: { content: [{ type: "text", text: "..." }] } }`
  *
  * Returns `null` if the event is not an agent message. Using this
@@ -227,7 +227,7 @@ export function extractAgentMessageText(event: unknown): string | null {
   };
   if (rec.source !== "agent") return null;
 
-  // OH 1.6 MessageEvent shape.
+  // OH V1 MessageEvent shape.
   if (rec.kind === "MessageEvent") {
     const content = rec.llm_message?.content;
     if (!Array.isArray(content)) return null;

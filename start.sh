@@ -185,7 +185,7 @@ fi
 : "${FRONTEND_PUBLIC_HOST:=$FRONTEND_HOST}"
 : "${FRONTEND_USE_HTTPS:=true}"
 : "${OPENHANDS_PORT:=3000}"
-: "${OPENHANDS_IMAGE:=docker.openhands.dev/openhands/openhands@sha256:5c0dc26f467bf8e47a6e76308edb7a30af4084b17e23a3460b5467008b12111b}"
+: "${OPENHANDS_IMAGE:=docker.openhands.dev/openhands/openhands@sha256:53ff46b778a4e2f5e8013adc12e347e421bacc9239e2f0482989aec391934487}"
 export FRONTEND_HOST FRONTEND_PUBLIC_HOST OPENHANDS_IMAGE
 
 FRONTEND_SCHEME="http"
@@ -350,7 +350,7 @@ fi
 # - local execution is configured via LLM_PROVIDER=local, or
 # - a real OpenAI key is configured for cloud-backed execution.
 if [ "$DOCKER_OK" = true ] && { [ "${LLM_PROVIDER:-}" = "local" ] || [ "$API_KEY_OK" = true ]; }; then
-  # OpenHands 1.6 reads AGENT_SERVER_IMAGE_REPOSITORY + AGENT_SERVER_IMAGE_TAG
+  # Current OpenHands reads AGENT_SERVER_IMAGE_REPOSITORY + AGENT_SERVER_IMAGE_TAG
   # to resolve the sandbox image; the old SANDBOX_BASE_CONTAINER_IMAGE env var
   # no longer applies. If AGENT_SERVER_IMAGE_REPOSITORY is unset, OH falls
   # back to its stock ghcr.io/openhands/agent-server image.

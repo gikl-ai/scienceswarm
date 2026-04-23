@@ -295,7 +295,7 @@ function createLiveOpenHandsTransport(): OpenHandsTransport {
   return {
     async startConversation(prompt) {
       const mod = await import("@/lib/openhands");
-      // OpenHands 1.6 has two independent message-dispatch contracts:
+      // OpenHands V1 has two independent message-dispatch contracts:
       //
       // 1. `initial_message` on POST /api/v1/app-conversations — this
       //    rides along with the start-conversation request that the
@@ -318,11 +318,10 @@ function createLiveOpenHandsTransport(): OpenHandsTransport {
       // under the task id. The orchestrator delivers it once the
       // start-task transitions to READY.
       //
-      // See OpenHands 1.6 source:
+      // See OpenHands source:
       //   openhands/app_server/app_conversation/live_status_app_conversation_service.py
-      //   :291-398 (start flow + _process_pending_messages dispatch)
       //   openhands/app_server/pending_messages/pending_message_router.py
-      //   frontend/src/contexts/conversation-websocket-context.tsx:849
+      //   frontend/src/contexts/conversation-websocket-context.tsx
       const task = (await mod.startConversation({
         message: prompt,
       })) as { id: string };
@@ -342,7 +341,7 @@ function createLiveOpenHandsTransport(): OpenHandsTransport {
       // Phase 1: resolve task_id → app_conversation_id. The task
       // starts in status WORKING and flips to READY with an
       // `app_conversation_id` once the sandbox is assigned. OpenHands
-      // 1.6 takes 5-30s to spin up the sandbox container on first
+      // V1 takes 5-30s to spin up the sandbox container on first
       // use (image pull / cold boot), so we allow up to half the
       // deadline for the resolve step before giving up.
       const RESOLVE_DEADLINE_FRACTION = 0.5;
@@ -422,14 +421,14 @@ function createLiveOpenHandsTransport(): OpenHandsTransport {
         nullStreak = 0;
         const status = conv.execution_status;
         if (status === "finished") {
-          // OH 1.6 stores messages as MessageEvent with
+          // OH V1 stores messages as MessageEvent with
           //   kind: "MessageEvent"
           //   source: "user" | "agent"
           //   llm_message.role: "user" | "assistant"
           //   llm_message.content: [{type: "text", text: "..."}]
           // We want the agent's last reply, so filter by source='agent'.
           // 50 is enough for the tail of any reasonable run; the
-          // sort_order parameter is the OH 1.6 enum, NOT asc/desc.
+          // sort_order parameter is the OH V1 enum, NOT asc/desc.
           //
           // Race window: execution_status can flip to "finished" a few
           // seconds before the events search index has indexed the
@@ -448,7 +447,7 @@ function createLiveOpenHandsTransport(): OpenHandsTransport {
           };
           let llmText: string | undefined;
           for (let attempt = 0; attempt < 5; attempt += 1) {
-            // getEvents normalizes OH 1.5 (raw array) and OH 1.6
+            // getEvents normalizes OH 1.5 (raw array) and OH V1
             // (`{items: [...]}`) into a single array shape, so we
             // can just iterate directly.
             const events = (await mod.getEvents(
@@ -472,7 +471,7 @@ function createLiveOpenHandsTransport(): OpenHandsTransport {
             finalMessage: llmText ?? null,
           };
         }
-        // OpenHands 1.6 ConversationExecutionStatus:
+        // OpenHands V1 ConversationExecutionStatus:
         //   idle, running, paused, waiting_for_confirmation,
         //   finished, error, stuck, deleting
         // We already handled "finished" above. The remaining

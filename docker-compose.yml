@@ -1,6 +1,6 @@
 services:
   openhands:
-    image: ${OPENHANDS_IMAGE:-docker.openhands.dev/openhands/openhands@sha256:5c0dc26f467bf8e47a6e76308edb7a30af4084b17e23a3460b5467008b12111b}
+    image: ${OPENHANDS_IMAGE:-docker.openhands.dev/openhands/openhands@sha256:53ff46b778a4e2f5e8013adc12e347e421bacc9239e2f0482989aec391934487}
     container_name: scienceswarm-agent
     ports:
       - "127.0.0.1:${OPENHANDS_PORT:-3000}:3000"
@@ -12,7 +12,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-}
       - LLM_API_KEY=${OPENAI_API_KEY}
       - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-32768}
-      # OpenHands 1.6 resolves the sandbox (agent-server) image via
+      # Current OpenHands resolves the sandbox (agent-server) image via
       # AGENT_SERVER_IMAGE_REPOSITORY + AGENT_SERVER_IMAGE_TAG. The
       # old 1.5 env var SANDBOX_BASE_CONTAINER_IMAGE no longer applies.
       # Build the custom image once with ./scripts/build-sandbox.sh,

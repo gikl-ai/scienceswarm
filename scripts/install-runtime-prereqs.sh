@@ -7,7 +7,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 MODEL="gemma4:latest"
-OPENHANDS_IMAGE="${OPENHANDS_IMAGE:-docker.openhands.dev/openhands/openhands@sha256:5c0dc26f467bf8e47a6e76308edb7a30af4084b17e23a3460b5467008b12111b}"
+OPENHANDS_IMAGE="${OPENHANDS_IMAGE:-docker.openhands.dev/openhands/openhands@sha256:53ff46b778a4e2f5e8013adc12e347e421bacc9239e2f0482989aec391934487}"
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
   OS="macos"
