@@ -3,9 +3,9 @@ name: Trusted Review Policy
 on:
   pull_request_target:
     branches: [main]
-    types: [opened, reopened, synchronize, ready_for_review, edited]
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
   pull_request_review:
-    types: [submitted, edited, dismissed]
+    types: [submitted, dismissed]
 
 permissions:
   contents: read
@@ -18,7 +18,8 @@ jobs:
     if: |
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'pull_request_review' &&
-       github.event.pull_request.base.ref == 'main')
+       github.event.pull_request.base.ref == 'main' &&
+       !contains(fromJSON('["vajdap","seijiyamamoto","yamamotoseiji"]'), github.event.pull_request.user.login))
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -32,7 +33,15 @@ jobs:
           set -euo pipefail
 
           head_sha=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')
+          labels_json=$(gh api "repos/$REPO/issues/$PR_NUMBER/labels" --paginate --slurp | jq -c 'add')
           reviews_json=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate --slurp | jq -c 'add')
+
+          ci_deferred=$(
+            jq -r '
+              map(.name)
+              | index("ci-defer") != null
+            ' <<<"$labels_json"
+          )
 
           trusted_author=$(
             jq -rn \
@@ -67,6 +76,17 @@ jobs:
             echo "- PR author: \`$PR_AUTHOR\`"
             echo "- Trusted maintainers: \`vajdap\`, \`seijiyamamoto\`, \`yamamotoseiji\`"
           } >>"$GITHUB_STEP_SUMMARY"
+
+          if [[ "$ci_deferred" == "true" ]]; then
+            {
+              echo "- Result: fail"
+              echo
+              echo "The \`ci-defer\` label is present. Remove it when the PR is ready for final required checks and merge."
+            } >>"$GITHUB_STEP_SUMMARY"
+
+            echo "ci-defer label blocks merge until final required checks are requested." >&2
+            exit 1
+          fi
 
           if [[ "$trusted_author" == "true" ]]; then
             {

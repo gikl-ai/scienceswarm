@@ -26,6 +26,12 @@ npm run build
 npm run quality
 ```
 
+Maintainers can add the `ci-defer` label while a PR is still in the
+bot-review/fix loop. That skips the heavier required PR checks on interim
+pushes, but it also blocks merge. Remove `ci-defer` when the PR is ready for
+final validation so CI, dependency review, and any relevant E2E checks run on
+the merge candidate.
+
 ## Contribution rules
 
 - Do not commit secrets, private local paths, or local runtime state.
@@ -51,6 +57,7 @@ npm run quality
 - Keep PRs focused.
 - Include a non-empty PR body with summary, verification, and any env or
   rollout impact.
+- Do not leave `ci-defer` on a PR that is ready to merge.
 - Do not force-push unless a maintainer explicitly asks for it.
 
 ## Inbound license terms
