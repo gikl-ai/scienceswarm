@@ -53,6 +53,14 @@ export interface OpenClawGatewayStatus {
   gateway: string;
 }
 
+export interface OpenClawChatSendOptions {
+  session?: string;
+  cwd?: string;
+  channel?: string;
+  timeoutMs?: number;
+  onEvent?: (event: unknown) => void;
+}
+
 const OPENCLAW_SESSION_FILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 const MAX_PERSISTED_WEB_SESSION_METADATA = 4096;
 const persistedWebSessionMetadata = new Set<string>();
@@ -642,6 +650,34 @@ export async function gatewayHealthCheck(): Promise<OpenClawGatewayStatus> {
 }
 
 /**
+ * Strict WebChat transport for dashboard turns.
+ *
+ * This is intentionally WS-only. If the OpenClaw gateway cannot accept the
+ * `chat.send` request, callers should surface a transport error instead of
+ * falling back to `openclaw agent` and paying CLI latency or risking semantic
+ * differences from the TUI path.
+ */
+export async function sendOpenClawChatMessage(
+  message: string,
+  options?: OpenClawChatSendOptions,
+): Promise<string> {
+  if (!options?.session) {
+    throw new Error("OpenClaw web chat requires a session id");
+  }
+
+  await persistWebSessionMetadata(options.session, options.cwd);
+  const { sendChatViaGateway } = await import(
+    "@/lib/openclaw/gateway-ws-client"
+  );
+  const result = await sendChatViaGateway(options.session, message, {
+    timeoutMs: options.timeoutMs ?? 600_000,
+    deliver: false,
+    onEvent: options.onEvent,
+  });
+  return result.text;
+}
+
+/**
  * Send a message through OpenClaw agent and get a response.
  *
  * Prefers the WebSocket gateway transport for session-scoped in-process turns.
@@ -668,11 +704,12 @@ export async function sendAgentMessage(
   const useGatewayTransport = shouldUseGatewayTransport(options);
   const useGatewayWebSession = shouldUseGatewayForWebSession(options);
 
+  if (useGatewayWebSession) {
+    return sendOpenClawChatMessage(message, options);
+  }
+
   if (useGatewayTransport && options?.session) {
     try {
-      if (useGatewayWebSession) {
-        await persistWebSessionMetadata(options.session, options.cwd);
-      }
       const { sendMessageViaGateway } = await import(
         "@/lib/openclaw/gateway-ws-client"
       );
@@ -696,7 +733,7 @@ export async function sendAgentMessage(
       const { isGatewayPostAckError } = await import(
         "@/lib/openclaw/gateway-ws-client"
       );
-      if (useGatewayWebSession || isGatewayPostAckError(err)) {
+      if (isGatewayPostAckError(err)) {
         throw err;
       }
       // Pre-ACK gateway failure (no token, gateway not running, auth failed,
