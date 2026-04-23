@@ -3,8 +3,14 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useScienceSwarmLocalAuth } from "@/hooks/use-scienceswarm-local-auth";
 import { getStructuredCritiqueDisplayError } from "@/lib/structured-critique-errors";
+import {
+  buildCritiqueDisplayModel,
+  type CritiqueDisplayItem,
+} from "@/lib/structured-critique-display";
 import {
   getScienceSwarmSignInUrl,
   SCIENCESWARM_CRITIQUE_CLOUD_DISCLAIMER,
@@ -1215,6 +1221,58 @@ function IssueQueueItem({
   );
 }
 
+function CritiqueMarkdownBlock({
+  content,
+  className = "",
+}: {
+  content: string;
+  className?: string;
+}) {
+  return (
+    <div className={`file-markdown bg-transparent p-0 ${className}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+    </div>
+  );
+}
+
+function FindingIdList({ findingIds }: { findingIds?: string[] }) {
+  if (!findingIds || findingIds.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1">
+      {findingIds.map((findingId) => (
+        <span
+          key={findingId}
+          className="rounded bg-white px-1.5 py-0.5 font-mono text-[10px] text-gray-600 ring-1 ring-gray-100"
+        >
+          {findingId}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function DisplayItemCard({
+  item,
+  index,
+}: {
+  item: CritiqueDisplayItem;
+  index?: number;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+      <div className="text-sm font-medium text-foreground">
+        {typeof index === "number" ? `${index + 1}. ` : null}
+        {item.title}
+      </div>
+      <CritiqueMarkdownBlock
+        content={item.bodyMarkdown}
+        className="mt-1 text-sm leading-6 text-muted"
+      />
+      <FindingIdList findingIds={item.findingIds} />
+    </div>
+  );
+}
+
 function ProjectSavePanel({
   controls,
   isSaving,
@@ -1339,7 +1397,12 @@ function ReportOverview({
   const saveStatus = brainSaveStatus;
   const destinationControls = saveControls;
   const title = job.result?.title || job.pdf_filename;
-  const topIssues = job.result?.author_feedback?.top_issues ?? [];
+  const displayModel = job.result
+    ? buildCritiqueDisplayModel(job.result)
+    : null;
+  const topIssues = displayModel?.topIssues ?? [];
+  const sectionFeedback = displayModel?.sectionFeedback ?? [];
+  const questionsForAuthors = displayModel?.questionsForAuthors ?? [];
   const reportMarkdown = job.result?.report_markdown?.trim() || "";
   const fileStem = slugifyFileStem(title || job.id);
   const canSaveToBrain =
@@ -1463,6 +1526,21 @@ function ReportOverview({
         </div>
       ) : null}
 
+      {displayModel?.summaryMarkdown ? (
+        <div className="space-y-2">
+          <div className={SECTION_LABEL}>Summary</div>
+          <CritiqueMarkdownBlock
+            content={displayModel.summaryMarkdown}
+            className="max-w-4xl text-sm leading-7 text-foreground"
+          />
+          {displayModel.atAGlance ? (
+            <p className="max-w-4xl rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-muted">
+              {displayModel.atAGlance}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {topIssues.length > 0 ? (
         <div className="space-y-2">
           <div className={SECTION_LABEL}>
@@ -1470,17 +1548,56 @@ function ReportOverview({
           </div>
           <div className="grid gap-2 md:grid-cols-2">
             {topIssues.map((issue, index) => (
-              <div key={`${issue.title || "issue"}-${index}`} className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
-                <div className="text-sm font-medium text-foreground">
-                  {index + 1}. {issue.title || "Issue"}
-                </div>
-                {issue.summary ? (
-                  <p className="mt-1 text-sm text-muted">{issue.summary}</p>
-                ) : null}
-              </div>
+              <DisplayItemCard
+                key={`${issue.title || "issue"}-${index}`}
+                item={issue}
+                index={index}
+              />
             ))}
           </div>
         </div>
+      ) : null}
+
+      {sectionFeedback.length > 0 ? (
+        <div className="space-y-2">
+          <div className={SECTION_LABEL}>Section-by-section feedback</div>
+          <div className="grid gap-2 xl:grid-cols-2">
+            {sectionFeedback.map((section, index) => (
+              <DisplayItemCard
+                key={`${section.title || "section"}-${index}`}
+                item={section}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {questionsForAuthors.length > 0 ? (
+        <details className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">
+            Questions for authors
+          </summary>
+          <div className="mt-3 grid gap-2 xl:grid-cols-2">
+            {questionsForAuthors.map((question, index) => (
+              <DisplayItemCard
+                key={`${question.title || "question"}-${index}`}
+                item={question}
+              />
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      {displayModel?.referencesFeedbackMarkdown ? (
+        <details className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">
+            Reference and methods notes
+          </summary>
+          <CritiqueMarkdownBlock
+            content={displayModel.referencesFeedbackMarkdown}
+            className="mt-3 text-sm leading-6 text-muted"
+          />
+        </details>
       ) : null}
 
       {reportMarkdown ? (
@@ -1488,9 +1605,10 @@ function ReportOverview({
           <summary className="cursor-pointer text-sm font-medium text-foreground">
             Report markdown
           </summary>
-          <pre className="mt-3 whitespace-pre-wrap font-mono text-xs leading-6 text-foreground">
-            {reportMarkdown}
-          </pre>
+          <CritiqueMarkdownBlock
+            content={reportMarkdown}
+            className="mt-3 max-h-[32rem] overflow-auto rounded border border-gray-100 bg-white px-3 py-2 text-sm leading-6 text-foreground"
+          />
         </details>
       ) : null}
     </div>
