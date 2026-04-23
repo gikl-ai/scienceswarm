@@ -74,6 +74,7 @@ vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
   gatewayHealthCheck: openClawHealthCheck,
   sendAgentMessage: sendOpenClawMessage,
+  sendOpenClawChatMessage: sendOpenClawMessage,
   getConversationMessagesSince: vi.fn(),
 }));
 

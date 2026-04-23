@@ -40,6 +40,7 @@ vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
   gatewayHealthCheck: openClawHealthCheck,
   sendAgentMessage: sendOpenClawMessage,
+  sendOpenClawChatMessage: sendOpenClawMessage,
 }));
 
 vi.mock("@/lib/message-handler", () => ({

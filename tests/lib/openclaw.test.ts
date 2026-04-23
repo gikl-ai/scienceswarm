@@ -14,6 +14,7 @@ const {
   execFileMock,
   execFileSyncMock,
   sendMessageViaGatewayMock,
+  sendChatViaGatewayMock,
   MockGatewayPostAckError,
   mockIsGatewayPostAckError,
 } = vi.hoisted(() => {
@@ -33,6 +34,7 @@ const {
     execFileMock: vi.fn(),
     execFileSyncMock: vi.fn(),
     sendMessageViaGatewayMock: vi.fn(),
+    sendChatViaGatewayMock: vi.fn(),
     MockGatewayPostAckError: _MockGatewayPostAckError,
     mockIsGatewayPostAckError: (err: unknown): err is InstanceType<typeof _MockGatewayPostAckError> =>
       err instanceof _MockGatewayPostAckError,
@@ -50,6 +52,7 @@ vi.mock("child_process", () => ({
 // real local gateway on the dev machine.
 vi.mock("@/lib/openclaw/gateway-ws-client", () => ({
   sendMessageViaGateway: sendMessageViaGatewayMock,
+  sendChatViaGateway: sendChatViaGatewayMock,
   GatewayPostAckError: MockGatewayPostAckError,
   isGatewayPostAckError: mockIsGatewayPostAckError,
 }));
@@ -59,6 +62,7 @@ import {
   getConversationMessagesSince,
   healthCheck,
   sendAgentMessage,
+  sendOpenClawChatMessage,
 } from "@/lib/openclaw";
 
 function mockExecFile(stdout: unknown, stderr = "") {
@@ -89,6 +93,8 @@ describe("OpenClaw healthCheck", () => {
     vi.unstubAllEnvs();
     execFileMock.mockReset();
     execFileSyncMock.mockReset();
+    sendMessageViaGatewayMock.mockReset();
+    sendChatViaGatewayMock.mockReset();
     // Prevent the HTTP fast path from hitting a real local gateway;
     // these tests exercise the CLI-based probes exclusively.
     globalThis.fetch = () => Promise.reject(new Error("mocked: no gateway"));
@@ -338,6 +344,7 @@ describe("sendAgentMessage output sanitization", () => {
     execFileMock.mockReset();
     execFileSyncMock.mockReset();
     sendMessageViaGatewayMock.mockReset();
+    sendChatViaGatewayMock.mockReset();
     // Force the WS gateway to fail so sendAgentMessage falls back to the
     // CLI path the assertions below exercise.
     sendMessageViaGatewayMock.mockRejectedValue(
@@ -503,15 +510,16 @@ describe("sendAgentMessage output sanitization", () => {
     expect(options?.env?.OPENCLAW_CONFIG_PATH).toBe(`${root}/openclaw/openclaw.json`);
   });
 
-  it("uses the gateway for web chat sessions even when cwd is provided, and records session cwd metadata", async () => {
+  it("uses chat.send for web chat sessions even when cwd is provided, and records session cwd metadata", async () => {
     const root = mkdtempSync(
       path.join(tmpdir(), "scienceswarm-openclaw-web-session-"),
     );
     vi.stubEnv("SCIENCESWARM_DIR", root);
-    sendMessageViaGatewayMock.mockReset();
-    sendMessageViaGatewayMock.mockResolvedValueOnce({
+    sendChatViaGatewayMock.mockReset();
+    sendChatViaGatewayMock.mockResolvedValueOnce({
       text: "ws web ok",
       events: [],
+      runId: "run-alpha",
     });
 
     await expect(
@@ -522,13 +530,15 @@ describe("sendAgentMessage output sanitization", () => {
       }),
     ).resolves.toBe("ws web ok");
 
-    expect(sendMessageViaGatewayMock).toHaveBeenCalledWith(
+    expect(sendChatViaGatewayMock).toHaveBeenCalledWith(
       "web:test:gateway-web",
       "Explain",
       expect.objectContaining({
         timeoutMs: 600_000,
+        deliver: false,
       }),
     );
+    expect(sendMessageViaGatewayMock).not.toHaveBeenCalled();
     expect(execFileMock).not.toHaveBeenCalled();
     expect(
       readFileSync(
@@ -556,10 +566,11 @@ describe("sendAgentMessage output sanitization", () => {
       path.join(tmpdir(), "scienceswarm-openclaw-web-dedupe-"),
     );
     vi.stubEnv("SCIENCESWARM_DIR", root);
-    sendMessageViaGatewayMock.mockReset();
-    sendMessageViaGatewayMock.mockImplementation(async () => ({
+    sendChatViaGatewayMock.mockReset();
+    sendChatViaGatewayMock.mockImplementation(async () => ({
       text: "ws web ok",
       events: [],
+      runId: "run-alpha",
     }));
 
     await Promise.all([
@@ -596,10 +607,11 @@ describe("sendAgentMessage output sanitization", () => {
       path.join(tmpdir(), "scienceswarm-openclaw-invalid-session-"),
     );
     vi.stubEnv("SCIENCESWARM_DIR", root);
-    sendMessageViaGatewayMock.mockReset();
-    sendMessageViaGatewayMock.mockResolvedValue({
+    sendChatViaGatewayMock.mockReset();
+    sendChatViaGatewayMock.mockResolvedValue({
       text: "ws web ok",
       events: [],
+      runId: "run-alpha",
     });
 
     for (const session of ["../escape", "web:test/../../escape", "web:test\\escape"]) {
@@ -687,8 +699,8 @@ describe("sendAgentMessage output sanitization", () => {
   });
 
   it("does NOT fall back to the CLI on a pre-ACK gateway failure for web chat sessions", async () => {
-    sendMessageViaGatewayMock.mockReset();
-    sendMessageViaGatewayMock.mockRejectedValueOnce(
+    sendChatViaGatewayMock.mockReset();
+    sendChatViaGatewayMock.mockRejectedValueOnce(
       new Error("mocked: gateway unreachable"),
     );
 
@@ -700,6 +712,38 @@ describe("sendAgentMessage output sanitization", () => {
       }),
     ).rejects.toThrow("gateway unreachable");
 
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("exposes a strict OpenClaw web-chat sender that bypasses legacy sessions.send", async () => {
+    const root = mkdtempSync(
+      path.join(tmpdir(), "scienceswarm-openclaw-strict-chat-"),
+    );
+    vi.stubEnv("SCIENCESWARM_DIR", root);
+    sendChatViaGatewayMock.mockReset();
+    sendChatViaGatewayMock.mockResolvedValueOnce({
+      text: "strict ok",
+      events: [],
+      runId: "run-alpha",
+    });
+
+    await expect(
+      sendOpenClawChatMessage("Hello", {
+        session: "web:test:strict-chat",
+        cwd: path.join(root, "projects", "project-alpha"),
+        onEvent: vi.fn(),
+      }),
+    ).resolves.toBe("strict ok");
+
+    expect(sendChatViaGatewayMock).toHaveBeenCalledWith(
+      "web:test:strict-chat",
+      "Hello",
+      expect.objectContaining({
+        deliver: false,
+        timeoutMs: 600_000,
+      }),
+    );
+    expect(sendMessageViaGatewayMock).not.toHaveBeenCalled();
     expect(execFileMock).not.toHaveBeenCalled();
   });
 
@@ -726,6 +770,8 @@ describe("OpenClaw conversation polling", () => {
     vi.unstubAllEnvs();
     execFileMock.mockReset();
     execFileSyncMock.mockReset();
+    sendMessageViaGatewayMock.mockReset();
+    sendChatViaGatewayMock.mockReset();
   });
 
   it("parses timestamps chronologically instead of relying on raw string order", async () => {
