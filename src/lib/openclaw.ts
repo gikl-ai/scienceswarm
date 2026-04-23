@@ -56,7 +56,6 @@ export interface OpenClawGatewayStatus {
 export interface OpenClawChatSendOptions {
   session?: string;
   cwd?: string;
-  channel?: string;
   timeoutMs?: number;
   onEvent?: (event: unknown) => void;
 }
