@@ -30,7 +30,8 @@ export function RadarOnboardingCard({ onDismiss }: RadarOnboardingCardProps) {
     try {
       // Check if radar already exists
       const radarRes = await fetch("/api/radar");
-      if (radarRes.ok) {
+      const radar = radarRes.ok ? await radarRes.json().catch(() => null) : null;
+      if (radar) {
         // Radar exists, don't show the card
         setState("dismissed");
         return;
