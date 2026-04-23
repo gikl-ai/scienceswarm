@@ -283,7 +283,9 @@ export function PaperLibraryCommandCenter({
   projectSlug: string;
 }) {
   const skipLatestRestoreRef = useRef(false);
-  const [session, setSession] = useState<PaperLibrarySession>(() => readStoredSession(projectSlug));
+  const [session, setSession] = useState<PaperLibrarySession>(() => defaultSession());
+  const [restoredProjectSlug, setRestoredProjectSlug] = useState<string | null>(null);
+  const sessionRestored = restoredProjectSlug === projectSlug;
   const sessionRef = useRef(session);
   const [scan, setScan] = useState<PaperLibraryScan | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
@@ -360,11 +362,13 @@ export function PaperLibraryCommandCenter({
     setScanError(null);
     resetDownstreamState();
     setCommandError(null);
+    setRestoredProjectSlug(projectSlug);
   }, [projectSlug, resetDownstreamState]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     persistStoredSession(projectSlug, session);
-  }, [projectSlug, session]);
+  }, [projectSlug, session, sessionRestored]);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -666,70 +670,80 @@ export function PaperLibraryCommandCenter({
   }, [gapFilter, projectSlug, session.scanId]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (!session.scanId) {
       setScan(null);
       return;
     }
     void loadScan(session.scanId);
-  }, [loadScan, session.scanId]);
+  }, [loadScan, session.scanId, sessionRestored]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (session.scanId) return;
     void loadLatestScan();
-  }, [loadLatestScan, session.scanId]);
+  }, [loadLatestScan, session.scanId, sessionRestored]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (!scan || !isScanInFlight(scan)) return;
     const interval = window.setInterval(() => {
       void loadScan(scan.id);
     }, 2_000);
     return () => window.clearInterval(interval);
-  }, [loadScan, scan]);
+  }, [loadScan, scan, sessionRestored]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (!session.applyPlanId) {
       setApplyPlanPage(null);
       return;
     }
     void loadApplyPlan({ applyPlanId: session.applyPlanId });
-  }, [loadApplyPlan, session.applyPlanId]);
+  }, [loadApplyPlan, session.applyPlanId, sessionRestored]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (!session.manifestId) {
       setManifestPage(null);
       return;
     }
     void loadManifest({ manifestId: session.manifestId });
-  }, [loadManifest, session.manifestId]);
+  }, [loadManifest, session.manifestId, sessionRestored]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (!scan || session.step !== "review") return;
     if (scan.status !== "ready_for_review" && scan.status !== "ready_for_apply") return;
     void loadReview();
-  }, [loadReview, scan, session.step, reviewFilter]);
+  }, [loadReview, scan, session.step, reviewFilter, sessionRestored]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (session.step !== "graph" || !session.scanId) return;
     void loadGraph();
     void loadClusters();
-  }, [loadClusters, loadGraph, session.scanId, session.step]);
+  }, [loadClusters, loadGraph, session.scanId, session.step, sessionRestored]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (session.step !== "graph" || !session.scanId) return;
     void loadGaps();
-  }, [loadGaps, session.scanId, session.step]);
+  }, [loadGaps, session.scanId, session.step, sessionRestored]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (scan?.applyPlanId && scan.applyPlanId !== session.applyPlanId) {
       patchSession({ applyPlanId: scan.applyPlanId });
     }
-  }, [patchSession, scan?.applyPlanId, session.applyPlanId]);
+  }, [patchSession, scan?.applyPlanId, session.applyPlanId, sessionRestored]);
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (applyPlanPage?.plan.manifestId && applyPlanPage.plan.manifestId !== session.manifestId) {
       patchSession({ manifestId: applyPlanPage.plan.manifestId });
     }
-  }, [applyPlanPage?.plan.manifestId, patchSession, session.manifestId]);
+  }, [applyPlanPage?.plan.manifestId, patchSession, session.manifestId, sessionRestored]);
 
   const handleStartScan = useCallback(async () => {
     setCommandError(null);
