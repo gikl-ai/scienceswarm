@@ -155,6 +155,43 @@ describe("paper-library jobs", () => {
     });
   });
 
+  it("records cancellation before stale reconciliation so workers can observe it", async () => {
+    const staleScanPath = scanPath("project-alpha", "stale-cancel-scan");
+    await mkdir(path.dirname(staleScanPath), { recursive: true });
+    await writeFile(staleScanPath, JSON.stringify({
+      version: 1,
+      id: "stale-cancel-scan",
+      project: "project-alpha",
+      rootPath: paperRoot,
+      rootRealpath: paperRoot,
+      status: "identifying",
+      createdAt: "2000-01-01T00:00:00.000Z",
+      updatedAt: "2000-01-01T00:00:00.000Z",
+      heartbeatAt: "2000-01-01T00:00:00.000Z",
+      counters: {
+        detectedFiles: 10,
+        identified: 1,
+        needsReview: 1,
+        readyForApply: 0,
+        failed: 0,
+      },
+      warnings: [],
+      currentPath: "paper.pdf",
+      reviewShardIds: [],
+    }), "utf-8");
+
+    const canceled = await cancelPaperLibraryScan("project-alpha", "stale-cancel-scan", path.join(dataRoot, "brain"));
+    expect(canceled?.status).toBe("identifying");
+    expect(typeof canceled?.cancelRequestedAt).toBe("string");
+    expect(canceled?.warnings).toEqual([]);
+
+    const reconciled = await reconcileStalePaperLibraryScan("project-alpha", "stale-cancel-scan", path.join(dataRoot, "brain"));
+    expect(reconciled).toMatchObject({
+      status: "canceled",
+      warnings: [],
+    });
+  });
+
   it("does not add cancel requests to scans that already reached a stable waiting state", async () => {
     await writeFile(path.join(paperRoot, "2024 - Smith - Interesting Paper.pdf"), "fake pdf", "utf-8");
     const scan = await startPaperLibraryScan({

@@ -79,9 +79,8 @@ function scanCounters(scan: { counters?: PartialScanCounters }): PaperLibrarySca
 }
 
 function scanIsStale(scan: PaperLibraryScan): boolean {
-  return ACTIVE_SCAN_STATUSES.has(scan.status)
-    && Boolean(scan.heartbeatAt)
-    && Date.now() - Date.parse(scan.heartbeatAt ?? "") > STALE_HEARTBEAT_MS;
+  if (!ACTIVE_SCAN_STATUSES.has(scan.status) || !scan.heartbeatAt) return false;
+  return Date.now() - Date.parse(scan.heartbeatAt) > STALE_HEARTBEAT_MS;
 }
 
 export async function readPaperLibraryScan(
@@ -111,16 +110,16 @@ export async function reconcileStalePaperLibraryScan(
   const stateRoot = getProjectStateRootForBrainRoot(project, brainRoot);
   return writeScan({
     ...scan,
-    status: "failed",
+    status: scan.cancelRequestedAt ? "canceled" : "failed",
     claimId: undefined,
     updatedAt: nowIso(),
-    warnings: [...scanWarnings(scan), "scan_worker_stale"],
+    warnings: scan.cancelRequestedAt ? scanWarnings(scan) : [...scanWarnings(scan), "scan_worker_stale"],
     counters: scanCounters(scan),
   }, stateRoot);
 }
 
 export async function cancelPaperLibraryScan(project: string, scanId: string, brainRoot: string): Promise<PaperLibraryScan | null> {
-  const scan = await reconcileStalePaperLibraryScan(project, scanId, brainRoot);
+  const scan = await readPaperLibraryScan(project, scanId, brainRoot);
   if (!scan) return null;
   if (!ACTIVE_SCAN_STATUSES.has(scan.status)) return scan;
 
