@@ -7450,13 +7450,18 @@ function streamOpenClawResponse(params: {
             const occurredAtMs = Date.now();
             if (!gatewayAckTimingSent) {
               gatewayAckTimingSent = true;
+              // OpenClaw exposes the first gateway event as the ack signal,
+              // so these checkpoints intentionally share one timestamp.
               sendTimingMeta("gateway_ack", occurredAtMs, { inferred: true });
             }
             if (!firstGatewayEventTimingSent) {
               firstGatewayEventTimingSent = true;
-              sendTimingMeta("first_gateway_event", occurredAtMs, {
-                method: gatewayEventMethodForTimingMeta(event),
-              });
+              const method = gatewayEventMethodForTimingMeta(event);
+              sendTimingMeta(
+                "first_gateway_event",
+                occurredAtMs,
+                method !== null ? { method } : undefined,
+              );
             }
           };
           const thinkingTraceStreamer = createOpenClawThinkingTraceStreamer({

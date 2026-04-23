@@ -2016,7 +2016,6 @@ describe("POST /api/chat/unified", () => {
     });
     sendOpenClawMessage.mockImplementationOnce(async (_message, options) => {
       options?.onEvent?.({
-        method: "agent",
         payload: {
           stream: "assistant",
           data: { delta: "private assistant delta" },
@@ -2051,12 +2050,64 @@ describe("POST /api/chat/unified", () => {
       "first_gateway_event",
       "final_assistant_text",
     ]);
+    const firstGatewayEvent = timingEvents.find(
+      (event) => event.name === "first_gateway_event",
+    );
+    expect(firstGatewayEvent).not.toHaveProperty("detail");
     expect(timingEvents.every((event) => event.type === "chat_timing")).toBe(true);
     expect(timingEvents.every((event) => typeof event.elapsedMs === "number")).toBe(true);
     expect(JSON.stringify(timingEvents)).not.toContain(
       "Secret prompt: EGFR timing window",
     );
     expect(JSON.stringify(timingEvents)).not.toContain("private assistant delta");
+    infoSpy.mockRestore();
+  });
+
+  it("streams opt-in timing meta without a first gateway event when OpenClaw is quiet", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw says hi");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Quiet no-event prompt",
+        projectId: "alpha-project",
+        mode: "reasoning",
+        streamPhases: true,
+      }),
+    });
+
+    const response = await POST(request);
+    const events = await readSseEvents(response);
+    const timingEvents = events
+      .map((event) => event.timing)
+      .filter((event): event is Record<string, unknown> =>
+        Boolean(event && typeof event === "object" && !Array.isArray(event)),
+      );
+
+    expect(timingEvents.map((event) => event.name)).toEqual([
+      "request_start",
+      "readiness_complete",
+      "gateway_ack",
+      "final_assistant_text",
+    ]);
+    expect(timingEvents.some((event) => event.name === "first_gateway_event")).toBe(
+      false,
+    );
+    expect(JSON.stringify(timingEvents)).not.toContain("Quiet no-event prompt");
     infoSpy.mockRestore();
   });
 
