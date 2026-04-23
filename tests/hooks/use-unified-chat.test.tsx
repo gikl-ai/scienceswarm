@@ -4433,7 +4433,10 @@ describe("useUnifiedChat persistence", () => {
           payload: {
             message: {
               role: "assistant",
-              content: "Canonical final answer.",
+              content: [
+                { type: "text", text: "Canonical" },
+                { type: "text", text: "final answer." },
+              ],
             },
           },
         },

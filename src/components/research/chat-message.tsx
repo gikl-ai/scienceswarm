@@ -855,7 +855,7 @@ export function ChatMessage({
           ? storedProgressLog
           : hasLegacyProgressFields
             ? buildFallbackProgressLog(thinking, visibleActivityLog)
-          : []
+            : []
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
