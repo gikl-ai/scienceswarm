@@ -612,6 +612,36 @@ describe("gateway-ws-client", () => {
     await expect(turn).resolves.toMatchObject({ text: "legacy reply" });
   });
 
+  it("does not match a different agent-scoped listener when only the frame key is normalized", async () => {
+    const { __testOnly } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const mainHandler = vi.fn();
+    const workerHandler = vi.fn();
+
+    __testOnly.dispatchGatewayFrame(
+      {
+        type: "event",
+        event: "agent",
+        payload: { key: "agent:worker:session-alpha" },
+      },
+      [
+        {
+          sessionKey: "agent:main:session-alpha",
+          handler: mainHandler,
+          reject: vi.fn(),
+        },
+        {
+          sessionKey: "agent:worker:session-alpha",
+          handler: workerHandler,
+          reject: vi.fn(),
+        },
+      ] as never,
+    );
+
+    expect(mainHandler).not.toHaveBeenCalled();
+    expect(workerHandler).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects a dropped turn before a reconnect can reuse stale listeners", async () => {
     const {
       GatewayPostAckError,

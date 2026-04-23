@@ -188,8 +188,7 @@ function sessionKeysMatch(
     return true;
   }
 
-  return normalizeSessionKeyForMatch(expectedSessionKey) ===
-    normalizeSessionKeyForMatch(frameSessionKey);
+  return expectedSessionKey === normalizeSessionKeyForMatch(frameSessionKey);
 }
 
 function isTurnTerminalFrame(frame: GatewayFrame): boolean {
