@@ -168,6 +168,67 @@ describe("paper-library review and apply", () => {
     expect(await exists(destination)).toBe(false);
   });
 
+  it("blocks apply before any rename when an approved source file changes", async () => {
+    const alphaPath = path.join(paperRoot, "2024 - Alpha Paper.pdf");
+    const betaPath = path.join(paperRoot, "2025 - Beta Paper.pdf");
+    await writeFile(alphaPath, "fake pdf alpha", "utf-8");
+    await writeFile(betaPath, "fake pdf beta", "utf-8");
+
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const reviewPage = await listPaperReviewItems({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      limit: 10,
+    });
+    expect(reviewPage?.items).toHaveLength(2);
+    for (const item of reviewPage?.items ?? []) {
+      await updatePaperReviewItem({
+        project: "project-alpha",
+        scanId: scan.id,
+        itemId: item.id,
+        action: "accept",
+        selectedCandidateId: item.candidates[0]?.id,
+        brainRoot,
+      });
+    }
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{year} - {title}.pdf",
+    });
+    const approval = await approveApplyPlan({
+      project: "project-alpha",
+      applyPlanId: created?.plan.id ?? "",
+      brainRoot,
+    });
+
+    await writeFile(alphaPath, "mutated after approval", "utf-8");
+
+    await expect(applyApprovedPlan({
+      project: "project-alpha",
+      applyPlanId: approval?.plan.id ?? "",
+      approvalToken: approval?.approvalToken ?? "",
+      brainRoot,
+    })).rejects.toThrow(/source/i);
+
+    for (const operation of created?.operations ?? []) {
+      const destination = path.join(paperRoot, operation.destinationRelativePath);
+      expect(await exists(destination)).toBe(false);
+    }
+    expect(await exists(alphaPath)).toBe(true);
+    expect(await exists(betaPath)).toBe(true);
+  });
+
   it("clears the active apply plan when a reviewed item changes", async () => {
     const originalPath = path.join(paperRoot, "2024 - Interesting Paper.pdf");
     await writeFile(originalPath, "fake pdf", "utf-8");

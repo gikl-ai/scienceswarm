@@ -14,6 +14,7 @@ import {
   type ApplyOperation,
   type ApplyPlan,
   type PaperIdentityCandidate,
+  type PaperLibraryFileSnapshot,
   type PaperReviewItem,
 } from "./contracts";
 import { buildAppliedPaperMetadata } from "./applied-metadata";
@@ -422,7 +423,10 @@ async function assertDestinationParentInsideRoot(rootRealpath: string, destinati
   }
 }
 
-async function applyOneOperation(rootRealpath: string, operation: ApplyOperation): Promise<ApplyManifestOperation> {
+async function preflightApplyOperation(
+  rootRealpath: string,
+  operation: ApplyOperation,
+): Promise<{ currentSnapshot: PaperLibraryFileSnapshot; destinationAbsolutePath: string }> {
   if (!operation.source) throw new Error("Apply operation is missing a source snapshot.");
   if (operation.conflictCodes.length > 0) throw new Error(`Apply operation has unresolved conflicts: ${operation.conflictCodes.join(", ")}`);
 
@@ -434,30 +438,41 @@ async function applyOneOperation(rootRealpath: string, operation: ApplyOperation
   if (!comparison.ok) throw new Error(comparison.problems[0]?.message ?? "Source changed since approval.");
   const destinationValidation = validateRelativeDestination(operation.destinationRelativePath);
   if (!destinationValidation.ok) throw new Error(destinationValidation.problems[0]?.message ?? "Destination is unsafe.");
+  if (operation.source.relativePath !== operation.destinationRelativePath && !(await destinationIsAvailable(destinationAbsolutePath))) {
+    throw new Error("Destination already exists.");
+  }
+
+  return {
+    currentSnapshot: currentSnapshot.snapshot,
+    destinationAbsolutePath,
+  };
+}
+
+async function applyOneOperation(rootRealpath: string, operation: ApplyOperation): Promise<ApplyManifestOperation> {
+  const { currentSnapshot, destinationAbsolutePath } = await preflightApplyOperation(rootRealpath, operation);
+  const source = operation.source;
+  if (!source) throw new Error("Apply operation is missing a source snapshot.");
   await assertDestinationParentInsideRoot(rootRealpath, destinationAbsolutePath);
   const baseOperation = {
     operationId: operation.id,
     paperId: operation.paperId,
-    sourceRelativePath: operation.source.relativePath,
+    sourceRelativePath: source.relativePath,
     destinationRelativePath: operation.destinationRelativePath,
-    source: operation.source,
+    source,
   } satisfies Pick<
     ApplyManifestOperation,
     "operationId" | "paperId" | "sourceRelativePath" | "destinationRelativePath" | "source"
   >;
-  if (operation.source.relativePath === operation.destinationRelativePath) {
+  if (source.relativePath === operation.destinationRelativePath) {
     return {
       ...baseOperation,
       status: "verified",
-      destinationSnapshot: currentSnapshot.snapshot,
+      destinationSnapshot: currentSnapshot,
       appliedAt: nowIso(),
     };
   }
-  if (!(await destinationIsAvailable(destinationAbsolutePath))) {
-    throw new Error("Destination already exists.");
-  }
 
-  await rename(sourceAbsolutePath, destinationAbsolutePath);
+  await rename(path.join(rootRealpath, source.relativePath), destinationAbsolutePath);
   const destinationSnapshot = await snapshotFile(rootRealpath, destinationAbsolutePath);
   if (!destinationSnapshot.ok) throw new Error(destinationSnapshot.problems[0]?.message ?? "Moved file cannot be verified.");
   return {
@@ -544,6 +559,9 @@ export async function applyApprovedPlan(input: {
   const review = await readAllPaperReviewItems(input.project, plan.scanId, input.brainRoot);
   const reviewItems = review?.items ?? [];
   const reviewItemsByPaperId = new Map(reviewItems.map((item) => [item.paperId, item]));
+  for (const operation of operations) {
+    await preflightApplyOperation(plan.rootRealpath, operation);
+  }
   const manifestId = plan.manifestId ?? randomUUID();
   const manifestOperations = manifestOperationsFromPlan(operations, reviewItemsByPaperId);
   const createdAt = nowIso();
