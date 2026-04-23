@@ -386,10 +386,12 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("backend").textContent).toBe("codex");
     expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
 
-    const stored = JSON.parse(
-      window.localStorage.getItem("scienceswarm.chat.alpha-project") ?? "{}",
-    ) as { conversationBackend?: string };
-    expect(stored.conversationBackend).toBe("codex");
+    await waitFor(() => {
+      const stored = JSON.parse(
+        window.localStorage.getItem("scienceswarm.chat.alpha-project") ?? "{}",
+      ) as { conversationBackend?: string };
+      expect(stored.conversationBackend).toBe("codex");
+    });
   });
 
   it("drops persisted assistant replay duplicates when restoring a project thread", async () => {
