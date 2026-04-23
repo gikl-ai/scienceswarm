@@ -20,6 +20,7 @@ function ChatHarness({ projectName }: { projectName: string }) {
     workspaceTree,
     artifactProvenance,
     generatedArtifacts,
+    runtimeCompareResult,
     uploadedFiles,
     addWorkspaceFileToChatContext,
     checkChanges,
@@ -34,6 +35,18 @@ function ChatHarness({ projectName }: { projectName: string }) {
       <button onClick={() => void sendMessage("Second queued message")}>Send second</button>
       <button onClick={() => void sendMessage("Review @Example Paper for me")}>Send explicit file</button>
       <button onClick={() => void sendMessage("Describe how all files are synchronized")}>Send broad all files</button>
+      <button
+        onClick={() =>
+          void sendMessage("Ask Codex for a second opinion", {
+            runtimeHostId: "codex",
+            runtimeMode: "chat",
+            projectPolicy: "cloud-ok",
+            approvalState: "approved",
+          })
+        }
+      >
+        Send Codex runtime
+      </button>
       <button
         onClick={() =>
           void sendMessage("Summarize this file", {
@@ -84,6 +97,9 @@ function ChatHarness({ projectName }: { projectName: string }) {
       </button>
       <div data-testid="conversation-id">{conversationId || ""}</div>
       <div data-testid="backend">{backend}</div>
+      <div data-testid="runtime-compare-result">
+        {runtimeCompareResult?.childResults.map((child) => `${child.hostId}:${child.status}`).join("\n") ?? ""}
+      </div>
       <div data-testid="chat-mode">{chatMode}</div>
       <div data-testid="is-streaming">{String(isStreaming)}</div>
       <div data-testid="workspace-root-count">{String(workspaceTree.length)}</div>
@@ -295,6 +311,55 @@ describe("useUnifiedChat persistence", () => {
     });
     expect(screen.getByTestId("message-log").textContent).toContain("user:Hello from the browser");
     expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
+  });
+
+  it("stores approved runtime host ids for new non-OpenClaw sessions", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url === "/api/runtime/sessions") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        expect(body).toMatchObject({
+          hostId: "codex",
+          projectId: "alpha-project",
+          projectPolicy: "cloud-ok",
+          approvalState: "approved",
+        });
+        return Response.json({
+          session: {
+            id: "rt-session-codex",
+            conversationId: "native-codex-session",
+            status: "completed",
+          },
+          events: [
+            {
+              type: "message",
+              payload: { text: "Codex runtime response" },
+            },
+          ],
+        });
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ files: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime" }));
+
+    await screen.findByText(/Codex runtime response/);
+    expect(screen.getByTestId("backend").textContent).toBe("codex");
+    expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
+
+    const stored = JSON.parse(
+      window.localStorage.getItem("scienceswarm.chat.alpha-project") ?? "{}",
+    ) as { conversationBackend?: string };
+    expect(stored.conversationBackend).toBe("codex");
   });
 
   it("drops persisted assistant replay duplicates when restoring a project thread", async () => {

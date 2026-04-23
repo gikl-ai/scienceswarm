@@ -39,9 +39,28 @@ import type { CompiledPageRead } from "@/components/research/compiled-page-view"
 import {
   useUnifiedChat,
   type ActiveFileContext,
+  type Backend,
   type CaptureClarification,
   type ChatMode,
+  type RuntimeSendOptions,
 } from "@/hooks/use-unified-chat";
+import type {
+  RuntimeDataIncluded,
+  RuntimeProjectPolicy,
+  TurnPreview,
+} from "@/lib/runtime-hosts/contracts";
+import { RuntimePicker } from "@/components/runtime/runtime-picker";
+import { TurnPreviewSheet } from "@/components/runtime/turn-preview-sheet";
+import { RuntimeTaskBoard } from "@/components/runtime/runtime-task-board";
+import { SessionDetail } from "@/components/runtime/session-detail";
+import { CompareResults } from "@/components/runtime/compare-results";
+import {
+  chooseRuntimeHostFallback,
+  type RuntimeComposerMode,
+  useRuntimeHosts,
+  useRuntimeSessionDetail,
+  useRuntimeSessions,
+} from "@/hooks/use-runtime-hosts";
 import { useVoiceChat, type VoiceState } from "@/hooks/use-voice-chat";
 import { useFilePreviewLocation } from "@/hooks/use-file-preview-location";
 import {
@@ -195,6 +214,14 @@ interface NextExperimentPlanIntent {
   updateExisting: boolean;
 }
 
+interface PendingRuntimeSend {
+  prompt: string;
+  activeFile?: ActiveFileContext;
+  preview: TurnPreview;
+  options: RuntimeSendOptions;
+  label: string;
+}
+
 type Tab =
   | "chat"
   | "papers"
@@ -229,6 +256,33 @@ const CHAT_PLACEHOLDER_ROTATE_MS = 4000;
 const PROJECT_TREE_VISIBILITY_STORAGE_KEY =
   "scienceswarm:project-tree-visibility";
 type ProjectTreeVisibilityMode = "auto" | "open" | "closed";
+
+function runtimeTextBytes(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+function buildComposerRuntimeDataIncluded(
+  prompt: string,
+  activeFile?: ActiveFileContext,
+): RuntimeDataIncluded[] {
+  const data: RuntimeDataIncluded[] = [
+    {
+      kind: "prompt",
+      label: "User prompt",
+      bytes: runtimeTextBytes(prompt),
+    },
+  ];
+
+  if (activeFile) {
+    data.push({
+      kind: "workspace-file",
+      label: activeFile.path,
+      bytes: runtimeTextBytes(activeFile.content),
+    });
+  }
+
+  return data;
+}
 
 function readProjectTreeVisibilityMode(): ProjectTreeVisibilityMode | null {
   if (typeof window === "undefined") return null;
@@ -1580,7 +1634,48 @@ function ProjectPageContent() {
     clearError,
     conversationId,
     artifactProvenance,
+    runtimeCompareResult,
+    clearRuntimeCompareResult,
   } = useUnifiedChat(projectName);
+  const runtimeHosts = useRuntimeHosts();
+  const [runtimeProjectPolicy, setRuntimeProjectPolicy] =
+    useState<RuntimeProjectPolicy>("local-only");
+  const [runtimeMode, setRuntimeMode] = useState<RuntimeComposerMode>("chat");
+  const [selectedRuntimeHostId, setSelectedRuntimeHostId] =
+    useState<string>("openclaw");
+  const [compareHostIds, setCompareHostIds] = useState<string[]>(["openclaw"]);
+  const [pendingRuntimeSend, setPendingRuntimeSend] =
+    useState<PendingRuntimeSend | null>(null);
+  const [runtimePreviewBusy, setRuntimePreviewBusy] = useState(false);
+  const [runtimePreviewError, setRuntimePreviewError] = useState<string | null>(null);
+  const runtimeSessions = useRuntimeSessions(activeProjectSlug);
+  const [selectedRuntimeSessionId, setSelectedRuntimeSessionId] = useState<string | null>(null);
+  const runtimeSessionDetail = useRuntimeSessionDetail(selectedRuntimeSessionId);
+  useEffect(() => {
+    if (runtimeHosts.hosts.length === 0) return;
+    const nextHostId = chooseRuntimeHostFallback({
+      hosts: runtimeHosts.hosts,
+      policy: runtimeProjectPolicy,
+      mode: runtimeMode === "compare" ? "chat" : runtimeMode,
+      preferredHostId: selectedRuntimeHostId,
+    });
+    if (nextHostId !== selectedRuntimeHostId) {
+      setSelectedRuntimeHostId(nextHostId);
+    }
+  }, [
+    runtimeHosts.hosts,
+    runtimeMode,
+    runtimeProjectPolicy,
+    selectedRuntimeHostId,
+  ]);
+  useEffect(() => {
+    if (runtimeMode !== "compare") return;
+    if (compareHostIds.length === 0 || !compareHostIds.includes("openclaw")) {
+      setCompareHostIds((current) =>
+        current.length === 0 ? ["openclaw"] : Array.from(new Set(["openclaw", ...current])),
+      );
+    }
+  }, [compareHostIds, runtimeMode]);
   const activeAssistantMessageId = isStreaming
     ? [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null
     : null;
@@ -3495,8 +3590,114 @@ function ProjectPageContent() {
     ],
   );
 
-  const isChatBusy = isCapturing || isInterpretingPacket || isPlanningExperiments;
+  const isChatBusy = isCapturing || isInterpretingPacket || isPlanningExperiments || runtimePreviewBusy;
   const filesRenderInChat = filePreviewLocation === "chat-pane";
+
+  const sendRuntimePrompt = useCallback(
+    async (
+      prompt: string,
+      options: RuntimeSendOptions,
+      clearInputAfterSend = true,
+    ) => {
+      await sendMessage(prompt, options);
+      if (clearInputAfterSend) setInput("");
+      void runtimeSessions.refresh();
+    },
+    [runtimeSessions, sendMessage],
+  );
+
+  const prepareRuntimePreviewAndSend = useCallback(
+    async (prompt: string, activeFile?: ActiveFileContext) => {
+      const mode = runtimeMode;
+      const runtimeHostId = selectedRuntimeHostId as Backend;
+      const dataIncluded = buildComposerRuntimeDataIncluded(prompt, activeFile);
+      const selectedHostIds = mode === "compare"
+        ? compareHostIds.length > 0 ? compareHostIds : ["openclaw"]
+        : undefined;
+      const options: RuntimeSendOptions = {
+        activeFile,
+        runtimeHostId,
+        runtimeMode: mode,
+        projectPolicy: runtimeProjectPolicy,
+        approvalState: "not-required",
+        selectedHostIds,
+        synthesisHostId: mode === "compare" ? selectedRuntimeHostId : undefined,
+        dataIncluded,
+      };
+
+      const canSendOpenClawDirect =
+        runtimeHostId === "openclaw"
+        && mode === "chat"
+        && runtimeProjectPolicy === "local-only";
+      if (canSendOpenClawDirect) {
+        await sendRuntimePrompt(prompt, options);
+        return;
+      }
+
+      setRuntimePreviewBusy(true);
+      setRuntimePreviewError(null);
+      try {
+        const response = await fetch("/api/runtime/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hostId: runtimeHostId,
+            selectedHostIds,
+            mode,
+            projectId: activeProjectSlug,
+            projectPolicy: runtimeProjectPolicy,
+            dataIncluded,
+            prompt,
+          }),
+        });
+        const payload = await response.json().catch(() => null) as
+          | { preview?: TurnPreview; error?: string }
+          | null;
+        if (!response.ok || !payload?.preview) {
+          throw new Error(payload?.error || `Runtime preview failed: ${response.status}`);
+        }
+        setPendingRuntimeSend({
+          prompt,
+          activeFile,
+          preview: payload.preview,
+          options: {
+            ...options,
+            approvalState: payload.preview.requiresUserApproval ? "approved" : "not-required",
+          },
+          label: `${mode} via ${payload.preview.destinations.map((item) => item.label).join(", ")}`,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Runtime preview failed.";
+        setRuntimePreviewError(message);
+        setError(message);
+      } finally {
+        setRuntimePreviewBusy(false);
+      }
+    },
+    [
+      activeProjectSlug,
+      compareHostIds,
+      runtimeMode,
+      runtimeProjectPolicy,
+      selectedRuntimeHostId,
+      sendRuntimePrompt,
+      setError,
+    ],
+  );
+
+  const handleApproveRuntimePreview = useCallback(async () => {
+    if (!pendingRuntimeSend) return;
+    setRuntimePreviewBusy(true);
+    setRuntimePreviewError(null);
+    try {
+      await sendRuntimePrompt(pendingRuntimeSend.prompt, pendingRuntimeSend.options);
+      setPendingRuntimeSend(null);
+    } catch (err) {
+      setRuntimePreviewError(err instanceof Error ? err.message : "Runtime send failed.");
+    } finally {
+      setRuntimePreviewBusy(false);
+    }
+  }, [pendingRuntimeSend, sendRuntimePrompt]);
 
   const moveInputCursorToEnd = useCallback((value: string) => {
     requestAnimationFrame(() => {
@@ -3652,8 +3853,7 @@ function ProjectPageContent() {
       // The preview pane is part of the visible scientist workflow. If a user
       // opens a report item and asks "what next?", attach that current view as
       // active-file context without requiring a separate context-chip action.
-      sendMessage(trimmed, activePreviewFile ?? undefined);
-      setInput("");
+      void prepareRuntimePreviewAndSend(trimmed, activePreviewFile ?? undefined);
     },
     [
       activePreviewFile,
@@ -3662,8 +3862,8 @@ function ProjectPageContent() {
       handleMultimodalInterpretation,
       handleNextExperimentPlannerIntent,
       isChatBusy,
+      prepareRuntimePreviewAndSend,
       recordPromptHistory,
-      sendMessage,
     ],
   );
 
@@ -4131,6 +4331,21 @@ function ProjectPageContent() {
                     <X size={14} />
                   </button>
                 </div>
+                <RuntimePicker
+                  hosts={runtimeHosts.hosts}
+                  selectedHostId={selectedRuntimeHostId}
+                  projectPolicy={runtimeProjectPolicy}
+                  mode={runtimeMode}
+                  compareHostIds={compareHostIds}
+                  loading={runtimeHosts.loading}
+                  onSelectedHostIdChange={setSelectedRuntimeHostId}
+                  onProjectPolicyChange={setRuntimeProjectPolicy}
+                  onModeChange={(mode) => {
+                    setRuntimeMode(mode);
+                    if (mode !== "compare") clearRuntimeCompareResult();
+                  }}
+                  onCompareHostIdsChange={setCompareHostIds}
+                />
                 <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-surface/30 select-text">
                   {!activeProjectSlug && messages.length === 0 && (
                     <section className="rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">
@@ -4605,6 +4820,28 @@ function ProjectPageContent() {
                     </button>
                   </div>
                 </div>
+                <CompareResults result={runtimeCompareResult} />
+                <RuntimeTaskBoard
+                  sessions={runtimeSessions.sessions}
+                  loading={runtimeSessions.loading}
+                  error={runtimeSessions.error}
+                  selectedSessionId={selectedRuntimeSessionId}
+                  onRefresh={() => void runtimeSessions.refresh()}
+                  onSelectSession={setSelectedRuntimeSessionId}
+                  onCancelSession={(sessionId) => {
+                    void fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/cancel`, {
+                      method: "POST",
+                    }).then(() => runtimeSessions.refresh());
+                  }}
+                />
+                <SessionDetail
+                  session={runtimeSessionDetail.session}
+                  events={runtimeSessionDetail.events}
+                  loading={runtimeSessionDetail.loading}
+                  error={runtimeSessionDetail.error}
+                  onClose={() => setSelectedRuntimeSessionId(null)}
+                  onRefresh={() => void runtimeSessionDetail.refresh()}
+                />
               </div>
             )}
           </div>
@@ -4636,6 +4873,24 @@ function ProjectPageContent() {
           )}
         </div>
       </div>
+
+      <TurnPreviewSheet
+        open={Boolean(pendingRuntimeSend)}
+        preview={pendingRuntimeSend?.preview ?? null}
+        pendingLabel={pendingRuntimeSend?.label ?? ""}
+        busy={runtimePreviewBusy}
+        error={runtimePreviewError}
+        onApprove={() => void handleApproveRuntimePreview()}
+        onCancel={() => {
+          setPendingRuntimeSend(null);
+          setRuntimePreviewError(null);
+        }}
+        onChangeHost={() => {
+          setPendingRuntimeSend(null);
+          setRuntimePreviewError(null);
+          inputRef.current?.focus();
+        }}
+      />
 
       {/* Import Local Project Dialog */}
       <ImportDialog
