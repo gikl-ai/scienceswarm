@@ -9,6 +9,7 @@
 - [ ] `npm run typecheck`
 - [ ] `npm run build`
 - [ ] `./scripts/python-quality.sh` if Python files changed
+- [ ] Remove `ci-defer` before final review/merge, if it was used during iteration
 
 ## Impact
 
