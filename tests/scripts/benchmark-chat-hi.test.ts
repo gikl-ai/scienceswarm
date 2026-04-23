@@ -214,6 +214,7 @@ describe("benchmark-chat-hi", () => {
         finalTextSample: "Hello.",
         timingArtifact: {
           turnId: "turn-1",
+          startedAtMs: 1000,
           totalDurationMs: 100,
           outcome: "streamed",
           status: 200,
@@ -262,9 +263,10 @@ describe("benchmark-chat-hi", () => {
             outcome: "streamed",
             status: 200,
             phases: [
-              { name: "request_parse", durationMs: 1.2 },
+              { name: "request_parse", startedAtMs: 1000, durationMs: 1.2 },
               {
                 name: "chat_readiness",
+                startedAtMs: 1002,
                 durationMs: 7.5,
                 inferred: true,
               },
@@ -280,6 +282,7 @@ describe("benchmark-chat-hi", () => {
       }),
     ).toEqual({
       turnId: "turn-1",
+      startedAtMs: 1000,
       totalDurationMs: 124,
       outcome: "streamed",
       status: 200,
@@ -296,5 +299,40 @@ describe("benchmark-chat-hi", () => {
     });
 
     expect(summarizeLatestTimingArtifact({ timings: [] })).toBeNull();
+  });
+
+  it("filters timing artifacts to turns that started after the benchmark request", () => {
+    const responseJson = {
+      timings: [
+        {
+          turnId: "older",
+          totalDurationMs: 999,
+          outcome: "old",
+          status: 200,
+          phases: [{ name: "request_parse", startedAtMs: 900, durationMs: 1 }],
+          promptCharCounts: { total: 1 },
+        },
+        {
+          turnId: "current",
+          totalDurationMs: 123,
+          outcome: "streamed",
+          status: 200,
+          phases: [
+            { name: "request_parse", startedAtMs: 1500, durationMs: 1 },
+          ],
+          promptCharCounts: { total: 2 },
+        },
+      ],
+    };
+
+    expect(
+      summarizeLatestTimingArtifact(responseJson, { minStartedAtMs: 1000 }),
+    ).toMatchObject({
+      turnId: "current",
+      startedAtMs: 1500,
+    });
+    expect(
+      summarizeLatestTimingArtifact(responseJson, { minStartedAtMs: 2000 }),
+    ).toBeNull();
   });
 });

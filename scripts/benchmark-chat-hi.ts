@@ -56,6 +56,7 @@ export interface ChatBenchmarkTimingPhaseSummary {
 
 export interface ChatBenchmarkTimingArtifactSummary {
   turnId: string;
+  startedAtMs: number | null;
   totalDurationMs: number;
   outcome: string | null;
   status: number | null;
@@ -348,15 +349,25 @@ export function chatTimingArtifactUrl(baseUrl: string): string {
 
 export function summarizeLatestTimingArtifact(
   responseJson: unknown,
+  options: { minStartedAtMs?: number } = {},
 ): ChatBenchmarkTimingArtifactSummary | null {
   const response = isRecord(responseJson) ? responseJson : null;
   const timings = Array.isArray(response?.timings) ? response.timings : [];
   let latest: unknown;
   for (let index = timings.length - 1; index >= 0; index -= 1) {
-    if (isRecord(timings[index])) {
-      latest = timings[index];
-      break;
+    const candidate = timings[index];
+    if (!isRecord(candidate)) {
+      continue;
     }
+    const startedAtMs = timingArtifactStartedAtMs(candidate);
+    if (
+      typeof options.minStartedAtMs === "number" &&
+      (startedAtMs === null || startedAtMs < options.minStartedAtMs)
+    ) {
+      continue;
+    }
+    latest = candidate;
+    break;
   }
   if (!isRecord(latest)) {
     return null;
@@ -396,6 +407,7 @@ export function summarizeLatestTimingArtifact(
 
   return {
     turnId: asString(latest.turnId) ?? "unknown",
+    startedAtMs: timingArtifactStartedAtMs(latest),
     totalDurationMs: Math.round(asFiniteNumber(latest.totalDurationMs) ?? 0),
     outcome: asString(latest.outcome),
     status: asFiniteNumber(latest.status),
@@ -405,19 +417,41 @@ export function summarizeLatestTimingArtifact(
   };
 }
 
+function timingArtifactStartedAtMs(
+  artifact: Record<string, unknown>,
+): number | null {
+  const phases = Array.isArray(artifact.phases) ? artifact.phases : [];
+  for (const phase of phases) {
+    if (!isRecord(phase)) {
+      continue;
+    }
+    const startedAtMs = asFiniteNumber(phase.startedAtMs);
+    if (startedAtMs !== null) {
+      return startedAtMs;
+    }
+  }
+  return null;
+}
+
 async function fetchLatestTimingArtifact(
   baseUrl: string,
+  options: { minStartedAtMs?: number } = {},
 ): Promise<ChatBenchmarkTimingArtifactSummary | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
   try {
     const response = await fetch(chatTimingArtifactUrl(baseUrl), {
       headers: { Accept: "application/json" },
+      signal: controller.signal,
     });
     if (!response.ok) {
       return null;
     }
-    return summarizeLatestTimingArtifact(await response.json());
+    return summarizeLatestTimingArtifact(await response.json(), options);
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -427,6 +461,7 @@ export async function runChatHiBenchmark(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
   const startedAt = performance.now();
+  const requestStartedAtEpochMs = Date.now();
   let headersAt = startedAt;
   let firstChunkAt: number | null = null;
   let rawBody = "";
@@ -476,7 +511,10 @@ export async function runChatHiBenchmark(
       bytes,
     });
     if (options.includeTimingArtifact) {
-      summary.timingArtifact = await fetchLatestTimingArtifact(options.baseUrl);
+      summary.timingArtifact = await fetchLatestTimingArtifact(
+        options.baseUrl,
+        { minStartedAtMs: requestStartedAtEpochMs },
+      );
     }
     return summary;
   } finally {
