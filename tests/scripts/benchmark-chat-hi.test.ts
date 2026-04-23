@@ -405,6 +405,18 @@ describe("benchmark-chat-hi", () => {
       minStartedAtMs: undefined,
     },
     {
+      name: "classifies an empty timings array as disabled/no timings",
+      response: new Response(JSON.stringify({ timings: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+      expected: {
+        reason: "endpoint_disabled_or_no_timings",
+        detail: "timings array was empty",
+      },
+      minStartedAtMs: undefined,
+    },
+    {
       name: "classifies older timing artifacts as no matching recent artifact",
       response: new Response(
         JSON.stringify({
