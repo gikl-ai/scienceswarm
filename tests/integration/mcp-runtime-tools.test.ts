@@ -41,6 +41,8 @@ function auth(input: {
   projectPolicy?: RuntimeProjectPolicy;
   projectId?: string;
   runtimeSessionId?: string;
+  approved?: boolean;
+  omitApproval?: boolean;
 }) {
   const projectId = input.projectId ?? "project-alpha";
   const runtimeSessionId = input.runtimeSessionId ?? "session-1";
@@ -59,6 +61,7 @@ function auth(input: {
     runtimeSessionId,
     hostId,
     projectPolicy: input.projectPolicy ?? "cloud-ok",
+    ...(input.omitApproval ? {} : { approved: input.approved ?? true }),
   };
 }
 
@@ -156,6 +159,28 @@ describe("runtime MCP tool wrappers", () => {
       }),
     ).rejects.toMatchObject({ code: "RUNTIME_PRIVACY_BLOCKED" });
     expect(projectWorkspaceRead).not.toHaveBeenCalled();
+  });
+
+  it("requires explicit approval for hosted MCP tool calls", async () => {
+    const brainSearch = vi.fn(async () => ({ status: "should-not-run" }));
+    const tools = createRuntimeMcpToolset({
+      tokenSecret: SECRET,
+      now: () => NOW,
+      brainSearch,
+    });
+
+    await expect(
+      tools.gbrainSearch({
+        ...auth({
+          allowedTools: ["gbrain_search"],
+          hostId: "codex",
+          projectPolicy: "cloud-ok",
+          omitApproval: true,
+        }),
+        query: "alpha",
+      }),
+    ).rejects.toMatchObject({ code: "RUNTIME_PREVIEW_APPROVAL_REQUIRED" });
+    expect(brainSearch).not.toHaveBeenCalled();
   });
 
   it("rejects workspace tools suppressed by the host MCP profile", async () => {

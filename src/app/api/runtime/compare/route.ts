@@ -3,6 +3,7 @@ import { RuntimeHostError } from "@/lib/runtime-hosts/errors";
 import {
   approvalStateFromBody,
   assertPreviewAllowed,
+  assertRuntimeApiLocalRequest,
   buildRuntimeTurnRequest,
   computeRuntimeApiPreview,
   dataIncludedFromBody,
@@ -50,6 +51,7 @@ async function runBounded<T, R>(
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    await assertRuntimeApiLocalRequest(request);
     const body = await parseJsonObject(request);
     const services = getRuntimeApiServices();
     const projectId = requireSafeProjectId(body.projectId);
@@ -113,6 +115,9 @@ export async function POST(request: Request): Promise<Response> {
         preview: childPreviews[index],
       })
     );
+    const childPreviewBySessionId = new Map(
+      childSessions.map((child, index) => [child.id, childPreviews[index]]),
+    );
 
     const maxChildren = services.concurrencyManager.snapshot().policy.compare.maxChildren;
     const childResults = await runBounded(
@@ -166,6 +171,20 @@ export async function POST(request: Request): Promise<Response> {
               context: { hostId: child.hostId },
             });
           }
+          const childPreview = child.preview ?? childPreviewBySessionId.get(child.id);
+          if (!childPreview) {
+            throw new RuntimeHostError({
+              code: "RUNTIME_INVALID_REQUEST",
+              status: 500,
+              message: `Runtime compare child ${child.id} is missing its preview.`,
+              userMessage: "Runtime compare could not prepare one child preview.",
+              recoverable: false,
+              context: {
+                childSessionId: child.id,
+                hostId: child.hostId,
+              },
+            });
+          }
 
           const result = await adapter.sendTurn(
             buildRuntimeTurnRequest({
@@ -177,7 +196,7 @@ export async function POST(request: Request): Promise<Response> {
               promptHash: optionalStringField(body, "promptHash"),
               inputFileRefs,
               approvalState,
-              preview: child.preview ?? childPreviews[0],
+              preview: childPreview,
             }),
           );
           services.sessionStore.updateSession(child.id, {

@@ -204,8 +204,6 @@ export interface RuntimeMcpToolsetDeps {
   ) => Promise<unknown>;
 }
 
-const defaultRuntimeMcpConcurrencyManager = createRuntimeConcurrencyManager();
-
 function runtimeMcpDataIncluded(input: {
   toolName: RuntimeMcpToolName;
   label: string;
@@ -274,7 +272,7 @@ export function authorizeRuntimeMcpToolCall(
     mode: "mcp-tool",
     dataIncluded: input.dataIncluded,
   });
-  assertTurnPreviewAllowsPromptConstruction(preview, input.approved ?? true);
+  assertTurnPreviewAllowsPromptConstruction(preview, input.approved ?? false);
 
   return {
     claims: tokenVerification.claims,
@@ -293,13 +291,12 @@ function laneForTool(toolName: RuntimeMcpToolName): RuntimeConcurrencyLane {
 }
 
 async function withRuntimeMcpToolAuthorization<T>(
-  deps: RuntimeMcpToolsetDeps,
+  deps: RuntimeMcpToolsetDeps & { concurrencyManager: RuntimeConcurrencyManager },
   input: RuntimeMcpAuthorizationInput,
   operation: (auth: RuntimeMcpAuthorizationResult) => Promise<T>,
 ): Promise<T> {
   const auth = authorizeRuntimeMcpToolCall(input);
-  const concurrencyManager =
-    deps.concurrencyManager ?? defaultRuntimeMcpConcurrencyManager;
+  const concurrencyManager = deps.concurrencyManager;
   const slot = concurrencyManager.requestSlot({
     lane: laneForTool(input.toolName),
     sessionId: input.runtimeSessionId,
@@ -481,15 +478,21 @@ async function defaultProvenanceLog(
 }
 
 export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
+  const toolsetDeps = {
+    ...deps,
+    concurrencyManager: deps.concurrencyManager
+      ?? createRuntimeConcurrencyManager(),
+  };
+
   return {
     gbrainSearch(input: RuntimeMcpGbrainSearchParams): Promise<unknown> {
       return withRuntimeMcpToolAuthorization(
-        deps,
+        toolsetDeps,
         {
           ...input,
           toolName: "gbrain_search",
-          tokenSecret: deps.tokenSecret,
-          now: deps.now,
+          tokenSecret: toolsetDeps.tokenSecret,
+          now: toolsetDeps.now,
           dataIncluded: runtimeMcpDataIncluded({
             toolName: "gbrain_search",
             label: input.query,
@@ -497,21 +500,21 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
           }),
         },
         () => {
-          if (!deps.brainSearch) toolUnavailable("gbrain_search");
+          if (!toolsetDeps.brainSearch) toolUnavailable("gbrain_search");
           const { query, mode, limit, detail } = input;
-          return deps.brainSearch({ query, mode, limit, detail });
+          return toolsetDeps.brainSearch({ query, mode, limit, detail });
         },
       );
     },
 
     gbrainRead(input: RuntimeMcpGbrainReadParams): Promise<unknown> {
       return withRuntimeMcpToolAuthorization(
-        deps,
+        toolsetDeps,
         {
           ...input,
           toolName: "gbrain_read",
-          tokenSecret: deps.tokenSecret,
-          now: deps.now,
+          tokenSecret: toolsetDeps.tokenSecret,
+          now: toolsetDeps.now,
           dataIncluded: runtimeMcpDataIncluded({
             toolName: "gbrain_read",
             label: input.path,
@@ -519,20 +522,20 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
           }),
         },
         () => {
-          if (!deps.brainRead) toolUnavailable("gbrain_read");
-          return deps.brainRead({ path: input.path });
+          if (!toolsetDeps.brainRead) toolUnavailable("gbrain_read");
+          return toolsetDeps.brainRead({ path: input.path });
         },
       );
     },
 
     gbrainCapture(input: RuntimeMcpGbrainCaptureParams): Promise<unknown> {
       return withRuntimeMcpToolAuthorization(
-        deps,
+        toolsetDeps,
         {
           ...input,
           toolName: "gbrain_capture",
-          tokenSecret: deps.tokenSecret,
-          now: deps.now,
+          tokenSecret: toolsetDeps.tokenSecret,
+          now: toolsetDeps.now,
           dataIncluded: runtimeMcpDataIncluded({
             toolName: "gbrain_capture",
             label: input.title ?? input.project ?? input.runtimeSessionId,
@@ -540,7 +543,7 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
           }),
         },
         () => {
-          if (!deps.brainCapture) toolUnavailable("gbrain_capture");
+          if (!toolsetDeps.brainCapture) toolUnavailable("gbrain_capture");
           assertRuntimeGbrainCaptureProvenance(input);
           const {
             content,
@@ -552,7 +555,7 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
             userId,
             runtimeProvenance,
           } = input;
-          return deps.brainCapture({
+          return toolsetDeps.brainCapture({
             content,
             kind,
             title,
@@ -573,12 +576,12 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
       input: RuntimeMcpProjectWorkspaceReadParams,
     ): Promise<RuntimeMcpProjectWorkspaceReadResult> {
       return withRuntimeMcpToolAuthorization(
-        deps,
+        toolsetDeps,
         {
           ...input,
           toolName: "project_workspace_read",
-          tokenSecret: deps.tokenSecret,
-          now: deps.now,
+          tokenSecret: toolsetDeps.tokenSecret,
+          now: toolsetDeps.now,
           dataIncluded: runtimeMcpDataIncluded({
             toolName: "project_workspace_read",
             label: input.workspacePath,
@@ -586,7 +589,7 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
             bytes: input.maxBytes,
           }),
         },
-        () => (deps.projectWorkspaceRead ?? defaultProjectWorkspaceRead)(input),
+        () => (toolsetDeps.projectWorkspaceRead ?? defaultProjectWorkspaceRead)(input),
       );
     },
 
@@ -594,12 +597,12 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
       input: RuntimeMcpArtifactImportParams,
     ): Promise<RuntimeMcpArtifactImportResult> {
       return withRuntimeMcpToolAuthorization(
-        deps,
+        toolsetDeps,
         {
           ...input,
           toolName: "artifact_import",
-          tokenSecret: deps.tokenSecret,
-          now: deps.now,
+          tokenSecret: toolsetDeps.tokenSecret,
+          now: toolsetDeps.now,
           dataIncluded: runtimeMcpDataIncluded({
             toolName: "artifact_import",
             label: input.sourcePath,
@@ -608,19 +611,19 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
         },
         () => {
           const mapper = pathMapperForArtifactImport(input);
-          return (deps.artifactImport ?? defaultArtifactImport)(input, mapper);
+          return (toolsetDeps.artifactImport ?? defaultArtifactImport)(input, mapper);
         },
       );
     },
 
     openhandsDelegate(input: RuntimeMcpOpenHandsDelegateParams): Promise<unknown> {
       return withRuntimeMcpToolAuthorization(
-        deps,
+        toolsetDeps,
         {
           ...input,
           toolName: "openhands_delegate",
-          tokenSecret: deps.tokenSecret,
-          now: deps.now,
+          tokenSecret: toolsetDeps.tokenSecret,
+          now: toolsetDeps.now,
           dataIncluded: runtimeMcpDataIncluded({
             toolName: "openhands_delegate",
             label: input.task,
@@ -629,7 +632,7 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
         },
         () => {
           const { task, repository, branch, model } = input;
-          return (deps.openhandsDelegate ?? defaultOpenHandsDelegate)({
+          return (toolsetDeps.openhandsDelegate ?? defaultOpenHandsDelegate)({
             task,
             repository,
             branch,
@@ -641,12 +644,12 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
 
     provenanceLog(input: RuntimeMcpProvenanceLogParams): Promise<unknown> {
       return withRuntimeMcpToolAuthorization(
-        deps,
+        toolsetDeps,
         {
           ...input,
           toolName: "provenance_log",
-          tokenSecret: deps.tokenSecret,
-          now: deps.now,
+          tokenSecret: toolsetDeps.tokenSecret,
+          now: toolsetDeps.now,
           dataIncluded: runtimeMcpDataIncluded({
             toolName: "provenance_log",
             label: input.event,
@@ -655,7 +658,7 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
         },
         () => {
           const { event, metadata, runtimeProvenance } = input;
-          return (deps.provenanceLog ?? defaultProvenanceLog)({
+          return (toolsetDeps.provenanceLog ?? defaultProvenanceLog)({
             event,
             metadata,
             runtimeProvenance,

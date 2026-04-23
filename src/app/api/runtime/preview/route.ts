@@ -1,5 +1,6 @@
 import {
   assertPreviewAllowed,
+  assertRuntimeApiLocalRequest,
   computeRuntimeApiPreview,
   dataIncludedFromBody,
   getRuntimeApiServices,
@@ -15,6 +16,7 @@ import {
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    await assertRuntimeApiLocalRequest(request);
     const body = await parseJsonObject(request);
     const services = getRuntimeApiServices();
     const mode = turnModeFromBody(body, "chat");

@@ -1,11 +1,13 @@
 import {
   approvalStateFromBody,
   assertPreviewAllowed,
+  assertRuntimeApiLocalRequest,
   buildRuntimeTurnRequest,
   computeRuntimeApiPreview,
   dataIncludedFromBody,
   getRuntimeApiServices,
   optionalSafeProjectId,
+  optionalRuntimeSessionStatusFromSearchParam,
   optionalStringArrayField,
   optionalStringField,
   parseJsonObject,
@@ -18,7 +20,7 @@ import {
   runtimeInvalidRequest,
   turnModeFromBody,
 } from "../_shared";
-import type { RuntimeSessionStatus } from "@/lib/runtime-hosts/sessions";
+import { RuntimeHostError } from "@/lib/runtime-hosts/errors";
 
 function enrichedSession(session: ReturnType<
   ReturnType<typeof getRuntimeApiServices>["sessionStore"]["getSession"]
@@ -32,13 +34,16 @@ function enrichedSession(session: ReturnType<
 
 export async function GET(request: Request): Promise<Response> {
   try {
+    await assertRuntimeApiLocalRequest(request);
     const services = getRuntimeApiServices();
     const url = new URL(request.url);
     const projectId = url.searchParams.has("projectId")
       ? optionalSafeProjectId(url.searchParams.get("projectId"))
       : undefined;
     const hostId = url.searchParams.get("hostId") ?? undefined;
-    const status = url.searchParams.get("status") as RuntimeSessionStatus | null;
+    const status = optionalRuntimeSessionStatusFromSearchParam(
+      url.searchParams.get("status"),
+    );
     const sessions = services.sessionStore.listSessions({
       projectId,
       hostId,
@@ -59,6 +64,7 @@ export async function GET(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   let sessionId: string | null = null;
   try {
+    await assertRuntimeApiLocalRequest(request);
     const body = await parseJsonObject(request);
     const services = getRuntimeApiServices();
     const mode = turnModeFromBody(body, "chat");
@@ -144,9 +150,9 @@ export async function POST(request: Request): Promise<Response> {
           nativeSessionId: result.sessionId,
         },
       });
-      for (const artifact of result.artifacts ?? []) {
+      for (const [index, artifact] of (result.artifacts ?? []).entries()) {
         services.eventStore.appendEvent({
-          id: `${session.id}:artifact:${artifact.sourcePath}`,
+          id: `${session.id}:artifact:${index}:${artifact.sourcePath}`,
           sessionId: session.id,
           hostId,
           type: "artifact",
@@ -200,7 +206,9 @@ export async function POST(request: Request): Promise<Response> {
       services.sessionStore.trySetSessionStatus({
         sessionId,
         status: "failed",
-        errorCode: error instanceof Error ? error.name : "RUNTIME_TRANSPORT_ERROR",
+        errorCode: error instanceof RuntimeHostError
+          ? error.code
+          : "RUNTIME_TRANSPORT_ERROR",
       });
       services.eventStore.appendEvent({
         id: `${sessionId}:runtime-failed`,
@@ -208,7 +216,9 @@ export async function POST(request: Request): Promise<Response> {
         hostId: services.sessionStore.getSession(sessionId)?.hostId ?? "unknown",
         type: "error",
         payload: {
-          code: error instanceof Error ? error.name : "RUNTIME_TRANSPORT_ERROR",
+          code: error instanceof RuntimeHostError
+            ? error.code
+            : "RUNTIME_TRANSPORT_ERROR",
           message: error instanceof Error ? error.message : String(error),
         },
       });
