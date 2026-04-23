@@ -45,8 +45,8 @@ import { resolveOpenClawMode } from "@/lib/openclaw/runner";
 
 /**
  * Thrown when a turn fails AFTER the gateway has already accepted the message
- * (`sessions.send` ACKed). Examples: turn timeout, WebSocket drop while the
- * agent is still processing, listener reject after-the-fact.
+ * (`chat.send` or `sessions.send` ACKed). Examples: turn timeout, WebSocket
+ * drop while the agent is still processing, listener reject after-the-fact.
  *
  * The defining property: the gateway has the message and may already be
  * dispatching it to the agent. Callers MUST NOT retry the same message on the
