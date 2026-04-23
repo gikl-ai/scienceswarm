@@ -29,10 +29,12 @@ function correctionString(item: PaperReviewItem | undefined, key: string): strin
 
 function correctionNumber(item: PaperReviewItem | undefined, key: string): number | undefined {
   const value = item?.correction?.[key];
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Number.isInteger(value) && value >= 1000 && value <= 3000 ? value : undefined;
+  }
   if (typeof value === "string" && value.trim()) {
     const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
+    if (Number.isInteger(parsed) && parsed >= 1000 && parsed <= 3000) return parsed;
   }
   return undefined;
 }
