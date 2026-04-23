@@ -72,7 +72,7 @@ export interface EndPhaseOptions {
 }
 
 export function isChatTimingTelemetryEnabled(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): boolean {
   return env[CHAT_TIMING_ENV_FLAG] === "1";
 }
