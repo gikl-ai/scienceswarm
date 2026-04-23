@@ -22,19 +22,20 @@ See [README.md](../../../../README.md) → Getting Started for user install. The
 
 ## Running
 
-- `./start.sh` — starts all available services + frontend at `http://localhost:${FRONTEND_PORT:-3001}`
+- `./start.sh` — starts all available services + frontend at `https://localhost:${FRONTEND_PORT:-3001}` by default
 - `npm run dev` — frontend only
 
 `start.sh` auto-detects and starts:
 - **OpenHands** (Docker agent at `http://localhost:${OPENHANDS_PORT:-3000}`) — if Docker is available
 - **OpenClaw gateway** — if the `openclaw` CLI is installed
-- **Next.js frontend** at `http://localhost:${FRONTEND_PORT:-3001}`
+- **Next.js frontend** defaults to HTTPS at `https://127.0.0.1:${FRONTEND_PORT:-3001}` when `FRONTEND_USE_HTTPS=true` (default).
 
 ## Key Environment Variables
 
 | Variable | Purpose |
 |---|---|
 | `OPENAI_API_KEY` | Optional cloud fallback for hosted LLM features. |
+| `FRONTEND_USE_HTTPS` | Set to `false` to serve ScienceSwarm over HTTP locally. |
 | `OPENHANDS_URL` | OpenHands agent URL (default: `http://localhost:3000`) |
 | `BRAIN_ROOT` | Second Brain data directory (default: `${SCIENCESWARM_DIR:-~/.scienceswarm}/brain`) |
 | `TELEGRAM_BOT_TOKEN` | Enables Telegram capture + radar via bot |
@@ -42,7 +43,7 @@ See [README.md](../../../../README.md) → Getting Started for user install. The
 
 ## Health Check
 
-Visit `http://localhost:${FRONTEND_PORT:-3001}/api/health` to see which services are connected:
+Visit `https://localhost:${FRONTEND_PORT:-3001}/api/health` to see which services are connected:
 - `openclaw`: connected/disconnected
 - `openhands`: connected/disconnected
 - `ollama`: connected/disconnected (local LLM)
@@ -50,7 +51,7 @@ Visit `http://localhost:${FRONTEND_PORT:-3001}/api/health` to see which services
 
 ## Common Issues
 
-- **"No OPENAI_API_KEY"**: Open `http://localhost:${FRONTEND_PORT:-3001}/setup` or add the key to `.env`
+- **"No OPENAI_API_KEY"**: Open `https://localhost:${FRONTEND_PORT:-3001}/setup` or add the key to `.env`
 - **OpenHands won't start**: Check Docker is running (`docker info`)
 - **Port in use**: Override with `FRONTEND_PORT=<port>` (or `PORT`) in `.env`
 - **OpenClaw unhealthy**: Run `openclaw doctor --fix` then `openclaw gateway --force`

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RadarBriefingView } from "@/components/radar/radar-briefing-view";
 
@@ -34,7 +34,7 @@ describe("RadarBriefingView", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows program-match context and visible feedback acknowledgement", async () => {
+  it("shows briefing items without program-match or feedback controls", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       const method = init?.method ?? "GET";
@@ -74,20 +74,6 @@ describe("RadarBriefingView", () => {
         });
       }
 
-      if (url === "/api/radar/feedback" && method === "POST") {
-        expect(JSON.parse(String(init?.body))).toMatchObject({
-          briefingId: "b1",
-          signalId: "s1",
-          action: "save-to-brain",
-        });
-        return Response.json({
-          ok: true,
-          message:
-            "Saved this frontier match to brain memory at wiki/entities/frontier/mek.md.",
-          savedPath: "wiki/entities/frontier/mek.md",
-        });
-      }
-
       throw new Error(`Unhandled fetch: ${method} ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -95,18 +81,14 @@ describe("RadarBriefingView", () => {
     render(<RadarBriefingView />);
 
     expect(
-      await screen.findByText("Why this changes your program")
+      await screen.findByText("MEK combination reverses EGFR resistance"),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Choosing whether to add a MEK arm/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Save to brain/i }));
-
-    expect(
-      await screen.findByText(/Saved this frontier match to brain memory/i)
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open saved brain note/i })).toHaveAttribute(
-      "href",
-      "/dashboard/gbrain?brain_slug=wiki%2Fentities%2Ffrontier%2Fmek"
-    );
+    expect(screen.getByText("Challenges the current single-agent EGFR plan.")).toBeInTheDocument();
+    expect(screen.queryByText("Why this changes your program")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Choosing whether to add a MEK arm/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save to brain/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /More like this/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Dismiss/i })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/radar/feedback", expect.anything());
   });
 });
