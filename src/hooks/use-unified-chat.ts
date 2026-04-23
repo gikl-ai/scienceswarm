@@ -1112,6 +1112,31 @@ function buildOptionalActivityProgressEntries(
   );
 }
 
+function timingMetaProgressEntries(value: unknown): MessageProgressEntry[] {
+  const timing =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  const name = typeof timing?.name === "string" ? timing.name : "";
+  if (timing?.type !== "chat_timing" || !name) {
+    return [];
+  }
+
+  const labels: Record<string, string> = {
+    request_start: "Timing: request started",
+    readiness_complete: "Timing: OpenClaw readiness complete",
+    gateway_ack: "Timing: OpenClaw gateway acknowledged",
+    first_gateway_event: "Timing: first OpenClaw event",
+    final_assistant_text: "Timing: final assistant text",
+  };
+  const label = labels[name] ?? `Timing: ${name.replace(/_/g, " ")}`;
+  const elapsedMs =
+    typeof timing.elapsedMs === "number" && Number.isFinite(timing.elapsedMs)
+      ? ` (${Math.round(timing.elapsedMs)} ms)`
+      : "";
+  return [{ kind: "activity", text: `${label}${elapsedMs}` }];
+}
+
 function isConcreteActionWithPrefix(text: string, prefix: string, generic: string): boolean {
   return text.startsWith(prefix) && text !== generic;
 }
@@ -3238,6 +3263,23 @@ export function useUnifiedChat(
           if (typeof parsed.error === "string" && parsed.error.trim().length > 0) {
             await reader.cancel().catch(() => undefined);
             throw new Error(parsed.error);
+          }
+
+          const timingProgressEntries = timingMetaProgressEntries(parsed.timing);
+          if (timingProgressEntries.length > 0 && isSendContextCurrent(context)) {
+            applyMessagesUpdate((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      progressLog: appendProgressLog(
+                        m.progressLog,
+                        timingProgressEntries,
+                      ),
+                    }
+                  : m,
+              ),
+            );
           }
 
           // Handle gateway WebSocket progress events — intermediate agent

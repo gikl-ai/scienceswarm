@@ -3445,6 +3445,78 @@ describe("useUnifiedChat persistence", () => {
     ).toHaveLength(2);
   });
 
+  it("appends ordered timing meta events from the SSE stream", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+          llmProvider: "openai",
+          ollamaModels: [],
+          configuredLocalModel: null,
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          { timing: { type: "chat_timing", name: "request_start", elapsedMs: 0 } },
+          { timing: { type: "chat_timing", name: "readiness_complete", elapsedMs: 12 } },
+          { timing: { type: "chat_timing", name: "gateway_ack", elapsedMs: 18 } },
+          { timing: { type: "chat_timing", name: "first_gateway_event", elapsedMs: 21 } },
+          { timing: { type: "chat_timing", name: "final_assistant_text", elapsedMs: 55 } },
+          { text: "Streamed answer" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Streamed answer");
+    });
+
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      [
+        "activity:Timing: request started (0 ms)",
+        "activity:Timing: OpenClaw readiness complete (12 ms)",
+        "activity:Timing: OpenClaw gateway acknowledged (18 ms)",
+        "activity:Timing: first OpenClaw event (21 ms)",
+        "activity:Timing: final assistant text (55 ms)",
+      ].join(" | "),
+    );
+  });
+
   it("accumulates direct-stream thinking traces and restores them after remount", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;

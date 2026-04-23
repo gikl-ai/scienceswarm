@@ -317,6 +317,13 @@ type SendOpenClawMessage = (
   },
 ) => Promise<string>;
 
+type ChatTimingMetaName =
+  | "request_start"
+  | "readiness_complete"
+  | "gateway_ack"
+  | "first_gateway_event"
+  | "final_assistant_text";
+
 function finishChatTimingResponse(
   timing: ChatTimingTelemetry,
   response: Response,
@@ -354,6 +361,20 @@ function instrumentOpenClawSender(
       throw error;
     }
   };
+}
+
+function eventRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function gatewayEventMethodForTimingMeta(event: unknown): string | null {
+  const record = eventRecord(event);
+  const method = record?.method ?? record?.event ?? record?.type;
+  return typeof method === "string" && method.trim().length > 0
+    ? method.trim()
+    : null;
 }
 
 function isValidTimestamp(value: string | null): value is string {
@@ -7338,6 +7359,8 @@ function streamOpenClawResponse(params: {
   workspaceFileContext?: WorkspaceFileContext | null;
   conversationId: string;
   workingDirectory: string | undefined;
+  requestStartedAtMs?: number;
+  readinessCompletedAtMs?: number;
   startedAtMs: number;
   taskPhases: OpenClawTaskPhase[];
   forceToolExecution?: boolean;
@@ -7368,6 +7391,26 @@ function streamOpenClawResponse(params: {
             return false;
           }
         };
+        const requestStartedAtMs =
+          params.requestStartedAtMs ?? params.startedAtMs;
+        const sendTimingMeta = (
+          name: ChatTimingMetaName,
+          occurredAtMs = Date.now(),
+          detail?: Record<string, string | number | boolean | null>,
+        ): boolean => {
+          if (!params.timing?.isEnabled) {
+            return false;
+          }
+          return sendEvent({
+            timing: {
+              type: "chat_timing",
+              name,
+              elapsedMs: Math.max(0, occurredAtMs - requestStartedAtMs),
+              occurredAtMs,
+              ...(detail ? { detail } : {}),
+            },
+          });
+        };
         const closeStream = () => {
           if (streamClosed) {
             return;
@@ -7385,6 +7428,21 @@ function streamOpenClawResponse(params: {
 
         void (async () => {
           let completedIds = new Set<OpenClawTaskPhaseId>();
+          let gatewayAckTimingSent = false;
+          let firstGatewayEventTimingSent = false;
+          const markGatewayTiming = (event: unknown) => {
+            const occurredAtMs = Date.now();
+            if (!gatewayAckTimingSent) {
+              gatewayAckTimingSent = true;
+              sendTimingMeta("gateway_ack", occurredAtMs, { inferred: true });
+            }
+            if (!firstGatewayEventTimingSent) {
+              firstGatewayEventTimingSent = true;
+              sendTimingMeta("first_gateway_event", occurredAtMs, {
+                method: gatewayEventMethodForTimingMeta(event),
+              });
+            }
+          };
           const thinkingTraceStreamer = createOpenClawThinkingTraceStreamer({
             conversationId: params.conversationId,
             sendEvent,
@@ -7407,6 +7465,9 @@ function streamOpenClawResponse(params: {
               params.timing?.markFinalAssistantText(
                 sanitizedPayload.text.length,
               );
+              sendTimingMeta("final_assistant_text", Date.now(), {
+                assistant_text_chars: sanitizedPayload.text.length,
+              });
             }
             sendEvent(sanitizedPayload);
           };
@@ -7414,12 +7475,28 @@ function streamOpenClawResponse(params: {
           // (tool start/result, text/lifecycle deltas) is forwarded to the
           // browser as a `progress` SSE event. Falls back transparently when
           // the underlying transport is the CLI, which never emits events.
-          const sendToOpenClawWithProgress: SendOpenClawMessage = (msg, opts) =>
-            params.sendToOpenClaw(msg, {
+          const sendToOpenClawWithProgress: SendOpenClawMessage = async (msg, opts) => {
+            const response = await params.sendToOpenClaw(msg, {
               ...opts,
-              onEvent: (event) => sendEvent({ progress: event }),
+              onEvent: (event) => {
+                markGatewayTiming(event);
+                sendEvent({ progress: event });
+              },
             });
+            if (!gatewayAckTimingSent) {
+              gatewayAckTimingSent = true;
+              sendTimingMeta("gateway_ack", Date.now(), { inferred: true });
+            }
+            return response;
+          };
           try {
+            sendTimingMeta("request_start", requestStartedAtMs);
+            if (typeof params.readinessCompletedAtMs === "number") {
+              sendTimingMeta(
+                "readiness_complete",
+                params.readinessCompletedAtMs,
+              );
+            }
             sendEvent({
               taskPhases: snapshotOpenClawTaskPhases(
                 params.taskPhases,
@@ -8032,6 +8109,7 @@ export async function handleUnifiedChatPost(
   request: Request,
   options: HandleUnifiedChatPostOptions = {},
 ) {
+  const requestStartedAtMs = Date.now();
   const chatTiming = createChatTimingTelemetry();
   if (!(await isLocalRequest(request))) {
     return finishChatTimingResponse(
@@ -8364,6 +8442,7 @@ export async function handleUnifiedChatPost(
         { preferFastOpenClawGatewayProbe: true },
       ),
     );
+    const readinessCompletedAtMs = Date.now();
 
     if (
       selectedAgent.type !== "openclaw"
@@ -8668,6 +8747,8 @@ export async function handleUnifiedChatPost(
           workspaceFileContext,
           conversationId: openClawConversationId,
           workingDirectory: openClawWorkingDirectory,
+          requestStartedAtMs,
+          readinessCompletedAtMs,
           startedAtMs: openClawTurnStartedAtMs,
           taskPhases,
           forceToolExecution,
