@@ -110,9 +110,8 @@ thinking and activity panels. It must:
 
 ## Sequential PR Plan
 
-Each PR below should be one small commit where feasible. This plan intentionally
-contains 35 PR-sized units so speed work, OpenClaw parity, and background-agent
-UX can land in reviewable slices. After opening each PR, run local validation,
+Each PR below should be one small commit where feasible. The count is not the
+goal; small reviewable slices are. After opening each PR, run local validation,
 address review feedback, enable auto-merge only when safe, wait for the merge,
 then measure and report the `Hi` response time.
 
