@@ -74,13 +74,23 @@ type SubmittedReasoningInput =
 type BrainSaveStatus =
   | { state: "idle" }
   | { state: "saving" }
-  | { state: "saved"; slug: string; url: string; projectUrl?: string }
+  | {
+      state: "saved";
+      slug: string;
+      url: string;
+      projectUrl?: string;
+      projectSlugs?: string[];
+      projectUrls?: Record<string, string>;
+    }
   | { state: "error"; error: string };
 
 type PersistCritiqueResponse = {
   brain_slug?: string;
+  project_slug?: string;
+  project_slugs?: string[];
   url?: string;
   project_url?: string;
+  project_urls?: Record<string, string>;
   error?: string;
 };
 
@@ -88,6 +98,7 @@ type PersistedCritiqueSummary = {
   brain_slug: string;
   parent_slug?: string;
   project_slug?: string;
+  project_slugs?: string[];
   title: string;
   uploaded_at?: string;
   source_filename?: string;
@@ -95,6 +106,33 @@ type PersistedCritiqueSummary = {
   finding_count?: number;
   url?: string;
   project_url?: string;
+  project_urls?: Record<string, string>;
+};
+
+type ProjectOption = {
+  slug: string;
+  name: string;
+  description?: string;
+};
+
+type ProjectListStatus = "idle" | "loading" | "loaded" | "error";
+
+type SaveDestinationControls = {
+  isOpen: boolean;
+  projects: ProjectOption[];
+  projectStatus: ProjectListStatus;
+  selectedProjectSlugs: string[];
+  newProjectName: string;
+  newProjectDescription: string;
+  error: string | null;
+  isCreatingProject: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  onReloadProjects: () => void;
+  onToggleProjectSlug: (slug: string) => void;
+  onNewProjectNameChange: (value: string) => void;
+  onNewProjectDescriptionChange: (value: string) => void;
+  onSave: () => void;
 };
 
 type BrainPageResponse = {
@@ -486,6 +524,60 @@ function readErrorFromPayload(payload: unknown): string | null {
   return null;
 }
 
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+function readProjectUrls(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>).flatMap(
+    ([projectSlug, url]): Array<[string, string]> =>
+      typeof url === "string" && url.trim().length > 0
+        ? [[projectSlug, url.trim()]]
+        : [],
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function projectSlugsFromRecord(record: Record<string, unknown>): string[] {
+  return Array.from(
+    new Set([
+      ...(typeof record.project_slug === "string" && record.project_slug.trim()
+        ? [record.project_slug.trim()]
+        : []),
+      ...readStringArray(record.project_slugs),
+      ...(typeof record.project === "string" && record.project.trim()
+        ? [record.project.trim()]
+        : []),
+      ...readStringArray(record.projects),
+    ]),
+  );
+}
+
+function buildProjectUrlsForBrainSlug(
+  projectSlugs: string[],
+  brainSlug: string,
+): Record<string, string> | undefined {
+  if (projectSlugs.length === 0) return undefined;
+  const encodedSlug = encodeURIComponent(brainSlug);
+  return Object.fromEntries(
+    projectSlugs.map((projectSlug) => [
+      projectSlug,
+      `/dashboard/project?name=${encodeURIComponent(projectSlug)}&brain_slug=${encodedSlug}`,
+    ]),
+  );
+}
+
 function normalizePersistedCritiqueSummaries(payload: unknown): PersistedCritiqueSummary[] {
   const rawEntries =
     payload && typeof payload === "object" && "audits" in payload
@@ -502,11 +594,16 @@ function normalizePersistedCritiqueSummaries(payload: unknown): PersistedCritiqu
       typeof record.title === "string" && record.title.trim().length > 0
         ? record.title.trim()
         : record.brain_slug.trim();
+    const projectSlugs = projectSlugsFromRecord(record);
+    const projectUrls =
+      readProjectUrls(record.project_urls) ??
+      buildProjectUrlsForBrainSlug(projectSlugs, record.brain_slug.trim());
     return [
       {
         brain_slug: record.brain_slug.trim(),
         parent_slug: typeof record.parent_slug === "string" ? record.parent_slug : undefined,
-        project_slug: typeof record.project_slug === "string" ? record.project_slug : undefined,
+        project_slug: projectSlugs[0],
+        project_slugs: projectSlugs.length > 0 ? projectSlugs : undefined,
         title,
         uploaded_at: typeof record.uploaded_at === "string" ? record.uploaded_at : undefined,
         source_filename:
@@ -518,10 +615,82 @@ function normalizePersistedCritiqueSummaries(payload: unknown): PersistedCritiqu
             ? record.finding_count
             : undefined,
         url: typeof record.url === "string" ? record.url : undefined,
-        project_url: typeof record.project_url === "string" ? record.project_url : undefined,
+        project_url:
+          typeof record.project_url === "string"
+            ? record.project_url
+            : projectSlugs[0] && projectUrls
+              ? projectUrls[projectSlugs[0]]
+              : undefined,
+        project_urls: projectUrls,
       },
     ];
   });
+}
+
+function normalizeProjectOptions(payload: unknown): ProjectOption[] {
+  const rawProjects =
+    payload && typeof payload === "object" && "projects" in payload
+      ? (payload as { projects?: unknown }).projects
+      : payload;
+  if (!Array.isArray(rawProjects)) return [];
+  return rawProjects.flatMap((entry): ProjectOption[] => {
+    if (!entry || typeof entry !== "object") return [];
+    const record = entry as Record<string, unknown>;
+    const slug =
+      typeof record.slug === "string" && record.slug.trim().length > 0
+        ? record.slug.trim()
+        : typeof record.id === "string" && record.id.trim().length > 0
+          ? record.id.trim()
+          : null;
+    if (!slug) return [];
+    return [
+      {
+        slug,
+        name:
+          typeof record.name === "string" && record.name.trim().length > 0
+            ? record.name.trim()
+            : slug,
+        description:
+          typeof record.description === "string" && record.description.trim().length > 0
+            ? record.description.trim()
+            : undefined,
+      },
+    ];
+  });
+}
+
+async function listProjectOptions(): Promise<ProjectOption[]> {
+  const response = await fetch("/api/projects", { cache: "no-store" });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(readErrorFromPayload(payload) || "Failed to load projects");
+  }
+  return normalizeProjectOptions(payload);
+}
+
+async function createProjectOption(input: {
+  name: string;
+  description?: string;
+}): Promise<ProjectOption> {
+  const response = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "create",
+      name: input.name,
+      description: input.description,
+    }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(readErrorFromPayload(payload) || "Failed to create project");
+  }
+  const projects = normalizeProjectOptions([payload && typeof payload === "object" ? (payload as { project?: unknown }).project : null]);
+  const project = projects[0];
+  if (!project) {
+    throw new Error("Project creation returned an invalid response");
+  }
+  return project;
 }
 
 async function listPersistedCritiques(): Promise<PersistedCritiqueSummary[]> {
@@ -572,9 +741,17 @@ function buildSavedBrainStatus(
   page: { frontmatter?: Record<string, unknown> },
   summary?: PersistedCritiqueSummary,
 ): Extract<BrainSaveStatus, { state: "saved" }> {
-  const projectSlug =
-    summary?.project_slug ||
-    (typeof page.frontmatter?.project === "string" ? page.frontmatter.project : undefined);
+  const projectSlugs = Array.from(
+    new Set([
+      ...(summary?.project_slugs ?? []),
+      ...(summary?.project_slug ? [summary.project_slug] : []),
+      ...projectSlugsFromRecord(page.frontmatter ?? {}),
+    ]),
+  );
+  const projectUrls =
+    summary?.project_urls ??
+    buildProjectUrlsForBrainSlug(projectSlugs, slug);
+  const projectSlug = projectSlugs[0];
   const encodedSlug = encodeURIComponent(slug);
   return {
     state: "saved",
@@ -582,9 +759,9 @@ function buildSavedBrainStatus(
     url: summary?.url || `/dashboard/reasoning?brain_slug=${encodedSlug}`,
     projectUrl:
       summary?.project_url ||
-      (projectSlug
-        ? `/dashboard/project?name=${encodeURIComponent(projectSlug)}&brain_slug=${encodedSlug}`
-        : undefined),
+      (projectSlug && projectUrls ? projectUrls[projectSlug] : undefined),
+    projectSlugs: projectSlugs.length > 0 ? projectSlugs : undefined,
+    projectUrls,
   };
 }
 
@@ -793,6 +970,23 @@ function downloadTextFile(filename: string, content: string): void {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function projectLabel(slug: string, projects: ProjectOption[]): string {
+  return projects.find((project) => project.slug === slug)?.name || slug;
+}
+
+function formatSavedProjectLabel(
+  slugs: string[],
+  projects: ProjectOption[],
+): string {
+  if (slugs.length === 0) return "project";
+  if (slugs.length === 1 && slugs[0]) return projectLabel(slugs[0], projects);
+  return `${slugs.length} projects`;
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter((value) => value.trim().length > 0)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1021,15 +1215,129 @@ function IssueQueueItem({
   );
 }
 
+function ProjectSavePanel({
+  controls,
+  isSaving,
+}: {
+  controls: SaveDestinationControls;
+  isSaving: boolean;
+}) {
+  const selected = new Set(controls.selectedProjectSlugs);
+  const hasNewProject = controls.newProjectName.trim().length > 0;
+  const canSave =
+    !isSaving &&
+    !controls.isCreatingProject &&
+    (selected.size > 0 || hasNewProject);
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className={SECTION_LABEL}>Destination projects</div>
+        <button
+          type="button"
+          onClick={controls.onClose}
+          className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:text-foreground"
+        >
+          Close
+        </button>
+      </div>
+
+      {controls.projectStatus === "loading" ? (
+        <div className="mt-3 text-xs text-muted">Loading projects...</div>
+      ) : controls.projectStatus === "error" ? (
+        <div className="mt-3 flex items-center gap-2">
+          <span className="text-xs text-rose-700">Projects unavailable.</span>
+          <button
+            type="button"
+            onClick={controls.onReloadProjects}
+            className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-gray-300"
+          >
+            Retry
+          </button>
+        </div>
+      ) : controls.projects.length > 0 ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {controls.projects.map((project) => (
+            <label
+              key={project.slug}
+              className={`flex cursor-pointer items-start gap-2 rounded border bg-white p-2 text-xs transition-colors ${
+                selected.has(project.slug)
+                  ? "border-emerald-300 text-emerald-800"
+                  : "border-gray-200 text-foreground hover:border-gray-300"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(project.slug)}
+                onChange={() => controls.onToggleProjectSlug(project.slug)}
+                className="mt-0.5 h-3.5 w-3.5 accent-emerald-600"
+              />
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{project.name}</span>
+                <span className="block truncate text-[11px] text-muted">{project.slug}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 text-xs text-muted">No projects yet.</div>
+      )}
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+        <label className="text-xs font-medium text-foreground">
+          New project
+          <input
+            value={controls.newProjectName}
+            onChange={(event) => controls.onNewProjectNameChange(event.target.value)}
+            placeholder="Project name"
+            className="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-xs font-normal text-foreground outline-none transition-colors focus:border-accent"
+          />
+        </label>
+        <label className="text-xs font-medium text-foreground">
+          Description
+          <input
+            value={controls.newProjectDescription}
+            onChange={(event) => controls.onNewProjectDescriptionChange(event.target.value)}
+            placeholder="Optional"
+            className="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-xs font-normal text-foreground outline-none transition-colors focus:border-accent"
+          />
+        </label>
+      </div>
+
+      {controls.error ? (
+        <div className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          {controls.error}
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={controls.onSave}
+          disabled={!canSave}
+          className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isSaving || controls.isCreatingProject ? "Saving..." : "Save critique"}
+        </button>
+        <span className="text-[11px] text-muted">
+          {selected.size + (hasNewProject ? 1 : 0)} selected
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function ReportOverview({
   job,
   brainSaveStatus = { state: "idle" },
-  onSaveToBrain,
+  saveControls,
 }: {
   job: StructuredCritiqueJob;
   brainSaveStatus?: BrainSaveStatus;
-  onSaveToBrain?: () => void;
+  saveControls?: SaveDestinationControls;
 }) {
+  const saveStatus = brainSaveStatus;
+  const destinationControls = saveControls;
   const title = job.result?.title || job.pdf_filename;
   const topIssues = job.result?.author_feedback?.top_issues ?? [];
   const reportMarkdown = job.result?.report_markdown?.trim() || "";
@@ -1037,7 +1345,28 @@ function ReportOverview({
   const canSaveToBrain =
     job.status === "COMPLETED" &&
     !!job.result &&
-    typeof onSaveToBrain === "function";
+    !!destinationControls;
+  const savedProjectSlugs =
+    saveStatus.state === "saved"
+      ? saveStatus.projectSlugs ?? []
+      : [];
+  const savedProjectUrls =
+    saveStatus.state === "saved"
+      ? saveStatus.projectUrls ??
+        buildProjectUrlsForBrainSlug(savedProjectSlugs, saveStatus.slug)
+      : undefined;
+  const savedProjectLinks =
+    saveStatus.state === "saved"
+      ? savedProjectSlugs.flatMap((projectSlug) => {
+          const href =
+            savedProjectUrls?.[projectSlug] ||
+            saveStatus.projectUrl ||
+            saveStatus.url;
+          return href
+            ? [{ projectSlug, href, label: projectLabel(projectSlug, destinationControls?.projects ?? []) }]
+            : [];
+        })
+      : [];
 
   return (
     <div className="border-b border-gray-100 px-6 py-5 space-y-4">
@@ -1069,43 +1398,68 @@ function ReportOverview({
             </button>
             {canSaveToBrain ? (
               <>
-                <button
-                  type="button"
-                  onClick={onSaveToBrain}
-                  disabled={brainSaveStatus.state === "saving"}
-                  className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {brainSaveStatus.state === "saving"
-                    ? "Saving..."
-                    : brainSaveStatus.state === "saved"
-                      ? "Saved to brain"
-                      : "Save to brain"}
-                </button>
-                {brainSaveStatus.state === "saved" ? (
+                {saveStatus.state === "saved" ? (
                   <>
+                    <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                      Saved in {formatSavedProjectLabel(savedProjectSlugs, destinationControls?.projects ?? [])}
+                    </span>
+                    {savedProjectLinks.length === 1 ? (
+                      <Link
+                        href={savedProjectLinks[0]?.href ?? saveStatus.url}
+                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:border-emerald-300"
+                      >
+                        Open in file tree
+                      </Link>
+                    ) : savedProjectLinks.length > 1 ? (
+                      savedProjectLinks.map((link) => (
+                        <Link
+                          key={link.projectSlug}
+                          href={link.href}
+                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:border-emerald-300"
+                        >
+                          Open {link.label}
+                        </Link>
+                      ))
+                    ) : null}
                     <Link
-                      href={brainSaveStatus.projectUrl ?? brainSaveStatus.url}
-                      className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:border-emerald-300"
-                    >
-                      Open in file tree
-                    </Link>
-                    <Link
-                      href={brainSaveStatus.url}
+                      href={saveStatus.url}
                       title="Open the durable saved analysis URL"
                       className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300"
                     >
                       Open saved analysis
                     </Link>
+                    <button
+                      type="button"
+                      onClick={destinationControls?.onOpen}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Manage projects
+                    </button>
                   </>
-                ) : null}
+                ) : (
+                  <button
+                    type="button"
+                    onClick={destinationControls?.onOpen}
+                    disabled={saveStatus.state === "saving"}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {saveStatus.state === "saving" ? "Saving..." : "Save to project..."}
+                  </button>
+                )}
               </>
             ) : null}
           </div>
         ) : null}
       </div>
-      {brainSaveStatus.state === "error" ? (
+      {destinationControls?.isOpen ? (
+        <ProjectSavePanel
+          controls={destinationControls}
+          isSaving={saveStatus.state === "saving"}
+        />
+      ) : null}
+      {saveStatus.state === "error" ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-          {brainSaveStatus.error}
+          {saveStatus.error}
         </div>
       ) : null}
 
@@ -1406,11 +1760,18 @@ function StructuredCritiquePageContent() {
   const [brainSaveByJobId, setBrainSaveByJobId] = useState<Record<string, BrainSaveStatus>>({});
   const [persistedCritiques, setPersistedCritiques] = useState<PersistedCritiqueSummary[]>([]);
   const [isLoadingPersistedCritiques, setIsLoadingPersistedCritiques] = useState(true);
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
+  const [projectListStatus, setProjectListStatus] =
+    useState<ProjectListStatus>("idle");
+  const [savePanelJobId, setSavePanelJobId] = useState<string | null>(null);
+  const [selectedSaveProjectSlugs, setSelectedSaveProjectSlugs] = useState<string[]>([]);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDescription, setNewProjectDescription] = useState("");
+  const [savePanelError, setSavePanelError] = useState<string | null>(null);
+  const [isCreatingProjectForSave, setIsCreatingProjectForSave] = useState(false);
 
   const queueRef = useRef<HTMLDivElement>(null);
   const hostedHistoryHydratedRef = useRef(false);
-  const autoSavedJobIdsRef = useRef<Set<string>>(new Set());
-  const autoSaveAttemptCountsRef = useRef<Map<string, number>>(new Map());
   const getCritiqueHeaders = useCallback(async () => ({}), []);
 
   // ---------------------------------------------------------------------------
@@ -1732,6 +2093,9 @@ function StructuredCritiquePageContent() {
     !isTerminalStatus(selectedJob.status) &&
     !(isSubmitting || isPolling) &&
     error === timedOutMessage;
+  const activeBrainSaveStatus: BrainSaveStatus = activeJob
+    ? brainSaveByJobId[activeJob.id] ?? { state: "idle" }
+    : { state: "idle" };
 
   // Auto-select first finding when results arrive
   const prevFindingsLenRef = useRef(0);
@@ -1787,6 +2151,48 @@ function StructuredCritiquePageContent() {
     },
     [loadBrainSlug],
   );
+
+  const loadProjectsForSave = useCallback(async () => {
+    setProjectListStatus("loading");
+    try {
+      const projects = await listProjectOptions();
+      setProjectOptions(projects);
+      setProjectListStatus("loaded");
+      setSavePanelError(null);
+    } catch (err) {
+      setProjectListStatus("error");
+      setSavePanelError(err instanceof Error ? err.message : "Failed to load projects");
+    }
+  }, []);
+
+  const handleOpenSavePanel = useCallback(
+    (job: StructuredCritiqueJob, status: BrainSaveStatus) => {
+      setSavePanelJobId(job.id);
+      setSavePanelError(null);
+      setNewProjectName("");
+      setNewProjectDescription("");
+      if (status.state === "saved") {
+        setSelectedSaveProjectSlugs(status.projectSlugs ?? []);
+      } else {
+        const existingSavedAudit = persistedCritiques.find(
+          (entry) => entry.descartes_job_id === job.id,
+        );
+        setSelectedSaveProjectSlugs(existingSavedAudit?.project_slugs ?? []);
+      }
+      if (projectListStatus === "idle" || projectListStatus === "error") {
+        void loadProjectsForSave();
+      }
+    },
+    [loadProjectsForSave, persistedCritiques, projectListStatus],
+  );
+
+  const handleToggleSaveProjectSlug = useCallback((slug: string) => {
+    setSelectedSaveProjectSlugs((previous) =>
+      previous.includes(slug)
+        ? previous.filter((candidate) => candidate !== slug)
+        : [...previous, slug],
+    );
+  }, []);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -1937,9 +2343,24 @@ function StructuredCritiquePageContent() {
   }, [refreshJob, selectedJobId]);
 
   const persistJobToBrain = useCallback(
-    async (job: StructuredCritiqueJob, options?: { silent?: boolean }) => {
-      if (job.status !== "COMPLETED" || !job.result) return false;
+    async (
+      job: StructuredCritiqueJob,
+      options: { projectSlugs: string[]; silent?: boolean },
+    ): Promise<{ saved: true } | { saved: false; error?: string }> => {
+      if (job.status !== "COMPLETED" || !job.result) return { saved: false };
       const silent = options?.silent === true;
+      const projectSlugs = dedupeStrings(options.projectSlugs.map((slug) => slug.trim()));
+      if (projectSlugs.length === 0) {
+        const message = "Choose at least one project before saving a critique";
+        setBrainSaveByJobId((previous) => ({
+          ...previous,
+          [job.id]: {
+            state: "error",
+            error: message,
+          },
+        }));
+        return { saved: false, error: message };
+      }
       setBrainSaveByJobId((previous) => ({
         ...previous,
         [job.id]: { state: "saving" },
@@ -1951,6 +2372,7 @@ function StructuredCritiquePageContent() {
           body: JSON.stringify({
             job,
             sourceFilename: job.pdf_filename || undefined,
+            projectSlugs,
           }),
         });
         const payload = (await response.json().catch(() => null)) as
@@ -1964,13 +2386,35 @@ function StructuredCritiquePageContent() {
         if (!slug || !url) {
           throw new Error("gbrain save returned an invalid response");
         }
+        const savedProjectSlugs =
+          payload?.project_slugs && payload.project_slugs.length > 0
+            ? payload.project_slugs
+            : payload?.project_slug
+              ? [payload.project_slug]
+              : projectSlugs;
+        const savedProjectUrls =
+          payload?.project_urls ??
+          buildProjectUrlsForBrainSlug(savedProjectSlugs, slug);
         setBrainSaveByJobId((previous) => ({
           ...previous,
-          [job.id]: { state: "saved", slug, url, projectUrl: payload?.project_url },
+          [job.id]: {
+            state: "saved",
+            slug,
+            url,
+            projectUrl:
+              payload?.project_url ||
+              (savedProjectSlugs[0] && savedProjectUrls
+                ? savedProjectUrls[savedProjectSlugs[0]]
+                : undefined),
+            projectSlugs: savedProjectSlugs,
+            projectUrls: savedProjectUrls,
+          },
         }));
         setPersistedCritiques((previous) => {
           const nextSummary: PersistedCritiqueSummary = {
             brain_slug: slug,
+            project_slug: savedProjectSlugs[0],
+            project_slugs: savedProjectSlugs,
             title: job.result?.title || job.pdf_filename || slug,
             uploaded_at: new Date().toISOString(),
             source_filename: job.pdf_filename || undefined,
@@ -1978,46 +2422,99 @@ function StructuredCritiquePageContent() {
             finding_count: job.result?.findings?.length,
             url,
             project_url: payload?.project_url,
+            project_urls: savedProjectUrls,
           };
           return [
             nextSummary,
-            ...previous.filter((entry) => entry.brain_slug !== slug),
+            ...previous.filter(
+              (entry) =>
+                entry.brain_slug !== slug && entry.descartes_job_id !== job.id,
+            ),
           ].slice(0, 50);
         });
-        return true;
+        return { saved: true };
       } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to save critique to gbrain";
         setBrainSaveByJobId((previous) => ({
           ...previous,
           [job.id]: silent
             ? { state: "idle" }
             : {
                 state: "error",
-                error: err instanceof Error ? err.message : "Failed to save critique to gbrain",
+                error: message,
               },
         }));
-        return false;
+        return { saved: false, error: message };
       }
     },
     [],
   );
 
-  const handleSaveToBrain = useCallback(
+  const handleSaveToSelectedProjects = useCallback(
     async (job: StructuredCritiqueJob) => {
-      await persistJobToBrain(job, { silent: false });
+      setSavePanelError(null);
+      let projectSlugs = dedupeStrings(selectedSaveProjectSlugs);
+      const requestedProjectName = newProjectName.trim();
+      if (requestedProjectName) {
+        setIsCreatingProjectForSave(true);
+        try {
+          const created = await createProjectOption({
+            name: requestedProjectName,
+            description: newProjectDescription.trim() || undefined,
+          });
+          setProjectOptions((previous) => {
+            const withoutDuplicate = previous.filter(
+              (project) => project.slug !== created.slug,
+            );
+            return [created, ...withoutDuplicate];
+          });
+          projectSlugs = dedupeStrings([...projectSlugs, created.slug]);
+          setSelectedSaveProjectSlugs(projectSlugs);
+          setNewProjectName("");
+          setNewProjectDescription("");
+          setProjectListStatus("loaded");
+        } catch (err) {
+          setSavePanelError(
+            err instanceof Error ? err.message : "Failed to create project",
+          );
+          setIsCreatingProjectForSave(false);
+          return;
+        }
+        setIsCreatingProjectForSave(false);
+      }
+
+      if (projectSlugs.length === 0) {
+        setSavePanelError("Choose at least one project before saving a critique");
+        return;
+      }
+
+      const result = await persistJobToBrain(job, {
+        projectSlugs,
+        silent: false,
+      });
+      if (result.saved) {
+        setSavePanelJobId(null);
+      } else if (result.error) {
+        setSavePanelError(result.error);
+      }
     },
-    [persistJobToBrain],
+    [
+      newProjectDescription,
+      newProjectName,
+      persistJobToBrain,
+      selectedSaveProjectSlugs,
+    ],
   );
 
-  // Completed live jobs are expensive. Persist the selected result to gbrain
-  // automatically when possible so a browser-local history loss cannot lose it.
+  // If this hosted job was already saved, reflect that durable state without
+  // issuing another write.
   useEffect(() => {
     if (
       !selectedJob ||
       selectedJob.id.startsWith("brain:") ||
       selectedJob.status !== "COMPLETED" ||
       !selectedJob.result ||
-      isLoadingPersistedCritiques ||
-      autoSavedJobIdsRef.current.has(selectedJob.id)
+      isLoadingPersistedCritiques
     ) {
       return;
     }
@@ -2028,7 +2525,6 @@ function StructuredCritiquePageContent() {
       (entry) => entry.descartes_job_id === selectedJob.id,
     );
     if (existingSavedAudit) {
-      autoSavedJobIdsRef.current.add(selectedJob.id);
       setBrainSaveByJobId((previous) => ({
         ...previous,
         [selectedJob.id]: {
@@ -2038,28 +2534,41 @@ function StructuredCritiquePageContent() {
             existingSavedAudit.url ||
             `/dashboard/reasoning?brain_slug=${encodeURIComponent(existingSavedAudit.brain_slug)}`,
           projectUrl: existingSavedAudit.project_url,
+          projectSlugs: existingSavedAudit.project_slugs,
+          projectUrls: existingSavedAudit.project_urls,
         },
       }));
-      return;
     }
-
-    const attemptCount = autoSaveAttemptCountsRef.current.get(selectedJob.id) ?? 0;
-    if (attemptCount >= 2) return;
-
-    autoSaveAttemptCountsRef.current.set(selectedJob.id, attemptCount + 1);
-    autoSavedJobIdsRef.current.add(selectedJob.id);
-    void persistJobToBrain(selectedJob, { silent: true }).then((saved) => {
-      if (!saved && (autoSaveAttemptCountsRef.current.get(selectedJob.id) ?? 0) < 2) {
-        autoSavedJobIdsRef.current.delete(selectedJob.id);
-      }
-    });
   }, [
     brainSaveByJobId,
     isLoadingPersistedCritiques,
     persistedCritiques,
-    persistJobToBrain,
     selectedJob,
   ]);
+
+  const activeSaveControls: SaveDestinationControls | undefined =
+    activeJob && activeJob.id !== EXAMPLE_REASONING_JOB.id
+      ? {
+          isOpen: savePanelJobId === activeJob.id,
+          projects: projectOptions,
+          projectStatus: projectListStatus,
+          selectedProjectSlugs: selectedSaveProjectSlugs,
+          newProjectName,
+          newProjectDescription,
+          error: savePanelError,
+          isCreatingProject: isCreatingProjectForSave,
+          onOpen: () => handleOpenSavePanel(activeJob, activeBrainSaveStatus),
+          onClose: () => {
+            setSavePanelJobId(null);
+            setSavePanelError(null);
+          },
+          onReloadProjects: () => void loadProjectsForSave(),
+          onToggleProjectSlug: handleToggleSaveProjectSlug,
+          onNewProjectNameChange: setNewProjectName,
+          onNewProjectDescriptionChange: setNewProjectDescription,
+          onSave: () => void handleSaveToSelectedProjects(activeJob),
+        }
+      : undefined;
 
   const handleQueueKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key === "ArrowDown" && index < filteredFindings.length - 1) {
@@ -2569,14 +3078,8 @@ function StructuredCritiquePageContent() {
               <div className="flex h-full flex-col">
                 <ReportOverview
                   job={activeJob}
-                  brainSaveStatus={
-                    brainSaveByJobId[activeJob.id] ?? { state: "idle" }
-                  }
-                  onSaveToBrain={
-                    activeJob.id === EXAMPLE_REASONING_JOB.id
-                      ? undefined
-                      : () => void handleSaveToBrain(activeJob)
-                  }
+                  brainSaveStatus={activeBrainSaveStatus}
+                  saveControls={activeSaveControls}
                 />
                 <FindingDetail
                   key={`${activeJob.id}:${selectedFinding.finding_id ?? selectedFindingIndex}`}
