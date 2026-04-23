@@ -1657,6 +1657,7 @@ function extractOpenClawProgressUpdate(progress: {
       update,
       extractAgentEventProgressUpdate(eventName, payload),
     );
+    return update;
   }
 
   const stream = firstNonEmptyString(payload.stream);
@@ -1715,7 +1716,11 @@ function extractOpenClawProgressUpdate(progress: {
     payload.content,
     typeof payload.message === "string" ? payload.message : undefined,
   );
-  if (!eventName.startsWith("chat.") && payloadNarration) {
+  if (
+    !eventName.startsWith("chat.") &&
+    !eventName.startsWith("agent.") &&
+    payloadNarration
+  ) {
     update.activityLines.push(payloadNarration);
     update.progressEntries.push(...buildActivityProgressEntries([payloadNarration]));
   }

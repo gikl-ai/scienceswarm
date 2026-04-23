@@ -4180,6 +4180,77 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
+  it("does not duplicate new-format agent events that also carry legacy fields", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "agent.tool.start",
+              payload: {
+                stream: "tool",
+                text: "duplicate top-level narration",
+                data: {
+                  phase: "start",
+                  name: "read_file",
+                  input: { path: "docs/results_table.csv" },
+                },
+              },
+            },
+          },
+          { text: "Done" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+    const progressLog = screen.getByTestId("progress-log").textContent ?? "";
+    expect(progressLog.match(/Read docs\/results_table\.csv/g)).toHaveLength(1);
+    expect(progressLog).not.toContain("duplicate top-level narration");
+  });
+
   it("captures lifecycle-only gateway progress as assistant activity", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
