@@ -7,12 +7,17 @@ import {
 } from "@/app/api/runtime/_shared";
 import { createRuntimeConcurrencyManager } from "@/lib/runtime-hosts/concurrency";
 import { createRuntimeEventStore } from "@/lib/runtime-hosts/events";
-import { createRuntimeSessionStore } from "@/lib/runtime-hosts/sessions";
+import {
+  RuntimeSessionStore,
+  createRuntimeSessionStore,
+  type CreateRuntimeSessionInput,
+} from "@/lib/runtime-hosts/sessions";
 import {
   createApiKeyRuntimeHostProfile,
 } from "@/lib/runtime-hosts/adapters/api-key";
 import type {
   ResearchRuntimeHost,
+  RuntimeSessionRecord,
   RuntimeHostProfile,
   RuntimeTurnRequest,
 } from "@/lib/runtime-hosts/contracts";
@@ -27,7 +32,7 @@ function request(body: unknown): Request {
 
 function adapter(
   profile: RuntimeHostProfile,
-  options: { fail?: boolean } = {},
+  options: { fail?: boolean; onTurn?: (turn: RuntimeTurnRequest) => void } = {},
 ): ResearchRuntimeHost {
   return {
     profile: () => profile,
@@ -39,6 +44,7 @@ function adapter(
     }),
     privacyProfile: async () => profile.privacyClass,
     sendTurn: async (turn: RuntimeTurnRequest) => {
+      options.onTurn?.(turn);
       if (options.fail) throw new Error(`${profile.id} failed`);
       return {
         hostId: profile.id,
@@ -62,6 +68,17 @@ function adapter(
     streamEvents: async function* () {},
     artifactImportHints: async () => [],
   };
+}
+
+class MissingPreviewReturnSessionStore extends RuntimeSessionStore {
+  createSession(input: CreateRuntimeSessionInput): RuntimeSessionRecord {
+    const session = super.createSession(input);
+    if (input.mode !== "chat") return session;
+    return {
+      ...session,
+      preview: undefined,
+    };
+  }
 }
 
 function installAdapters(adapters: ResearchRuntimeHost[]) {
@@ -167,5 +184,43 @@ describe("POST /api/runtime/compare", () => {
       costCopyRequired: true,
       compareFanOutCount: 1,
     });
+  });
+
+  it("uses each child's own preview when a returned child session omits preview", async () => {
+    const turnPreviewHosts: string[] = [];
+    const sessions = new MissingPreviewReturnSessionStore({
+      now: () => new Date("2026-04-22T12:00:00Z"),
+      idGenerator: (() => {
+        let index = 0;
+        return () => `compare-session-${++index}`;
+      })(),
+    });
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      concurrencyManager: createRuntimeConcurrencyManager({
+        policy: { compare: { maxChildren: 3 } },
+      }),
+      adapters: [
+        adapter(requireRuntimeHostProfile("openclaw"), {
+          onTurn: (turn) => turnPreviewHosts.push(turn.preview.hostId),
+        }),
+        adapter(requireRuntimeHostProfile("codex"), {
+          onTurn: (turn) => turnPreviewHosts.push(turn.preview.hostId),
+        }),
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+
+    const response = await POST(request({
+      projectId: "project-alpha",
+      projectPolicy: "cloud-ok",
+      selectedHostIds: ["openclaw", "codex"],
+      prompt: "Compare models.",
+      approvalState: "approved",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(turnPreviewHosts.sort()).toEqual(["codex", "openclaw"]);
   });
 });

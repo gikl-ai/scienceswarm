@@ -19,6 +19,7 @@ import {
   createRuntimeSessionStore,
   type RuntimeSessionStore,
 } from "@/lib/runtime-hosts/sessions";
+import { RuntimeHostError } from "@/lib/runtime-hosts/errors";
 import type {
   ResearchRuntimeHost,
   RuntimeHostProfile,
@@ -130,6 +131,18 @@ describe("runtime session APIs", () => {
     ]);
   });
 
+  it("rejects invalid status filters instead of casting arbitrary strings", async () => {
+    const response = await sessionsGET(
+      new Request("http://localhost/api/runtime/sessions?status=not-a-status"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toMatchObject({
+      code: "RUNTIME_INVALID_REQUEST",
+    });
+  });
+
   it("renders unknown historical host ids as read-only session history", async () => {
     const session = sessions.createSession({
       hostId: "retired-host",
@@ -213,6 +226,109 @@ describe("runtime session APIs", () => {
     expect(eventBody.events.map((event: { type: string }) => event.type)).toEqual(
       expect.arrayContaining(["status", "message", "done"]),
     );
+  });
+
+  it("stores semantic RuntimeHostError codes on failed sessions", async () => {
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      adapters: [
+        {
+          ...adapter(requireRuntimeHostProfile("openclaw")),
+          sendTurn: async () => {
+            throw new RuntimeHostError({
+              code: "RUNTIME_HOST_AUTH_REQUIRED",
+              status: 401,
+              message: "OpenClaw auth required.",
+              userMessage: "OpenClaw needs authentication.",
+              recoverable: true,
+            });
+          },
+        },
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+
+    const response = await sessionsPOST(jsonRequest(
+      "http://localhost/api/runtime/sessions",
+      {
+        hostId: "openclaw",
+        projectId: "project-alpha",
+        projectPolicy: "local-only",
+        mode: "chat",
+        prompt: "Local turn",
+        approvalState: "approved",
+      },
+    ));
+    const body = await response.json();
+    const [session] = sessions.listSessions();
+
+    expect(response.status).toBe(401);
+    expect(body.code).toBe("RUNTIME_HOST_AUTH_REQUIRED");
+    expect(session?.errorCode).toBe("RUNTIME_HOST_AUTH_REQUIRED");
+    expect(session?.status).toBe("failed");
+  });
+
+  it("keeps duplicate artifact source paths as distinct runtime events", async () => {
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      adapters: [
+        {
+          ...adapter(requireRuntimeHostProfile("openclaw")),
+          sendTurn: async () => ({
+            hostId: "openclaw",
+            sessionId: "openclaw-native-session",
+            message: "two artifacts",
+            artifacts: [
+              {
+                sessionId: "openclaw-native-session",
+                hostId: "openclaw",
+                sourcePath: "results/summary.md",
+                sourceNamespace: "project-relative",
+                provenance: {
+                  generatedByHostId: "openclaw",
+                  runtimeSessionId: "openclaw-native-session",
+                  privacyClass: "local-only",
+                },
+              },
+              {
+                sessionId: "openclaw-native-session",
+                hostId: "openclaw",
+                sourcePath: "results/summary.md",
+                sourceNamespace: "project-relative",
+                provenance: {
+                  generatedByHostId: "openclaw",
+                  runtimeSessionId: "openclaw-native-session",
+                  privacyClass: "local-only",
+                },
+              },
+            ],
+          }),
+        },
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+
+    const response = await sessionsPOST(jsonRequest(
+      "http://localhost/api/runtime/sessions",
+      {
+        hostId: "openclaw",
+        projectId: "project-alpha",
+        projectPolicy: "local-only",
+        mode: "chat",
+        prompt: "Local turn",
+        approvalState: "approved",
+      },
+    ));
+    const body = await response.json();
+    const artifactEvents = body.events.filter(
+      (event: { type: string }) => event.type === "artifact",
+    );
+
+    expect(response.status).toBe(200);
+    expect(artifactEvents).toHaveLength(2);
+    expect(new Set(artifactEvents.map((event: { id: string }) => event.id)).size).toBe(2);
   });
 
   it("labels wrapper-kill versus host-api cancellation semantics", async () => {

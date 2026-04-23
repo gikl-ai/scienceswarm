@@ -10,6 +10,7 @@ import type { RuntimePathNamespace } from "@/lib/runtime-hosts/path-mapping";
 import {
   approvalStateFromBody,
   assertPreviewAllowed,
+  assertRuntimeApiLocalRequest,
   computeRuntimeApiPreview,
   getRuntimeApiServices,
   optionalStringArrayField,
@@ -56,6 +57,7 @@ function importReasonFromBody(
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    await assertRuntimeApiLocalRequest(request);
     const body = await parseJsonObject(request);
     const services = getRuntimeApiServices();
     const action = optionalStringField(body, "action") ?? "validate";

@@ -70,7 +70,7 @@ afterEach(() => {
 
 describe("GET /api/runtime/health", () => {
   it("returns host health, auth, capability, and MCP profile data", async () => {
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/runtime/health"));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -88,5 +88,16 @@ describe("GET /api/runtime/health", () => {
       auth: { status: "not-required" },
     });
     expect(body.checkedAt).toBe("2026-04-22T12:00:00.000Z");
+  });
+
+  it("rejects non-local runtime health requests", async () => {
+    const response = await GET(new Request("https://example.com/api/runtime/health"));
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toMatchObject({
+      code: "RUNTIME_INVALID_REQUEST",
+      recoverable: false,
+    });
   });
 });
