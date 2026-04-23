@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { LLMClient } from "@/brain/llm";
 import type { MorningBrief } from "@/brain/types";
 
 const mocks = vi.hoisted(() => ({
@@ -149,6 +150,30 @@ describe("GET /api/brain/morning-brief", () => {
     "OpenAI API rate limit exceeded.",
   ])("maps generation-time provider failure %s to a structured 503", async (message) => {
     mocks.buildMorningBrief.mockRejectedValue(new Error(message));
+
+    const { GET } = await importRoute();
+    const response = await GET(new Request("http://localhost/api/brain/morning-brief"));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "llm_unavailable",
+      error: "Morning brief generation requires a configured LLM provider.",
+      cause: message,
+    });
+  });
+
+  it.each([
+    "Incorrect API key provided.",
+    "Rate limit exceeded for current organization.",
+    "Request failed with status 401 Unauthorized.",
+  ])("maps generic llm.complete failure %s to a structured 503", async (message) => {
+    mocks.buildMorningBrief.mockImplementation(
+      async (_config: unknown, providerAwareLlm: LLMClient) => {
+        await providerAwareLlm.complete({ system: "test", user: "test" });
+        return makeBrief();
+      },
+    );
+    llm.complete.mockRejectedValue(new Error(message));
 
     const { GET } = await importRoute();
     const response = await GET(new Request("http://localhost/api/brain/morning-brief"));

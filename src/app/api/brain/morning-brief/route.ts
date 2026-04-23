@@ -28,6 +28,13 @@ class MorningBriefTimeoutError extends Error {
   }
 }
 
+class MorningBriefLLMProviderError extends Error {
+  constructor(err: unknown) {
+    super(err instanceof Error ? err.message : "LLM provider unavailable.");
+    this.name = "MorningBriefLLMProviderError";
+  }
+}
+
 interface MorningBriefCacheEntry {
   brief: MorningBrief;
   generatedAtMs: number;
@@ -116,6 +123,18 @@ function startBriefGeneration(
   return generation;
 }
 
+function withLLMProviderErrorContext(llm: LLMClient): LLMClient {
+  return {
+    async complete(call) {
+      try {
+        return await llm.complete(call);
+      } catch (err) {
+        throw new MorningBriefLLMProviderError(err);
+      }
+    },
+  };
+}
+
 function buildDegradedBrief(project?: string): MorningBrief {
   const now = new Date();
   const projectNote = project ? ` for ${project}` : "";
@@ -163,7 +182,12 @@ async function resolveMorningBrief(
     return { brief: fresh.brief, status: "cached" };
   }
 
-  const generation = startBriefGeneration(key, config, llm, project);
+  const generation = startBriefGeneration(
+    key,
+    config,
+    withLLMProviderErrorContext(llm),
+    project,
+  );
 
   try {
     const brief = await withTimeout(generation, getGenerationTimeoutMs());
@@ -232,7 +256,7 @@ function isLLMProviderError(message: string): boolean {
 function generationFailedResponse(err: unknown): Response {
   const message =
     err instanceof Error ? err.message : "Morning brief generation failed";
-  if (isLLMProviderError(message)) {
+  if (err instanceof MorningBriefLLMProviderError || isLLMProviderError(message)) {
     return llmUnavailableResponse(err);
   }
   return Response.json({ error: message }, { status: 500 });
