@@ -537,10 +537,7 @@ function buildProgressSectionChanges(blocks: ProgressTranscriptBlock[]): ReactNo
       return;
     }
 
-    const rowClassName =
-      block.entry.kind === "thinking"
-        ? PROGRESS_SECTION_META.thinking.rowClassName
-        : PROGRESS_SECTION_META.activity.rowClassName;
+    const rowClassName = PROGRESS_SECTION_META[block.section].rowClassName;
     elements.push(
       <div
         key={`${index}-${block.entry.kind}-${block.entry.text}`}
@@ -712,13 +709,12 @@ function parseEmbedDirective(part: string): {
   };
 }
 
-type InlineMarkdownToken =
-  | {
-      type: "code" | "bold" | "italic" | "boldItalic";
-      start: number;
-      end: number;
-      value: string;
-    };
+type InlineMarkdownToken = {
+  type: "code" | "bold" | "italic" | "boldItalic";
+  start: number;
+  end: number;
+  value: string;
+};
 
 function isInlineWhitespace(value: string | undefined): boolean {
   return typeof value === "string" && /\s/.test(value);
@@ -771,6 +767,8 @@ function findNextInlineMarkdownToken(value: string, fromIndex: number): InlineMa
         }
         closingIndex = value.indexOf(marker, closingIndex + marker.length);
       }
+
+      break;
     }
   }
 
