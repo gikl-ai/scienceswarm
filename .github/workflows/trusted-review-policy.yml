@@ -18,7 +18,8 @@ jobs:
     if: |
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'pull_request_review' &&
-       github.event.pull_request.base.ref == 'main')
+       github.event.pull_request.base.ref == 'main' &&
+       !contains(fromJSON('["vajdap","seijiyamamoto","yamamotoseiji"]'), github.event.pull_request.user.login))
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
