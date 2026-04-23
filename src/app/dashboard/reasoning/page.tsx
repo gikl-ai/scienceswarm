@@ -20,6 +20,7 @@ import {
   type StructuredCritiqueResult,
   type StructuredCritiqueStatus,
 } from "@/lib/structured-critique-schema";
+import { SUBMIT_BUTTON_LABEL } from "@/lib/reasoning-page-constants";
 
 // ---------------------------------------------------------------------------
 // Constants & Types
@@ -36,7 +37,6 @@ const QUEUED_PROGRESS_RECOVERY_MESSAGE =
   "Queued in ScienceSwarm's hosted reasoning service. You can leave this page open or reopen the run from Recent Reasoning Analyses later.";
 const DEFAULT_STYLE_PROFILE = "professional";
 const SECTION_LABEL = "text-xs font-medium uppercase tracking-widest text-muted";
-export const SUBMIT_BUTTON_LABEL = "Submit to Reasoning Engine";
 const REASONING_AUDIT_LOADING_AUTH_MESSAGE =
   "Loading your ScienceSwarm account…";
 const SCIENCESWARM_SIGN_IN_URL = getScienceSwarmSignInUrl();

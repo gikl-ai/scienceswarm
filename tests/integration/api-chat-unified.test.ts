@@ -6379,6 +6379,89 @@ describe("POST /api/chat/unified", () => {
     ).toBe(true);
   });
 
+  it("updates an existing visible artifact when OpenClaw edits the matching runtime workspace path", async () => {
+    const projectRoot = createProjectRoot("alpha-project");
+    const stateRoot = ensureScienceSwarmDir();
+    const existingPath = path.join(
+      projectRoot,
+      "docs",
+      "paper-results-section.md",
+    );
+    const runtimePath = path.join(
+      stateRoot,
+      "openclaw",
+      "workspace",
+      "docs",
+      "paper-results-section.md",
+    );
+    mkdirSync(path.dirname(existingPath), { recursive: true });
+    writeFileSync(
+      existingPath,
+      "# Results\n\n## Limitations\n\nInitial caveats.\n",
+    );
+    const oldTimestamp = new Date(Date.now() - 10_000);
+    utimesSync(existingPath, oldTimestamp, oldTimestamp);
+
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockImplementationOnce(async () => {
+      mkdirSync(path.dirname(runtimePath), { recursive: true });
+      writeFileSync(
+        runtimePath,
+        [
+          "# Results",
+          "",
+          "## Reviewer-facing Caveats",
+          "",
+          "- Accuracy changes are descriptive until replicated.",
+          "- Latency and memory should be treated as deployment constraints.",
+        ].join("\n"),
+      );
+      return "Successfully replaced 1 block(s) in docs/paper-results-section.md.";
+    });
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message:
+          "Revise docs/paper-results-section.md in place with reviewer-facing caveats.",
+        projectId: "alpha-project",
+        mode: "openclaw-tools",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      backend: "openclaw",
+      response: expect.stringContaining("docs/paper-results-section.md"),
+      generatedFiles: ["docs/paper-results-section.md"],
+      generatedArtifacts: [
+        expect.objectContaining({
+          projectPath: "docs/paper-results-section.md",
+          tool: "OpenClaw CLI",
+        }),
+      ],
+    });
+    expect(readFileSync(existingPath, "utf-8")).toContain(
+      "## Reviewer-facing Caveats",
+    );
+    expect(
+      existsSync(path.join(projectRoot, "docs", "paper-results-section-2.md")),
+    ).toBe(false);
+  });
+
   it("treats markdown-emphasized output paths as satisfying explicit requested artifacts", async () => {
     const projectRoot = createProjectRoot("project-alpha-recovery-7747");
     const stateRoot = ensureScienceSwarmDir();

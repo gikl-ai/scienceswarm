@@ -3317,6 +3317,56 @@ async function findExistingImportedProjectOutput(
   return null;
 }
 
+async function findExistingProjectOutputForRuntimePath(params: {
+  projectRoot: string;
+  sourcePath: string;
+  projectId: string;
+  workingDirectory?: string | null;
+}): Promise<string | null> {
+  const roots = dedupePaths([
+    ...(params.workingDirectory ? [params.workingDirectory] : []),
+    ...getOpenClawRuntimeRoots(params.projectId),
+  ]);
+
+  for (const root of roots) {
+    const relativePath = await relativePathWithinRoot(params.sourcePath, root);
+    if (!relativePath) {
+      continue;
+    }
+
+    const normalizedRelativePath = normalizeWorkspacePath(relativePath);
+    const segments = normalizedRelativePath.split("/").filter(Boolean);
+    if (segments.length < 2) {
+      continue;
+    }
+
+    const fileName = segments.at(-1) ?? "";
+    const targetFolder = getTargetFolder(fileName);
+    if (
+      targetFolder === "other" ||
+      targetFolder === "config" ||
+      segments[0] !== targetFolder
+    ) {
+      continue;
+    }
+
+    const targetPath = path.resolve(params.projectRoot, normalizedRelativePath);
+    const normalizedProjectRoot = path.resolve(params.projectRoot);
+    if (
+      targetPath === normalizedProjectRoot ||
+      !targetPath.startsWith(`${normalizedProjectRoot}${path.sep}`)
+    ) {
+      continue;
+    }
+
+    if (await pathExists(targetPath)) {
+      return targetPath;
+    }
+  }
+
+  return null;
+}
+
 async function relativePathWithinRoot(
   absolutePath: string,
   root: string,
@@ -3352,6 +3402,7 @@ async function importOpenClawGeneratedFile(
   projectId: string,
   sourcePath: string,
   startedAtMs: number,
+  workingDirectory?: string | null,
 ): Promise<ImportedGeneratedFile | null> {
   if (!looksImportableGeneratedFile(sourcePath)) {
     return null;
@@ -3396,14 +3447,23 @@ async function importOpenClawGeneratedFile(
       projectRoot,
       normalizedSource,
     );
+    const existingProjectPath = existingImportedPath
+      ? null
+      : await findExistingProjectOutputForRuntimePath({
+          projectRoot,
+          sourcePath: normalizedSource,
+          projectId,
+          workingDirectory,
+        });
     const targetPath =
       existingImportedPath
+      ?? existingProjectPath
       ?? (await reserveUniqueProjectOutputPath(
         projectRoot,
         path.basename(sourcePath),
       ));
     if (!existingImportedPath) {
-      await copyFile(sourcePath, targetPath);
+      await copyFile(normalizedSource, targetPath);
     }
     workspacePath = normalizeWorkspacePath(
       path.relative(projectRoot, targetPath),
@@ -6758,6 +6818,7 @@ async function importOpenClawOutputsIntoProject(params: {
       params.projectId,
       candidate,
       params.startedAtMs,
+      params.workingDirectory,
     );
     if (
       imported &&

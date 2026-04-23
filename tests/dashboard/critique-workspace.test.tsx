@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HOSTED_DESCARTES_RECOVERY_MESSAGE } from "@/lib/structured-critique-errors";
+import { SUBMIT_BUTTON_LABEL } from "@/lib/reasoning-page-constants";
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
@@ -22,9 +23,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import StructuredCritiquePage, {
-  SUBMIT_BUTTON_LABEL,
-} from "@/app/dashboard/reasoning/page";
+import StructuredCritiquePage from "@/app/dashboard/reasoning/page";
 
 const STORAGE_KEY = "structured-critique-history.v1";
 const POLL_TIMEOUT_MESSAGE =
