@@ -1,13 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildPromptSizeBuckets,
+  clearChatTimingArtifactsForTests,
   createChatTimingTelemetry,
+  getRecentChatTimingArtifacts,
   isChatTimingTelemetryEnabled,
   type ChatTimingLogPayload,
 } from "@/lib/chat-timing-telemetry";
 
 describe("chat timing telemetry", () => {
+  beforeEach(() => {
+    clearChatTimingArtifactsForTests();
+  });
+
+  afterEach(() => {
+    clearChatTimingArtifactsForTests();
+  });
+
   it("records ordered phases and gateway milestones without event text", () => {
     let now = 1_000;
     const logs: ChatTimingLogPayload[] = [];
@@ -62,6 +72,7 @@ describe("chat timing telemetry", () => {
     });
     expect(JSON.stringify(logs[0])).not.toContain("secret assistant text");
     expect(JSON.stringify(logs[0])).not.toContain("final text");
+    expect(getRecentChatTimingArtifacts()).toHaveLength(1);
   });
 
   it("reports prompt-size buckets without retaining prompt contents", () => {

@@ -77,6 +77,76 @@ export function isChatTimingTelemetryEnabled(
   return env[CHAT_TIMING_ENV_FLAG] === "1";
 }
 
+export const CHAT_TIMING_ARTIFACT_LIMIT = 25;
+
+const recentChatTimingArtifacts: ChatTimingLogPayload[] = [];
+
+function sanitizeIdentifier(value: string | undefined): string | undefined {
+  if (!value) {
+    return value;
+  }
+  return /^[a-z0-9_.:-]{1,128}$/i.test(value) ? value : "[redacted]";
+}
+
+function sanitizeRoute(route: string): string {
+  if (!route.startsWith("/") && !/^https?:\/\//i.test(route)) {
+    return "/api/chat/unified";
+  }
+  try {
+    return new URL(route, "http://localhost").pathname || "/api/chat/unified";
+  } catch {
+    return "/api/chat/unified";
+  }
+}
+
+function sanitizeDetail(
+  detail?: Record<string, string | number | boolean | null>,
+): Record<string, string | number | boolean | null> | undefined {
+  if (!detail) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(detail).map(([key, value]) => [
+      key,
+      typeof value === "string" ? "[redacted]" : value,
+    ]),
+  );
+}
+
+function sanitizeTimingArtifact(payload: ChatTimingLogPayload): ChatTimingLogPayload {
+  return {
+    event: "scienceswarm.chat.timing",
+    route: sanitizeRoute(payload.route),
+    turnId: sanitizeIdentifier(payload.turnId) ?? "[redacted]",
+    totalDurationMs: payload.totalDurationMs,
+    outcome: sanitizeIdentifier(payload.outcome),
+    status: payload.status,
+    phases: payload.phases.map((phase) => ({
+      ...phase,
+      detail: sanitizeDetail(phase.detail),
+    })),
+    promptCharCounts: { ...payload.promptCharCounts },
+  };
+}
+
+export function recordChatTimingArtifact(payload: ChatTimingLogPayload): void {
+  recentChatTimingArtifacts.push(sanitizeTimingArtifact(payload));
+  if (recentChatTimingArtifacts.length > CHAT_TIMING_ARTIFACT_LIMIT) {
+    recentChatTimingArtifacts.splice(
+      0,
+      recentChatTimingArtifacts.length - CHAT_TIMING_ARTIFACT_LIMIT,
+    );
+  }
+}
+
+export function getRecentChatTimingArtifacts(): ChatTimingLogPayload[] {
+  return recentChatTimingArtifacts.map((payload) => sanitizeTimingArtifact(payload));
+}
+
+export function clearChatTimingArtifactsForTests(): void {
+  recentChatTimingArtifacts.length = 0;
+}
+
 export function promptCharCount(value: unknown): number {
   if (typeof value === "string") {
     return value.length;
@@ -490,6 +560,7 @@ export class ChatTimingTelemetry {
       phases: [...this.phases].sort((left, right) => left.order - right.order),
       promptCharCounts: { ...this.promptCharCounts },
     };
+    recordChatTimingArtifact(payload);
     this.logger(payload);
   }
 }
