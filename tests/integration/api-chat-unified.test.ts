@@ -2008,6 +2008,54 @@ describe("POST /api/chat/unified", () => {
     infoSpy.mockRestore();
   });
 
+  it("streams opt-in timing meta without a first gateway event when OpenClaw is quiet", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw says hi");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Quiet no-event prompt",
+        projectId: "alpha-project",
+        mode: "reasoning",
+        streamPhases: true,
+      }),
+    });
+
+    const response = await POST(request);
+    const events = await readSseEvents(response);
+    const timingEvents = events
+      .map((event) => event.timing)
+      .filter((event): event is Record<string, unknown> =>
+        Boolean(event && typeof event === "object" && !Array.isArray(event)),
+      );
+
+    expect(timingEvents.map((event) => event.name)).toEqual([
+      "request_start",
+      "readiness_complete",
+      "gateway_ack",
+      "final_assistant_text",
+    ]);
+    expect(timingEvents.some((event) => event.name === "first_gateway_event")).toBe(
+      false,
+    );
+    expect(JSON.stringify(timingEvents)).not.toContain("Quiet no-event prompt");
+    infoSpy.mockRestore();
+  });
+
   it("records streaming timing failures as stream errors", async () => {
     vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
