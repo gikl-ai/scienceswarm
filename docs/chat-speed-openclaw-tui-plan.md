@@ -67,6 +67,19 @@ details should be additive and backward compatible. Tests must cover:
 - Prompt bucket totals.
 - Emitted benchmark summary for `Hi`.
 
+### Prompt Budget Contract
+
+Prompt budgets use characters because the existing telemetry reports character
+counts. PRs may tighten these values when benchmark evidence supports it, but
+they must not silently exceed them:
+
+- Simple greetings: `recent_chat_context <= 1_000` characters and
+  `workspace_files = 0` characters.
+- Project work turns: `workspace_files <= 6_000` characters total and
+  `<= 1_500` characters per referenced file summary.
+- Any budget trim must be visible in timing detail so reviewers can confirm the
+  fast path is intentional, not accidental context loss.
+
 ### Progress Contract
 
 `MessageProgressEntry` remains persistable history data. New fields must be
@@ -164,14 +177,14 @@ wait for the merge, then measure and report the `Hi` response time.
     - Cap or skip recent chat context for simple greetings while preserving it
       for real project work.
     - Depends on PR #8.
-    - Validation: prompt bucket test proves greeting prompt context stays below
-      the agreed budget.
+    - Validation: prompt bucket test proves greeting prompt context stays within
+      the Prompt Budget Contract.
 
 12. **Workspace Files Budget PR**
     - Add a hard prompt-size budget for workspace file summaries.
     - Depends on PR #8.
-    - Validation: test proves oversized workspace summaries are trimmed and
-      logged rather than silently sent.
+    - Validation: test proves oversized workspace summaries are trimmed to the
+      Prompt Budget Contract and logged rather than silently sent.
 
 13. **Fast Postprocess PR**
     - Skip artifact import repair and media probing for turns that cannot
@@ -297,7 +310,5 @@ For transcript PRs, the PR body must include:
 ## Open Questions To Resolve In PRs
 
 - Whether the benchmark should target the browser UI, the route API, or both.
-- How much recent chat context a greeting should keep when the user is inside a
-  project.
 - Whether OpenClaw gateway events already include enough structured timing to
   avoid client-side inference for first assistant text.
