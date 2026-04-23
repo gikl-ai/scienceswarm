@@ -113,7 +113,12 @@ wait for the merge, then measure and report the `Hi` response time.
 3. **Timing Artifact PR**
    - Persist the most recent timing payloads in memory behind a dev-only API or
      debug helper so repeated tests can compare runs.
-   - Validation: route test proves bounded retention and no secret leakage.
+   - The artifact endpoint must be unavailable unless
+     `SCIENCESWARM_CHAT_TIMING=1` is set. In production, that flag remains off
+     by default and the endpoint must return `404` or `403` without timing
+     payloads.
+   - Validation: route tests prove bounded retention, disabled-by-default
+     access, enabled access only with the flag, and no secret leakage.
 
 4. **SSE Timing Meta PR**
    - Emit timing meta events for request start, readiness complete, gateway ack,
@@ -145,28 +150,33 @@ wait for the merge, then measure and report the `Hi` response time.
 9. **Project Materialization Skip PR**
    - Skip project workspace materialization for turns classified as simple
      conversation.
+   - Depends on PR #8.
    - Validation: route test proves `project_materialization` is skipped for
      `Hi` and still runs when a project artifact is referenced.
 
 10. **File Reference Skip PR**
     - Avoid file reference merge scans when the message contains no file-like
       tokens and no attachments.
+    - Depends on PR #8.
     - Validation: route test proves file scan phase is skipped for `Hi`.
 
 11. **Recent Context Budget PR**
     - Cap or skip recent chat context for simple greetings while preserving it
       for real project work.
+    - Depends on PR #8.
     - Validation: prompt bucket test proves greeting prompt context stays below
       the agreed budget.
 
 12. **Workspace Files Budget PR**
     - Add a hard prompt-size budget for workspace file summaries.
+    - Depends on PR #8.
     - Validation: test proves oversized workspace summaries are trimmed and
       logged rather than silently sent.
 
 13. **Fast Postprocess PR**
     - Skip artifact import repair and media probing for turns that cannot
       produce file artifacts.
+    - Depends on PR #8.
     - Validation: route test proves artifact repair phase is skipped for simple
       chat and still runs for media-producing responses.
 
@@ -260,8 +270,12 @@ measurement after each merge. If parallelization becomes necessary later, only
 these groups are safe to overlap after their shared contracts merge:
 
 - Timing and benchmark work: PRs 2 to 4.
-- Server speed work: PRs 5 to 13.
-- Transcript rendering work: PRs 14 to 23.
+- Server speed work: PRs 5 to 13. Within this group, PRs 9 to 13 depend on the
+  greeting classifier from PR #8 and must not start before it merges.
+- Server-to-client progress bridge: PR #14. This straddles the server route and
+  client transcript work, so it must merge after the server-speed sequence and
+  before transcript-only rendering PRs.
+- Transcript rendering work: PRs 15 to 23.
 - Stability and cleanup work: PRs 24 to 28.
 
 ## Validation Standard
@@ -283,8 +297,6 @@ For transcript PRs, the PR body must include:
 ## Open Questions To Resolve In PRs
 
 - Whether the benchmark should target the browser UI, the route API, or both.
-- Whether timing artifacts should be exposed only in development or behind an
-  explicit environment flag in production.
 - How much recent chat context a greeting should keep when the user is inside a
   project.
 - Whether OpenClaw gateway events already include enough structured timing to
