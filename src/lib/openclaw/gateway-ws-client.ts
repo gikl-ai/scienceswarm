@@ -11,6 +11,8 @@
  * persisting the device identity.
  *
  * Exports:
+ *   - ensureGatewayConnection() → Promise<void>
+ *   - prewarmGatewayConnection() → Promise<void>
  *   - sendMessageViaGateway(sessionKey, message, options?) → Promise<SendMessageResult>
  *   - sendChatViaGateway(sessionKey, message, options?) → Promise<SendChatResult>
  *   - isGatewayConnected() → boolean
@@ -370,7 +372,7 @@ function dispatchGatewayFrame(
  * Ensure the singleton WebSocket is connected and authenticated.
  * Returns immediately if already connected.
  */
-async function ensureConnected(): Promise<void> {
+export async function ensureGatewayConnection(): Promise<void> {
   if (_ws && _ws.readyState === WebSocket.OPEN && _authenticated) {
     return;
   }
@@ -386,6 +388,18 @@ async function ensureConnected(): Promise<void> {
   } finally {
     _connectPromise = null;
   }
+}
+
+/**
+ * Best-effort background warmup for callers that want to start the singleton
+ * handshake without awaiting it on their critical path.
+ */
+export function prewarmGatewayConnection(): Promise<void> {
+  const promise = ensureGatewayConnection();
+  promise.catch((error) => {
+    debugLog("background prewarm failed", error);
+  });
+  return promise;
 }
 
 async function connectAndAuth(): Promise<void> {
@@ -602,11 +616,11 @@ async function sendRequest(
   params: Record<string, unknown>,
   timeoutMs = 30_000,
 ): Promise<GatewayFrame> {
-  await ensureConnected();
+  await ensureGatewayConnection();
 
   const ws = _ws;
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    throw new Error("WebSocket not connected after ensureConnected()");
+    throw new Error("WebSocket not connected after ensureGatewayConnection()");
   }
 
   const id = nextRequestId();
@@ -718,7 +732,7 @@ export async function sendChatViaGateway(
   let turnTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let listenerEntry: GatewayEventListenerEntry | null = null;
 
-  await ensureConnected();
+  await ensureGatewayConnection();
 
   const cleanupListener = () => {
     if (turnTimeoutId !== null) {
@@ -872,7 +886,7 @@ export async function sendMessageViaGateway(
   let turnComplete = false;
 
   // Ensure connected
-  await ensureConnected();
+  await ensureGatewayConnection();
 
   // 1. Create session (ignore "already exists")
   try {

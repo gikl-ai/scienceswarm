@@ -7484,6 +7484,24 @@ export function __getConfiguredAgentRuntimeStatusCacheSizeForTests(): number {
   return configuredAgentRuntimeStatusCache.size;
 }
 
+function prewarmOpenClawGatewayFromUnifiedHealth(
+  agentConfig: ReturnType<typeof resolveAgentConfig>,
+): void {
+  if (agentConfig?.type !== "openclaw") {
+    return;
+  }
+
+  void import("@/lib/openclaw")
+    .then((openClawModule) => {
+      if (typeof openClawModule.prewarmGatewayConnectionIfHealthy === "function") {
+        openClawModule.prewarmGatewayConnectionIfHealthy();
+      }
+    })
+    .catch(() => {
+      // Best-effort only. Health should not fail because warmup could not start.
+    });
+}
+
 function streamOpenClawResponse(params: {
   message: string;
   preparedMessage?: string;
@@ -9219,6 +9237,7 @@ export async function GET(request: Request) {
       strictLocalOnly,
       { preferFastOpenClawGatewayProbe: agentCfg?.type === "openclaw" },
     );
+    prewarmOpenClawGatewayFromUnifiedHealth(agentCfg);
     const agent = {
       type: agentStatus.type,
       status: agentStatus.status as string,

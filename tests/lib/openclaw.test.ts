@@ -16,6 +16,7 @@ const {
   sendMessageViaGatewayMock,
   sendChatViaGatewayMock,
   isGatewayConnectedMock,
+  prewarmGatewayConnectionMock,
   MockGatewayPostAckError,
   mockIsGatewayPostAckError,
 } = vi.hoisted(() => {
@@ -37,6 +38,7 @@ const {
     sendMessageViaGatewayMock: vi.fn(),
     sendChatViaGatewayMock: vi.fn(),
     isGatewayConnectedMock: vi.fn(() => false),
+    prewarmGatewayConnectionMock: vi.fn(),
     MockGatewayPostAckError: _MockGatewayPostAckError,
     mockIsGatewayPostAckError: (err: unknown): err is InstanceType<typeof _MockGatewayPostAckError> =>
       err instanceof _MockGatewayPostAckError,
@@ -56,6 +58,7 @@ vi.mock("@/lib/openclaw/gateway-ws-client", () => ({
   sendMessageViaGateway: sendMessageViaGatewayMock,
   sendChatViaGateway: sendChatViaGatewayMock,
   isGatewayConnected: isGatewayConnectedMock,
+  prewarmGatewayConnection: prewarmGatewayConnectionMock,
   GatewayPostAckError: MockGatewayPostAckError,
   isGatewayPostAckError: mockIsGatewayPostAckError,
 }));
@@ -64,6 +67,7 @@ import {
   gatewayHealthCheck,
   getConversationMessagesSince,
   healthCheck,
+  prewarmGatewayConnectionIfHealthy,
   sendAgentMessage,
   sendOpenClawChatMessage,
 } from "@/lib/openclaw";
@@ -89,6 +93,15 @@ function mockExecFileError(stderr: string, stdout = "") {
   });
 }
 
+async function waitUntil(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("Timed out waiting for condition");
+}
+
 describe("OpenClaw healthCheck", () => {
   const originalFetch = globalThis.fetch;
 
@@ -99,6 +112,7 @@ describe("OpenClaw healthCheck", () => {
     sendMessageViaGatewayMock.mockReset();
     sendChatViaGatewayMock.mockReset();
     isGatewayConnectedMock.mockReset();
+    prewarmGatewayConnectionMock.mockReset();
     isGatewayConnectedMock.mockReturnValue(false);
     // Prevent the HTTP fast path from hitting a real local gateway;
     // these tests exercise the CLI-based probes exclusively.
@@ -412,6 +426,51 @@ describe("OpenClaw gatewayHealthCheck", () => {
       gateway: "",
     });
     expect(execFileMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("OpenClaw prewarmGatewayConnectionIfHealthy", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    execFileMock.mockReset();
+    execFileSyncMock.mockReset();
+    isGatewayConnectedMock.mockReset();
+    isGatewayConnectedMock.mockReturnValue(false);
+    prewarmGatewayConnectionMock.mockReset();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("starts a background WS warmup after the fast health probe reports connected", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    const releasePrewarm = vi.fn();
+    prewarmGatewayConnectionMock.mockImplementationOnce(
+      () => new Promise<void>((resolve) => {
+        releasePrewarm.mockImplementationOnce(resolve);
+      }),
+    );
+
+    prewarmGatewayConnectionIfHealthy();
+
+    await waitUntil(() => prewarmGatewayConnectionMock.mock.calls.length === 1);
+    expect(prewarmGatewayConnectionMock).toHaveBeenCalledTimes(1);
+    releasePrewarm();
+  });
+
+  it("skips the background WS warmup when the fast health probe is disconnected", async () => {
+    globalThis.fetch = vi.fn(async () => new Response("nope", { status: 503 }));
+
+    prewarmGatewayConnectionIfHealthy();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(prewarmGatewayConnectionMock).not.toHaveBeenCalled();
   });
 });
 

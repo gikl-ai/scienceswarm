@@ -21,6 +21,7 @@ const {
   sendAgentMessage,
   openClawHealthCheck,
   openClawGatewayHealthCheck,
+  prewarmGatewayConnectionIfHealthy,
   sendOpenClawMessage,
   getConversationMessagesSince,
   runOpenClaw,
@@ -51,6 +52,7 @@ const {
   sendAgentMessage: vi.fn(),
   openClawHealthCheck: vi.fn(),
   openClawGatewayHealthCheck: vi.fn(),
+  prewarmGatewayConnectionIfHealthy: vi.fn(),
   sendOpenClawMessage: vi.fn(),
   getConversationMessagesSince: vi.fn(),
   runOpenClaw: vi.fn(),
@@ -89,6 +91,7 @@ vi.mock("@/lib/local-guard", () => ({
 vi.mock("@/lib/openclaw", () => ({
   healthCheck: openClawHealthCheck,
   gatewayHealthCheck: openClawGatewayHealthCheck,
+  prewarmGatewayConnectionIfHealthy,
   sendAgentMessage: sendOpenClawMessage,
   sendOpenClawChatMessage: sendOpenClawMessage,
   getConversationMessagesSince,
@@ -251,6 +254,7 @@ beforeEach(() => {
   sendAgentMessage.mockReset();
   openClawHealthCheck.mockReset();
   openClawGatewayHealthCheck.mockReset();
+  prewarmGatewayConnectionIfHealthy.mockReset();
   sendOpenClawMessage.mockReset();
   runOpenClaw.mockReset();
   sendMessageViaGateway.mockReset();
@@ -927,6 +931,57 @@ describe("GET /api/chat/unified", () => {
     expect(body.openclaw).toBe("disconnected");
     expect(openClawGatewayHealthCheck).toHaveBeenCalledTimes(1);
     expect(openClawHealthCheck).not.toHaveBeenCalled();
+  });
+
+  it("starts OpenClaw gateway prewarm in the background for health checks", async () => {
+    const agentCfg = { type: "openclaw", url: "http://localhost:19002" };
+    resolveAgentConfig.mockReturnValue(agentCfg);
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: ["telegram"],
+      agents: 1,
+      sessions: 2,
+    });
+    prewarmGatewayConnectionIfHealthy.mockImplementationOnce(
+      () => new Promise<void>(() => {
+        // Keep the warmup pending to prove the health response does not await it.
+      }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(new Response("ok", { status: 200 })),
+    );
+
+    const response = await GET(
+      new Request("http://localhost/api/chat/unified?action=health"),
+    );
+
+    expect(response.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(prewarmGatewayConnectionIfHealthy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start OpenClaw gateway prewarm when another agent is configured", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "nanoclaw",
+      url: "http://localhost:19002",
+    });
+    agentHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(new Response("ok", { status: 200 })),
+    );
+
+    const response = await GET(
+      new Request("http://localhost/api/chat/unified?action=health"),
+    );
+
+    expect(response.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(prewarmGatewayConnectionIfHealthy).not.toHaveBeenCalled();
   });
 
   it("reuses a fresh OpenClaw runtime status between the health probe and the next POST even when config key order differs", async () => {
