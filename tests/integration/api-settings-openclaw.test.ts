@@ -152,6 +152,7 @@ function installExecFileMock(options?: { model?: string | null; openclawInstalle
 
 describe("GET /api/settings/openclaw", () => {
   let prevScienceSwarmDir: string | undefined;
+  let prevCwd = process.cwd();
   let tmpRoot: string;
   const originalFetch = globalThis.fetch;
 
@@ -174,14 +175,17 @@ describe("GET /api/settings/openclaw", () => {
     mockSpawn.mockImplementation(() => makeFakeChild({ exitCode: 0 }));
 
     // Every test gets its own SCIENCESWARM_DIR under tmp so the wrapper's
-    // pidfile writes land in a test-owned tree.
+    // pidfile and .env writes land in a test-owned tree.
     prevScienceSwarmDir = process.env.SCIENCESWARM_DIR;
     tmpRoot = mkdtempSync(join(tmpdir(), "openclaw-route-test-"));
+    prevCwd = process.cwd();
+    process.chdir(tmpRoot);
     process.env.SCIENCESWARM_DIR = tmpRoot;
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    process.chdir(prevCwd);
     if (prevScienceSwarmDir === undefined) {
       delete process.env.SCIENCESWARM_DIR;
     } else {
@@ -290,16 +294,33 @@ describe("GET /api/settings/openclaw", () => {
 
   it("treats start as a no-op when an attached OpenClaw runtime is already responding", async () => {
     installExecFileMock({ openclawInstalled: false });
+    const fsPromises = await import("node:fs/promises");
+    const readFileMock = fsPromises.readFile as unknown as ReturnType<typeof vi.fn>;
+    const prevImpl = readFileMock.getMockImplementation();
+    readFileMock.mockResolvedValue("AGENT_BACKEND=none\nLLM_PROVIDER=local\n");
 
-    const { POST } = await import("@/app/api/settings/openclaw/route");
-    const response = await POST(localRequest({ action: "start" }));
+    try {
+      const { POST } = await import("@/app/api/settings/openclaw/route");
+      const response = await POST(localRequest({ action: "start" }));
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      ok: true,
-      running: true,
-      alreadyRunning: true,
-    });
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: true,
+        running: true,
+        alreadyRunning: true,
+      });
+      const savedEnv = readFileSync(join(tmpRoot, ".env"), "utf-8");
+      expect(savedEnv).toContain("AGENT_BACKEND=openclaw");
+      expect(savedEnv).not.toContain("AGENT_BACKEND=none");
+    } finally {
+      if (prevImpl) {
+        readFileMock.mockImplementation(prevImpl);
+      } else {
+        readFileMock.mockResolvedValue(
+          "OPENAI_API_KEY=sk-test-openai\nLLM_MODEL=gpt-5.4\n",
+        );
+      }
+    }
   });
 
   it("rejects configure when OpenClaw is attached externally", async () => {
