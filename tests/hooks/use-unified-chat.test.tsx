@@ -5494,7 +5494,7 @@ describe("useUnifiedChat persistence", () => {
 
       if (url === "/api/chat/unified?action=health") {
         healthProbeCount += 1;
-        if (healthProbeCount === 1) {
+        if (healthProbeCount <= 2) {
           return Response.json({
             agent: { type: "openclaw", status: "disconnected" },
             openclaw: "disconnected",
