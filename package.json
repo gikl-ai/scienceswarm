@@ -33,6 +33,7 @@
     "install:gbrain": "NODE_OPTIONS=--preserve-symlinks npx tsx scripts/install-gbrain.ts",
     "setup:reset": "NODE_OPTIONS=--preserve-symlinks npx tsx scripts/reset-onboarding.ts",
     "migrate:chat-threads-openclaw": "NODE_OPTIONS=--preserve-symlinks npx tsx scripts/migrate-chat-threads-openclaw.ts",
+    "bench:chat-hi": "NODE_OPTIONS=--preserve-symlinks npx tsx scripts/benchmark-chat-hi.ts",
     "import-pdfs": "npx tsx scripts/import-pdfs.ts",
     "radar:run": "NODE_OPTIONS=--preserve-symlinks npx tsx scripts/run-research-radar.ts",
     "dream:run": "NODE_OPTIONS=--preserve-symlinks npx tsx scripts/run-dream-cycle.ts",
