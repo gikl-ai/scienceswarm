@@ -152,6 +152,7 @@ function installExecFileMock(options?: { model?: string | null; openclawInstalle
 
 describe("GET /api/settings/openclaw", () => {
   let prevScienceSwarmDir: string | undefined;
+  let prevCwd = process.cwd();
   let tmpRoot: string;
   const originalFetch = globalThis.fetch;
 
@@ -174,14 +175,17 @@ describe("GET /api/settings/openclaw", () => {
     mockSpawn.mockImplementation(() => makeFakeChild({ exitCode: 0 }));
 
     // Every test gets its own SCIENCESWARM_DIR under tmp so the wrapper's
-    // pidfile writes land in a test-owned tree.
+    // pidfile and .env writes land in a test-owned tree.
     prevScienceSwarmDir = process.env.SCIENCESWARM_DIR;
     tmpRoot = mkdtempSync(join(tmpdir(), "openclaw-route-test-"));
+    prevCwd = process.cwd();
+    process.chdir(tmpRoot);
     process.env.SCIENCESWARM_DIR = tmpRoot;
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    process.chdir(prevCwd);
     if (prevScienceSwarmDir === undefined) {
       delete process.env.SCIENCESWARM_DIR;
     } else {
@@ -290,16 +294,63 @@ describe("GET /api/settings/openclaw", () => {
 
   it("treats start as a no-op when an attached OpenClaw runtime is already responding", async () => {
     installExecFileMock({ openclawInstalled: false });
+    const fsPromises = await import("node:fs/promises");
+    const readFileMock = fsPromises.readFile as unknown as ReturnType<typeof vi.fn>;
+    const prevImpl = readFileMock.getMockImplementation();
+    readFileMock.mockResolvedValue("AGENT_BACKEND=none\nLLM_PROVIDER=local\n");
 
-    const { POST } = await import("@/app/api/settings/openclaw/route");
-    const response = await POST(localRequest({ action: "start" }));
+    try {
+      const { POST } = await import("@/app/api/settings/openclaw/route");
+      const response = await POST(localRequest({ action: "start" }));
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      ok: true,
-      running: true,
-      alreadyRunning: true,
-    });
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: true,
+        running: true,
+        alreadyRunning: true,
+      });
+      const savedEnv = readFileSync(join(tmpRoot, ".env"), "utf-8");
+      expect(savedEnv).toContain("AGENT_BACKEND=openclaw");
+      expect(savedEnv).toContain("OLLAMA_API_KEY=ollama-local");
+      expect(savedEnv).not.toContain("AGENT_BACKEND=none");
+    } finally {
+      if (prevImpl) {
+        readFileMock.mockImplementation(prevImpl);
+      } else {
+        readFileMock.mockResolvedValue(
+          "OPENAI_API_KEY=sk-test-openai\nLLM_MODEL=gpt-5.4\n",
+        );
+      }
+    }
+  });
+
+  it("returns a controlled error when an already-running gateway cannot save the backend env", async () => {
+    installExecFileMock({ openclawInstalled: false });
+    const fsPromises = await import("node:fs/promises");
+    const readFileMock = fsPromises.readFile as unknown as ReturnType<typeof vi.fn>;
+    const prevImpl = readFileMock.getMockImplementation();
+    readFileMock.mockRejectedValue(Object.assign(new Error("denied"), { code: "EACCES" }));
+
+    try {
+      const { POST } = await import("@/app/api/settings/openclaw/route");
+      const response = await POST(localRequest({ action: "start" }));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toMatchObject({
+        error:
+          "OpenClaw is running, but ScienceSwarm could not save AGENT_BACKEND=openclaw. Check .env file permissions, then retry Start.",
+        running: true,
+        alreadyRunning: true,
+      });
+    } finally {
+      if (prevImpl) {
+        readFileMock.mockImplementation(prevImpl);
+      } else {
+        readFileMock.mockResolvedValue(
+          "OPENAI_API_KEY=sk-test-openai\nLLM_MODEL=gpt-5.4\n",
+        );
+      }
+    }
   });
 
   it("rejects configure when OpenClaw is attached externally", async () => {
@@ -417,6 +468,7 @@ describe("GET /api/settings/openclaw", () => {
 
     const configuredModels: string[] = [];
     const providerConfigs: Array<{ args: string[]; env: NodeJS.ProcessEnv | undefined }> = [];
+    const allowedModelConfigs: string[] = [];
     const modelSetEnvs: NodeJS.ProcessEnv[] = [];
     mockExecFile.mockImplementation((file: string, maybeArgs: unknown, maybeOptions: unknown, maybeCb: unknown) => {
       const args = Array.isArray(maybeArgs) ? maybeArgs as string[] : [];
@@ -453,6 +505,15 @@ describe("GET /api/settings/openclaw", () => {
         providerConfigs.push({ args, env: options?.env });
       }
 
+      if (
+        file === "openclaw"
+        && args[0] === "config"
+        && args[1] === "set"
+        && args[2] === "agents.defaults.models"
+      ) {
+        allowedModelConfigs.push(args[3] ?? "");
+      }
+
       cb(null, "", "");
     });
 
@@ -477,6 +538,11 @@ describe("GET /api/settings/openclaw", () => {
           (model) => model.id === "gemma4:latest" && model.reasoning === true,
         ),
       ).toBe(true);
+      expect(allowedModelConfigs.length).toBe(1);
+      expect(JSON.parse(allowedModelConfigs[0]!)).toEqual({
+        "ollama/gemma4:latest": {},
+        "ollama/gemma4": {},
+      });
       expect(modelSetEnvs.some((env) => env.OLLAMA_API_KEY === "ollama-local")).toBe(true);
     } finally {
       if (prevOpenAiKey === undefined) {
