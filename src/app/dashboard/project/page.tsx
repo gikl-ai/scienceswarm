@@ -3570,10 +3570,21 @@ function ProjectPageContent() {
       options: RuntimeSendOptions,
       clearInputAfterSend = true,
     ) => {
-      await sendMessage(prompt, options);
-      if (clearInputAfterSend) setInput("");
+      if (clearInputAfterSend) {
+        setInput("");
+      }
+      try {
+        await sendMessage(prompt, options);
+      } catch (error) {
+        if (clearInputAfterSend) {
+          setInput((current) => (current.length === 0 ? prompt : current));
+        }
+        throw error;
+      } finally {
+        void runtimeSessions.refresh();
+      }
     },
-    [sendMessage],
+    [runtimeSessions, sendMessage],
   );
 
   const prepareRuntimePreviewAndSend = useCallback(
