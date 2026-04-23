@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 import { Check, CopySimple, WarningCircle } from "@phosphor-icons/react";
 import type {
   ChatTaskPhase,
@@ -152,11 +152,31 @@ type ProgressTranscriptBlock =
   | {
       type: "narrative";
       entry: MessageProgressEntry;
+      section: "thinking" | "activity";
     }
   | {
       type: "explored";
       lines: string[];
+      section: "activity";
     };
+
+const PROGRESS_SECTION_META: Record<
+  "thinking" | "activity",
+  { title: string; icon: string; className: string; rowClassName: string }
+> = {
+  thinking: {
+    title: "Thinking Trace",
+    icon: "🧠",
+    className: "border-sky-200 bg-sky-50 text-sky-700",
+    rowClassName: "text-sky-900/90",
+  },
+  activity: {
+    title: "OpenClaw Activity",
+    icon: "⚙️",
+    className: "border-border bg-slate-50 text-muted",
+    rowClassName: "text-muted",
+  },
+};
 
 const EXPLORE_COMMAND_PREFIXES = [
   "Read ",
@@ -434,7 +454,11 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
 
   const flushExploredLines = () => {
     if (exploredLines.length === 0) return;
-    blocks.push({ type: "explored", lines: exploredLines });
+    blocks.push({
+      type: "explored",
+      lines: exploredLines,
+      section: "activity",
+    });
     exploredLines = [];
   };
 
@@ -451,11 +475,80 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
     blocks.push({
       type: "narrative",
       entry: { ...entry, text },
+      section: entry.kind,
     });
   }
 
   flushExploredLines();
   return blocks;
+}
+
+function buildProgressSectionChanges(blocks: ProgressTranscriptBlock[]): ReactNode[] {
+  const elements: ReactNode[] = [];
+  let lastSection: "thinking" | "activity" | null = null;
+
+  blocks.forEach((block, index) => {
+    const nextSection = block.section;
+    if (nextSection !== lastSection) {
+      const sectionMeta = PROGRESS_SECTION_META[nextSection];
+      const sectionTitleId = `openclaw-progress-section-${nextSection}-${index}`;
+      elements.push(
+        <div
+          key={`section-${nextSection}-${index}`}
+          id={sectionTitleId}
+          className={`mb-2 inline-flex w-fit items-center gap-2 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.1em] ${sectionMeta.className}`}
+        >
+          <span aria-hidden="true">{sectionMeta.icon}</span>
+          <span>{sectionMeta.title}</span>
+        </div>,
+      );
+      lastSection = nextSection;
+    }
+
+    if (block.type === "explored") {
+      elements.push(
+        <div
+          key={`${index}-explored`}
+          className="space-y-0.5"
+        >
+          <div className={PROGRESS_SECTION_META.activity.rowClassName}>
+            • Explored
+          </div>
+          <div className="space-y-0.5 pl-6 text-muted">
+            {block.lines.map((line, lineIndex) => (
+              <div
+                key={`${index}-${lineIndex}-${line}`}
+                className="whitespace-pre-wrap"
+              >
+                {lineIndex === 0 ? "└ " : "  "}
+                {renderInlineMarkdownLite(
+                  line,
+                  `progress-explored-${index}-${lineIndex}`,
+                )}
+              </div>
+            ))}
+          </div>
+        </div>,
+      );
+      return;
+    }
+
+    const rowClassName =
+      block.entry.kind === "thinking"
+        ? PROGRESS_SECTION_META.thinking.rowClassName
+        : PROGRESS_SECTION_META.activity.rowClassName;
+    elements.push(
+      <div
+        key={`${index}-${block.entry.kind}-${block.entry.text}`}
+        className={`whitespace-pre-wrap ${rowClassName}`}
+      >
+        <span aria-hidden="true">• </span>
+        {renderInlineMarkdownLite(block.entry.text, `progress-${index}`)}
+      </div>,
+    );
+  });
+
+  return elements;
 }
 
 function formatElapsedCompact(elapsedMs: number): string {
@@ -1025,42 +1118,10 @@ export function ChatMessage({
             className="mb-3 space-y-3 font-mono text-[13px] leading-6 text-foreground/95"
             role="log"
           >
-            {progressTranscript.map((block, index) =>
-              block.type === "explored" ? (
-                <div key={`${index}-explored`} className="space-y-0.5">
-                  <div className="whitespace-pre-wrap text-foreground">
-                    • Explored
-                  </div>
-                  <div className="space-y-0.5 pl-6 text-muted">
-                    {block.lines.map((line, lineIndex) => (
-                      <div
-                        key={`${index}-${lineIndex}-${line}`}
-                        className="whitespace-pre-wrap"
-                      >
-                        {lineIndex === 0 ? "└ " : "  "}
-                        {renderInlineMarkdownLite(
-                          line,
-                          `progress-explored-${index}-${lineIndex}`,
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div
-                  key={`${index}-${block.entry.kind}-${block.entry.text}`}
-                  className={`whitespace-pre-wrap ${
-                    block.entry.kind === "thinking" ? "text-foreground" : "text-muted"
-                  }`}
-                >
-                  <span aria-hidden="true">• </span>
-                  {renderInlineMarkdownLite(block.entry.text, `progress-${index}`)}
-                </div>
-              ),
-            )}
+            {buildProgressSectionChanges(progressTranscript)}
 
             {workingElapsed && (
-              <div className="whitespace-pre-wrap text-muted">
+              <div className="whitespace-pre-wrap text-xs text-muted">
                 {`• Working (${workingElapsed} • esc to interrupt)`}
               </div>
             )}
