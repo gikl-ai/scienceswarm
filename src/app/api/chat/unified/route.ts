@@ -7350,10 +7350,8 @@ async function getConfiguredAgentRuntimeStatus(
   const now = Date.now();
   pruneExpiredConfiguredAgentRuntimeStatusCache(now);
   const cached = configuredAgentRuntimeStatusCache.get(cacheKey);
-  const canReuseDisconnectedOpenClawStatus = !(
-    agentConfig?.type === "openclaw" &&
-    cached?.status.status !== "connected"
-  );
+  const canReuseDisconnectedOpenClawStatus =
+    agentConfig?.type !== "openclaw" || cached?.status.status === "connected";
   const canReuseCachedStatus = options.preferFastOpenClawGatewayProbe === true
     || cached?.hasChannelInventory === true;
   if (
