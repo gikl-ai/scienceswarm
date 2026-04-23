@@ -108,7 +108,7 @@ function isProgressEvent(event: ParsedSseEvent): boolean {
 
 function isFinalEvent(event: ParsedSseEvent): boolean {
   const type = eventType(event);
-  if (type === "final" || type === "done") {
+  if ((type === "final" || type === "done") && !isProgressEvent(event)) {
     return true;
   }
   const json = eventRecord(event);

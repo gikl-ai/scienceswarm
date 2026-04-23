@@ -102,6 +102,34 @@ describe("benchmark-chat-hi", () => {
     });
   });
 
+  it("does not double-count hybrid progress wrappers as final events", () => {
+    const rawBody = [
+      'data: {"type":"final","progress":{"type":"event","payload":{"data":{"text":"still streaming"}}},"text":"not final"}',
+      'data: {"type":"final","text":"Done."}',
+      "",
+    ].join("\n\n");
+
+    expect(
+      summarizeChatBenchmarkResponse({
+        status: 200,
+        ok: true,
+        backend: "openclaw",
+        contentType: "text/event-stream; charset=utf-8",
+        conversationId: "bench-hybrid",
+        rawBody,
+        headersMs: 10,
+        firstChunkMs: 20,
+        totalMs: 100,
+        bytes: 500,
+      }),
+    ).toMatchObject({
+      eventCount: 2,
+      progressEventCount: 1,
+      finalEventCount: 1,
+      finalTextSample: "Done.",
+    });
+  });
+
   it("supports JSON responses for non-streaming fallback measurements", () => {
     expect(
       summarizeChatBenchmarkResponse({
