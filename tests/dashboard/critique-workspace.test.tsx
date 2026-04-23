@@ -666,7 +666,73 @@ describe("Critique workspace", () => {
     expect(
       await within(panel as HTMLElement).findByText("gbrain unavailable"),
     ).toBeInTheDocument();
+    expect(screen.getAllByText("gbrain unavailable")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Save critique" })).toBeEnabled();
+  });
+
+  it("resets project creation state when reopening the save picker", async () => {
+    const completedJob = makeCompletedJob();
+    let resolveCreateProject!: (response: Response) => void;
+    const pendingCreateProject = new Promise<Response>((resolve) => {
+      resolveCreateProject = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/health") {
+        return makeHealthResponse(true);
+      }
+      if (isAuthStatusRequest(input)) {
+        return makeAuthStatusResponse();
+      }
+      if (isPersistedCritiqueList(input)) {
+        return makeEmptyPersistedCritiqueList();
+      }
+      if (isHostedCritiqueHistoryRequest(input)) {
+        return makeEmptyHostedCritiqueHistory();
+      }
+      if (String(input) === "/api/projects" && init?.method === "POST") {
+        return pendingCreateProject;
+      }
+      if (isProjectListRequest(input)) {
+        return makeProjectListResponse();
+      }
+      if (String(input) === "/api/brain/critique") {
+        return Response.json({
+          brain_slug: "paper-critique",
+          project_slug: "project-alpha",
+          project_slugs: ["project-alpha"],
+          url: "/dashboard/reasoning?brain_slug=paper-critique",
+        });
+      }
+      throw new Error(`Unexpected fetch in test: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
+
+    render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
+    fireEvent.click(await screen.findByRole("button", { name: "Save to project..." }));
+    fireEvent.change(await screen.findByPlaceholderText("Project name"), {
+      target: { value: "New Project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save critique" }));
+    expect(await screen.findByRole("button", { name: "Saving..." })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save to project..." }));
+    fireEvent.click(await screen.findByText("Project Alpha"));
+
+    expect(screen.getByRole("button", { name: "Save critique" })).toBeEnabled();
+
+    await act(async () => {
+      resolveCreateProject(Response.json({
+        project: {
+          slug: "new-project",
+          name: "New Project",
+          description: "",
+        },
+      }));
+    });
   });
 
   it("recognizes a local completed audit that was already saved", async () => {
