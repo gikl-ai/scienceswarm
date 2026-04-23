@@ -1544,7 +1544,8 @@ function ProjectPageContent() {
   const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
   const [latestImportSummary, setLatestImportSummary] =
     useState<LatestImportSummary | null>(null);
-  const [, setImportSummaryState] = useState<ImportSummaryState>("loading");
+  const [importSummaryState, setImportSummaryState] =
+    useState<ImportSummaryState>("loading");
   const [hasImportedArchive, setHasImportedArchive] = useState(false);
   const [brainBootstrapState, setBrainBootstrapState] =
     useState<BrainBootstrapState>({ status: "loading" });
@@ -1553,6 +1554,10 @@ function ProjectPageContent() {
   const [, setProjectFiles] = useState<FileNode[]>(initialFiles);
   const [, setOrganizeBadge] = useState<string | null>(null);
   const [gbrainNodes, setGbrainNodes] = useState<FileNode[]>([]);
+  const [gbrainNodesLoaded, setGbrainNodesLoaded] = useState(!activeProjectSlug);
+  const [hasPaperLibraryActivity, setHasPaperLibraryActivity] = useState(false);
+  const [paperLibraryActivityLoaded, setPaperLibraryActivityLoaded] =
+    useState(!activeProjectSlug);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1592,6 +1597,13 @@ function ProjectPageContent() {
 
   useEffect(() => {
     setMobileProjectListOpen(false);
+  }, [activeProjectSlug]);
+
+  useEffect(() => {
+    setGbrainNodesLoaded(!activeProjectSlug);
+    setHasPaperLibraryActivity(false);
+    setPaperLibraryActivityLoaded(!activeProjectSlug);
+    setImportSummaryState("loading");
   }, [activeProjectSlug]);
 
   useEffect(() => {
@@ -2000,6 +2012,7 @@ function ProjectPageContent() {
     async (signal?: AbortSignal) => {
       if (!activeProjectSlug) {
         setGbrainNodes([]);
+        setGbrainNodesLoaded(true);
         return;
       }
 
@@ -2010,6 +2023,9 @@ function ProjectPageContent() {
         );
         if (!res.ok || signal?.aborted) {
           setGbrainNodes([]);
+          if (!signal?.aborted) {
+            setGbrainNodesLoaded(true);
+          }
           return;
         }
         const pages = (await res.json()) as Array<{
@@ -2046,9 +2062,59 @@ function ProjectPageContent() {
           }));
         if (!signal?.aborted) {
           setGbrainNodes(nodes);
+          setGbrainNodesLoaded(true);
         }
       } catch {
         // Silently degrade — gbrain may not be initialized yet.
+        if (!signal?.aborted) {
+          setGbrainNodes([]);
+          setGbrainNodesLoaded(true);
+        }
+      }
+    },
+    [activeProjectSlug],
+  );
+
+  const loadPaperLibraryActivity = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!activeProjectSlug) {
+        setHasPaperLibraryActivity(false);
+        setPaperLibraryActivityLoaded(true);
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `/api/brain/paper-library/scan?project=${encodeURIComponent(activeProjectSlug)}&latest=1`,
+          { signal },
+        );
+        if (signal?.aborted) {
+          return;
+        }
+        if (res.status === 404) {
+          setHasPaperLibraryActivity(false);
+          setPaperLibraryActivityLoaded(true);
+          return;
+        }
+        if (!res.ok) {
+          throw new Error(`Paper library lookup failed (${res.status})`);
+        }
+
+        const payload = (await res.json().catch(() => ({}))) as {
+          scan?: unknown;
+        };
+        setHasPaperLibraryActivity(
+          typeof payload === "object" &&
+            payload !== null &&
+            "scan" in payload &&
+            Boolean(payload.scan),
+        );
+        setPaperLibraryActivityLoaded(true);
+      } catch (error) {
+        if (!(error instanceof Error && error.name === "AbortError")) {
+          setHasPaperLibraryActivity(false);
+          setPaperLibraryActivityLoaded(true);
+        }
       }
     },
     [activeProjectSlug],
@@ -2059,6 +2125,7 @@ function ProjectPageContent() {
       await Promise.all([
         loadBrainStatus(),
         loadGbrainNodes(signal),
+        loadPaperLibraryActivity(signal),
         loadImportSummary(signal),
         checkChanges(signal),
       ]);
@@ -2067,6 +2134,7 @@ function ProjectPageContent() {
       checkChanges,
       loadBrainStatus,
       loadGbrainNodes,
+      loadPaperLibraryActivity,
       loadImportSummary,
     ],
   );
@@ -2100,6 +2168,7 @@ function ProjectPageContent() {
         await Promise.all([
           loadBrainStatus(),
           loadGbrainNodes(controller.signal),
+          loadPaperLibraryActivity(controller.signal),
           loadImportSummary(controller.signal),
         ]);
       } finally {
@@ -2140,6 +2209,7 @@ function ProjectPageContent() {
     checkChanges,
     loadBrainStatus,
     loadGbrainNodes,
+    loadPaperLibraryActivity,
     loadImportSummary,
   ]);
 
@@ -2155,6 +2225,12 @@ function ProjectPageContent() {
   }, [loadGbrainNodes]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    void loadPaperLibraryActivity(controller.signal);
+    return () => controller.abort();
+  }, [loadPaperLibraryActivity]);
+
+  useEffect(() => {
     if (!activeProjectSlug || typeof window === "undefined") return;
     const handleGbrainArtifactsUpdated = (event: Event) => {
       const detail = (event as CustomEvent<{ project?: string }>).detail;
@@ -2164,6 +2240,7 @@ function ProjectPageContent() {
       gbrainArtifactRefreshControllerRef.current = controller;
       void Promise.all([
         loadGbrainNodes(controller.signal),
+        loadPaperLibraryActivity(controller.signal),
         loadImportSummary(controller.signal),
       ]);
     };
@@ -2179,7 +2256,7 @@ function ProjectPageContent() {
         handleGbrainArtifactsUpdated,
       );
     };
-  }, [activeProjectSlug, loadGbrainNodes, loadImportSummary]);
+  }, [activeProjectSlug, loadGbrainNodes, loadPaperLibraryActivity, loadImportSummary]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2275,13 +2352,21 @@ function ProjectPageContent() {
   // ready — `!== "loading"` also matched `"error"` and `"missing"`,
   // which is wrong: `missing` now redirects via the effect above and
   // `error` should show the error UI, not a warm-start prompt.
+  const hasProjectContent =
+    workspaceTree.length > 0 ||
+    uploadedFiles.length > 0 ||
+    Boolean(latestImportSummary) ||
+    gbrainNodes.length > 0 ||
+    hasPaperLibraryActivity;
+
   const showEmptyStateImport =
     !!activeProjectSlug &&
     brainBootstrapState.status === "ready" &&
     !hasImportedArchive &&
-    workspaceTree.length === 0 &&
-    uploadedFiles.length === 0 &&
-    !latestImportSummary;
+    importSummaryState !== "loading" &&
+    gbrainNodesLoaded &&
+    paperLibraryActivityLoaded &&
+    !hasProjectContent;
 
   // ── Auto-organize uploaded files into the project tree ──
   const handleProjectUpload = useCallback(
