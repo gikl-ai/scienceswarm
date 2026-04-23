@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  benchmarkHelpText,
   buildBenchmarkPayload,
   chatBenchmarkUrl,
   formatBenchmarkSummary,
+  normalizeBenchmarkBaseUrl,
   parseBenchmarkArgs,
   parseSseEvents,
   summarizeChatBenchmarkResponse,
@@ -64,7 +66,7 @@ describe("benchmark-chat-hi", () => {
       bytes: 321,
       eventCount: 3,
       progressEventCount: 2,
-      finalEventCount: 2,
+      finalEventCount: 1,
       finalTextSample: "Hi there.",
     });
   });
@@ -111,7 +113,7 @@ describe("benchmark-chat-hi", () => {
     );
 
     expect(options).toMatchObject({
-      baseUrl: "http://127.0.0.1:3001/dashboard",
+      baseUrl: "http://127.0.0.1:3001",
       projectId: "project-alpha",
       message: "Hello",
       conversationId: "bench-fixed",
@@ -122,6 +124,13 @@ describe("benchmark-chat-hi", () => {
     expect(chatBenchmarkUrl(options.baseUrl)).toBe(
       "http://127.0.0.1:3001/api/chat/unified",
     );
+    expect(normalizeBenchmarkBaseUrl("http://localhost:4000/proxy?a=1#top")).toBe(
+      "http://localhost:4000",
+    );
+    expect(chatBenchmarkUrl("http://localhost:4000/proxy")).toBe(
+      "http://localhost:4000/api/chat/unified",
+    );
+    expect(benchmarkHelpText()).toContain("path/query/hash are stripped");
     expect(
       formatBenchmarkSummary({
         status: 200,

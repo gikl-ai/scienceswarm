@@ -58,6 +58,10 @@ function toPositiveInteger(value: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+export function normalizeBenchmarkBaseUrl(value: string): string {
+  return new URL(value).origin;
+}
+
 function parseJson(value: string): unknown | null {
   try {
     return JSON.parse(value);
@@ -133,7 +137,7 @@ export function summarizeChatBenchmarkResponse(params: {
   }).length;
   const finalEvents = events.filter((event) => {
     const type = eventType(event);
-    return type === "final" || type === "done" || eventText(event).length > 0;
+    return type === "final" || type === "done";
   });
   const lastFinal = finalEvents.at(-1);
   const fallbackJson = events.length === 0 ? parseJson(params.rawBody) : null;
@@ -201,12 +205,29 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
   ].join("\n");
 }
 
+export function benchmarkHelpText(): string {
+  return [
+    "Usage: npx tsx scripts/benchmark-chat-hi.ts [options]",
+    "",
+    "Options:",
+    "  --url <url>              ScienceSwarm origin; path/query/hash are stripped (default: http://127.0.0.1:3001)",
+    "  --project <slug>         Project slug (default: test)",
+    "  --message <text>         Message to send (default: Hi)",
+    "  --conversation-id <id>   Conversation id for the benchmark turn",
+    "  --timeout-ms <ms>        Abort after this many ms (default: 120000)",
+    "  --no-stream-phases       Disable streamPhases for comparison",
+    "  --json                   Print machine-readable JSON",
+  ].join("\n");
+}
+
 export function parseBenchmarkArgs(
   argv: string[],
   env: Record<string, string | undefined> = process.env,
 ): ChatBenchmarkOptions {
   const options: ChatBenchmarkOptions = {
-    baseUrl: env.SCIENCESWARM_CHAT_URL ?? "http://127.0.0.1:3001",
+    baseUrl: normalizeBenchmarkBaseUrl(
+      env.SCIENCESWARM_CHAT_URL ?? "http://127.0.0.1:3001",
+    ),
     projectId: env.SCIENCESWARM_CHAT_PROJECT ?? "test",
     message: env.SCIENCESWARM_CHAT_MESSAGE ?? "Hi",
     conversationId:
@@ -224,7 +245,7 @@ export function parseBenchmarkArgs(
     const arg = argv[index];
     const next = () => argv[++index] ?? "";
     if (arg === "--url") {
-      options.baseUrl = next();
+      options.baseUrl = normalizeBenchmarkBaseUrl(next());
     } else if (arg === "--project") {
       options.projectId = next();
     } else if (arg === "--message") {
@@ -238,20 +259,7 @@ export function parseBenchmarkArgs(
     } else if (arg === "--no-stream-phases") {
       options.streamPhases = false;
     } else if (arg === "--help" || arg === "-h") {
-      throw new Error(
-        [
-          "Usage: npx tsx scripts/benchmark-chat-hi.ts [options]",
-          "",
-          "Options:",
-          "  --url <url>              ScienceSwarm base URL (default: http://127.0.0.1:3001)",
-          "  --project <slug>         Project slug (default: test)",
-          "  --message <text>         Message to send (default: Hi)",
-          "  --conversation-id <id>   Conversation id for the benchmark turn",
-          "  --timeout-ms <ms>        Abort after this many ms (default: 120000)",
-          "  --no-stream-phases       Disable streamPhases for comparison",
-          "  --json                   Print machine-readable JSON",
-        ].join("\n"),
-      );
+      throw new Error(benchmarkHelpText());
     }
   }
 
@@ -259,7 +267,10 @@ export function parseBenchmarkArgs(
 }
 
 export function chatBenchmarkUrl(baseUrl: string): string {
-  return new URL("/api/chat/unified", baseUrl).toString();
+  return new URL(
+    "/api/chat/unified",
+    normalizeBenchmarkBaseUrl(baseUrl),
+  ).toString();
 }
 
 export async function runChatHiBenchmark(
@@ -323,7 +334,12 @@ export async function runChatHiBenchmark(
 
 async function main(): Promise<void> {
   try {
-    const options = parseBenchmarkArgs(process.argv.slice(2));
+    const argv = process.argv.slice(2);
+    if (argv.includes("--help") || argv.includes("-h")) {
+      process.stdout.write(`${benchmarkHelpText()}\n`);
+      return;
+    }
+    const options = parseBenchmarkArgs(argv);
     const summary = await runChatHiBenchmark(options);
     console.log(
       options.json
@@ -336,7 +352,7 @@ async function main(): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);
-    process.exitCode = message.startsWith("Usage:") ? 0 : 1;
+    process.exitCode = 1;
   }
 }
 
