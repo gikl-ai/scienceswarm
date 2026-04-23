@@ -39,7 +39,6 @@ const SECTION_ROLE_ALIASES: Record<DisplaySectionRole, string[]> = {
   top_issues: ["top issues", "priority issues", "main issues", "main findings"],
   section_feedback: [
     "section-by-section feedback",
-    "section by section feedback",
     "section feedback",
     "manuscript sections",
   ],
@@ -156,8 +155,9 @@ export function buildCritiqueDisplayModel(
       readNonEmptyString(authorFeedback?.appendix_overview) ??
       cleanMarkdownBody(appendixSection?.bodyMarkdown),
     fullReportMarkdown,
-    unclassifiedSections: markdownSections.filter(
-      (section) => !consumedMarkdownSections.has(section),
+    unclassifiedSections: removeConsumedMarkdownSections(
+      markdownSections,
+      consumedMarkdownSections,
     ),
   };
 }
@@ -170,17 +170,23 @@ export function parseMarkdownSections(markdown: string): MarkdownSection[] {
     children: [],
   };
   const stack: MarkdownSection[] = [root];
-  let inFence = false;
+  let fenceMarker: "`" | "~" | null = null;
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
 
   for (const line of lines) {
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence;
+    const fenceMatch = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0] as "`" | "~";
+      if (!fenceMarker) {
+        fenceMarker = marker;
+      } else if (fenceMarker === marker) {
+        fenceMarker = null;
+      }
       appendBodyLine(stack.at(-1) ?? root, line);
       continue;
     }
 
-    const heading = inFence ? null : parseHeading(line);
+    const heading = fenceMarker ? null : parseHeading(line);
     if (!heading) {
       appendBodyLine(stack.at(-1) ?? root, line);
       continue;
@@ -325,12 +331,43 @@ function findMarkdownSection(
   sections: MarkdownSection[],
   aliases: string[],
 ): MarkdownSection | null {
+  const normalizedAliases = new Set(aliases.map(normalizeHeading));
+  return findMarkdownSectionByAlias(sections, normalizedAliases);
+}
+
+function findMarkdownSectionByAlias(
+  sections: MarkdownSection[],
+  aliases: Set<string>,
+): MarkdownSection | null {
   for (const section of sections) {
-    if (aliases.includes(normalizeHeading(section.title))) return section;
-    const child = findMarkdownSection(section.children, aliases);
+    if (aliases.has(normalizeHeading(section.title))) return section;
+    const child = findMarkdownSectionByAlias(section.children, aliases);
     if (child) return child;
   }
   return null;
+}
+
+function removeConsumedMarkdownSections(
+  sections: MarkdownSection[],
+  consumedSections: Set<MarkdownSection>,
+): MarkdownSection[] {
+  return sections.flatMap((section): MarkdownSection[] => {
+    if (consumedSections.has(section)) return [];
+    const children = removeConsumedMarkdownSections(
+      section.children,
+      consumedSections,
+    );
+    const childrenChanged =
+      children.length !== section.children.length ||
+      children.some((child, index) => child !== section.children[index]);
+    if (!childrenChanged) return [section];
+    return [
+      {
+        ...section,
+        children,
+      },
+    ];
+  });
 }
 
 function parseHeading(line: string): { depth: number; title: string } | null {
