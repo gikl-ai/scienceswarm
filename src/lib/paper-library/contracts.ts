@@ -6,6 +6,7 @@ export const paperLibraryErrorCodes = [
   "invalid_root",
   "template_unknown_variable",
   "approval_token_expired",
+  "invalid_approval_token",
   "source_changed_since_approval",
   "metadata_unavailable",
   "apply_blocked_conflicts",
