@@ -17,7 +17,17 @@ permissions:
   contents: read
 
 jobs:
+  deferred:
+    name: CI deferred
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci-defer')
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "Full CI is deferred while the ci-defer label is present."
+          echo "Remove ci-defer when the PR is ready for final checks and merge."
+
   typecheck:
+    if: github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-defer')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -31,6 +41,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
 
   lint:
+    if: github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-defer')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -42,6 +53,7 @@ jobs:
       - run: npm run lint
 
   build:
+    if: github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-defer')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -53,6 +65,7 @@ jobs:
       - run: npm run build
 
   test:
+    if: github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-defer')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HOSTED_DESCARTES_RECOVERY_MESSAGE } from "@/lib/structured-critique-errors";
@@ -53,6 +53,24 @@ function makeCompletedJob(overrides?: Record<string, unknown>) {
             summary: "The results are correlational, but the discussion states causation.",
           },
         ],
+        section_feedback: [
+          {
+            section: "Methods",
+            summary:
+              "The methods section should explain the missing control and how the central comparison was constructed.",
+            finding_ids: ["finding-1"],
+          },
+        ],
+        questions_for_authors: [
+          {
+            question: "Can you explain why the central comparison is fair?",
+            rationale:
+              "The current draft relies on the comparison but does not defend it.",
+            finding_ids: ["finding-1"],
+          },
+        ],
+        references_feedback:
+          "No reference problems were found in this synthetic fixture.",
       },
       findings: [
         {
@@ -197,6 +215,27 @@ function makeEmptyHostedCritiqueHistory() {
   return Response.json({ jobs: [] });
 }
 
+function isProjectListRequest(input: RequestInfo | URL): boolean {
+  return String(input) === "/api/projects";
+}
+
+function makeProjectListResponse() {
+  return Response.json({
+    projects: [
+      {
+        slug: "project-alpha",
+        name: "Project Alpha",
+        description: "Example project",
+      },
+      {
+        slug: "project-beta",
+        name: "Project Beta",
+        description: "Second example project",
+      },
+    ],
+  });
+}
+
 async function openRecentAnalysis(label: string | RegExp) {
   if (!screen.queryByText(label)) {
     fireEvent.click(
@@ -227,6 +266,9 @@ describe("Critique workspace", () => {
         }
         if (isHostedCritiqueHistoryRequest(input)) {
           return makeEmptyHostedCritiqueHistory();
+        }
+        if (isProjectListRequest(input)) {
+          return makeProjectListResponse();
         }
         if (String(input) === "/api/brain/critique") {
           return Response.json({
@@ -405,11 +447,67 @@ describe("Critique workspace", () => {
     expect(
       screen.queryByText("Analyze a paper, memo, or argument for reasoning flaws."),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Saved to brain" })).toBeInTheDocument();
+    expect(screen.getByText("Saved in pasted-text")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open in file tree" })).toHaveAttribute(
       "href",
       "/dashboard/project?name=pasted-text&brain_slug=newest-text-critique",
     );
+    expect(screen.getByText("Saved in brain")).toBeInTheDocument();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("does not render saved gbrain pages as browser run replicas", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        makeCompletedJob({
+          id: "brain:hubble-1929-critique",
+          pdf_filename: "hubble-1929.pdf",
+          saved_at: "2026-04-18T07:02:34.000Z",
+        }),
+      ]),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/health") {
+          return makeHealthResponse(true);
+        }
+        if (isAuthStatusRequest(input)) {
+          return makeAuthStatusResponse();
+        }
+        if (isPersistedCritiqueList(input)) {
+          return Response.json({
+            audits: [
+              {
+                brain_slug: "hubble-1929-critique",
+                parent_slug: "hubble-1929",
+                project_slug: "hubble-1929",
+                title: "Hubble critique",
+                uploaded_at: "2026-04-18T07:02:34.000Z",
+                source_filename: "hubble-1929.pdf",
+                descartes_job_id: "job-hubble",
+                finding_count: 3,
+                url: "/dashboard/reasoning?brain_slug=hubble-1929-critique",
+                project_url:
+                  "/dashboard/project?name=hubble-1929&brain_slug=hubble-1929-critique",
+              },
+            ],
+          });
+        }
+        if (isHostedCritiqueHistoryRequest(input)) {
+          return makeEmptyHostedCritiqueHistory();
+        }
+        throw new Error(`Unexpected fetch in test: ${url}`);
+      }),
+    );
+
+    render(<StructuredCritiquePage />);
+
+    expect(await screen.findByText("Saved in brain")).toBeInTheDocument();
+    expect(screen.queryByText("Run history")).not.toBeInTheDocument();
+    expect(screen.getAllByText("hubble-1929.pdf")).toHaveLength(1);
   });
 
   it("rehydrates hosted history when browser-local history is empty", async () => {
@@ -420,7 +518,7 @@ describe("Critique workspace", () => {
       created_at: "2026-04-20T16:26:03.000Z",
       completed_at: "2026-04-20T16:36:59.000Z",
     };
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === "/api/health") {
         return makeHealthResponse(true);
@@ -433,15 +531,6 @@ describe("Critique workspace", () => {
       }
       if (isHostedCritiqueHistoryRequest(input)) {
         return Response.json({ jobs: [remoteJob] });
-      }
-      if (url === "/api/brain/critique") {
-        expect(init?.method).toBe("POST");
-        return Response.json({
-          brain_slug: "remote-paper-critique",
-          url: "/dashboard/reasoning?brain_slug=remote-paper-critique",
-          project_url:
-            "/dashboard/project?name=remote-paper&brain_slug=remote-paper-critique",
-        });
       }
       throw new Error(`Unexpected fetch in test: ${url}`);
     });
@@ -456,7 +545,11 @@ describe("Critique workspace", () => {
     fireEvent.click(screen.getByText("remote-paper.pdf"));
 
     expect(await screen.findByText("Audit for Synthetic Biology Draft")).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Saved to brain" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save to project..." })).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/brain/critique",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("renders the issue-driven workspace for a completed job", async () => {
@@ -472,6 +565,19 @@ describe("Critique workspace", () => {
     expect(screen.getByText(/1 error · 1 warning · 1 note/)).toBeInTheDocument();
     expect(screen.getByText("1. Missing controls section")).toBeInTheDocument();
     expect(screen.getByText("2. Causal leap")).toBeInTheDocument();
+    expect(screen.getByText("Summary")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("The draft's main claim is promising but currently under-justified.").length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Section-by-section feedback")).toBeInTheDocument();
+    expect(screen.getByText("Methods")).toBeInTheDocument();
+    expect(
+      screen.getByText(/The methods section should explain the missing control/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Questions for authors")).toBeInTheDocument();
+    expect(
+      screen.getByText("Can you explain why the central comparison is fair?"),
+    ).toBeInTheDocument();
     expect(
       screen.getAllByText("The main conclusion depends on an unstated premise.").length,
     ).toBeGreaterThanOrEqual(1);
@@ -481,7 +587,7 @@ describe("Critique workspace", () => {
     expect(screen.getByText(/The evidence chain breaks around the main causal claim/)).toBeInTheDocument();
   });
 
-  it("auto-saves a completed audit to gbrain", async () => {
+  it("saves a completed audit to selected projects", async () => {
     const completedJob = makeCompletedJob();
     const postBodies: unknown[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -497,14 +603,23 @@ describe("Critique workspace", () => {
       if (isHostedCritiqueHistoryRequest(input)) {
         return makeEmptyHostedCritiqueHistory();
       }
+      if (isProjectListRequest(input)) {
+        return makeProjectListResponse();
+      }
       if (String(input) === "/api/brain/critique") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body));
         postBodies.push(body);
         return Response.json({
           brain_slug: "paper-critique",
+          project_slug: "project-alpha",
+          project_slugs: ["project-alpha"],
           url: "/dashboard/reasoning?brain_slug=paper-critique",
-          project_url: "/dashboard/project?name=paper&brain_slug=paper-critique",
+          project_url: "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
+          project_urls: {
+            "project-alpha":
+              "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
+          },
         });
       }
       throw new Error(`Unexpected fetch in test: ${String(input)}`);
@@ -517,27 +632,81 @@ describe("Critique workspace", () => {
     await openRecentAnalysis("paper.pdf");
 
     expect(await screen.findByText("Audit for Synthetic Biology Draft")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save to project..." })).toBeInTheDocument();
+    expect(postBodies).toHaveLength(0);
 
-    expect(await screen.findByRole("button", { name: "Saved to brain" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save to project..." }));
+    expect(await screen.findByText("Destination projects")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Project Alpha"));
+    fireEvent.click(screen.getByRole("button", { name: "Save critique" }));
+
+    expect(await screen.findByText("Saved in Project Alpha")).toBeInTheDocument();
     expect(postBodies).toMatchObject([
       {
         job: { id: "job-completed-1" },
         sourceFilename: "paper.pdf",
+        projectSlugs: ["project-alpha"],
       },
     ]);
     expect(screen.getByRole("link", { name: "Open in file tree" })).toHaveAttribute(
       "href",
-      "/dashboard/project?name=paper&brain_slug=paper-critique",
+      "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
     );
-    expect(screen.getByRole("link", { name: "Analysis link" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open saved analysis" })).toHaveAttribute(
       "href",
       "/dashboard/reasoning?brain_slug=paper-critique",
     );
   });
 
-  it("retries automatic gbrain save after a transient failure", async () => {
+  it("shows save API failures inside the project picker", async () => {
     const completedJob = makeCompletedJob();
-    let saveAttempts = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/health") {
+        return makeHealthResponse(true);
+      }
+      if (isAuthStatusRequest(input)) {
+        return makeAuthStatusResponse();
+      }
+      if (isPersistedCritiqueList(input)) {
+        return makeEmptyPersistedCritiqueList();
+      }
+      if (isHostedCritiqueHistoryRequest(input)) {
+        return makeEmptyHostedCritiqueHistory();
+      }
+      if (isProjectListRequest(input)) {
+        return makeProjectListResponse();
+      }
+      if (String(input) === "/api/brain/critique") {
+        return Response.json({ error: "gbrain unavailable" }, { status: 503 });
+      }
+      throw new Error(`Unexpected fetch in test: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
+
+    render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
+    fireEvent.click(await screen.findByRole("button", { name: "Save to project..." }));
+    fireEvent.click(await screen.findByText("Project Alpha"));
+    fireEvent.click(screen.getByRole("button", { name: "Save critique" }));
+
+    const destinationLabel = await screen.findByText("Destination projects");
+    const panel = destinationLabel.parentElement?.parentElement;
+    expect(panel).toBeTruthy();
+    expect(
+      await within(panel as HTMLElement).findByText("gbrain unavailable"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("gbrain unavailable")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Save critique" })).toBeEnabled();
+  });
+
+  it("resets project creation state when reopening the save picker", async () => {
+    const completedJob = makeCompletedJob();
+    let resolveCreateProject!: (response: Response) => void;
+    const pendingCreateProject = new Promise<Response>((resolve) => {
+      resolveCreateProject = resolve;
+    });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/health") {
         return makeHealthResponse(true);
@@ -551,16 +720,18 @@ describe("Critique workspace", () => {
       if (isHostedCritiqueHistoryRequest(input)) {
         return makeEmptyHostedCritiqueHistory();
       }
+      if (String(input) === "/api/projects" && init?.method === "POST") {
+        return pendingCreateProject;
+      }
+      if (isProjectListRequest(input)) {
+        return makeProjectListResponse();
+      }
       if (String(input) === "/api/brain/critique") {
-        saveAttempts += 1;
-        expect(init?.method).toBe("POST");
-        if (saveAttempts === 1) {
-          return Response.json({ error: "temporary gbrain failure" }, { status: 500 });
-        }
         return Response.json({
           brain_slug: "paper-critique",
+          project_slug: "project-alpha",
+          project_slugs: ["project-alpha"],
           url: "/dashboard/reasoning?brain_slug=paper-critique",
-          project_url: "/dashboard/project?name=paper&brain_slug=paper-critique",
         });
       }
       throw new Error(`Unexpected fetch in test: ${String(input)}`);
@@ -568,22 +739,89 @@ describe("Critique workspace", () => {
     vi.stubGlobal("fetch", fetchMock);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
 
-    const { rerender } = render(<StructuredCritiquePage />);
+    render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
+    fireEvent.click(await screen.findByRole("button", { name: "Save to project..." }));
+    fireEvent.change(await screen.findByPlaceholderText("Project name"), {
+      target: { value: "New Project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save critique" }));
+    expect(await screen.findByRole("button", { name: "Saving..." })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save to project..." }));
+    fireEvent.click(await screen.findByText("Project Alpha"));
+
+    expect(screen.getByRole("button", { name: "Save critique" })).toBeEnabled();
+
+    await act(async () => {
+      resolveCreateProject(Response.json({
+        project: {
+          slug: "new-project",
+          name: "New Project",
+          description: "",
+        },
+      }));
+    });
+  });
+
+  it("recognizes a local completed audit that was already saved", async () => {
+    const completedJob = makeCompletedJob();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/health") {
+        return makeHealthResponse(true);
+      }
+      if (isAuthStatusRequest(input)) {
+        return makeAuthStatusResponse();
+      }
+      if (isPersistedCritiqueList(input)) {
+        return Response.json({
+          audits: [
+            {
+              brain_slug: "paper-critique",
+              project_slug: "project-alpha",
+              project_slugs: ["project-alpha"],
+              title: "Audit for Synthetic Biology Draft",
+              uploaded_at: "2026-04-11T11:00:00.000Z",
+              source_filename: "paper.pdf",
+              descartes_job_id: "job-completed-1",
+              finding_count: 3,
+              url: "/dashboard/reasoning?brain_slug=paper-critique",
+              project_url:
+                "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
+            },
+          ],
+        });
+      }
+      if (isHostedCritiqueHistoryRequest(input)) {
+        return makeEmptyHostedCritiqueHistory();
+      }
+      if (String(input) === "/api/brain/critique") {
+        throw new Error(`Unexpected save request: ${String(init?.body)}`);
+      }
+      throw new Error(`Unexpected fetch in test: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
+
+    render(<StructuredCritiquePage />);
 
     await openRecentAnalysis("paper.pdf");
 
     expect(await screen.findByText("Audit for Synthetic Biology Draft")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(saveAttempts).toBe(1);
-    });
-
-    rerender(<StructuredCritiquePage />);
-
-    expect(await screen.findByRole("button", { name: "Saved to brain" })).toBeInTheDocument();
-    expect(saveAttempts).toBe(2);
+    expect(await screen.findByText("Saved in project-alpha")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open in file tree" })).toHaveAttribute(
+      "href",
+      "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/brain/critique",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
-  it("filters the issue queue by finding kind", async () => {
+  it("filters the issue queue by flaw type", async () => {
     const completedJob = makeCompletedJob();
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
 
@@ -592,13 +830,38 @@ describe("Critique workspace", () => {
     await openRecentAnalysis("paper.pdf");
 
     expect((await screen.findAllByText("missing_assumption")).length).toBeGreaterThanOrEqual(1);
-    fireEvent.click(screen.getByRole("button", { name: "Fallacy" }));
+    expect(screen.queryByRole("button", { name: "Fallacy" })).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Filter issue queue by Causal Leap \(1 finding\)/,
+      }),
+    );
 
     expect((await screen.findAllByText("causal_leap")).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryAllByText("missing_assumption")).toHaveLength(0);
     expect(screen.queryAllByText("ignored_counterargument")).toHaveLength(0);
     expect(
       screen.getAllByText("The paper treats a correlational result as if it established causation.").length,
+    ).toBeGreaterThanOrEqual(1);
+    fireEvent.click(screen.getByRole("button", { name: "All 3" }));
+    expect((await screen.findAllByText("missing_assumption")).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("surfaces useful details for the selected issue", async () => {
+    const completedJob = makeCompletedJob();
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
+
+    render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
+
+    expect(await screen.findByRole("heading", { name: "Missing Assumption" })).toBeInTheDocument();
+    expect(screen.getByText("What is wrong")).toBeInTheDocument();
+    expect(screen.getByText("Evidence quoted")).toBeInTheDocument();
+    expect(screen.getByText("Why it matters")).toBeInTheDocument();
+    expect(screen.getByText("Suggested fix")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("The core claim is not yet justified by the described evidence.").length,
     ).toBeGreaterThanOrEqual(1);
   });
 
@@ -726,13 +989,6 @@ describe("Critique workspace", () => {
         submittedForm = init?.body instanceof FormData ? init.body : null;
         return pendingSubmission;
       }
-      if (url === "/api/brain/critique") {
-        return Response.json({
-          brain_slug: "auto-domain-critique",
-          url: "/dashboard/reasoning?brain_slug=auto-domain-critique",
-          project_url: "/dashboard/project?name=auto-domain&brain_slug=auto-domain-critique",
-        });
-      }
       throw new Error(`Unexpected fetch in test: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -766,12 +1022,11 @@ describe("Critique workspace", () => {
       id: "job-auto-domain",
       pdf_filename: "pasted-text.txt",
     })));
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/brain/critique",
-        expect.objectContaining({ method: "POST" }),
-      );
-    });
+    expect(await screen.findByRole("button", { name: "Save to project..." })).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/brain/critique",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("enables the reasoning-engine submit button for a single-sentence pasted text submission", async () => {

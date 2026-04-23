@@ -3,8 +3,14 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useScienceSwarmLocalAuth } from "@/hooks/use-scienceswarm-local-auth";
 import { getStructuredCritiqueDisplayError } from "@/lib/structured-critique-errors";
+import {
+  buildCritiqueDisplayModel,
+  type CritiqueDisplayItem,
+} from "@/lib/structured-critique-display";
 import {
   getScienceSwarmSignInUrl,
   SCIENCESWARM_CRITIQUE_CLOUD_DISCLAIMER,
@@ -67,20 +73,29 @@ type BrainArtifactPage = {
 };
 
 type InputMode = "pdf" | "text";
-type FilterKind = "critique" | "fallacy" | "gap";
 type SubmittedReasoningInput =
   | { kind: "pdf"; name: string; size?: number }
   | { kind: "text"; charCount?: number; preview: string };
 type BrainSaveStatus =
   | { state: "idle" }
   | { state: "saving" }
-  | { state: "saved"; slug: string; url: string; projectUrl?: string }
+  | {
+      state: "saved";
+      slug: string;
+      url: string;
+      projectUrl?: string;
+      projectSlugs?: string[];
+      projectUrls?: Record<string, string>;
+    }
   | { state: "error"; error: string };
 
 type PersistCritiqueResponse = {
   brain_slug?: string;
+  project_slug?: string;
+  project_slugs?: string[];
   url?: string;
   project_url?: string;
+  project_urls?: Record<string, string>;
   error?: string;
 };
 
@@ -88,6 +103,7 @@ type PersistedCritiqueSummary = {
   brain_slug: string;
   parent_slug?: string;
   project_slug?: string;
+  project_slugs?: string[];
   title: string;
   uploaded_at?: string;
   source_filename?: string;
@@ -95,6 +111,33 @@ type PersistedCritiqueSummary = {
   finding_count?: number;
   url?: string;
   project_url?: string;
+  project_urls?: Record<string, string>;
+};
+
+type ProjectOption = {
+  slug: string;
+  name: string;
+  description?: string;
+};
+
+type ProjectListStatus = "idle" | "loading" | "loaded" | "error";
+
+type SaveDestinationControls = {
+  isOpen: boolean;
+  projects: ProjectOption[];
+  projectStatus: ProjectListStatus;
+  selectedProjectSlugs: string[];
+  newProjectName: string;
+  newProjectDescription: string;
+  error: string | null;
+  isCreatingProject: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  onReloadProjects: () => void;
+  onToggleProjectSlug: (slug: string) => void;
+  onNewProjectNameChange: (value: string) => void;
+  onNewProjectDescriptionChange: (value: string) => void;
+  onSave: () => void;
 };
 
 type BrainPageResponse = {
@@ -107,6 +150,13 @@ type BrainPageResponse = {
 };
 
 type StructuredCritiqueProgressLike = Record<string, unknown> | null | undefined;
+type FindingFilterOption = {
+  value: string;
+  label: string;
+  count: number;
+};
+
+const FALLBACK_FINDING_TYPE = "uncategorized";
 
 const EXAMPLE_REASONING_JOB: StructuredCritiqueJob = {
   id: "example-reasoning-report",
@@ -394,6 +444,7 @@ function loadStoredHistory(): StoredStructuredCritiqueJob[] {
         if (typeof item?.saved_at !== "string") return [];
         const normalized = tryNormalizeStructuredCritiqueJobPayload(item);
         if (!normalized.ok) return [];
+        if (normalized.job.id.startsWith("brain:")) return [];
         return [{ ...normalized.job, saved_at: item.saved_at }];
       })
       .sort((left, right) => right.saved_at.localeCompare(left.saved_at));
@@ -485,6 +536,60 @@ function readErrorFromPayload(payload: unknown): string | null {
   return null;
 }
 
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+function readProjectUrls(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>).flatMap(
+    ([projectSlug, url]): Array<[string, string]> =>
+      typeof url === "string" && url.trim().length > 0
+        ? [[projectSlug, url.trim()]]
+        : [],
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function projectSlugsFromRecord(record: Record<string, unknown>): string[] {
+  return Array.from(
+    new Set([
+      ...(typeof record.project_slug === "string" && record.project_slug.trim()
+        ? [record.project_slug.trim()]
+        : []),
+      ...readStringArray(record.project_slugs),
+      ...(typeof record.project === "string" && record.project.trim()
+        ? [record.project.trim()]
+        : []),
+      ...readStringArray(record.projects),
+    ]),
+  );
+}
+
+function buildProjectUrlsForBrainSlug(
+  projectSlugs: string[],
+  brainSlug: string,
+): Record<string, string> | undefined {
+  if (projectSlugs.length === 0) return undefined;
+  const encodedSlug = encodeURIComponent(brainSlug);
+  return Object.fromEntries(
+    projectSlugs.map((projectSlug) => [
+      projectSlug,
+      `/dashboard/project?name=${encodeURIComponent(projectSlug)}&brain_slug=${encodedSlug}`,
+    ]),
+  );
+}
+
 function normalizePersistedCritiqueSummaries(payload: unknown): PersistedCritiqueSummary[] {
   const rawEntries =
     payload && typeof payload === "object" && "audits" in payload
@@ -501,11 +606,16 @@ function normalizePersistedCritiqueSummaries(payload: unknown): PersistedCritiqu
       typeof record.title === "string" && record.title.trim().length > 0
         ? record.title.trim()
         : record.brain_slug.trim();
+    const projectSlugs = projectSlugsFromRecord(record);
+    const projectUrls =
+      readProjectUrls(record.project_urls) ??
+      buildProjectUrlsForBrainSlug(projectSlugs, record.brain_slug.trim());
     return [
       {
         brain_slug: record.brain_slug.trim(),
         parent_slug: typeof record.parent_slug === "string" ? record.parent_slug : undefined,
-        project_slug: typeof record.project_slug === "string" ? record.project_slug : undefined,
+        project_slug: projectSlugs[0],
+        project_slugs: projectSlugs.length > 0 ? projectSlugs : undefined,
         title,
         uploaded_at: typeof record.uploaded_at === "string" ? record.uploaded_at : undefined,
         source_filename:
@@ -517,10 +627,82 @@ function normalizePersistedCritiqueSummaries(payload: unknown): PersistedCritiqu
             ? record.finding_count
             : undefined,
         url: typeof record.url === "string" ? record.url : undefined,
-        project_url: typeof record.project_url === "string" ? record.project_url : undefined,
+        project_url:
+          typeof record.project_url === "string"
+            ? record.project_url
+            : projectSlugs[0] && projectUrls
+              ? projectUrls[projectSlugs[0]]
+              : undefined,
+        project_urls: projectUrls,
       },
     ];
   });
+}
+
+function normalizeProjectOptions(payload: unknown): ProjectOption[] {
+  const rawProjects =
+    payload && typeof payload === "object" && "projects" in payload
+      ? (payload as { projects?: unknown }).projects
+      : payload;
+  if (!Array.isArray(rawProjects)) return [];
+  return rawProjects.flatMap((entry): ProjectOption[] => {
+    if (!entry || typeof entry !== "object") return [];
+    const record = entry as Record<string, unknown>;
+    const slug =
+      typeof record.slug === "string" && record.slug.trim().length > 0
+        ? record.slug.trim()
+        : typeof record.id === "string" && record.id.trim().length > 0
+          ? record.id.trim()
+          : null;
+    if (!slug) return [];
+    return [
+      {
+        slug,
+        name:
+          typeof record.name === "string" && record.name.trim().length > 0
+            ? record.name.trim()
+            : slug,
+        description:
+          typeof record.description === "string" && record.description.trim().length > 0
+            ? record.description.trim()
+            : undefined,
+      },
+    ];
+  });
+}
+
+async function listProjectOptions(): Promise<ProjectOption[]> {
+  const response = await fetch("/api/projects", { cache: "no-store" });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(readErrorFromPayload(payload) || "Failed to load projects");
+  }
+  return normalizeProjectOptions(payload);
+}
+
+async function createProjectOption(input: {
+  name: string;
+  description?: string;
+}): Promise<ProjectOption> {
+  const response = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "create",
+      name: input.name,
+      description: input.description,
+    }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(readErrorFromPayload(payload) || "Failed to create project");
+  }
+  const projects = normalizeProjectOptions([payload && typeof payload === "object" ? (payload as { project?: unknown }).project : null]);
+  const project = projects[0];
+  if (!project) {
+    throw new Error("Project creation returned an invalid response");
+  }
+  return project;
 }
 
 async function listPersistedCritiques(): Promise<PersistedCritiqueSummary[]> {
@@ -571,9 +753,17 @@ function buildSavedBrainStatus(
   page: { frontmatter?: Record<string, unknown> },
   summary?: PersistedCritiqueSummary,
 ): Extract<BrainSaveStatus, { state: "saved" }> {
-  const projectSlug =
-    summary?.project_slug ||
-    (typeof page.frontmatter?.project === "string" ? page.frontmatter.project : undefined);
+  const projectSlugs = Array.from(
+    new Set([
+      ...(summary?.project_slugs ?? []),
+      ...(summary?.project_slug ? [summary.project_slug] : []),
+      ...projectSlugsFromRecord(page.frontmatter ?? {}),
+    ]),
+  );
+  const projectUrls =
+    summary?.project_urls ??
+    buildProjectUrlsForBrainSlug(projectSlugs, slug);
+  const projectSlug = projectSlugs[0];
   const encodedSlug = encodeURIComponent(slug);
   return {
     state: "saved",
@@ -581,9 +771,9 @@ function buildSavedBrainStatus(
     url: summary?.url || `/dashboard/reasoning?brain_slug=${encodedSlug}`,
     projectUrl:
       summary?.project_url ||
-      (projectSlug
-        ? `/dashboard/project?name=${encodeURIComponent(projectSlug)}&brain_slug=${encodedSlug}`
-        : undefined),
+      (projectSlug && projectUrls ? projectUrls[projectSlug] : undefined),
+    projectSlugs: projectSlugs.length > 0 ? projectSlugs : undefined,
+    projectUrls,
   };
 }
 
@@ -617,13 +807,15 @@ function brainPageToCritiqueJob(
     typeof fm.style_profile === "string"
       ? fm.style_profile
       : DEFAULT_STYLE_PROFILE;
-  const parentSlug =
-    typeof fm.parent === "string" && fm.parent.length > 0 ? fm.parent : slug;
+  const sourceFilename =
+    typeof fm.source_filename === "string" && fm.source_filename.trim().length > 0
+      ? fm.source_filename.trim()
+      : "";
   try {
     return normalizeStructuredCritiqueJobPayload({
       id: `brain:${slug}`,
       status: "COMPLETED",
-      pdf_filename: `${parentSlug}.pdf`,
+      pdf_filename: sourceFilename,
       style_profile: styleProfile,
       result: parsed,
     });
@@ -719,6 +911,69 @@ function severityLabel(severity: "error" | "warning" | "note"): string {
   }
 }
 
+function normalizeFindingTypeValue(value?: string): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return trimmed
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+    .replace(/_+/g, "_");
+}
+
+function getFindingTypeKey(finding: Finding): string {
+  return (
+    normalizeFindingTypeValue(finding.flaw_type) ??
+    normalizeFindingTypeValue(finding.finding_kind) ??
+    FALLBACK_FINDING_TYPE
+  );
+}
+
+function humanizeFindingType(value?: string): string {
+  const normalized = normalizeFindingTypeValue(value) ?? FALLBACK_FINDING_TYPE;
+  return normalized
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getFindingTypeLabel(finding: Finding): string {
+  return humanizeFindingType(
+    finding.flaw_type || finding.finding_kind || FALLBACK_FINDING_TYPE,
+  );
+}
+
+function getFindingTitle(finding: Finding): string {
+  const typeLabel = getFindingTypeLabel(finding);
+  return typeLabel === humanizeFindingType(FALLBACK_FINDING_TYPE)
+    ? "Reasoning issue"
+    : typeLabel;
+}
+
+function formatConfidence(value?: number): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return `${Math.round(value * 100)}%`;
+}
+
+function buildFindingFilterOptions(findings: Finding[]): FindingFilterOption[] {
+  const byKey = new Map<string, FindingFilterOption>();
+  for (const finding of findings) {
+    const value = getFindingTypeKey(finding);
+    const existing = byKey.get(value);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    byKey.set(value, {
+      value,
+      label: getFindingTypeLabel(finding),
+      count: 1,
+    });
+  }
+  return [...byKey.values()].sort((left, right) => {
+    if (right.count !== left.count) return right.count - left.count;
+    return left.label.localeCompare(right.label);
+  });
+}
+
 function findingKindChipClasses(kind?: string): string {
   switch (kind) {
     case "fallacy":
@@ -792,6 +1047,23 @@ function downloadTextFile(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
+function projectLabel(slug: string, projects: ProjectOption[]): string {
+  return projects.find((project) => project.slug === slug)?.name || slug;
+}
+
+function formatSavedProjectLabel(
+  slugs: string[],
+  projects: ProjectOption[],
+): string {
+  if (slugs.length === 0) return "project";
+  if (slugs.length === 1 && slugs[0]) return projectLabel(slugs[0], projects);
+  return `${slugs.length} projects`;
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter((value) => value.trim().length > 0)));
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -816,7 +1088,7 @@ function SeverityDot({ severity }: { severity: "error" | "warning" | "note" }) {
 }
 
 function FindingKindChip({ kind }: { kind?: string }) {
-  const label = kind || "critique";
+  const label = humanizeFindingType(kind || "critique");
   return (
     <span
       className={`px-2 py-0.5 rounded text-xs ${findingKindChipClasses(kind)}`}
@@ -984,6 +1256,9 @@ function IssueQueueItem({
   onKeyDown: (e: React.KeyboardEvent) => void;
 }) {
   const severity = normalizeSeverity(finding.severity);
+  const title = getFindingTitle(finding);
+  const confidence = formatConfidence(finding.confidence);
+  const rawType = finding.flaw_type?.trim();
   const selectedBg = isSelected
     ? "bg-teal-50 border-l-[3px] border-l-teal-500"
     : "border-l-[3px] border-l-transparent hover:bg-gray-50";
@@ -994,47 +1269,268 @@ function IssueQueueItem({
       onClick={onSelect}
       onKeyDown={onKeyDown}
       tabIndex={0}
-      aria-label={`${severityLabel(severity)} finding: ${finding.flaw_type || finding.description || finding.finding_id || "finding"}`}
-      className={`w-full text-left py-2 px-3 transition-colors cursor-pointer ${selectedBg}`}
+      aria-label={`${severityLabel(severity)} ${title}: ${finding.description || finding.finding_id || "finding"}`}
+      className={`w-full text-left px-3 py-2.5 transition-colors cursor-pointer ${selectedBg}`}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-start gap-2">
         <SeverityDot severity={severity} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span
+              className={`text-xs font-semibold ${severityTextClass(severity)}`}
+              aria-label={`${severityLabel(severity)} severity`}
+            >
+              {severityLabel(severity)}
+            </span>
+            <span className="text-xs font-medium leading-5 text-foreground">
+              {title}
+            </span>
+          </div>
+          {finding.description ? (
+            <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted">
+              {finding.description}
+            </p>
+          ) : null}
+          {finding.impact ? (
+            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">
+              <span className="font-medium text-slate-600">Impact: </span>
+              {finding.impact}
+            </p>
+          ) : null}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {finding.argument_id ? (
+              <span className="rounded bg-white px-1.5 py-0.5 text-[10px] font-mono text-gray-600 ring-1 ring-gray-100">
+                {finding.argument_id}
+              </span>
+            ) : null}
+            {rawType ? (
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono text-gray-600">
+                {rawType}
+              </span>
+            ) : null}
+            {confidence ? (
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                {confidence}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function CritiqueMarkdownBlock({
+  content,
+  className = "",
+}: {
+  content: string;
+  className?: string;
+}) {
+  return (
+    <div className={`file-markdown bg-transparent p-0 ${className}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} disallowedElements={["img"]}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function FindingIdList({ findingIds }: { findingIds?: string[] }) {
+  if (!findingIds || findingIds.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1">
+      {findingIds.map((findingId) => (
         <span
-          className={`text-xs font-medium uppercase ${severityTextClass(severity)}`}
-          aria-label={`${severityLabel(severity)} severity`}
+          key={findingId}
+          className="rounded bg-white px-1.5 py-0.5 font-mono text-[10px] text-gray-600 ring-1 ring-gray-100"
         >
-          {severity === "error" ? "ERR" : severity === "warning" ? "WRN" : "NOTE"}
+          {findingId}
         </span>
-        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono text-gray-700">
-          {finding.flaw_type || finding.finding_id || "finding"}
+      ))}
+    </div>
+  );
+}
+
+function DisplayItemCard({
+  item,
+  index,
+}: {
+  item: CritiqueDisplayItem;
+  index?: number;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+      <div className="text-sm font-medium text-foreground">
+        {typeof index === "number" ? `${index + 1}. ` : null}
+        {item.title}
+      </div>
+      <CritiqueMarkdownBlock
+        content={item.bodyMarkdown}
+        className="mt-1 text-sm leading-6 text-muted"
+      />
+      <FindingIdList findingIds={item.findingIds} />
+    </div>
+  );
+}
+
+function ProjectSavePanel({
+  controls,
+  isSaving,
+}: {
+  controls: SaveDestinationControls;
+  isSaving: boolean;
+}) {
+  const selected = new Set(controls.selectedProjectSlugs);
+  const hasNewProject = controls.newProjectName.trim().length > 0;
+  const canSave =
+    !isSaving &&
+    !controls.isCreatingProject &&
+    (selected.size > 0 || hasNewProject);
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className={SECTION_LABEL}>Destination projects</div>
+        <button
+          type="button"
+          onClick={controls.onClose}
+          className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:text-foreground"
+        >
+          Close
+        </button>
+      </div>
+
+      {controls.projectStatus === "loading" ? (
+        <div className="mt-3 text-xs text-muted">Loading projects...</div>
+      ) : controls.projectStatus === "error" ? (
+        <div className="mt-3 flex items-center gap-2">
+          <span className="text-xs text-rose-700">Projects unavailable.</span>
+          <button
+            type="button"
+            onClick={controls.onReloadProjects}
+            className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-gray-300"
+          >
+            Retry
+          </button>
+        </div>
+      ) : controls.projects.length > 0 ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {controls.projects.map((project) => (
+            <label
+              key={project.slug}
+              className={`flex cursor-pointer items-start gap-2 rounded border bg-white p-2 text-xs transition-colors ${
+                selected.has(project.slug)
+                  ? "border-emerald-300 text-emerald-800"
+                  : "border-gray-200 text-foreground hover:border-gray-300"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(project.slug)}
+                onChange={() => controls.onToggleProjectSlug(project.slug)}
+                className="mt-0.5 h-3.5 w-3.5 accent-emerald-600"
+              />
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{project.name}</span>
+                <span className="block truncate text-[11px] text-muted">{project.slug}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 text-xs text-muted">No projects yet.</div>
+      )}
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+        <label className="text-xs font-medium text-foreground">
+          New project
+          <input
+            value={controls.newProjectName}
+            onChange={(event) => controls.onNewProjectNameChange(event.target.value)}
+            placeholder="Project name"
+            className="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-xs font-normal text-foreground outline-none transition-colors focus:border-accent"
+          />
+        </label>
+        <label className="text-xs font-medium text-foreground">
+          Description
+          <input
+            value={controls.newProjectDescription}
+            onChange={(event) => controls.onNewProjectDescriptionChange(event.target.value)}
+            placeholder="Optional"
+            className="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-xs font-normal text-foreground outline-none transition-colors focus:border-accent"
+          />
+        </label>
+      </div>
+
+      {controls.error ? (
+        <div className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          {controls.error}
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={controls.onSave}
+          disabled={!canSave}
+          className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isSaving || controls.isCreatingProject ? "Saving..." : "Save critique"}
+        </button>
+        <span className="text-[11px] text-muted">
+          {selected.size + (hasNewProject ? 1 : 0)} selected
         </span>
       </div>
-      {finding.description ? (
-        <p className="text-xs text-muted truncate mt-0.5 pl-[18px]">
-          {finding.description}
-        </p>
-      ) : null}
-    </button>
+    </div>
   );
 }
 
 function ReportOverview({
   job,
   brainSaveStatus = { state: "idle" },
-  onSaveToBrain,
+  saveControls,
 }: {
   job: StructuredCritiqueJob;
   brainSaveStatus?: BrainSaveStatus;
-  onSaveToBrain?: () => void;
+  saveControls?: SaveDestinationControls;
 }) {
+  const saveStatus = brainSaveStatus;
+  const destinationControls = saveControls;
   const title = job.result?.title || job.pdf_filename;
-  const topIssues = job.result?.author_feedback?.top_issues ?? [];
+  const displayModel = job.result
+    ? buildCritiqueDisplayModel(job.result)
+    : null;
+  const topIssues = displayModel?.topIssues ?? [];
+  const sectionFeedback = displayModel?.sectionFeedback ?? [];
+  const questionsForAuthors = displayModel?.questionsForAuthors ?? [];
   const reportMarkdown = job.result?.report_markdown?.trim() || "";
   const fileStem = slugifyFileStem(title || job.id);
   const canSaveToBrain =
     job.status === "COMPLETED" &&
     !!job.result &&
-    typeof onSaveToBrain === "function";
+    !!destinationControls;
+  const savedProjectSlugs =
+    saveStatus.state === "saved"
+      ? saveStatus.projectSlugs ?? []
+      : [];
+  const savedProjectUrls =
+    saveStatus.state === "saved"
+      ? saveStatus.projectUrls ??
+        buildProjectUrlsForBrainSlug(savedProjectSlugs, saveStatus.slug)
+      : undefined;
+  const savedProjectLinks =
+    saveStatus.state === "saved"
+      ? savedProjectSlugs.flatMap((projectSlug) => {
+          const href =
+            savedProjectUrls?.[projectSlug] ||
+            saveStatus.projectUrl ||
+            saveStatus.url;
+          return href
+            ? [{ projectSlug, href, label: projectLabel(projectSlug, destinationControls?.projects ?? []) }]
+            : [];
+        })
+      : [];
 
   return (
     <div className="border-b border-gray-100 px-6 py-5 space-y-4">
@@ -1066,42 +1562,83 @@ function ReportOverview({
             </button>
             {canSaveToBrain ? (
               <>
-                <button
-                  type="button"
-                  onClick={onSaveToBrain}
-                  disabled={brainSaveStatus.state === "saving"}
-                  className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {brainSaveStatus.state === "saving"
-                    ? "Saving..."
-                    : brainSaveStatus.state === "saved"
-                      ? "Saved to brain"
-                      : "Save to brain"}
-                </button>
-                {brainSaveStatus.state === "saved" ? (
+                {saveStatus.state === "saved" ? (
                   <>
+                    <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                      Saved in {formatSavedProjectLabel(savedProjectSlugs, destinationControls?.projects ?? [])}
+                    </span>
+                    {savedProjectLinks.length === 1 ? (
+                      <Link
+                        href={savedProjectLinks[0]?.href ?? saveStatus.url}
+                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:border-emerald-300"
+                      >
+                        Open in file tree
+                      </Link>
+                    ) : savedProjectLinks.length > 1 ? (
+                      savedProjectLinks.map((link) => (
+                        <Link
+                          key={link.projectSlug}
+                          href={link.href}
+                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:border-emerald-300"
+                        >
+                          Open {link.label}
+                        </Link>
+                      ))
+                    ) : null}
                     <Link
-                      href={brainSaveStatus.projectUrl ?? brainSaveStatus.url}
-                      className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:border-emerald-300"
-                    >
-                      Open in file tree
-                    </Link>
-                    <Link
-                      href={brainSaveStatus.url}
+                      href={saveStatus.url}
+                      title="Open the durable saved analysis URL"
                       className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300"
                     >
-                      Analysis link
+                      Open saved analysis
                     </Link>
+                    <button
+                      type="button"
+                      onClick={destinationControls?.onOpen}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Manage projects
+                    </button>
                   </>
-                ) : null}
+                ) : (
+                  <button
+                    type="button"
+                    onClick={destinationControls?.onOpen}
+                    disabled={saveStatus.state === "saving"}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {saveStatus.state === "saving" ? "Saving..." : "Save to project..."}
+                  </button>
+                )}
               </>
             ) : null}
           </div>
         ) : null}
       </div>
-      {brainSaveStatus.state === "error" ? (
+      {destinationControls?.isOpen ? (
+        <ProjectSavePanel
+          controls={destinationControls}
+          isSaving={saveStatus.state === "saving"}
+        />
+      ) : null}
+      {!destinationControls?.isOpen && saveStatus.state === "error" ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-          {brainSaveStatus.error}
+          {saveStatus.error}
+        </div>
+      ) : null}
+
+      {displayModel?.summaryMarkdown ? (
+        <div className="space-y-2">
+          <div className={SECTION_LABEL}>Summary</div>
+          <CritiqueMarkdownBlock
+            content={displayModel.summaryMarkdown}
+            className="max-w-4xl text-sm leading-7 text-foreground"
+          />
+          {displayModel.atAGlance ? (
+            <p className="max-w-4xl rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-muted">
+              {displayModel.atAGlance}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -1112,17 +1649,56 @@ function ReportOverview({
           </div>
           <div className="grid gap-2 md:grid-cols-2">
             {topIssues.map((issue, index) => (
-              <div key={`${issue.title || "issue"}-${index}`} className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
-                <div className="text-sm font-medium text-foreground">
-                  {index + 1}. {issue.title || "Issue"}
-                </div>
-                {issue.summary ? (
-                  <p className="mt-1 text-sm text-muted">{issue.summary}</p>
-                ) : null}
-              </div>
+              <DisplayItemCard
+                key={`${issue.title || "issue"}-${index}`}
+                item={issue}
+                index={index}
+              />
             ))}
           </div>
         </div>
+      ) : null}
+
+      {sectionFeedback.length > 0 ? (
+        <div className="space-y-2">
+          <div className={SECTION_LABEL}>Section-by-section feedback</div>
+          <div className="grid gap-2 xl:grid-cols-2">
+            {sectionFeedback.map((section, index) => (
+              <DisplayItemCard
+                key={`${section.title || "section"}-${index}`}
+                item={section}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {questionsForAuthors.length > 0 ? (
+        <details className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">
+            Questions for authors
+          </summary>
+          <div className="mt-3 grid gap-2 xl:grid-cols-2">
+            {questionsForAuthors.map((question, index) => (
+              <DisplayItemCard
+                key={`${question.title || "question"}-${index}`}
+                item={question}
+              />
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      {displayModel?.referencesFeedbackMarkdown ? (
+        <details className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">
+            Reference and methods notes
+          </summary>
+          <CritiqueMarkdownBlock
+            content={displayModel.referencesFeedbackMarkdown}
+            className="mt-3 text-sm leading-6 text-muted"
+          />
+        </details>
       ) : null}
 
       {reportMarkdown ? (
@@ -1130,9 +1706,10 @@ function ReportOverview({
           <summary className="cursor-pointer text-sm font-medium text-foreground">
             Report markdown
           </summary>
-          <pre className="mt-3 whitespace-pre-wrap font-mono text-xs leading-6 text-foreground">
-            {reportMarkdown}
-          </pre>
+          <CritiqueMarkdownBlock
+            content={reportMarkdown}
+            className="mt-3 max-h-[32rem] overflow-auto rounded border border-gray-100 bg-white px-3 py-2 text-sm leading-6 text-foreground"
+          />
         </details>
       ) : null}
     </div>
@@ -1187,32 +1764,48 @@ function BrainArtifactViewer({ artifact }: { artifact: BrainArtifactPage }) {
 
 function FilterChips({
   active,
+  options,
+  totalCount,
+  onClear,
   onToggle,
 }: {
-  active: Set<FilterKind>;
-  onToggle: (kind: FilterKind) => void;
+  active: Set<string>;
+  options: FindingFilterOption[];
+  totalCount: number;
+  onClear: () => void;
+  onToggle: (kind: string) => void;
 }) {
-  const chips: { kind: FilterKind; label: string }[] = [
-    { kind: "critique", label: "Critique" },
-    { kind: "fallacy", label: "Fallacy" },
-    { kind: "gap", label: "Gap" },
-  ];
+  const allActive = active.size === 0;
   return (
-    <div className="flex gap-2 px-3">
-      {chips.map((c) => {
-        const isActive = active.has(c.kind);
+    <div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto px-3">
+      <button
+        type="button"
+        onClick={onClear}
+        aria-pressed={allActive}
+        className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+          allActive
+            ? "border-accent bg-accent/10 font-medium text-accent"
+            : "border-gray-200 bg-white text-muted hover:border-gray-300"
+        }`}
+      >
+        All {totalCount}
+      </button>
+      {options.map((option) => {
+        const isActive = active.has(option.value);
         return (
           <button
-            key={c.kind}
+            key={option.value}
             type="button"
-            onClick={() => onToggle(c.kind)}
-            className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+            onClick={() => onToggle(option.value)}
+            aria-pressed={isActive}
+            aria-label={`Filter issue queue by ${option.label} (${option.count} finding${option.count !== 1 ? "s" : ""})`}
+            className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
               isActive
-                ? "border-accent bg-accent/10 text-accent font-medium"
+                ? "border-accent bg-accent/10 font-medium text-accent"
                 : "border-gray-200 bg-white text-muted hover:border-gray-300"
             }`}
           >
-            {c.label}
+            {option.label} {option.count}
           </button>
         );
       })}
@@ -1230,81 +1823,112 @@ function FindingDetail({
   finding: Finding;
 }) {
   const severity = normalizeSeverity(finding.severity);
+  const title = getFindingTitle(finding);
+  const confidence = formatConfidence(finding.confidence);
+  const rawType = finding.flaw_type?.trim();
+  const kind = finding.finding_kind?.trim();
+  const detailRows = [
+    finding.argument_id
+      ? { label: "Affected claim", value: finding.argument_id, mono: true }
+      : null,
+    finding.broken_link
+      ? { label: "Broken link", value: finding.broken_link, mono: false }
+      : null,
+    rawType ? { label: "Raw issue type", value: rawType, mono: true } : null,
+    kind
+      ? { label: "Broad group", value: humanizeFindingType(kind), mono: false }
+      : null,
+    confidence ? { label: "Confidence", value: confidence, mono: false } : null,
+    finding.finding_id
+      ? { label: "Finding ID", value: finding.finding_id, mono: true }
+      : null,
+  ].filter(
+    (row): row is { label: string; value: string; mono: boolean } => row !== null,
+  );
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      {/* Severity + type */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5">
-          <SeverityDot severity={severity} />
-          <span
-            className={`text-sm font-medium ${severityTextClass(severity)}`}
-            aria-label={`${severityLabel(severity)} severity`}
-          >
-            {severityLabel(severity)}
-          </span>
-        </span>
-        {finding.flaw_type ? (
-          <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-mono">
-            {finding.flaw_type}
-          </span>
-        ) : null}
-        <FindingKindChip kind={finding.finding_kind} />
-      </div>
-
-      {/* Description */}
-      {finding.description ? (
-        <p className="text-sm leading-relaxed text-foreground">{finding.description}</p>
-      ) : null}
-
-      {/* Evidence quote */}
-      {finding.evidence_quote ? (
-        <blockquote className="text-sm italic border-l-2 border-gray-200 bg-gray-50 pl-4 py-3 text-muted">
-          {finding.evidence_quote}
-        </blockquote>
-      ) : null}
-
-      {/* Meta fields */}
-      <div className="space-y-2">
-        {finding.argument_id ? (
-          <div className="text-xs">
-            <span className="font-medium text-muted">Affected claim: </span>
-            <span className="text-foreground font-mono">{finding.argument_id}</span>
-          </div>
-        ) : null}
-        {finding.broken_link ? (
-          <div className="text-xs">
-            <span className="font-medium text-muted">Broken link: </span>
-            <span className="text-foreground">{finding.broken_link}</span>
-          </div>
-        ) : null}
-        {finding.impact ? (
-          <div className="text-xs">
-            <span className="font-medium text-muted">Impact: </span>
-            <span className="text-foreground">{finding.impact}</span>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Suggested fix */}
-      {finding.suggested_fix ? (
+    <article className="border-b border-gray-100 px-6 py-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className={`${SECTION_LABEL} mb-1`}>
-            Suggested fix
-          </div>
-          <p className="text-sm leading-relaxed text-foreground bg-emerald-50 border border-emerald-100 rounded p-3">
-            {finding.suggested_fix}
-          </p>
+          <div className={SECTION_LABEL}>Selected issue</div>
+          <h2 className="mt-1 text-2xl font-semibold text-foreground">
+            {title}
+          </h2>
         </div>
-      ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5">
+            <SeverityDot severity={severity} />
+            <span
+              className={`text-sm font-medium ${severityTextClass(severity)}`}
+              aria-label={`${severityLabel(severity)} severity`}
+            >
+              {severityLabel(severity)}
+            </span>
+          </span>
+          {rawType ? (
+            <span className="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-700">
+              {rawType}
+            </span>
+          ) : null}
+          <FindingKindChip kind={finding.finding_kind} />
+        </div>
+      </div>
 
-      {/* Confidence */}
-      {finding.confidence != null ? (
-        <div className="text-xs text-muted">
-          Confidence: {Math.round(finding.confidence * 100)}%
+      <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
+        <div className="space-y-4">
+          <section>
+            <div className={`${SECTION_LABEL} mb-1`}>What is wrong</div>
+            <p className="text-sm leading-7 text-foreground">
+              {finding.description || "No description supplied for this finding."}
+            </p>
+          </section>
+
+          {finding.evidence_quote ? (
+            <section>
+              <div className={`${SECTION_LABEL} mb-1`}>Evidence quoted</div>
+              <blockquote className="border-l-2 border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-7 text-muted">
+                {finding.evidence_quote}
+              </blockquote>
+            </section>
+          ) : null}
+
+          {finding.impact ? (
+            <section>
+              <div className={`${SECTION_LABEL} mb-1`}>Why it matters</div>
+              <p className="rounded border border-amber-100 bg-amber-50/70 p-3 text-sm leading-7 text-amber-900">
+                {finding.impact}
+              </p>
+            </section>
+          ) : null}
+
+          {finding.suggested_fix ? (
+            <section>
+              <div className={`${SECTION_LABEL} mb-1`}>Suggested fix</div>
+              <p className="rounded border border-emerald-100 bg-emerald-50 p-3 text-sm leading-7 text-emerald-950">
+                {finding.suggested_fix}
+              </p>
+            </section>
+          ) : null}
         </div>
-      ) : null}
-    </div>
+
+        {detailRows.length > 0 ? (
+          <dl className="grid content-start gap-3 rounded-lg border border-gray-100 bg-gray-50/70 p-4 sm:grid-cols-2 xl:grid-cols-1">
+            {detailRows.map((row) => (
+              <div key={row.label}>
+                <dt className={SECTION_LABEL}>{row.label}</dt>
+                <dd
+                  className={`mt-1 break-words text-sm text-foreground ${
+                    row.mono ? "font-mono" : ""
+                  }`}
+                >
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -1375,6 +1999,7 @@ function StructuredCritiquePageContent() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [history, setHistory] = useState<StoredStructuredCritiqueJob[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [loadedBrainJob, setLoadedBrainJob] = useState<StructuredCritiqueJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [brainArtifact, setBrainArtifact] =
     useState<BrainArtifactPage | null>(null);
@@ -1388,7 +2013,7 @@ function StructuredCritiquePageContent() {
   const [inputMode, setInputMode] = useState<InputMode>("pdf");
   const [pasteText, setPasteText] = useState("");
   const [selectedFindingIndex, setSelectedFindingIndex] = useState<number>(0);
-  const [activeFilters, setActiveFilters] = useState<Set<FilterKind>>(new Set());
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [uploadAccepted, setUploadAccepted] = useState(false);
   const [submittedInput, setSubmittedInput] =
@@ -1401,11 +2026,18 @@ function StructuredCritiquePageContent() {
   const [brainSaveByJobId, setBrainSaveByJobId] = useState<Record<string, BrainSaveStatus>>({});
   const [persistedCritiques, setPersistedCritiques] = useState<PersistedCritiqueSummary[]>([]);
   const [isLoadingPersistedCritiques, setIsLoadingPersistedCritiques] = useState(true);
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
+  const [projectListStatus, setProjectListStatus] =
+    useState<ProjectListStatus>("idle");
+  const [savePanelJobId, setSavePanelJobId] = useState<string | null>(null);
+  const [selectedSaveProjectSlugs, setSelectedSaveProjectSlugs] = useState<string[]>([]);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDescription, setNewProjectDescription] = useState("");
+  const [savePanelError, setSavePanelError] = useState<string | null>(null);
+  const [isCreatingProjectForSave, setIsCreatingProjectForSave] = useState(false);
 
   const queueRef = useRef<HTMLDivElement>(null);
   const hostedHistoryHydratedRef = useRef(false);
-  const autoSavedJobIdsRef = useRef<Set<string>>(new Set());
-  const autoSaveAttemptCountsRef = useRef<Map<string, number>>(new Map());
   const getCritiqueHeaders = useCallback(async () => ({}), []);
 
   // ---------------------------------------------------------------------------
@@ -1413,6 +2045,7 @@ function StructuredCritiquePageContent() {
   // ---------------------------------------------------------------------------
 
   const rememberJob = useCallback((job: StructuredCritiqueJob) => {
+    setLoadedBrainJob(null);
     setHistory((previous) => {
       const next = upsertStoredJob(previous, job);
       saveStoredHistory(next);
@@ -1480,7 +2113,8 @@ function StructuredCritiquePageContent() {
         setBrainArtifact(null);
         setShowExampleReport(false);
         setSubmittedInput(buildSubmittedInputFromJob(job));
-        rememberJob(job);
+        setLoadedBrainJob(job);
+        setSelectedJobId(job.id);
         setBrainSaveByJobId((previous) => ({
           ...previous,
           [job.id]: buildSavedBrainStatus(slug, payload, summary),
@@ -1489,9 +2123,10 @@ function StructuredCritiquePageContent() {
       }
       setSelectedJobId(null);
       setError(null);
+      setLoadedBrainJob(null);
       setBrainArtifact(brainPageToArtifact(slug, payload));
     },
-    [rememberJob],
+    [],
   );
 
   // Hydrate history from localStorage
@@ -1589,9 +2224,8 @@ function StructuredCritiquePageContent() {
     });
   }, [refreshJob, requestedJobId]);
 
-  // Handle URL brain_slug param — load a persisted critique from gbrain and
-  // hydrate the same state the live-job path uses. Persists into localStorage
-  // history so navigating back picks the same job up.
+  // Handle URL brain_slug param: load a persisted critique from gbrain without
+  // turning that saved page into a browser-local hosted-run history entry.
   useEffect(() => {
     if (
       !hydratedRef.current ||
@@ -1674,7 +2308,10 @@ function StructuredCritiquePageContent() {
     };
   }, []);
 
-  const selectedJob = history.find((entry) => entry.id === selectedJobId) ?? null;
+  const selectedHistoryJob = history.find((entry) => entry.id === selectedJobId) ?? null;
+  const selectedJob =
+    selectedHistoryJob ??
+    (loadedBrainJob?.id === selectedJobId ? loadedBrainJob : null);
   const structuredCritiqueUnavailableMessage =
     structuredCritiqueAvailable === false
       ? structuredCritiqueStatusDetail ?? STRUCTURED_CRITIQUE_UNAVAILABLE_FALLBACK
@@ -1696,14 +2333,14 @@ function StructuredCritiquePageContent() {
 
   const allFindings: Finding[] = activeJob?.result?.findings ?? [];
   const sorted = sortedFindings(allFindings);
+  const findingFilterOptions = buildFindingFilterOptions(sorted);
 
   // Apply filters
   const filteredFindings =
     activeFilters.size === 0
       ? sorted
       : sorted.filter((f) => {
-          const kind = (f.finding_kind || "critique") as FilterKind;
-          return activeFilters.has(kind);
+          return activeFilters.has(getFindingTypeKey(f));
         });
 
   const selectedFinding = filteredFindings[selectedFindingIndex] ?? null;
@@ -1722,6 +2359,9 @@ function StructuredCritiquePageContent() {
     !isTerminalStatus(selectedJob.status) &&
     !(isSubmitting || isPolling) &&
     error === timedOutMessage;
+  const activeBrainSaveStatus: BrainSaveStatus = activeJob
+    ? brainSaveByJobId[activeJob.id] ?? { state: "idle" }
+    : { state: "idle" };
 
   // Auto-select first finding when results arrive
   const prevFindingsLenRef = useRef(0);
@@ -1732,10 +2372,11 @@ function StructuredCritiquePageContent() {
     prevFindingsLenRef.current = filteredFindings.length;
   }, [filteredFindings.length]);
 
-  // Reset finding index when job changes
+  // Reset selected finding and filters when the visible analysis changes.
   useEffect(() => {
     setSelectedFindingIndex(0);
-  }, [selectedJobId]);
+    setActiveFilters(new Set());
+  }, [selectedJobId, showExampleReport]);
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -1743,6 +2384,7 @@ function StructuredCritiquePageContent() {
 
   const handleSelectHistoryJob = useCallback(
     (job: StoredStructuredCritiqueJob) => {
+      setLoadedBrainJob(null);
       setBrainArtifact(null);
       setShowExampleReport(false);
       setSelectedJobId(job.id);
@@ -1750,6 +2392,7 @@ function StructuredCritiquePageContent() {
       setUploadAccepted(false);
       setSubmittedInput(buildSubmittedInputFromJob(job));
       setSelectedFindingIndex(0);
+      setActiveFilters(new Set());
       if (!isTerminalStatus(job.status)) {
         void refreshJob(job.id).catch((err) => {
           setError(err instanceof Error ? err.message : "Structured critique refresh failed");
@@ -1770,6 +2413,7 @@ function StructuredCritiquePageContent() {
           : { kind: "text", charCount: 0, preview: summary.title || "Saved reasoning analysis" },
       );
       setSelectedFindingIndex(0);
+      setActiveFilters(new Set());
       void loadBrainSlug(summary.brain_slug, summary).catch((err) => {
         setError(err instanceof Error ? err.message : "brain critique load failed");
       });
@@ -1777,23 +2421,69 @@ function StructuredCritiquePageContent() {
     [loadBrainSlug],
   );
 
+  const loadProjectsForSave = useCallback(async () => {
+    setProjectListStatus("loading");
+    try {
+      const projects = await listProjectOptions();
+      setProjectOptions(projects);
+      setProjectListStatus("loaded");
+      setSavePanelError(null);
+    } catch (err) {
+      setProjectListStatus("error");
+      setSavePanelError(err instanceof Error ? err.message : "Failed to load projects");
+    }
+  }, []);
+
+  const handleOpenSavePanel = useCallback(
+    (job: StructuredCritiqueJob, status: BrainSaveStatus) => {
+      setSavePanelJobId(job.id);
+      setSavePanelError(null);
+      setNewProjectName("");
+      setNewProjectDescription("");
+      setIsCreatingProjectForSave(false);
+      if (status.state === "saved") {
+        setSelectedSaveProjectSlugs(status.projectSlugs ?? []);
+      } else {
+        const existingSavedAudit = persistedCritiques.find(
+          (entry) => entry.descartes_job_id === job.id,
+        );
+        setSelectedSaveProjectSlugs(existingSavedAudit?.project_slugs ?? []);
+      }
+      if (projectListStatus === "idle" || projectListStatus === "error") {
+        void loadProjectsForSave();
+      }
+    },
+    [loadProjectsForSave, persistedCritiques, projectListStatus],
+  );
+
+  const handleToggleSaveProjectSlug = useCallback((slug: string) => {
+    setSelectedSaveProjectSlugs((previous) =>
+      previous.includes(slug)
+        ? previous.filter((candidate) => candidate !== slug)
+        : [...previous, slug],
+    );
+  }, []);
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     if (!file) {
       setSelectedFile(null);
       setSubmittedInput(null);
+      setLoadedBrainJob(null);
       setUploadAccepted(false);
       return;
     }
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       setError("Only PDF files are supported for structured critique.");
       setSelectedFile(null);
+      setLoadedBrainJob(null);
       event.target.value = "";
       return;
     }
     setError(null);
     setSelectedFile(file);
     setSubmittedInput(null);
+    setLoadedBrainJob(null);
     setUploadAccepted(false);
     setShowExampleReport(false);
   };
@@ -1821,11 +2511,13 @@ function StructuredCritiquePageContent() {
     pollTokenRef.current += 1;
     setError(null);
     setBrainArtifact(null);
+    setLoadedBrainJob(null);
     setShowExampleReport(false);
     setSelectedJobId(null);
     setIsSubmitting(true);
     setUploadAccepted(false);
     setSelectedFindingIndex(0);
+    setActiveFilters(new Set());
     setSubmittedInput(
       inputMode === "pdf" && selectedFile
         ? { kind: "pdf", name: selectedFile.name, size: selectedFile.size }
@@ -1882,12 +2574,14 @@ function StructuredCritiquePageContent() {
     setPollStartTime(null);
     pollTokenRef.current += 1;
     setBrainArtifact(null);
+    setLoadedBrainJob(null);
     setSelectedJobId(null);
     setError(null);
     setUploadAccepted(false);
     setSubmittedInput(buildSubmittedInputFromJob(EXAMPLE_REASONING_JOB));
     setShowExampleReport(true);
     setSelectedFindingIndex(0);
+    setActiveFilters(new Set());
   };
 
   const handleClearHistory = () => {
@@ -1897,11 +2591,18 @@ function StructuredCritiquePageContent() {
     setHistory([]);
     setSelectedJobId(null);
     setSubmittedInput(null);
+    setLoadedBrainJob(null);
     setShowExampleReport(false);
+    setActiveFilters(new Set());
     saveStoredHistory([]);
   };
 
-  const toggleFilter = (kind: FilterKind) => {
+  const clearFilters = () => {
+    setActiveFilters(new Set());
+    setSelectedFindingIndex(0);
+  };
+
+  const toggleFilter = (kind: string) => {
     setActiveFilters((prev) => {
       const next = new Set(prev);
       if (next.has(kind)) next.delete(kind);
@@ -1920,9 +2621,24 @@ function StructuredCritiquePageContent() {
   }, [refreshJob, selectedJobId]);
 
   const persistJobToBrain = useCallback(
-    async (job: StructuredCritiqueJob, options?: { silent?: boolean }) => {
-      if (job.status !== "COMPLETED" || !job.result) return false;
+    async (
+      job: StructuredCritiqueJob,
+      options: { projectSlugs: string[]; silent?: boolean },
+    ): Promise<{ saved: true } | { saved: false; error?: string }> => {
+      if (job.status !== "COMPLETED" || !job.result) return { saved: false };
       const silent = options?.silent === true;
+      const projectSlugs = dedupeStrings(options.projectSlugs.map((slug) => slug.trim()));
+      if (projectSlugs.length === 0) {
+        const message = "Choose at least one project before saving a critique";
+        setBrainSaveByJobId((previous) => ({
+          ...previous,
+          [job.id]: {
+            state: "error",
+            error: message,
+          },
+        }));
+        return { saved: false, error: message };
+      }
       setBrainSaveByJobId((previous) => ({
         ...previous,
         [job.id]: { state: "saving" },
@@ -1934,6 +2650,7 @@ function StructuredCritiquePageContent() {
           body: JSON.stringify({
             job,
             sourceFilename: job.pdf_filename || undefined,
+            projectSlugs,
           }),
         });
         const payload = (await response.json().catch(() => null)) as
@@ -1947,13 +2664,35 @@ function StructuredCritiquePageContent() {
         if (!slug || !url) {
           throw new Error("gbrain save returned an invalid response");
         }
+        const savedProjectSlugs =
+          payload?.project_slugs && payload.project_slugs.length > 0
+            ? payload.project_slugs
+            : payload?.project_slug
+              ? [payload.project_slug]
+              : projectSlugs;
+        const savedProjectUrls =
+          payload?.project_urls ??
+          buildProjectUrlsForBrainSlug(savedProjectSlugs, slug);
         setBrainSaveByJobId((previous) => ({
           ...previous,
-          [job.id]: { state: "saved", slug, url, projectUrl: payload?.project_url },
+          [job.id]: {
+            state: "saved",
+            slug,
+            url,
+            projectUrl:
+              payload?.project_url ||
+              (savedProjectSlugs[0] && savedProjectUrls
+                ? savedProjectUrls[savedProjectSlugs[0]]
+                : undefined),
+            projectSlugs: savedProjectSlugs,
+            projectUrls: savedProjectUrls,
+          },
         }));
         setPersistedCritiques((previous) => {
           const nextSummary: PersistedCritiqueSummary = {
             brain_slug: slug,
+            project_slug: savedProjectSlugs[0],
+            project_slugs: savedProjectSlugs,
             title: job.result?.title || job.pdf_filename || slug,
             uploaded_at: new Date().toISOString(),
             source_filename: job.pdf_filename || undefined,
@@ -1961,46 +2700,99 @@ function StructuredCritiquePageContent() {
             finding_count: job.result?.findings?.length,
             url,
             project_url: payload?.project_url,
+            project_urls: savedProjectUrls,
           };
           return [
             nextSummary,
-            ...previous.filter((entry) => entry.brain_slug !== slug),
+            ...previous.filter(
+              (entry) =>
+                entry.brain_slug !== slug && entry.descartes_job_id !== job.id,
+            ),
           ].slice(0, 50);
         });
-        return true;
+        return { saved: true };
       } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to save critique to gbrain";
         setBrainSaveByJobId((previous) => ({
           ...previous,
           [job.id]: silent
             ? { state: "idle" }
             : {
                 state: "error",
-                error: err instanceof Error ? err.message : "Failed to save critique to gbrain",
+                error: message,
               },
         }));
-        return false;
+        return { saved: false, error: message };
       }
     },
     [],
   );
 
-  const handleSaveToBrain = useCallback(
+  const handleSaveToSelectedProjects = useCallback(
     async (job: StructuredCritiqueJob) => {
-      await persistJobToBrain(job, { silent: false });
+      setSavePanelError(null);
+      let projectSlugs = dedupeStrings(selectedSaveProjectSlugs);
+      const requestedProjectName = newProjectName.trim();
+      if (requestedProjectName) {
+        setIsCreatingProjectForSave(true);
+        try {
+          const created = await createProjectOption({
+            name: requestedProjectName,
+            description: newProjectDescription.trim() || undefined,
+          });
+          setProjectOptions((previous) => {
+            const withoutDuplicate = previous.filter(
+              (project) => project.slug !== created.slug,
+            );
+            return [created, ...withoutDuplicate];
+          });
+          projectSlugs = dedupeStrings([...projectSlugs, created.slug]);
+          setSelectedSaveProjectSlugs(projectSlugs);
+          setNewProjectName("");
+          setNewProjectDescription("");
+          setProjectListStatus("loaded");
+        } catch (err) {
+          setSavePanelError(
+            err instanceof Error ? err.message : "Failed to create project",
+          );
+          setIsCreatingProjectForSave(false);
+          return;
+        }
+        setIsCreatingProjectForSave(false);
+      }
+
+      if (projectSlugs.length === 0) {
+        setSavePanelError("Choose at least one project before saving a critique");
+        return;
+      }
+
+      const result = await persistJobToBrain(job, {
+        projectSlugs,
+        silent: false,
+      });
+      if (result.saved) {
+        setSavePanelJobId(null);
+      } else if (result.error) {
+        setSavePanelError(result.error);
+      }
     },
-    [persistJobToBrain],
+    [
+      newProjectDescription,
+      newProjectName,
+      persistJobToBrain,
+      selectedSaveProjectSlugs,
+    ],
   );
 
-  // Completed live jobs are expensive. Persist the selected result to gbrain
-  // automatically when possible so a browser-local history loss cannot lose it.
+  // If this hosted job was already saved, reflect that durable state without
+  // issuing another write.
   useEffect(() => {
     if (
       !selectedJob ||
       selectedJob.id.startsWith("brain:") ||
       selectedJob.status !== "COMPLETED" ||
       !selectedJob.result ||
-      isLoadingPersistedCritiques ||
-      autoSavedJobIdsRef.current.has(selectedJob.id)
+      isLoadingPersistedCritiques
     ) {
       return;
     }
@@ -2011,7 +2803,6 @@ function StructuredCritiquePageContent() {
       (entry) => entry.descartes_job_id === selectedJob.id,
     );
     if (existingSavedAudit) {
-      autoSavedJobIdsRef.current.add(selectedJob.id);
       setBrainSaveByJobId((previous) => ({
         ...previous,
         [selectedJob.id]: {
@@ -2021,28 +2812,41 @@ function StructuredCritiquePageContent() {
             existingSavedAudit.url ||
             `/dashboard/reasoning?brain_slug=${encodeURIComponent(existingSavedAudit.brain_slug)}`,
           projectUrl: existingSavedAudit.project_url,
+          projectSlugs: existingSavedAudit.project_slugs,
+          projectUrls: existingSavedAudit.project_urls,
         },
       }));
-      return;
     }
-
-    const attemptCount = autoSaveAttemptCountsRef.current.get(selectedJob.id) ?? 0;
-    if (attemptCount >= 2) return;
-
-    autoSaveAttemptCountsRef.current.set(selectedJob.id, attemptCount + 1);
-    autoSavedJobIdsRef.current.add(selectedJob.id);
-    void persistJobToBrain(selectedJob, { silent: true }).then((saved) => {
-      if (!saved && (autoSaveAttemptCountsRef.current.get(selectedJob.id) ?? 0) < 2) {
-        autoSavedJobIdsRef.current.delete(selectedJob.id);
-      }
-    });
   }, [
     brainSaveByJobId,
     isLoadingPersistedCritiques,
     persistedCritiques,
-    persistJobToBrain,
     selectedJob,
   ]);
+
+  const activeSaveControls: SaveDestinationControls | undefined =
+    activeJob && activeJob.id !== EXAMPLE_REASONING_JOB.id
+      ? {
+          isOpen: savePanelJobId === activeJob.id,
+          projects: projectOptions,
+          projectStatus: projectListStatus,
+          selectedProjectSlugs: selectedSaveProjectSlugs,
+          newProjectName,
+          newProjectDescription,
+          error: savePanelError,
+          isCreatingProject: isCreatingProjectForSave,
+          onOpen: () => handleOpenSavePanel(activeJob, activeBrainSaveStatus),
+          onClose: () => {
+            setSavePanelJobId(null);
+            setSavePanelError(null);
+          },
+          onReloadProjects: () => void loadProjectsForSave(),
+          onToggleProjectSlug: handleToggleSaveProjectSlug,
+          onNewProjectNameChange: setNewProjectName,
+          onNewProjectDescriptionChange: setNewProjectDescription,
+          onSave: () => void handleSaveToSelectedProjects(activeJob),
+        }
+      : undefined;
 
   const handleQueueKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key === "ArrowDown" && index < filteredFindings.length - 1) {
@@ -2358,10 +3162,16 @@ function StructuredCritiquePageContent() {
               <div className="border-t border-gray-100 py-2">
                 <div className="px-3 pb-1">
                   <span className={SECTION_LABEL}>
-                    Filter
+                    Filter by issue type
                   </span>
                 </div>
-                <FilterChips active={activeFilters} onToggle={toggleFilter} />
+                <FilterChips
+                  active={activeFilters}
+                  options={findingFilterOptions}
+                  totalCount={allFindings.length}
+                  onClear={clearFilters}
+                  onToggle={toggleFilter}
+                />
               </div>
             ) : null}
 
@@ -2383,6 +3193,11 @@ function StructuredCritiquePageContent() {
                     <div className="px-3 py-2 text-xs text-muted">No history yet.</div>
                   ) : (
                     <>
+                      {history.length > 0 ? (
+                        <div className="px-3 pb-1 pt-1 text-[10px] font-medium uppercase tracking-widest text-muted">
+                          Run history
+                        </div>
+                      ) : null}
                       {history.map((job) => (
                         <button
                           key={job.id}
@@ -2409,6 +3224,11 @@ function StructuredCritiquePageContent() {
                           </div>
                         </button>
                       ))}
+                      {persistedHistory.length > 0 ? (
+                        <div className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-widest text-muted">
+                          Saved in brain
+                        </div>
+                      ) : null}
                       {persistedHistory.map((entry) => (
                         <button
                           key={entry.brain_slug}
@@ -2490,11 +3310,11 @@ function StructuredCritiquePageContent() {
               </div>
               {selectedFinding && activeJob ? (
                 <div className="flex h-full flex-col">
-                  <ReportOverview job={activeJob} />
                   <FindingDetail
                     key={`${activeJob.id}:${selectedFinding.finding_id ?? selectedFindingIndex}`}
                     finding={selectedFinding}
                   />
+                  <ReportOverview job={activeJob} />
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-64 text-sm text-muted">
@@ -2540,20 +3360,14 @@ function StructuredCritiquePageContent() {
           {hasCompletedResults && !isPartialFailure ? (
             selectedFinding && activeJob ? (
               <div className="flex h-full flex-col">
-                <ReportOverview
-                  job={activeJob}
-                  brainSaveStatus={
-                    brainSaveByJobId[activeJob.id] ?? { state: "idle" }
-                  }
-                  onSaveToBrain={
-                    activeJob.id === EXAMPLE_REASONING_JOB.id
-                      ? undefined
-                      : () => void handleSaveToBrain(activeJob)
-                  }
-                />
                 <FindingDetail
                   key={`${activeJob.id}:${selectedFinding.finding_id ?? selectedFindingIndex}`}
                   finding={selectedFinding}
+                />
+                <ReportOverview
+                  job={activeJob}
+                  brainSaveStatus={activeBrainSaveStatus}
+                  saveControls={activeSaveControls}
                 />
               </div>
             ) : (

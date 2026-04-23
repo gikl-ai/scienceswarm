@@ -18,10 +18,18 @@ import { LocalModelSection } from "./sections/local-model";
 import { TelegramOpenClawSection } from "./sections/telegram-openclaw";
 import { FrontierWatchSection } from "./sections/frontier-watch";
 import { ResearchRadarSection } from "./sections/research-radar";
-import { RuntimeCapabilityMatrix } from "./sections/runtime-capability-matrix";
 import { WorkspaceDisplaySection } from "./sections/workspace-display";
-import type { RuntimeCapabilityContract } from "@/lib/runtime";
 import { useFilePreviewLocation } from "@/hooks/use-file-preview-location";
+import {
+  RuntimeHostMatrix,
+  runtimeHostSelectableForDefault,
+  type RuntimeHealthResponse,
+} from "@/components/runtime/RuntimeHostMatrix";
+import {
+  RuntimeDefaultsForm,
+  type RuntimeSettingsPolicy,
+} from "@/components/runtime/RuntimeDefaultsForm";
+import { RuntimeSetupCallouts } from "@/components/runtime/RuntimeSetupCallouts";
 
 /* ---------- types ---------- */
 
@@ -184,12 +192,15 @@ function Toast({
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [runtimeContract, setRuntimeContract] = useState<RuntimeCapabilityContract | null>(null);
+  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthResponse | null>(null);
   const [localHealth, setLocalHealth] = useState<LocalHealthStatus | null>(null);
   const [openclawSetup, setOpenclawSetup] = useState<OpenClawSetupStatus | null>(null);
   const [llmProviderDraft, setLlmProviderDraft] = useState<LlmProvider>("local");
   const [llmModelDraft, setLlmModelDraft] = useState(DEFAULT_OPENAI_MODEL);
   const [openAiKeyDraft, setOpenAiKeyDraft] = useState("");
+  const [runtimeDefaultHostId, setRuntimeDefaultHostId] = useState("openclaw");
+  const [runtimePolicyDraft, setRuntimePolicyDraft] =
+    useState<RuntimeSettingsPolicy>("local-only");
   const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
   const [watchProject, setWatchProject] = useState("");
   const [watchConfig, setWatchConfig] = useState<ProjectWatchConfig>(createDefaultWatchConfig());
@@ -294,14 +305,11 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const fetchRuntimeContract = useCallback(async () => {
+  const fetchRuntimeHealth = useCallback(async () => {
     try {
-      const res = await fetch("/api/health", { cache: "no-store" });
+      const res = await fetch("/api/runtime/health", { cache: "no-store" });
       if (!res.ok) return;
-      const data = (await res.json()) as { runtimeContract?: RuntimeCapabilityContract };
-      if (data.runtimeContract) {
-        setRuntimeContract(data.runtimeContract);
-      }
+      setRuntimeHealth((await res.json()) as RuntimeHealthResponse);
     } catch {
       // ignore
     }
@@ -407,14 +415,14 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
     fetchHealth();
-    fetchRuntimeContract();
+    fetchRuntimeHealth();
     fetchOpenclaw();
     fetchProjects();
     fetchLocalHealth();
 
     const interval = setInterval(() => {
       fetchHealth();
-      fetchRuntimeContract();
+      fetchRuntimeHealth();
       fetchOpenclaw();
       fetchLocalHealth();
     }, 10_000);
@@ -423,7 +431,7 @@ export default function SettingsPage() {
   }, [
     fetchSettings,
     fetchHealth,
-    fetchRuntimeContract,
+    fetchRuntimeHealth,
     fetchOpenclaw,
     fetchProjects,
     fetchLocalHealth,
@@ -483,7 +491,7 @@ export default function SettingsPage() {
         );
         fetchSettings();
         fetchHealth();
-        fetchRuntimeContract();
+        fetchRuntimeHealth();
       } else {
         showToast(String(data.error || "Failed to update strict local-only mode"), "error");
       }
@@ -584,7 +592,7 @@ export default function SettingsPage() {
       await Promise.all([
         fetchSettings(),
         fetchHealth(),
-        fetchRuntimeContract(),
+        fetchRuntimeHealth(),
         fetchOpenclaw(),
       ]);
 
@@ -624,6 +632,44 @@ export default function SettingsPage() {
     void fetchHealth();
     void fetchLocalHealth();
   }, [fetchHealth, fetchLocalHealth]);
+
+  const strictLocalOnlyEnabled = settings?.strictLocalOnly ?? health?.strictLocalOnly ?? false;
+
+  const chooseRuntimeDefaultFallback = useCallback((
+    policy: RuntimeSettingsPolicy,
+    preferredHostId?: string,
+  ) => {
+    const hosts = runtimeHealth?.hosts ?? [];
+    const preferredHost = preferredHostId
+      ? hosts.find((host) => host.profile.id === preferredHostId)
+      : null;
+    if (preferredHost && runtimeHostSelectableForDefault(preferredHost, policy)) {
+      return preferredHost.profile.id;
+    }
+    const openclaw = hosts.find((host) => host.profile.id === "openclaw");
+    if (openclaw && runtimeHostSelectableForDefault(openclaw, policy)) {
+      return openclaw.profile.id;
+    }
+    return hosts.find((host) => runtimeHostSelectableForDefault(host, policy))?.profile.id
+      ?? preferredHostId
+      ?? "openclaw";
+  }, [runtimeHealth]);
+
+  const handleRuntimePolicyChange = useCallback((policy: RuntimeSettingsPolicy) => {
+    setRuntimePolicyDraft(policy);
+    setRuntimeDefaultHostId((current) =>
+      chooseRuntimeDefaultFallback(policy, current),
+    );
+  }, [chooseRuntimeDefaultFallback]);
+
+  const handleRuntimeDefaultHostChange = useCallback((hostId: string) => {
+    const host = runtimeHealth?.hosts.find((item) => item.profile.id === hostId);
+    if (!host || !runtimeHostSelectableForDefault(host, runtimePolicyDraft)) {
+      setRuntimeDefaultHostId(chooseRuntimeDefaultFallback(runtimePolicyDraft, hostId));
+      return;
+    }
+    setRuntimeDefaultHostId(hostId);
+  }, [chooseRuntimeDefaultFallback, runtimeHealth, runtimePolicyDraft]);
 
   const persistActiveOllamaPull = useCallback((model: string | null) => {
     try {
@@ -737,6 +783,19 @@ export default function SettingsPage() {
     void resumeOllamaPull();
   }, [resumeOllamaPull]);
 
+  useEffect(() => {
+    if (strictLocalOnlyEnabled) {
+      handleRuntimePolicyChange("local-only");
+    }
+  }, [handleRuntimePolicyChange, strictLocalOnlyEnabled]);
+
+  useEffect(() => {
+    if (!runtimeHealth) return;
+    setRuntimeDefaultHostId((current) =>
+      chooseRuntimeDefaultFallback(runtimePolicyDraft, current),
+    );
+  }, [chooseRuntimeDefaultFallback, runtimeHealth, runtimePolicyDraft]);
+
   async function saveWatchConfig() {
     if (!watchProject.trim()) {
       showToast("Choose a project slug before saving watch config", "error");
@@ -789,7 +848,6 @@ export default function SettingsPage() {
     ...parseStringList(localHealth?.models),
   ]);
   const configuredOllamaModel = resolveConfiguredOllamaModel(settings);
-  const strictLocalOnlyEnabled = settings?.strictLocalOnly ?? health?.strictLocalOnly ?? false;
   const openclawHealthSummary = (() => {
     if (openclawRunning) {
       return { label: "running", dot: "ok" as const };
@@ -989,7 +1047,21 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <RuntimeCapabilityMatrix contract={runtimeContract} />
+      <RuntimeHostMatrix runtimeHealth={runtimeHealth} />
+
+      {runtimeHealth && (
+        <>
+          <RuntimeDefaultsForm
+            hosts={runtimeHealth.hosts}
+            selectedHostId={runtimeDefaultHostId}
+            policy={runtimePolicyDraft}
+            onSelectedHostIdChange={handleRuntimeDefaultHostChange}
+            onPolicyChange={handleRuntimePolicyChange}
+          />
+
+          <RuntimeSetupCallouts hosts={runtimeHealth.hosts} />
+        </>
+      )}
 
       <FrontierWatchSection
         projectOptions={projectOptions}
