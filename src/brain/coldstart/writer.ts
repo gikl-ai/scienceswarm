@@ -49,6 +49,7 @@ import {
   extractMarkdownTitle,
   formatSize,
 } from "./transformer";
+import { withLlmTimeout } from "./timeout";
 
 export interface ColdstartWriterOptions {
   enableGbrain?: boolean;
@@ -393,34 +394,11 @@ async function completeTextExtractionWithTimeout(
   llm: LLMClient,
   call: Parameters<LLMClient["complete"]>[0],
 ): Promise<Awaited<ReturnType<LLMClient["complete"]>>> {
-  const timeoutMs = getTextExtractionTimeoutMs();
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      llm.complete(call),
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => {
-          reject(
-            new Error(
-              `Coldstart text extraction timed out after ${timeoutMs}ms`,
-            ),
-          );
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
-function getTextExtractionTimeoutMs(): number {
-  const raw = process.env.SCIENCESWARM_COLDSTART_TEXT_LLM_TIMEOUT_MS;
-  if (!raw) return DEFAULT_TEXT_EXTRACTION_TIMEOUT_MS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_TEXT_EXTRACTION_TIMEOUT_MS;
-  }
-  return Math.max(100, Math.floor(parsed));
+  return withLlmTimeout(llm.complete(call), {
+    defaultMs: DEFAULT_TEXT_EXTRACTION_TIMEOUT_MS,
+    envVar: "SCIENCESWARM_COLDSTART_TEXT_LLM_TIMEOUT_MS",
+    stage: "Coldstart text extraction",
+  });
 }
 
 export function createPaperPageFromPdf(

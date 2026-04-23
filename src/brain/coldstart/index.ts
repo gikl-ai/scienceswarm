@@ -69,6 +69,7 @@ import {
   loadColdstartTemplate,
   parseBriefingResponse,
 } from "./transformer";
+import { withLlmTimeout } from "./timeout";
 
 import {
   type ColdstartWriterOptions,
@@ -655,28 +656,9 @@ async function withColdstartLlmTimeout<T>(
   promise: Promise<T>,
   stage: string,
 ): Promise<T> {
-  const timeoutMs = getColdstartLlmTimeoutMs();
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => {
-          reject(new Error(`Coldstart ${stage} timed out after ${timeoutMs}ms`));
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
-function getColdstartLlmTimeoutMs(): number {
-  const raw = process.env.SCIENCESWARM_COLDSTART_LLM_TIMEOUT_MS;
-  if (!raw) return DEFAULT_COLDSTART_LLM_TIMEOUT_MS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_COLDSTART_LLM_TIMEOUT_MS;
-  }
-  return Math.max(100, Math.floor(parsed));
+  return withLlmTimeout(promise, {
+    defaultMs: DEFAULT_COLDSTART_LLM_TIMEOUT_MS,
+    envVar: "SCIENCESWARM_COLDSTART_LLM_TIMEOUT_MS",
+    stage: `Coldstart ${stage}`,
+  });
 }

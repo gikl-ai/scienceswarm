@@ -32,7 +32,10 @@ function wrapRuntimeEngine(engine) {
         && typeof target.addTimelineEntry === "function"
       ) {
         return async (slug, entry) => {
-          const existing = await target.getTimeline(slug, { limit: 100000 }).catch(() => []);
+          const getTimeline = typeof target.getTimeline === "function"
+            ? target.getTimeline.bind(target)
+            : async () => [];
+          const existing = await getTimeline(slug, { limit: 100000 }).catch(() => []);
           const entryKey = `${timelineDateKey(entry.date)}::${entry.summary}`;
           if (
             existing.some(
