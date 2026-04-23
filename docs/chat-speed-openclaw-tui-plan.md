@@ -581,5 +581,89 @@ For transcript PRs, the PR body must include:
 - Whether the benchmark should target the browser UI, the route API, or both.
 - Whether OpenClaw gateway events already include enough structured timing to
   avoid client-side inference for first assistant text.
+
+## Codex Comparison Follow-Up
+
+The next wave should prioritize the differences that materially affect both
+speed and communication quality versus Codex and the OpenClaw TUI:
+
+- Codex keeps a long-lived typed event stream; ScienceSwarm still bridges each
+  browser turn through a route-local fetch plus generic SSE payloads.
+- Codex has one primary run-state surface; ScienceSwarm still duplicates status
+  across progress rows, timers, and assistant bubble scaffolding.
+- Codex renders a compact transcript with strong markdown hierarchy; our
+  assistant lane still reads like a wide dashboard card with lower information
+  density.
+- Codex coalesces tool and lifecycle updates; ScienceSwarm still emits too many
+  low-signal rows that make progress feel slower than it is.
+
+Append these PRs after the current sequence:
+
+29. **Project-Load Preconnect PR**
+   - Start the OpenClaw gateway connection when the project page loads and the
+     selected agent is OpenClaw, instead of waiting for the first send.
+   - Validation: hook or route test proves project load triggers a warm
+     connection exactly once and repeated loads reuse the active warm state.
+
+30. **Warm Session Retention PR**
+   - Keep the warmed OpenClaw session alive for a short idle window so the
+     first follow-up turn does not pay the full reconnect cost.
+   - Validation: gateway client test proves back-to-back turns reuse the same
+     connection while expired idle sessions reconnect cleanly.
+
+31. **Send-Path Health Elision PR**
+   - Remove nonessential health fetches from the hot send path once a live
+     gateway connection already exists and can prove readiness directly.
+   - Validation: route or hook test proves a healthy warmed connection skips
+     the extra health call while a broken connection still falls back to the
+     explicit error path.
+
+32. **Typed Transcript Envelope PR**
+   - Replace mixed generic SSE payload inference with a typed transcript event
+     envelope for progress, reasoning summary, tool progress, and final answer
+     deltas.
+   - Validation: parser tests prove each event kind is reconstructed without
+     string heuristics or duplicate visible rows.
+
+33. **Progress Dedupe PR**
+   - Collapse repeated lifecycle text and duplicate progress state writes so one
+     logical action produces one visible transcript update.
+   - Validation: hook test feeds duplicate gateway and server progress events
+     and asserts the rendered transcript only shows the coalesced row.
+
+34. **Primary Run-State Surface PR**
+   - Move live run-state display to one compact top-of-turn surface and keep
+     the bubble transcript focused on the chronological narrative.
+   - Validation: component test proves active run state is visible once and is
+     removed from duplicate locations.
+
+35. **Full Markdown Transcript PR**
+   - Promote the assistant progress transcript from markdown-lite spans to the
+     same safe markdown renderer used for richer emphasis, lists, and code
+     formatting.
+   - Validation: component tests cover emphasis, lists, code spans, and link
+     rendering in progress rows without exposing unsafe HTML.
+
+36. **Assistant Lane Geometry PR**
+   - Reshape the assistant transcript so it reads like a real chat surface:
+     tighter content column, clearer user and assistant separation, and less
+     dashboard-style chrome.
+   - Validation: component or browser test proves assistant content stays
+     inside the chat lane, user turns remain visually distinct, and media still
+     scales responsively.
+
+37. **Transcript Detail Expansion PR**
+   - Add expandable detail blocks for commands and tool artifacts so the
+     default transcript stays compact while deeper execution detail remains one
+     click away.
+   - Validation: component test proves collapsed summaries show by default and
+     expanded content preserves file paths, commands, and result snippets.
+
+38. **Codex Gap Review PR**
+   - Re-run the timing and transcript comparison after the earlier PRs merge,
+     then capture any remaining user-visible gaps versus Codex and the OpenClaw
+     TUI in a follow-up plan update.
+   - Validation: updated timing report, transcript screenshots, and a short gap
+     table tied to specific code areas.
 - Whether the web run-state surface should live inside the active assistant turn
   or at the chat composer boundary once the dedicated status widget work starts.
