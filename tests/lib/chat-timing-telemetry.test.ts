@@ -93,6 +93,62 @@ describe("chat timing telemetry", () => {
     expect(JSON.stringify(buckets)).not.toContain("workspace excerpt");
   });
 
+  it("counts mixed string and object message content blocks", () => {
+    let now = 2_000;
+    const logs: ChatTimingLogPayload[] = [];
+    const telemetry = createChatTimingTelemetry({
+      enabled: true,
+      turnId: "mixed-content",
+      now: () => now,
+      logger: (payload) => logs.push(payload),
+    });
+
+    telemetry.observeGatewayEvent({
+      method: "chat.final",
+      payload: {
+        message: {
+          role: "assistant",
+          content: [
+            "preamble",
+            { type: "text", text: "body" },
+          ],
+        },
+      },
+    });
+    now += 3;
+    telemetry.finish({ outcome: "completed", status: 200 });
+
+    const firstTextPhase = logs[0]?.phases.find(
+      (phase) => phase.name === "first_assistant_text",
+    );
+    expect(firstTextPhase).toMatchObject({
+      detail: { assistant_text_chars: "preamblebody".length },
+    });
+  });
+
+  it("closes active phases as inferred on finish", () => {
+    let now = 3_000;
+    const logs: ChatTimingLogPayload[] = [];
+    const telemetry = createChatTimingTelemetry({
+      enabled: true,
+      turnId: "active-phase",
+      now: () => now,
+      logger: (payload) => logs.push(payload),
+    });
+
+    telemetry.startPhase("project_materialization");
+    now += 11;
+    telemetry.finish({ outcome: "failed", status: 500 });
+
+    expect(logs[0]?.phases).toEqual([
+      expect.objectContaining({
+        name: "project_materialization",
+        durationMs: 11,
+        inferred: true,
+      }),
+    ]);
+  });
+
   it("is opt-in through SCIENCESWARM_CHAT_TIMING=1", () => {
     expect(
       isChatTimingTelemetryEnabled({ SCIENCESWARM_CHAT_TIMING: "1" }),

@@ -111,22 +111,6 @@ export function buildPromptSizeBuckets(
   return buckets;
 }
 
-function addPromptSizeBuckets(
-  left: PromptSizeBuckets,
-  right: PromptSizeBuckets,
-): PromptSizeBuckets {
-  return {
-    user_text: left.user_text + right.user_text,
-    guardrails: left.guardrails + right.guardrails,
-    project_prompt: left.project_prompt + right.project_prompt,
-    recent_chat_context:
-      left.recent_chat_context + right.recent_chat_context,
-    active_file: left.active_file + right.active_file,
-    workspace_files: left.workspace_files + right.workspace_files,
-    total: left.total + right.total,
-  };
-}
-
 function defaultNow(): number {
   return Date.now();
 }
@@ -206,11 +190,16 @@ function messageContentCharCount(message: unknown): number {
   if (!record) {
     return 0;
   }
-  return (
-    promptCharCount(record.content) ||
-    promptCharCount(record.text) ||
-    contentArrayCharCount(record.content)
-  );
+  if (typeof record.content === "string") {
+    return record.content.length;
+  }
+  if (Array.isArray(record.content)) {
+    return contentArrayCharCount(record.content);
+  }
+  if (typeof record.text === "string") {
+    return record.text.length;
+  }
+  return 0;
 }
 
 function assistantTextCharCountFromEvent(event: unknown): number {
@@ -401,16 +390,6 @@ export class ChatTimingTelemetry {
     this.promptCharCounts = { ...buckets };
   }
 
-  mergePromptCharCounts(
-    sources: Partial<Record<PromptSizeBucketName, unknown>>,
-  ): void {
-    if (!this.enabled) {
-      return;
-    }
-    const next = buildPromptSizeBuckets(sources);
-    this.promptCharCounts = addPromptSizeBuckets(this.promptCharCounts, next);
-  }
-
   beginGatewayConnectAuth(): void {
     if (!this.enabled || this.gatewayConnectAuthPhase) {
       return;
@@ -487,12 +466,19 @@ export class ChatTimingTelemetry {
     this.finalAssistantTextRecorded = true;
   }
 
+  private endActivePhasesAsInferred(): void {
+    for (const id of Array.from(this.activePhases.keys())) {
+      this.endPhase(id, { inferred: true });
+    }
+  }
+
   finish(options: { outcome?: string; status?: number } = {}): void {
     if (!this.enabled || this.flushed) {
       return;
     }
     this.flushed = true;
     this.endGatewayConnectAuth({ inferred: true });
+    this.endActivePhasesAsInferred();
     const endedAtMs = this.now();
     const payload: ChatTimingLogPayload = {
       event: "scienceswarm.chat.timing",
