@@ -94,6 +94,13 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json(
+          { error: { message: "Paper library scan not found." } },
+          { status: 404 },
+        );
+      }
+
       if (url === "/api/brain/paper-library/scan" && method === "POST") {
         return Response.json({ ok: true, scanId: "scan-1" });
       }
@@ -121,14 +128,265 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/scan?project=demo-project&latest=1"),
+      ).toBe(true);
+    });
+
     fireEvent.change(screen.getByPlaceholderText("/Users/you/Research Papers"), {
       target: { value: "/tmp/library" },
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Start dry-run scan" })).toBeEnabled();
     });
     fireEvent.click(screen.getByRole("button", { name: "Start dry-run scan" }));
 
     expect(await screen.findByText("ready for review")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open review queue" }));
     expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+  });
+
+  it("hydrates the latest persisted scan when local storage is empty", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 1,
+              readyForApply: 3,
+              failed: 0,
+            },
+          }),
+        });
+      }
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 1,
+              readyForApply: 3,
+              failed: 0,
+            },
+          }),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/review?")) {
+        return Response.json({
+          ok: true,
+          items: [baseReviewItem()],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"rootPath\":\"/tmp/library\"");
+    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"scanId\":\"scan-1\"");
+  });
+
+  it("does not override a manual root-path edit while latest-scan restore is in flight", async () => {
+    let resolveLatestScan: ((response: Response) => void) | undefined;
+    const latestScanResponse = new Promise<Response>((resolve) => {
+      resolveLatestScan = resolve;
+    });
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return latestScanResponse;
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    fireEvent.change(screen.getByPlaceholderText("/Users/you/Research Papers"), {
+      target: { value: "/tmp/manual-library" },
+    });
+
+    resolveLatestScan?.(Response.json({
+      ok: true,
+      scan: baseScan(),
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("/Users/you/Research Papers")).toHaveValue("/tmp/manual-library");
+    });
+
+    expect(
+      fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/scan?project=demo-project&id=scan-1"),
+    ).toBe(false);
+    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"rootPath\":\"/tmp/manual-library\"");
+    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).not.toContain("\"scanId\"");
+  });
+
+  it("ignores malformed latest-scan payloads without breaking the scan view", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json({ ok: true });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByRole("heading", { name: "Scan a local paper library without mutating disk" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("/Users/you/Research Papers")).toHaveValue("");
+  });
+
+  it("restores manifest history from the latest persisted scan", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            status: "ready_for_apply",
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 0,
+              readyForApply: 3,
+              failed: 0,
+            },
+            applyPlanId: "plan-1",
+          }),
+        });
+      }
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            status: "ready_for_apply",
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 0,
+              readyForApply: 3,
+              failed: 0,
+            },
+            applyPlanId: "plan-1",
+          }),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/apply-plan?")) {
+        return Response.json({
+          ok: true,
+          plan: {
+            version: 1,
+            id: "plan-1",
+            scanId: "scan-1",
+            project: "demo-project",
+            status: "applied",
+            rootPath: "/tmp/library",
+            rootRealpath: "/tmp/library",
+            templateFormat: "papers/{year}/{title}.pdf",
+            operationCount: 1,
+            conflictCount: 0,
+            operationShardIds: ["0001"],
+            planDigest: "digest",
+            manifestId: "manifest-1",
+            createdAt: "2026-04-23T12:20:00.000Z",
+            updatedAt: "2026-04-23T12:20:00.000Z",
+          },
+          operations: [
+            {
+              id: "operation-1",
+              paperId: "paper-1",
+              kind: "rename",
+              source: baseReviewItem().source,
+              destinationRelativePath: "papers/2024/Interesting Paper.pdf",
+              reason: "Paper library template proposal",
+              confidence: 0.82,
+              conflictCodes: [],
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/manifest?")) {
+        return Response.json({
+          ok: true,
+          manifest: {
+            version: 1,
+            id: "manifest-1",
+            project: "demo-project",
+            applyPlanId: "plan-1",
+            status: "undone",
+            rootRealpath: "/tmp/library",
+            planDigest: "digest",
+            operationCount: 1,
+            appliedCount: 1,
+            failedCount: 0,
+            undoneCount: 1,
+            operationShardIds: ["0001"],
+            warnings: [],
+            createdAt: "2026-04-23T12:31:00.000Z",
+            updatedAt: "2026-04-23T12:31:00.000Z",
+          },
+          operations: [
+            {
+              operationId: "operation-1",
+              paperId: "paper-1",
+              sourceRelativePath: "2024 - Smith - Interesting Paper.pdf",
+              destinationRelativePath: "papers/2024/Interesting Paper.pdf",
+              status: "undone",
+              appliedAt: "2026-04-23T12:31:00.000Z",
+              undoneAt: "2026-04-23T12:35:00.000Z",
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByText("Manifest and undo")).toBeInTheDocument();
+    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"step\":\"history\"");
+    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"manifestId\":\"manifest-1\"");
+    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"templateFormat\":\"papers/{year}/{title}.pdf\"");
   });
 
   it("supports accept, plan, approve, apply, and undo through the command center", async () => {

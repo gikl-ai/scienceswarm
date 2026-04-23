@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initBrain } from "@/brain/init";
 import {
   cancelPaperLibraryScan,
+  findLatestPaperLibraryScan,
   readPaperLibraryScan,
   reconcileStalePaperLibraryScan,
   startPaperLibraryScan,
@@ -153,6 +154,24 @@ describe("paper-library jobs", () => {
     expect(reconciled).toMatchObject({
       status: "failed",
       warnings: ["scan_worker_stale"],
+    });
+  });
+
+  it("skips malformed scan filenames when restoring the latest scan", async () => {
+    await writeFile(path.join(paperRoot, "2024 - Smith - Interesting Paper.pdf"), "fake pdf", "utf-8");
+
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot: path.join(dataRoot, "brain"),
+      idempotencyKey: "restore-latest-scan",
+    });
+
+    await waitForScanFile("project-alpha", scan.id);
+    await writeFile(path.join(path.dirname(scanPath("project-alpha", scan.id)), "%E0%.json"), "not json", "utf-8");
+
+    await expect(findLatestPaperLibraryScan("project-alpha", path.join(dataRoot, "brain"))).resolves.toMatchObject({
+      id: scan.id,
     });
   });
 

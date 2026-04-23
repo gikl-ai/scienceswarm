@@ -80,6 +80,50 @@ describe("paper-library scan route", () => {
     });
   });
 
+  it("returns the latest scan for a project", async () => {
+    const { GET, POST } = await import("@/app/api/brain/paper-library/scan/route");
+
+    const firstResponse = await POST(new Request("http://localhost/api/brain/paper-library/scan", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "start",
+        project: "project-alpha",
+        rootPath: paperRoot,
+        mode: "dry-run",
+        idempotencyKey: "route-latest-1",
+      }),
+    }));
+    const first = await firstResponse.json() as { scanId: string };
+    await waitForReady(GET, "project-alpha", first.scanId);
+
+    await writeFile(path.join(paperRoot, "2025 - Jones - Newer Paper.pdf"), "fake pdf", "utf-8");
+
+    const secondResponse = await POST(new Request("http://localhost/api/brain/paper-library/scan", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "start",
+        project: "project-alpha",
+        rootPath: paperRoot,
+        mode: "dry-run",
+        idempotencyKey: "route-latest-2",
+      }),
+    }));
+    const second = await secondResponse.json() as { scanId: string };
+    await waitForReady(GET, "project-alpha", second.scanId);
+
+    const latestResponse = await GET(new Request("http://localhost/api/brain/paper-library/scan?project=project-alpha&latest=1"));
+    expect(latestResponse.status).toBe(200);
+    await expect(latestResponse.json()).resolves.toMatchObject({
+      ok: true,
+      scan: {
+        id: second.scanId,
+        counters: {
+          detectedFiles: 2,
+        },
+      },
+    });
+  });
+
   it("rejects non-local requests", async () => {
     mockIsLocal.mockResolvedValue(false);
     const { POST } = await import("@/app/api/brain/paper-library/scan/route");

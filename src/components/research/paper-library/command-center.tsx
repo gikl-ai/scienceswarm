@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowSquareOut,
   Graph,
@@ -96,6 +96,14 @@ function defaultSession(): PaperLibrarySession {
     rootPath: "",
     templateFormat: DEFAULT_TEMPLATE,
   };
+}
+
+function stepForRestoredScan(scan: PaperLibraryScan): PaperLibraryStep {
+  if (scan.applyPlanId) return "apply";
+  if (isScanInFlight(scan) || scan.status === "failed" || scan.status === "canceled") return "scan";
+  if (scan.counters.needsReview > 0 || scan.status === "ready_for_review") return "review";
+  if (scan.counters.readyForApply > 0 || scan.status === "ready_for_apply") return "apply";
+  return "scan";
 }
 
 function sessionStorageKey(projectSlug: string): string {
@@ -274,7 +282,9 @@ export function PaperLibraryCommandCenter({
 }: {
   projectSlug: string;
 }) {
+  const skipLatestRestoreRef = useRef(false);
   const [session, setSession] = useState<PaperLibrarySession>(() => readStoredSession(projectSlug));
+  const sessionRef = useRef(session);
   const [scan, setScan] = useState<PaperLibraryScan | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -344,6 +354,7 @@ export function PaperLibraryCommandCenter({
   }, []);
 
   useEffect(() => {
+    skipLatestRestoreRef.current = false;
     setSession(readStoredSession(projectSlug));
     setScan(null);
     setScanError(null);
@@ -354,6 +365,10 @@ export function PaperLibraryCommandCenter({
   useEffect(() => {
     persistStoredSession(projectSlug, session);
   }, [projectSlug, session]);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   const loadScan = useCallback(async (scanId: string) => {
     setScanLoading(true);
@@ -370,11 +385,60 @@ export function PaperLibraryCommandCenter({
         patchSession({ applyPlanId: payload.scan.applyPlanId });
       }
     } catch (error) {
+      if (error instanceof PaperLibraryApiError && error.status === 404) {
+        setScan(null);
+        setSession((current) => current.scanId === scanId
+          ? {
+              ...current,
+              step: "scan",
+              scanId: undefined,
+              applyPlanId: undefined,
+              manifestId: undefined,
+            }
+          : current);
+        return;
+      }
       setScanError(error instanceof Error ? error.message : "Could not load paper-library scan.");
     } finally {
       setScanLoading(false);
     }
   }, [patchSession, projectSlug, session.applyPlanId, session.rootPath]);
+
+  const loadLatestScan = useCallback(async () => {
+    setScanLoading(true);
+    setScanError(null);
+    try {
+      const payload = await paperLibraryFetchJson<{ ok?: true; scan?: PaperLibraryScan }>(
+        `/api/brain/paper-library/scan?project=${encodeURIComponent(projectSlug)}&latest=1`,
+      );
+      const restoredScan = payload?.scan;
+      if (!restoredScan) {
+        return;
+      }
+      const currentSession = sessionRef.current;
+      if (currentSession.scanId || skipLatestRestoreRef.current) {
+        return;
+      }
+      setSession((current) => current.scanId || skipLatestRestoreRef.current
+        ? current
+        : {
+            ...current,
+            step: stepForRestoredScan(restoredScan),
+            rootPath: restoredScan.rootPath || current.rootPath || "",
+            scanId: restoredScan.id,
+            applyPlanId: restoredScan.applyPlanId,
+            manifestId: undefined,
+          });
+      setScan(restoredScan);
+    } catch (error) {
+      if (error instanceof PaperLibraryApiError && error.status === 404) {
+        return;
+      }
+      setScanError(error instanceof Error ? error.message : "Could not restore the latest paper-library scan.");
+    } finally {
+      setScanLoading(false);
+    }
+  }, [projectSlug]);
 
   const loadReview = useCallback(async ({ cursor, append = false }: { cursor?: string; append?: boolean } = {}) => {
     if (!session.scanId) return;
@@ -435,8 +499,15 @@ export function PaperLibraryCommandCenter({
         totalCount: payload.totalCount,
         filteredCount: payload.filteredCount,
       }));
-      if (payload.plan.manifestId && payload.plan.manifestId !== session.manifestId) {
-        patchSession({ manifestId: payload.plan.manifestId });
+      if (
+        (payload.plan.manifestId && payload.plan.manifestId !== session.manifestId)
+        || payload.plan.templateFormat !== session.templateFormat
+      ) {
+        patchSession({
+          manifestId: payload.plan.manifestId ?? session.manifestId,
+          step: payload.plan.manifestId && session.step === "apply" ? "history" : session.step,
+          templateFormat: payload.plan.templateFormat,
+        });
       }
     } catch (error) {
       setApplyPlanError(error instanceof Error ? error.message : "Could not load the apply plan.");
@@ -444,7 +515,7 @@ export function PaperLibraryCommandCenter({
       setApplyPlanLoading(false);
       setApplyPlanLoadingMore(false);
     }
-  }, [patchSession, projectSlug, session.manifestId]);
+  }, [patchSession, projectSlug, session.manifestId, session.step, session.templateFormat]);
 
   const loadManifest = useCallback(async ({
     manifestId,
@@ -601,6 +672,11 @@ export function PaperLibraryCommandCenter({
     }
     void loadScan(session.scanId);
   }, [loadScan, session.scanId]);
+
+  useEffect(() => {
+    if (session.scanId) return;
+    void loadLatestScan();
+  }, [loadLatestScan, session.scanId]);
 
   useEffect(() => {
     if (!scan || !isScanInFlight(scan)) return;
@@ -1877,7 +1953,10 @@ export function PaperLibraryCommandCenter({
               Library root
               <input
                 value={session.rootPath}
-                onChange={(event) => patchSession({ rootPath: event.target.value })}
+                onChange={(event) => {
+                  skipLatestRestoreRef.current = true;
+                  patchSession({ rootPath: event.target.value });
+                }}
                 placeholder="/Users/you/Research Papers"
                 className="rounded-lg border border-border px-3 py-2 text-sm text-foreground"
               />
