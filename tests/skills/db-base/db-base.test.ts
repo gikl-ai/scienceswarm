@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import matter from "gray-matter";
-import { beforeEach, afterEach, describe, expect, it } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   InProcessGbrainClient,
@@ -187,15 +187,20 @@ describe("db-base", () => {
 
   it("requires SCIENCESWARM_USER_HANDLE for attributed writes", async () => {
     delete process.env.SCIENCESWARM_USER_HANDLE;
+    const cwd = vi.spyOn(process, "cwd").mockReturnValue(brainRoot);
 
-    await expect(
-      persistEntity(paperEntity({ sourceDb: "pubmed" }), {
-        client: new FakeInProcessClient(),
-        brainRoot,
-      }),
-    ).rejects.toThrow(/SCIENCESWARM_USER_HANDLE is not set/);
-    expect(existsSync(path.join(brainRoot, "literature"))).toBe(false);
-    expect(existsSync(path.join(brainRoot, "db-retry-queue"))).toBe(false);
+    try {
+      await expect(
+        persistEntity(paperEntity({ sourceDb: "pubmed" }), {
+          client: new FakeInProcessClient(),
+          brainRoot,
+        }),
+      ).rejects.toThrow(/SCIENCESWARM_USER_HANDLE is not set/);
+      expect(existsSync(path.join(brainRoot, "literature"))).toBe(false);
+      expect(existsSync(path.join(brainRoot, "db-retry-queue"))).toBe(false);
+    } finally {
+      cwd.mockRestore();
+    }
   });
 
   it("persists search results as one page instead of one page per hit", async () => {

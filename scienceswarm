@@ -60,10 +60,24 @@ load_repo_env() {
   source "$REPO_ROOT/scripts/openclaw-env.sh"
 
   if [ -f "$REPO_ROOT/.env" ]; then
+    local existing_env=""
+    existing_env="$(mktemp)"
+    # Snapshot after OpenClaw defaults are loaded so .env cannot override
+    # runtime-resolved OpenClaw values or explicit caller env.
+    env -0 > "$existing_env"
     set -a
     # shellcheck disable=SC1091
     source "$REPO_ROOT/.env"
     set +a
+    while IFS='=' read -r -d '' key value; do
+      case "$key" in
+        ''|*[!A-Za-z0-9_]*|[0-9]*)
+          continue
+          ;;
+      esac
+      export "$key=$value"
+    done < "$existing_env"
+    rm -f "$existing_env"
   fi
 
   if command -v npx >/dev/null 2>&1 && [ -f "$REPO_ROOT/scripts/print-port.ts" ]; then

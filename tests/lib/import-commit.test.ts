@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GbrainClient } from "@/brain/gbrain-client";
 import {
   type IngestError,
@@ -519,6 +519,7 @@ describe("commitImportedProject", () => {
   it("requires explicit uploadedBy for gbrain-enabled library callers", async () => {
     const originalHandle = process.env.SCIENCESWARM_USER_HANDLE;
     delete process.env.SCIENCESWARM_USER_HANDLE;
+    const cwd = vi.spyOn(process, "cwd").mockReturnValue(ROOT);
     const preview = buildPreview();
     const request: ImportCommitRequest = {
       folder: {
@@ -551,6 +552,7 @@ describe("commitImportedProject", () => {
         }),
       ).rejects.toThrow("uploadedBy is required when gbrain is enabled");
     } finally {
+      cwd.mockRestore();
       if (originalHandle === undefined) {
         delete process.env.SCIENCESWARM_USER_HANDLE;
       } else {

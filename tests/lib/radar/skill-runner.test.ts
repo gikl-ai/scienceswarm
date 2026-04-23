@@ -381,6 +381,7 @@ describe("runResearchRadarSkill — LLM retry path", () => {
 describe("runResearchRadarSkill — missing user handle", () => {
   it("throws loudly when SCIENCESWARM_USER_HANDLE is not set", async () => {
     vi.unstubAllEnvs();
+    const cwd = vi.spyOn(process, "cwd").mockReturnValue("/tmp/scienceswarm-radar-no-env");
     // setupBrain in tests/setup.ts already strips env between tests,
     // so the handle is unset by default. Re-stub nothing — confirm
     // the throw happens BEFORE any env / engine I/O.
@@ -402,17 +403,21 @@ describe("runResearchRadarSkill — missing user handle", () => {
       llmCallCount,
     });
 
-    await expect(runResearchRadarSkill(env)).rejects.toThrow(
-      /SCIENCESWARM_USER_HANDLE/,
-    );
+    try {
+      await expect(runResearchRadarSkill(env)).rejects.toThrow(
+        /SCIENCESWARM_USER_HANDLE/,
+      );
 
-    // Critically: nothing was written. Engine never opened, pointer
-    // never updated. This is decision 3A in action — the runner
-    // must fail BEFORE any side effect.
-    expect(captured.connected).toBe(false);
-    expect(captured.disconnected).toBe(false);
-    expect(captured.pages).toEqual([]);
-    expect(pointer.value).toBeNull();
+      // Critically: nothing was written. Engine never opened, pointer
+      // never updated. This is decision 3A in action — the runner
+      // must fail BEFORE any side effect.
+      expect(captured.connected).toBe(false);
+      expect(captured.disconnected).toBe(false);
+      expect(captured.pages).toEqual([]);
+      expect(pointer.value).toBeNull();
+    } finally {
+      cwd.mockRestore();
+    }
   });
 });
 

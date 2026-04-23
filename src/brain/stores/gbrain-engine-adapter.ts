@@ -41,6 +41,7 @@ interface GbrainRuntimeSearchResult {
   chunk_id?: number;
   chunk_index?: number;
   score: number;
+  source_id?: string;
 }
 
 interface GbrainRuntimePage {
@@ -162,6 +163,7 @@ function toSearchResult(result: GbrainRuntimeSearchResult): SearchResult {
     type: inferContentType(result.type, result.slug),
     chunkId: result.chunk_id,
     chunkIndex: result.chunk_index,
+    sourceId: result.source_id,
   };
 }
 
