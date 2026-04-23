@@ -170,6 +170,28 @@ function getFrameSessionKey(frame: GatewayFrame): string {
   );
 }
 
+function normalizeSessionKeyForMatch(sessionKey: string): string {
+  const trimmed = sessionKey.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+
+  const agentScopedMatch = /^agent:[^:]+:(.+)$/.exec(trimmed);
+  return agentScopedMatch?.[1] ?? trimmed;
+}
+
+function sessionKeysMatch(
+  expectedSessionKey: string,
+  frameSessionKey: string,
+): boolean {
+  if (expectedSessionKey === frameSessionKey) {
+    return true;
+  }
+
+  return normalizeSessionKeyForMatch(expectedSessionKey) ===
+    normalizeSessionKeyForMatch(frameSessionKey);
+}
+
 function isTurnTerminalFrame(frame: GatewayFrame): boolean {
   const method = frame.event ?? frame.method ?? "";
   if (TURN_COMPLETE_SIGNALS.has(method)) return true;
@@ -335,7 +357,7 @@ function dispatchGatewayFrame(
   }
 
   for (const entry of [...listeners]) {
-    if (entry.sessionKey !== frameSessionKey) continue;
+    if (!sessionKeysMatch(entry.sessionKey, frameSessionKey)) continue;
 
     try {
       entry.handler(frame);
