@@ -433,8 +433,14 @@ describe("OpenClaw gatewayHealthCheck", () => {
 
 describe("OpenClaw prewarmGatewayConnectionIfHealthy", () => {
   const originalFetch = globalThis.fetch;
+  let tempRoot = "";
 
   beforeEach(() => {
+    vi.unstubAllEnvs();
+    tempRoot = mkdtempSync(path.join(tmpdir(), "openclaw-prewarm-"));
+    vi.stubEnv("SCIENCESWARM_DIR", tempRoot);
+    vi.stubEnv("HOME", path.join(tempRoot, "home"));
+    vi.stubEnv("OPENCLAW_PROFILE", "");
     execFileMock.mockReset();
     execFileSyncMock.mockReset();
     isGatewayConnectedMock.mockReset();
@@ -444,9 +450,21 @@ describe("OpenClaw prewarmGatewayConnectionIfHealthy", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    rmSync(tempRoot, { recursive: true, force: true });
   });
 
+  function writeGatewayToken(): void {
+    const configPath = path.join(tempRoot, "openclaw", "openclaw.json");
+    mkdirSync(path.dirname(configPath), { recursive: true });
+    writeFileSync(
+      configPath,
+      JSON.stringify({ gateway: { auth: { token: "test-token" } } }),
+      "utf8",
+    );
+  }
+
   it("starts a background WS warmup after the fast health probe reports connected", async () => {
+    writeGatewayToken();
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ ok: true }), {
         status: 200,
