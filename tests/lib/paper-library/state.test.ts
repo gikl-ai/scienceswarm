@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getPaperLibraryApplyPlanPath,
+  getPaperLibraryGraphPath,
   getPaperLibraryReviewShardPath,
   getPaperLibraryScanPath,
   parsePersistedState,
@@ -18,6 +19,9 @@ describe("paper-library state", () => {
     );
     expect(getPaperLibraryApplyPlanPath("project-alpha", "plan-1", "/tmp/state")).toBe(
       "/tmp/state/projects/project-alpha/paper-library/apply-plans/plan-1.json",
+    );
+    expect(getPaperLibraryGraphPath("project-alpha", "scan-1", "/tmp/state")).toBe(
+      "/tmp/state/projects/project-alpha/paper-library/graphs/scan-1.json",
     );
   });
 
@@ -66,4 +70,3 @@ describe("paper-library state", () => {
     expect(second.nextCursor).toBeUndefined();
   });
 });
-

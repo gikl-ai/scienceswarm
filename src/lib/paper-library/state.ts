@@ -92,6 +92,10 @@ export function getPaperLibraryEnrichmentCachePath(project: string, stateRoot?: 
   return path.join(getPaperLibraryStateDir(project, stateRoot), "enrichment-cache.json");
 }
 
+export function getPaperLibraryGraphPath(project: string, scanId: string, stateRoot?: string): string {
+  return path.join(getPaperLibraryStateDir(project, stateRoot), "graphs", `${encodeURIComponent(scanId)}.json`);
+}
+
 export function parsePersistedState<T>(
   value: unknown,
   schema: z.ZodType<T>,
