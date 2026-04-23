@@ -160,6 +160,35 @@ Compared with the Codex reference and the current ScienceSwarm web UI:
   stream. The compact chat lane and any future expanded transcript need to
   derive from one ordered event sequence.
 
+## Speed And Communication Differences
+
+The largest transport and latency differences versus the Codex reference are:
+
+- Codex clients consume typed live notifications from an already-running app
+  server connection, including agent message deltas, reasoning summary deltas,
+  realtime transcript deltas, and MCP tool progress. ScienceSwarm currently
+  sends a browser `POST /api/chat/unified`, then the Next.js route translates
+  OpenClaw gateway events into SSE frames before the browser reconstructs them.
+- ScienceSwarm still performs route-local work before the first meaningful
+  assistant event can arrive: readiness resolution, optional workspace file
+  context assembly, artifact-only revision checks, and phase snapshot emission.
+  That is correct behavior for project work, but it is expensive compared with
+  Codex’s thinner turn-start path for simple conversation.
+- The browser currently receives one generic SSE stream and then infers many
+  UI states by inspecting `{ progress }`, `{ thinking }`, `{ taskPhases }`, and
+  final text payloads. Codex’s transport is more strongly typed, so less client
+  work is needed to decide what belongs in the status surface versus the
+  transcript.
+- ScienceSwarm still duplicates communication state in the client by storing
+  legacy `activityLog` alongside `progressLog`, then promoting lifecycle and
+  timing text into the visible transcript. Even when raw transport latency is
+  acceptable, this makes the experience feel slower and noisier because users
+  see more intermediate chatter before useful output.
+- The OpenClaw WebSocket client is already persistent on the server side, but
+  the browser does not talk to that session directly. The hot path still pays a
+  browser fetch, server route dispatch, SSE framing, and progress normalization
+  pass on every turn.
+
 ## Sequential PR Plan
 
 Each PR below should be one small commit where feasible. After opening each PR,
@@ -414,6 +443,36 @@ wait for the merge, then measure and report the `Hi` response time.
       transcript gaps with benchmark evidence.
     - Validation: docs inspection plus the latest `Hi` benchmark table.
 
+41. **Send-Path Health Elision PR**
+    - Once the project-load preconnect and warm-session work are in place, stop
+      paying an extra send-time health round-trip when the gateway session is
+      already warm and let real transport failure surface directly.
+    - Validation: integration test proves a warm OpenClaw session sends without
+      a redundant health probe while a cold or expired session still fails
+      safely.
+
+42. **Typed SSE Envelope PR**
+    - Replace the current loosely typed browser SSE payload mix with explicit
+      event kinds for assistant delta, thinking delta, tool progress, task
+      phase, timing meta, and final message completion.
+    - Validation: hook parser tests prove each event kind updates only the
+      intended slice of state and malformed events are ignored safely.
+
+43. **Progress State Dedupe PR**
+    - Remove the remaining dual-write path between legacy `activityLog` and the
+      richer `progressLog`, and stop surfacing timing or low-signal lifecycle
+      rows in the visible transcript by default.
+    - Validation: hook tests prove one gateway event produces one visible
+      progress representation and duplicate final answers remain deduped.
+
+44. **Persistent Thread Stream PR**
+    - Evaluate and implement a longer-lived browser-to-server thread stream for
+      the active chat session so repeated turns reuse one live communication
+      channel instead of paying full per-turn bootstrap and SSE setup costs.
+    - Validation: end-to-end benchmark proves improved time to first visible
+      event across back-to-back turns, plus reconnect tests for tab refresh and
+      project navigation.
+
 ## Merge Order
 
 The exact order is sequential because the user asked for many small PRs with a
@@ -436,6 +495,9 @@ these groups are safe to overlap after their shared contracts merge:
   after PR #33 lands.
 - Post-rollup comparison: PR #40 after the earlier groups merge and fresh
   benchmark data exists.
+- Transport cleanup follow-up: PRs 41 to 44. PR #41 depends on PRs 29 and 30,
+  PR #42 can start after PR #31, PR #43 depends on PRs 31 and 42, and PR #44
+  should wait until the earlier transport measurements exist.
 
 ## Validation Standard
 
