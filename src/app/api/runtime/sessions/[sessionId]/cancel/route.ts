@@ -1,14 +1,16 @@
 import {
+  assertRuntimeApiLocalRequest,
   getRuntimeApiServices,
   runtimeAdapterForApi,
   runtimeErrorResponse,
 } from "../../../_shared";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ sessionId: string }> },
 ): Promise<Response> {
   try {
+    await assertRuntimeApiLocalRequest(request);
     const { sessionId } = await context.params;
     const services = getRuntimeApiServices();
     const session = services.sessionStore.requireSession(sessionId);

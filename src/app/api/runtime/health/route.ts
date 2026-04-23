@@ -1,4 +1,5 @@
 import {
+  assertRuntimeApiLocalRequest,
   getRuntimeApiServices,
   listRuntimeApiHostProfiles,
   runtimeAdapterForApi,
@@ -6,9 +7,10 @@ import {
 } from "../_shared";
 import { resolveRuntimeMcpToolProfile } from "@/lib/runtime-hosts/mcp/tool-profiles";
 
-export async function GET(): Promise<Response> {
-  const services = getRuntimeApiServices();
+export async function GET(request: Request): Promise<Response> {
   try {
+    await assertRuntimeApiLocalRequest(request);
+    const services = getRuntimeApiServices();
     const hosts = await Promise.all(
       listRuntimeApiHostProfiles(services).map(async (profile) => {
         const adapter = runtimeAdapterForApi(profile.id, services);

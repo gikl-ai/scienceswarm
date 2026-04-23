@@ -164,18 +164,21 @@ export async function POST(request: Request): Promise<Response> {
       return { critiqueSlug, built, linkedParent };
     });
 
-    for (const projectSlug of projectSlugs) {
-      await ensureProjectShellForProjectSlug({
-        projectSlug,
-        sourceFilename,
-      }).catch((error) => {
-        console.warn("Failed to ensure project shell for critique", {
-          projectSlug,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return null;
-      });
-    }
+    await Promise.allSettled(
+      projectSlugs.map(async (projectSlug) => {
+        try {
+          await ensureProjectShellForProjectSlug({
+            projectSlug,
+            sourceFilename,
+          });
+        } catch (error) {
+          console.warn("Failed to ensure project shell for critique", {
+            projectSlug,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }),
+    );
 
     const encodedSlug = encodeURIComponent(persisted.critiqueSlug);
     const projectUrls = buildProjectUrls(projectSlugs, encodedSlug);
@@ -281,10 +284,6 @@ function readDestinationProjectSlugs(
     if (seen.has(slug)) continue;
     seen.add(slug);
     projectSlugs.push(slug);
-  }
-
-  if (projectSlugs.length === 0) {
-    return { error: "Choose at least one project before saving a critique" };
   }
 
   return { projectSlugs };

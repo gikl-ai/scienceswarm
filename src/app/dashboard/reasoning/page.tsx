@@ -432,6 +432,7 @@ function loadStoredHistory(): StoredStructuredCritiqueJob[] {
         if (typeof item?.saved_at !== "string") return [];
         const normalized = tryNormalizeStructuredCritiqueJobPayload(item);
         if (!normalized.ok) return [];
+        if (normalized.job.id.startsWith("brain:")) return [];
         return [{ ...normalized.job, saved_at: item.saved_at }];
       })
       .sort((left, right) => right.saved_at.localeCompare(left.saved_at));
@@ -794,13 +795,15 @@ function brainPageToCritiqueJob(
     typeof fm.style_profile === "string"
       ? fm.style_profile
       : DEFAULT_STYLE_PROFILE;
-  const parentSlug =
-    typeof fm.parent === "string" && fm.parent.length > 0 ? fm.parent : slug;
+  const sourceFilename =
+    typeof fm.source_filename === "string" && fm.source_filename.trim().length > 0
+      ? fm.source_filename.trim()
+      : "";
   try {
     return normalizeStructuredCritiqueJobPayload({
       id: `brain:${slug}`,
       status: "COMPLETED",
-      pdf_filename: `${parentSlug}.pdf`,
+      pdf_filename: sourceFilename,
       style_profile: styleProfile,
       result: parsed,
     });
@@ -1420,9 +1423,10 @@ function ReportOverview({
                     ) : null}
                     <Link
                       href={saveStatus.url}
+                      title="Open the durable saved analysis URL"
                       className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300"
                     >
-                      Analysis link
+                      Open saved analysis
                     </Link>
                     <button
                       type="button"
@@ -1729,6 +1733,7 @@ function StructuredCritiquePageContent() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [history, setHistory] = useState<StoredStructuredCritiqueJob[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [loadedBrainJob, setLoadedBrainJob] = useState<StructuredCritiqueJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [brainArtifact, setBrainArtifact] =
     useState<BrainArtifactPage | null>(null);
@@ -1774,6 +1779,7 @@ function StructuredCritiquePageContent() {
   // ---------------------------------------------------------------------------
 
   const rememberJob = useCallback((job: StructuredCritiqueJob) => {
+    setLoadedBrainJob(null);
     setHistory((previous) => {
       const next = upsertStoredJob(previous, job);
       saveStoredHistory(next);
@@ -1841,7 +1847,8 @@ function StructuredCritiquePageContent() {
         setBrainArtifact(null);
         setShowExampleReport(false);
         setSubmittedInput(buildSubmittedInputFromJob(job));
-        rememberJob(job);
+        setLoadedBrainJob(job);
+        setSelectedJobId(job.id);
         setBrainSaveByJobId((previous) => ({
           ...previous,
           [job.id]: buildSavedBrainStatus(slug, payload, summary),
@@ -1850,9 +1857,10 @@ function StructuredCritiquePageContent() {
       }
       setSelectedJobId(null);
       setError(null);
+      setLoadedBrainJob(null);
       setBrainArtifact(brainPageToArtifact(slug, payload));
     },
-    [rememberJob],
+    [],
   );
 
   // Hydrate history from localStorage
@@ -1950,9 +1958,8 @@ function StructuredCritiquePageContent() {
     });
   }, [refreshJob, requestedJobId]);
 
-  // Handle URL brain_slug param — load a persisted critique from gbrain and
-  // hydrate the same state the live-job path uses. Persists into localStorage
-  // history so navigating back picks the same job up.
+  // Handle URL brain_slug param: load a persisted critique from gbrain without
+  // turning that saved page into a browser-local hosted-run history entry.
   useEffect(() => {
     if (
       !hydratedRef.current ||
@@ -2035,7 +2042,10 @@ function StructuredCritiquePageContent() {
     };
   }, []);
 
-  const selectedJob = history.find((entry) => entry.id === selectedJobId) ?? null;
+  const selectedHistoryJob = history.find((entry) => entry.id === selectedJobId) ?? null;
+  const selectedJob =
+    selectedHistoryJob ??
+    (loadedBrainJob?.id === selectedJobId ? loadedBrainJob : null);
   const structuredCritiqueUnavailableMessage =
     structuredCritiqueAvailable === false
       ? structuredCritiqueStatusDetail ?? STRUCTURED_CRITIQUE_UNAVAILABLE_FALLBACK
@@ -2107,6 +2117,7 @@ function StructuredCritiquePageContent() {
 
   const handleSelectHistoryJob = useCallback(
     (job: StoredStructuredCritiqueJob) => {
+      setLoadedBrainJob(null);
       setBrainArtifact(null);
       setShowExampleReport(false);
       setSelectedJobId(job.id);
@@ -2188,18 +2199,21 @@ function StructuredCritiquePageContent() {
     if (!file) {
       setSelectedFile(null);
       setSubmittedInput(null);
+      setLoadedBrainJob(null);
       setUploadAccepted(false);
       return;
     }
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       setError("Only PDF files are supported for structured critique.");
       setSelectedFile(null);
+      setLoadedBrainJob(null);
       event.target.value = "";
       return;
     }
     setError(null);
     setSelectedFile(file);
     setSubmittedInput(null);
+    setLoadedBrainJob(null);
     setUploadAccepted(false);
     setShowExampleReport(false);
   };
@@ -2227,6 +2241,7 @@ function StructuredCritiquePageContent() {
     pollTokenRef.current += 1;
     setError(null);
     setBrainArtifact(null);
+    setLoadedBrainJob(null);
     setShowExampleReport(false);
     setSelectedJobId(null);
     setIsSubmitting(true);
@@ -2288,6 +2303,7 @@ function StructuredCritiquePageContent() {
     setPollStartTime(null);
     pollTokenRef.current += 1;
     setBrainArtifact(null);
+    setLoadedBrainJob(null);
     setSelectedJobId(null);
     setError(null);
     setUploadAccepted(false);
@@ -2303,6 +2319,7 @@ function StructuredCritiquePageContent() {
     setHistory([]);
     setSelectedJobId(null);
     setSubmittedInput(null);
+    setLoadedBrainJob(null);
     setShowExampleReport(false);
     saveStoredHistory([]);
   };
@@ -2329,19 +2346,20 @@ function StructuredCritiquePageContent() {
     async (
       job: StructuredCritiqueJob,
       options: { projectSlugs: string[]; silent?: boolean },
-    ) => {
-      if (job.status !== "COMPLETED" || !job.result) return false;
+    ): Promise<{ saved: true } | { saved: false; error?: string }> => {
+      if (job.status !== "COMPLETED" || !job.result) return { saved: false };
       const silent = options?.silent === true;
       const projectSlugs = dedupeStrings(options.projectSlugs.map((slug) => slug.trim()));
       if (projectSlugs.length === 0) {
+        const message = "Choose at least one project before saving a critique";
         setBrainSaveByJobId((previous) => ({
           ...previous,
           [job.id]: {
             state: "error",
-            error: "Choose at least one project before saving a critique",
+            error: message,
           },
         }));
-        return false;
+        return { saved: false, error: message };
       }
       setBrainSaveByJobId((previous) => ({
         ...previous,
@@ -2414,18 +2432,19 @@ function StructuredCritiquePageContent() {
             ),
           ].slice(0, 50);
         });
-        return true;
+        return { saved: true };
       } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to save critique to gbrain";
         setBrainSaveByJobId((previous) => ({
           ...previous,
           [job.id]: silent
             ? { state: "idle" }
             : {
                 state: "error",
-                error: err instanceof Error ? err.message : "Failed to save critique to gbrain",
+                error: message,
               },
         }));
-        return false;
+        return { saved: false, error: message };
       }
     },
     [],
@@ -2469,12 +2488,14 @@ function StructuredCritiquePageContent() {
         return;
       }
 
-      const saved = await persistJobToBrain(job, {
+      const result = await persistJobToBrain(job, {
         projectSlugs,
         silent: false,
       });
-      if (saved) {
+      if (result.saved) {
         setSavePanelJobId(null);
+      } else if (result.error) {
+        setSavePanelError(result.error);
       }
     },
     [
@@ -2888,6 +2909,11 @@ function StructuredCritiquePageContent() {
                     <div className="px-3 py-2 text-xs text-muted">No history yet.</div>
                   ) : (
                     <>
+                      {history.length > 0 ? (
+                        <div className="px-3 pb-1 pt-1 text-[10px] font-medium uppercase tracking-widest text-muted">
+                          Run history
+                        </div>
+                      ) : null}
                       {history.map((job) => (
                         <button
                           key={job.id}
@@ -2914,6 +2940,11 @@ function StructuredCritiquePageContent() {
                           </div>
                         </button>
                       ))}
+                      {persistedHistory.length > 0 ? (
+                        <div className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-widest text-muted">
+                          Saved in brain
+                        </div>
+                      ) : null}
                       {persistedHistory.map((entry) => (
                         <button
                           key={entry.brain_slug}

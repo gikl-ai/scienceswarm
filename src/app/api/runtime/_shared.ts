@@ -32,6 +32,7 @@ import {
 } from "@/lib/runtime-hosts/registry";
 import {
   createRuntimeSessionStore,
+  type RuntimeSessionStatus,
   type RuntimeSessionStore,
 } from "@/lib/runtime-hosts/sessions";
 import { createOpenClawRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/openclaw";
@@ -40,6 +41,7 @@ import { createCodexRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/code
 import { createGeminiCliRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/gemini-cli";
 import { createOpenHandsRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/openhands";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
+import { isLocalRequest } from "@/lib/local-guard";
 
 export interface RuntimeApiServices {
   sessionStore: RuntimeSessionStore;
@@ -71,6 +73,14 @@ export const RUNTIME_APPROVAL_STATES = [
   "approved",
   "rejected",
 ] as const satisfies readonly RuntimeApprovalState[];
+
+export const RUNTIME_SESSION_STATUSES = [
+  "queued",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+] as const satisfies readonly RuntimeSessionStatus[];
 
 function defaultRuntimeAdapters(): ResearchRuntimeHost[] {
   return [
@@ -126,6 +136,21 @@ export function runtimeInvalidRequest(
     userMessage: message,
     recoverable: true,
     context,
+  });
+}
+
+export async function assertRuntimeApiLocalRequest(
+  request: Request,
+): Promise<void> {
+  if (await isLocalRequest(request)) return;
+
+  throw new RuntimeHostError({
+    code: "RUNTIME_INVALID_REQUEST",
+    status: 403,
+    message: "Runtime API requests must originate from the local ScienceSwarm app.",
+    userMessage: "Runtime controls are only available from the local ScienceSwarm app.",
+    recoverable: false,
+    context: { localOnly: true },
   });
 }
 
@@ -221,14 +246,34 @@ export function optionalStringArrayField(
   if (!Array.isArray(value)) {
     throw runtimeInvalidRequest(`Expected string array field: ${key}.`, { key });
   }
-  return value.map((item) => {
+  const strings = value.map((item) => {
     if (typeof item !== "string") {
       throw runtimeInvalidRequest(`Expected ${key} to contain only strings.`, {
         key,
       });
     }
-    return item;
+    const trimmed = item.trim();
+    if (!trimmed) {
+      throw runtimeInvalidRequest(`Expected ${key} to contain only strings.`, {
+        key,
+      });
+    }
+    return trimmed;
   });
+  return Array.from(new Set(strings));
+}
+
+export function optionalRuntimeSessionStatusFromSearchParam(
+  value: string | null,
+): RuntimeSessionStatus | undefined {
+  if (value === null || value.trim() === "") return undefined;
+  const status = value.trim();
+  if (!RUNTIME_SESSION_STATUSES.includes(status as RuntimeSessionStatus)) {
+    throw runtimeInvalidRequest("Invalid runtime session status.", {
+      status: value,
+    });
+  }
+  return status as RuntimeSessionStatus;
 }
 
 export function projectPolicyFromBody(

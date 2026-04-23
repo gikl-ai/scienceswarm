@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HOSTED_DESCARTES_RECOVERY_MESSAGE } from "@/lib/structured-critique-errors";
@@ -434,6 +434,62 @@ describe("Critique workspace", () => {
       "href",
       "/dashboard/project?name=pasted-text&brain_slug=newest-text-critique",
     );
+    expect(screen.getByText("Saved in brain")).toBeInTheDocument();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("does not render saved gbrain pages as browser run replicas", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        makeCompletedJob({
+          id: "brain:hubble-1929-critique",
+          pdf_filename: "hubble-1929.pdf",
+          saved_at: "2026-04-18T07:02:34.000Z",
+        }),
+      ]),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/health") {
+          return makeHealthResponse(true);
+        }
+        if (isAuthStatusRequest(input)) {
+          return makeAuthStatusResponse();
+        }
+        if (isPersistedCritiqueList(input)) {
+          return Response.json({
+            audits: [
+              {
+                brain_slug: "hubble-1929-critique",
+                parent_slug: "hubble-1929",
+                project_slug: "hubble-1929",
+                title: "Hubble critique",
+                uploaded_at: "2026-04-18T07:02:34.000Z",
+                source_filename: "hubble-1929.pdf",
+                descartes_job_id: "job-hubble",
+                finding_count: 3,
+                url: "/dashboard/reasoning?brain_slug=hubble-1929-critique",
+                project_url:
+                  "/dashboard/project?name=hubble-1929&brain_slug=hubble-1929-critique",
+              },
+            ],
+          });
+        }
+        if (isHostedCritiqueHistoryRequest(input)) {
+          return makeEmptyHostedCritiqueHistory();
+        }
+        throw new Error(`Unexpected fetch in test: ${url}`);
+      }),
+    );
+
+    render(<StructuredCritiquePage />);
+
+    expect(await screen.findByText("Saved in brain")).toBeInTheDocument();
+    expect(screen.queryByText("Run history")).not.toBeInTheDocument();
+    expect(screen.getAllByText("hubble-1929.pdf")).toHaveLength(1);
   });
 
   it("rehydrates hosted history when browser-local history is empty", async () => {
@@ -565,10 +621,52 @@ describe("Critique workspace", () => {
       "href",
       "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
     );
-    expect(screen.getByRole("link", { name: "Analysis link" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open saved analysis" })).toHaveAttribute(
       "href",
       "/dashboard/reasoning?brain_slug=paper-critique",
     );
+  });
+
+  it("shows save API failures inside the project picker", async () => {
+    const completedJob = makeCompletedJob();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/health") {
+        return makeHealthResponse(true);
+      }
+      if (isAuthStatusRequest(input)) {
+        return makeAuthStatusResponse();
+      }
+      if (isPersistedCritiqueList(input)) {
+        return makeEmptyPersistedCritiqueList();
+      }
+      if (isHostedCritiqueHistoryRequest(input)) {
+        return makeEmptyHostedCritiqueHistory();
+      }
+      if (isProjectListRequest(input)) {
+        return makeProjectListResponse();
+      }
+      if (String(input) === "/api/brain/critique") {
+        return Response.json({ error: "gbrain unavailable" }, { status: 503 });
+      }
+      throw new Error(`Unexpected fetch in test: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([completedJob]));
+
+    render(<StructuredCritiquePage />);
+
+    await openRecentAnalysis("paper.pdf");
+    fireEvent.click(await screen.findByRole("button", { name: "Save to project..." }));
+    fireEvent.click(await screen.findByText("Project Alpha"));
+    fireEvent.click(screen.getByRole("button", { name: "Save critique" }));
+
+    const destinationLabel = await screen.findByText("Destination projects");
+    const panel = destinationLabel.parentElement?.parentElement;
+    expect(panel).toBeTruthy();
+    expect(
+      await within(panel as HTMLElement).findByText("gbrain unavailable"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save critique" })).toBeEnabled();
   });
 
   it("recognizes a local completed audit that was already saved", async () => {
