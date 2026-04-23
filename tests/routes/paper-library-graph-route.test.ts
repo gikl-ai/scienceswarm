@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initBrain } from "@/brain/init";
 import type { PaperReviewItem } from "@/lib/paper-library/contracts";
+import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 const mockIsLocal = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
 const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
@@ -15,9 +16,10 @@ vi.mock("@/lib/local-guard", () => ({
 }));
 
 let dataRoot: string;
+let brainRoot: string;
 
 function stateRoot(): string {
-  return path.join(dataRoot, "projects", "project-alpha", ".brain", "state");
+  return getProjectStateRootForBrainRoot("project-alpha", brainRoot);
 }
 
 function item(): PaperReviewItem {
@@ -84,7 +86,8 @@ describe("paper-library graph route", () => {
     process.env.SCIENCESWARM_DIR = dataRoot;
     process.env.SCIENCESWARM_USER_HANDLE = "@paper-library-graph-route-test";
     delete process.env.SEMANTIC_SCHOLAR_API_KEY;
-    initBrain({ root: path.join(dataRoot, "brain"), name: "Test Researcher" });
+    brainRoot = path.join(dataRoot, "brain");
+    initBrain({ root: brainRoot, name: "Test Researcher" });
     await seedState();
   });
 

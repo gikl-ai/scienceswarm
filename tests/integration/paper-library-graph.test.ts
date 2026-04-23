@@ -10,6 +10,7 @@ import {
   type PaperLibraryGraphAdapter,
 } from "@/lib/paper-library/graph";
 import type { PaperReviewItem } from "@/lib/paper-library/contracts";
+import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
 const ORIGINAL_SCIENCESWARM_USER_HANDLE = process.env.SCIENCESWARM_USER_HANDLE;
@@ -22,7 +23,7 @@ function iso(): string {
 }
 
 function stateRoot(): string {
-  return path.join(dataRoot, "projects", "project-alpha", ".brain", "state");
+  return getProjectStateRootForBrainRoot("project-alpha", brainRoot);
 }
 
 function reviewItem(paperId: string, title: string, doi: string): PaperReviewItem {
