@@ -219,6 +219,46 @@ describe("gateway-ws-client", () => {
     });
   });
 
+  it("does not treat chat.final tool-role content as assistant text", async () => {
+    const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const turn = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 60_000,
+      idempotencyKey: "run-alpha",
+    });
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.send"));
+    });
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "session-alpha",
+          runId: "run-alpha",
+          state: "final",
+          message: {
+            role: "tool",
+            content: [{ type: "text", text: "tool output" }],
+          },
+        },
+      }),
+    );
+
+    await expect(turn).resolves.toMatchObject({
+      runId: "run-alpha",
+      text: "",
+      events: [expect.objectContaining({ method: "chat" })],
+    });
+  });
+
   it("forwards chat.send agent progress events for the active run", async () => {
     const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
     const onEvent = vi.fn();

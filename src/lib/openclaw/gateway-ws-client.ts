@@ -703,8 +703,7 @@ function extractAssistantTextFromMessage(message: unknown): string {
 
   if (
     typeof record.role === "string" &&
-    record.role !== "assistant" &&
-    record.role !== "tool"
+    record.role !== "assistant"
   ) {
     return "";
   }
@@ -816,6 +815,7 @@ export async function sendChatViaGateway(
               ? payload.errorMessage
               : `OpenClaw chat turn ${state}`;
           reject(new Error(detail));
+          return;
         }
         return;
       }
