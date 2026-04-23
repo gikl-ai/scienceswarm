@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 import { Check, CopySimple, WarningCircle } from "@phosphor-icons/react";
 import type {
   ChatTaskPhase,
@@ -168,13 +168,13 @@ const PROGRESS_SECTION_META: Record<
     title: "Thinking Trace",
     icon: "🧠",
     className: "border-sky-200 bg-sky-50 text-sky-700",
-    rowClassName: "text-slate-900/90",
+    rowClassName: "text-sky-900/90",
   },
   activity: {
     title: "OpenClaw Activity",
     icon: "⚙️",
     className: "border-border bg-slate-50 text-muted",
-    rowClassName: "text-slate-700",
+    rowClassName: "text-muted",
   },
 };
 const EXPLORE_COMMAND_PREFIXES = [
@@ -512,9 +512,9 @@ function buildProgressSectionChanges(blocks: ProgressTranscriptBlock[]): ReactNo
         >
           <div className={`flex items-start gap-2 ${PROGRESS_SECTION_META.activity.rowClassName}`}>
             <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
-            <span className="font-medium text-slate-700">Explored</span>
+            <span className="font-medium">Explored</span>
           </div>
-          <div className="space-y-1 pl-5 text-slate-600">
+          <div className="space-y-1 pl-5 text-muted">
             {block.lines.map((line, lineIndex) => (
               <div
                 key={`${index}-${lineIndex}-${line}`}

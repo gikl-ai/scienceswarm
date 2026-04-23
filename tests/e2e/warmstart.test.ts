@@ -763,6 +763,24 @@ describe("Test 3: First briefing generation", () => {
     );
   });
 
+  it("falls back to a heuristic briefing when the LLM stalls", async () => {
+    vi.stubEnv("SCIENCESWARM_COLDSTART_LLM_TIMEOUT_MS", "100");
+    const config = makeConfig();
+    const llmComplete = vi.fn(() => new Promise<LLMResponse>(() => {}));
+    const llm: LLMClient = {
+      complete: llmComplete,
+    };
+
+    const briefing = await generateFirstBriefing(config, llm);
+
+    expect(llmComplete).toHaveBeenCalledTimes(1);
+    expect(briefing.generatedAt).toBeTruthy();
+    expect(briefing.stats.totalPages).toBeGreaterThan(0);
+    expect(briefing.suggestedQuestions).toContain(
+      "What are the main themes in my research corpus?",
+    );
+  });
+
   it("handles an empty brain gracefully", async () => {
     const config = makeConfig();
     const llmComplete = vi.fn(async (): Promise<LLMResponse> => {

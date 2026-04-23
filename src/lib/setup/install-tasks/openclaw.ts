@@ -18,11 +18,13 @@
  */
 
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
+import JSON5 from "json5";
+
 import { getOpenClawPort } from "@/lib/config/ports";
+import { ensureOpenClawGatewayAuthConfig } from "@/lib/openclaw/gateway-auth";
 import {
   type OpenClawMode,
   resolveOpenClawMode,
@@ -239,11 +241,22 @@ async function* applyStateDirOnboarding(
         detail:
           "OpenClaw onboarding timed out; writing minimal local gateway config…",
       };
-      await writeMinimalStateDirOnboarding({
-        mode,
-        port: Number(port),
-        workspace,
-      });
+      try {
+        await writeMinimalStateDirOnboarding({
+          mode,
+          port: Number(port),
+          workspace,
+        });
+      } catch (error) {
+        yield {
+          status: "failed",
+          error:
+            error instanceof Error
+              ? error.message
+              : "OpenClaw onboarding recovery could not update the local gateway config.",
+        };
+        return false;
+      }
       return true;
     }
 
@@ -268,45 +281,7 @@ async function writeMinimalStateDirOnboarding(args: {
 }): Promise<void> {
   await fs.mkdir(args.mode.stateDir, { recursive: true });
   await fs.mkdir(args.workspace, { recursive: true });
-
-  let config: Record<string, unknown> = {};
-  let rawConfig: string | null = null;
-  try {
-    rawConfig = await fs.readFile(args.mode.configPath, "utf8");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw err;
-    }
-  }
-  if (rawConfig) {
-    try {
-      config = JSON.parse(rawConfig) as Record<string, unknown>;
-    } catch {
-      config = {};
-    }
-  }
-
-  const existingGateway = config.gateway && typeof config.gateway === "object"
-    ? (config.gateway as Record<string, unknown>)
-    : {};
-  const existingAuth = existingGateway.auth && typeof existingGateway.auth === "object"
-    ? (existingGateway.auth as Record<string, unknown>)
-    : null;
-
-  config.gateway = {
-    ...existingGateway,
-    mode: "local",
-    port: args.port,
-    auth: existingAuth ?? {
-      mode: "token",
-      token: randomBytes(32).toString("hex"),
-    },
-  };
-
-  await fs.writeFile(args.mode.configPath, `${JSON.stringify(config, null, 2)}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
+  ensureOpenClawGatewayAuthConfig({ mode: args.mode, port: args.port });
 }
 
 async function stateDirOnboardingExists(
@@ -322,21 +297,30 @@ async function stateDirOnboardingExists(
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(rawConfig);
+    parsed = JSON5.parse(rawConfig);
   } catch {
     return false;
   }
 
   const config = parsed as {
-    gateway?: { mode?: unknown; port?: unknown; auth?: unknown };
+    gateway?: {
+      mode?: unknown;
+      port?: unknown;
+      auth?: { token?: unknown } | unknown;
+    };
   };
   const gateway = config.gateway;
+  const auth = gateway?.auth;
+  const token =
+    typeof auth === "object" && auth !== null
+      ? (auth as { token?: unknown }).token
+      : null;
   if (
     !gateway ||
     gateway.mode !== "local" ||
     gateway.port !== getOpenClawPort() ||
-    typeof gateway.auth !== "object" ||
-    gateway.auth === null
+    typeof token !== "string" ||
+    token.trim().length === 0
   ) {
     return false;
   }

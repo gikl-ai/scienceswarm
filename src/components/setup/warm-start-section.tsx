@@ -29,7 +29,7 @@
  * right side of the frontend/backend boundary.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   BrainProgress,
@@ -68,7 +68,18 @@ export function WarmStartSection({
 }: WarmStartSectionProps) {
   const [path, setPath] = useState<string>("");
   const [state, setState] = useState<ViewState>({ kind: "idle" });
+  const statusRef = useRef<HTMLDivElement | null>(null);
   const lockedProjectSlug = projectSlug?.trim() || null;
+
+  useEffect(() => {
+    if (
+      state.kind === "scanned" ||
+      state.kind === "importing" ||
+      state.kind === "done"
+    ) {
+      statusRef.current?.scrollIntoView?.({ block: "center" });
+    }
+  }, [state.kind]);
 
   const handleScan = useCallback(async () => {
     const trimmed = path.trim();
@@ -224,6 +235,7 @@ export function WarmStartSection({
 
       {state.kind === "scanned" && (
         <div
+          ref={statusRef}
           className="mt-4 rounded-xl border border-border bg-surface/30 px-4 py-3 text-sm text-foreground"
           data-testid="warm-start-summary"
         >
@@ -251,7 +263,11 @@ export function WarmStartSection({
       )}
 
       {(state.kind === "importing" || state.kind === "done") && (
-        <div className="mt-4" data-testid="warm-start-progress-container">
+        <div
+          ref={statusRef}
+          className="mt-4"
+          data-testid="warm-start-progress-container"
+        >
           <BrainProgress
             streamUrl="/api/brain/coldstart-stream"
             requestBody={importRequestBody}

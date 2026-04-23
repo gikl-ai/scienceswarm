@@ -11,6 +11,7 @@ import path from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { getOpenClawGatewayUrl } from "@/lib/config/ports";
 import { getScienceSwarmOpenClawStateDir } from "@/lib/scienceswarm-paths";
+import { getOpenClawGatewayAuthStatus } from "@/lib/openclaw/gateway-auth";
 import { runOpenClaw, runOpenClawSync } from "@/lib/openclaw/runner";
 
 /**
@@ -640,6 +641,14 @@ export async function gatewayHealthCheck(): Promise<OpenClawGatewayStatus> {
   } catch {
     // If the WS helper cannot be loaded, fall back to HTTP readiness below.
   }
+
+  if (!getOpenClawGatewayAuthStatus().configured) {
+    return {
+      status: "disconnected",
+      gateway: "",
+    };
+  }
+
   if (isGatewayConnected?.()) {
     return {
       status: "connected",

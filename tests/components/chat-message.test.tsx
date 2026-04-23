@@ -132,6 +132,53 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
   });
 
+  it("renders thinking and activity sections in chronological order", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "thinking", text: "Plan: inspect files" },
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "thinking", text: "Now summarize findings" },
+          { kind: "activity", text: "Read docs/notes.md" },
+        ]}
+        timestamp={new Date("2026-04-20T10:20:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    const text = progressLog.textContent ?? "";
+    const firstThinking = text.indexOf("Thinking Trace");
+    const firstPlan = text.indexOf("Plan: inspect files");
+    const firstActivity = text.indexOf("OpenClaw Activity");
+    const firstRead = text.indexOf("Read docs/results_table.csv");
+    const secondThinking = text.indexOf("Thinking Trace", firstThinking + 1);
+    const secondThought = text.indexOf("Now summarize findings");
+    const secondActivity = text.indexOf("OpenClaw Activity", firstActivity + 1);
+    const secondRead = text.indexOf("Read docs/notes.md");
+    for (const position of [
+      firstThinking,
+      firstPlan,
+      firstActivity,
+      firstRead,
+      secondThinking,
+      secondThought,
+      secondActivity,
+      secondRead,
+    ]) {
+      expect(position).toBeGreaterThan(-1);
+    }
+    expect(firstThinking).toBeLessThan(firstPlan);
+    expect(firstPlan).toBeLessThan(firstActivity);
+    expect(firstActivity).toBeLessThan(firstRead);
+    expect(firstRead).toBeLessThan(secondThinking);
+    expect(secondThinking).toBeLessThan(secondThought);
+    expect(secondThought).toBeLessThan(secondActivity);
+    expect(secondActivity).toBeLessThan(secondRead);
+  });
+
   it("increments the live Working elapsed row every second under fake timers", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
@@ -339,6 +386,7 @@ describe("ChatMessage", () => {
     expect(progressLog).not.toHaveTextContent("Tool read_file result:");
     expect(progressLog).toHaveTextContent(/• Working \(\d+s • esc to interrupt\)/);
     expect(screen.getByText("Thinking Trace")).toBeInTheDocument();
+    expect(screen.getByText("OpenClaw Activity")).toBeInTheDocument();
   });
 
   it("renders restored legacy thinking and activity after a completed assistant turn", () => {

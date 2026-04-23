@@ -218,6 +218,16 @@ describe("Project dashboard smoke test", () => {
     expect(screen.queryByText("Low-Confidence Project Read")).not.toBeInTheDocument();
   });
 
+  it("shows a paper library launcher for the active project", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    const launcher = await screen.findByRole("link", { name: "Paper Library" });
+    expect(launcher).toHaveAttribute("href", "/dashboard/gbrain?name=demo-project&view=paper-library");
+  });
+
 
   it("restores the last project slug when the workspace URL is missing name", async () => {
     searchParamsValue = "";

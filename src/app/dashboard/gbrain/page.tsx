@@ -11,6 +11,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DreamCycleCard } from "@/components/research/dream-cycle-card";
 import { BrainSearchPanel } from "@/components/research/brain-search-panel";
+import { PaperLibraryCommandCenter } from "@/components/research/paper-library/command-center";
 import {
   CompiledPageView,
   type CompiledPageRead,
@@ -63,7 +64,7 @@ type BrainArtifactState =
   | { status: "ready"; slug: string; page: CompiledPageRead }
   | { status: "error"; slug: string; message: string };
 
-type GbrainView = "pages" | "skills";
+type GbrainView = "pages" | "skills" | "paper-library";
 type GbrainSkillsCatalog = "workspace" | "openclaw" | "installed";
 
 function GbrainPageContent() {
@@ -79,7 +80,11 @@ function GbrainPageContent() {
         ? "installed"
         : "workspace";
   const activeProjectSlug = safeProjectSlugOrNull(projectSlugFromUrl);
-  const activeView: GbrainView = searchParams.get("view") === "skills" ? "skills" : "pages";
+  const activeView: GbrainView = searchParams.get("view") === "skills"
+    ? "skills"
+    : searchParams.get("view") === "paper-library"
+      ? "paper-library"
+      : "pages";
   const requestedBrainPageSlug = useMemo(
     () => normalizeBrainArtifactSlug(requestedBrainSlug),
     [requestedBrainSlug],
@@ -94,7 +99,7 @@ function GbrainPageContent() {
       return;
     }
 
-    if (activeView === "skills") {
+    if (activeView !== "pages") {
       return;
     }
 
@@ -269,7 +274,7 @@ function GbrainPageContent() {
   }, [activeView, brainBootstrapState.status, router]);
 
   useEffect(() => {
-    if (!activeProjectSlug || activeView === "skills") {
+    if (!activeProjectSlug || activeView !== "pages") {
       setProjectBrief(null);
       return;
     }
@@ -279,7 +284,7 @@ function GbrainPageContent() {
   }, [activeProjectSlug, activeView, loadProjectBrief]);
 
   useEffect(() => {
-    if (activeView === "skills") {
+    if (activeView !== "pages") {
       setSelectedArtifact({ status: "idle" });
       return;
     }
@@ -309,7 +314,9 @@ function GbrainPageContent() {
             <p className="mt-1 max-w-2xl text-sm text-muted">
               {activeView === "pages"
                 ? "Dream Cycle, search, and page inspection for your current project's gbrain."
-                : activeSkillsCatalog === "workspace"
+                : activeView === "paper-library"
+                  ? "Turn a local PDF archive into a reviewed, reversible, graph-aware research library."
+                  : activeSkillsCatalog === "workspace"
                   ? "Curate host-neutral skills in this repo, keep some private, and sync them into OpenClaw, Claude Code, Codex, and other adapters."
                   : activeSkillsCatalog === "openclaw"
                     ? "Inspect the generated OpenClaw adapter output that ScienceSwarm materializes from the canonical workspace skill source."
@@ -338,6 +345,17 @@ function GbrainPageContent() {
               >
                 Skills
               </button>
+              <button
+                type="button"
+                onClick={() => handleSelectView("paper-library")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  activeView === "paper-library"
+                    ? "bg-white text-foreground shadow-sm"
+                    : "text-muted hover:text-foreground"
+                }`}
+              >
+                Paper Library
+              </button>
             </div>
           </div>
 
@@ -351,7 +369,7 @@ function GbrainPageContent() {
                 <span>{brainBootstrapState.pageCount} pages</span>
               )}
             </div>
-            {activeView === "pages" && activeProjectSlug && (
+            {(activeView === "pages" || activeView === "paper-library") && activeProjectSlug && (
               <Link
                 href={buildWorkspaceHrefForSlug(activeProjectSlug)}
                 className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-white px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
@@ -370,6 +388,23 @@ function GbrainPageContent() {
             <h2 className="text-lg font-semibold">No project selected</h2>
             <p className="mt-2 max-w-md text-sm text-muted">
               Open a project workspace first so gbrain can scope Dream Cycle and search to that project.
+            </p>
+            <Link
+              href="/dashboard/project"
+              className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+            >
+              Open workspace
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {activeView === "paper-library" && !activeProjectSlug && (
+        <section className="m-4 rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">
+          <div className="flex flex-col items-center text-center">
+            <h2 className="text-lg font-semibold">No project selected</h2>
+            <p className="mt-2 max-w-md text-sm text-muted">
+              Open a project workspace first so Paper Library can scope scans, apply plans, and graph state to one local research archive.
             </p>
             <Link
               href="/dashboard/project"
@@ -504,6 +539,38 @@ function GbrainPageContent() {
           </div>
         </>
       )}
+
+      {activeView === "paper-library" && activeProjectSlug && (
+        <>
+          {brainBootstrapState.status === "missing" && (
+            <section
+              role="alert"
+              className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+            >
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="font-semibold">Paper Library needs local setup.</p>
+                  <p className="mt-1 text-xs leading-5 text-amber-700">
+                    {brainBootstrapState.message ?? "Run setup first so ScienceSwarm has a local brain root for paper-library state."}
+                  </p>
+                </div>
+                <Link
+                  href="/setup"
+                  className="inline-flex h-8 shrink-0 items-center justify-center rounded border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-800 transition-colors hover:border-amber-500 hover:text-amber-900"
+                >
+                  Open setup
+                </Link>
+              </div>
+            </section>
+          )}
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 md:p-4">
+            <div className="min-h-0 flex-1 overflow-hidden rounded-[24px] border border-border bg-white shadow-sm">
+              <PaperLibraryCommandCenter projectSlug={activeProjectSlug} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -631,6 +698,10 @@ function buildGbrainDashboardHref({
     } else {
       params.delete("skill");
     }
+  } else if (view === "paper-library") {
+    params.set("view", "paper-library");
+    params.delete("skill");
+    params.delete("skills_catalog");
   } else {
     params.delete("view");
     params.delete("skill");

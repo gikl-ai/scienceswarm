@@ -873,12 +873,9 @@ describe("GET /api/chat/unified", () => {
   it("returns health status when action=health", async () => {
     const agentCfg = { type: "openclaw", url: "http://localhost:19002" };
     resolveAgentConfig.mockReturnValue(agentCfg);
-    openClawHealthCheck.mockResolvedValueOnce({
+    openClawGatewayHealthCheck.mockResolvedValueOnce({
       status: "connected",
       gateway: "ws://127.0.0.1:19002",
-      channels: ["telegram"],
-      agents: 1,
-      sessions: 2,
     });
 
     // Mock OpenHands health check
@@ -896,7 +893,40 @@ describe("GET /api/chat/unified", () => {
     expect(body.agent).toEqual({ type: "openclaw", status: "connected" });
     // Legacy field
     expect(body.openclaw).toBe("connected");
-    expect(body.channels).toEqual(["telegram"]);
+    expect(body.channels).toEqual([]);
+  });
+
+  it("uses chat-gateway readiness for OpenClaw health status", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: ["telegram"],
+      agents: 1,
+      sessions: 2,
+    });
+    openClawGatewayHealthCheck.mockResolvedValueOnce({
+      status: "disconnected",
+      gateway: "",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(new Response("ok", { status: 200 })),
+    );
+
+    const response = await GET(
+      new Request("http://localhost/api/chat/unified?action=health"),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.agent).toEqual({ type: "openclaw", status: "disconnected" });
+    expect(body.openclaw).toBe("disconnected");
+    expect(openClawGatewayHealthCheck).toHaveBeenCalledTimes(1);
+    expect(openClawHealthCheck).not.toHaveBeenCalled();
   });
 
   it("reuses a fresh OpenClaw runtime status between the health probe and the next POST even when config key order differs", async () => {
@@ -1100,12 +1130,9 @@ describe("GET /api/chat/unified", () => {
     vi.stubEnv("SCIENCESWARM_STRICT_LOCAL_ONLY", "1");
     const agentCfg = { type: "openclaw", url: "http://localhost:19002" };
     resolveAgentConfig.mockReturnValue(agentCfg);
-    openClawHealthCheck.mockResolvedValueOnce({
+    openClawGatewayHealthCheck.mockResolvedValueOnce({
       status: "connected",
       gateway: "ws://127.0.0.1:19002",
-      channels: ["telegram"],
-      agents: 1,
-      sessions: 2,
     });
     isLocalProviderConfigured.mockReturnValue(false);
     localHealthCheck.mockResolvedValueOnce({
@@ -1129,7 +1156,7 @@ describe("GET /api/chat/unified", () => {
     expect(body.llmProvider).toBe("local");
     expect(body.agent).toEqual({ type: "openclaw", status: "connected" });
     expect(body.openhands).toBe("disconnected");
-    expect(body.channels).toEqual(["telegram"]);
+    expect(body.channels).toEqual([]);
     expect(body.ready).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
   });

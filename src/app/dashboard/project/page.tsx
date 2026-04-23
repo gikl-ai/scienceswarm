@@ -79,6 +79,7 @@ import {
 } from "@/components/research/inline-chart";
 import { SchedulerPanel } from "@/components/research/scheduler-panel";
 import {
+  buildPaperLibraryHrefForSlug,
   buildWorkspaceHrefForSlug,
   persistLastProjectSlug,
   readLastProjectSlug,
@@ -4214,6 +4215,14 @@ function ProjectPageContent() {
                 {uploadedFiles.length} files
               </span>
             )}
+            {activeProjectSlug && (
+              <Link
+                href={buildPaperLibraryHrefForSlug(activeProjectSlug)}
+                className="inline-flex h-8 items-center rounded border border-border bg-white px-3 text-[11px] font-medium text-foreground transition-colors hover:border-accent hover:text-accent"
+              >
+                Paper Library
+              </Link>
+            )}
           </div>
         </div>
 
@@ -4346,7 +4355,7 @@ function ProjectPageContent() {
                   }}
                   onCompareHostIdsChange={setCompareHostIds}
                 />
-                <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-surface/30 select-text">
+                <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-4 bg-surface/30 select-text">
                   {!activeProjectSlug && messages.length === 0 && (
                     <section className="rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">
                       <div className="flex flex-col items-center text-center">

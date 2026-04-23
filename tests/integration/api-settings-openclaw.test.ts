@@ -1,5 +1,12 @@
 import { EventEmitter } from "node:events";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -150,6 +157,22 @@ function installExecFileMock(options?: { model?: string | null; openclawInstalle
   });
 }
 
+function writeGatewayToken(root: string, token = "test-token"): void {
+  const configPath = join(root, "openclaw", "openclaw.json");
+  mkdirSync(join(root, "openclaw"), { recursive: true });
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      gateway: {
+        mode: "local",
+        port: 18789,
+        auth: { mode: "token", token },
+      },
+    }),
+    "utf8",
+  );
+}
+
 describe("GET /api/settings/openclaw", () => {
   let prevScienceSwarmDir: string | undefined;
   let prevCwd = process.cwd();
@@ -181,6 +204,7 @@ describe("GET /api/settings/openclaw", () => {
     prevCwd = process.cwd();
     process.chdir(tmpRoot);
     process.env.SCIENCESWARM_DIR = tmpRoot;
+    writeGatewayToken(tmpRoot);
   });
 
   afterEach(() => {
@@ -250,6 +274,24 @@ describe("GET /api/settings/openclaw", () => {
       running: false,
       steps: {
         configure: false,
+      },
+    });
+  });
+
+  it("does not mark a bare reachable gateway as running when gateway auth is missing", async () => {
+    rmSync(join(tmpRoot, "openclaw", "openclaw.json"), { force: true });
+
+    const { GET } = await import("@/app/api/settings/openclaw/route");
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      installed: true,
+      configured: false,
+      running: false,
+      steps: {
+        configure: false,
+        start: false,
       },
     });
   });

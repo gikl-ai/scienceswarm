@@ -38,11 +38,18 @@ function candidateForReviewItem(item: PaperReviewItem | undefined): PaperIdentit
   return item.candidates.find((candidate) => candidate.id === item.selectedCandidateId) ?? item.candidates[0];
 }
 
-function paperSlug(operation: ApplyOperation, candidate: PaperIdentityCandidate | undefined): string {
+export function paperLibraryPageSlug(operation: ApplyOperation, candidate: PaperIdentityCandidate | undefined): string {
+  return paperLibraryPageSlugForPaperId(operation.paperId, candidate);
+}
+
+export function paperLibraryPageSlugForPaperId(
+  paperId: string,
+  candidate: PaperIdentityCandidate | undefined,
+): string {
   if (candidate?.identifiers.doi) return `wiki/entities/papers/doi-${slugSegment(candidate.identifiers.doi)}`;
   if (candidate?.identifiers.arxivId) return `wiki/entities/papers/arxiv-${slugSegment(candidate.identifiers.arxivId)}`;
   if (candidate?.identifiers.pmid) return `wiki/entities/papers/pmid-${slugSegment(candidate.identifiers.pmid)}`;
-  return `wiki/entities/papers/local-${slugSegment(operation.paperId)}`;
+  return `wiki/entities/papers/local-${slugSegment(paperId)}`;
 }
 
 function paperTitle(
@@ -114,7 +121,7 @@ export async function persistAppliedPaperLocations(input: PersistAppliedPaperLoc
     if (!operation) continue;
     const reviewItem = reviewItemsByPaperId.get(operation.paperId);
     const candidate = candidateForReviewItem(reviewItem);
-    const slug = paperSlug(operation, candidate);
+    const slug = paperLibraryPageSlug(operation, candidate);
     const title = paperTitle(operation, reviewItem, candidate);
     const timelineEntry = `- **${nowIso.slice(0, 10)}** | ScienceSwarm paper library - Applied local PDF path \`${manifestOperation.destinationRelativePath}\` (manifest ${input.manifestId}).`;
 

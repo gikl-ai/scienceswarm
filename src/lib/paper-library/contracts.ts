@@ -17,6 +17,8 @@ export const paperLibraryErrorCodes = [
   "invalid_cursor",
   "invalid_state",
   "malformed_state",
+  "model_unavailable",
+  "resource_budget_exhausted",
 ] as const;
 
 export const PaperLibraryErrorCodeSchema = z.enum(paperLibraryErrorCodes);
@@ -138,6 +140,11 @@ export const PaperReviewItemSchema = z.object({
   candidates: z.array(PaperIdentityCandidateSchema).default([]),
   selectedCandidateId: z.string().optional(),
   correction: z.record(z.string(), z.unknown()).optional(),
+  semanticText: z.string().min(1).max(4000).optional(),
+  semanticTextHash: z.string().min(1).optional(),
+  firstSentence: z.string().min(1).max(400).optional(),
+  pageCount: z.number().int().nonnegative().optional(),
+  wordCount: z.number().int().nonnegative().optional(),
   version: z.number().int().nonnegative(),
   updatedAt: IsoDateStringSchema,
 });
@@ -391,6 +398,201 @@ export const CursorWindowResponseSchema = z.object({
 });
 export type CursorWindowResponse = z.infer<typeof CursorWindowResponseSchema>;
 
+export const SourceRunStatusSchema = z.enum([
+  "success",
+  "negative",
+  "metadata_unavailable",
+  "rate_limited",
+  "auth_unavailable",
+  "paused",
+]);
+export type SourceRunStatus = z.infer<typeof SourceRunStatusSchema>;
+
+export const PaperLibraryGraphNodeKindSchema = z.enum([
+  "local_paper",
+  "external_paper",
+  "bridge_suggestion",
+]);
+export type PaperLibraryGraphNodeKind = z.infer<typeof PaperLibraryGraphNodeKindSchema>;
+
+export const PaperLibraryGraphNodeSchema = z.object({
+  id: z.string().min(1),
+  kind: PaperLibraryGraphNodeKindSchema,
+  paperIds: z.array(z.string().min(1)).default([]),
+  title: z.string().optional(),
+  authors: z.array(z.string()).default([]),
+  year: z.number().int().min(1000).max(3000).optional(),
+  venue: z.string().optional(),
+  identifiers: PaperIdentifierSchema.default({}),
+  local: z.boolean(),
+  suggestion: z.boolean().default(false),
+  sources: z.array(PaperMetadataSourceSchema).default([]),
+  evidence: z.array(z.string()).default([]),
+  referenceCount: z.number().int().nonnegative().optional(),
+  citationCount: z.number().int().nonnegative().optional(),
+});
+export type PaperLibraryGraphNode = z.infer<typeof PaperLibraryGraphNodeSchema>;
+
+export const PaperLibraryGraphEdgeKindSchema = z.enum([
+  "references",
+  "cited_by",
+  "same_identity",
+  "bridge_suggestion",
+]);
+export type PaperLibraryGraphEdgeKind = z.infer<typeof PaperLibraryGraphEdgeKindSchema>;
+
+export const PaperLibraryGraphEdgeSchema = z.object({
+  id: z.string().min(1),
+  sourceNodeId: z.string().min(1),
+  targetNodeId: z.string().min(1),
+  kind: PaperLibraryGraphEdgeKindSchema,
+  source: PaperMetadataSourceSchema,
+  evidence: z.array(z.string()).default([]),
+});
+export type PaperLibraryGraphEdge = z.infer<typeof PaperLibraryGraphEdgeSchema>;
+
+export const PaperLibraryGraphSourceRunSchema = z.object({
+  id: z.string().min(1),
+  source: PaperMetadataSourceSchema,
+  status: SourceRunStatusSchema,
+  paperId: z.string().min(1).optional(),
+  identifier: z.string().min(1).optional(),
+  attempts: z.number().int().nonnegative().default(0),
+  fetchedCount: z.number().int().nonnegative().default(0),
+  cacheHits: z.number().int().nonnegative().default(0),
+  retryAfter: IsoDateStringSchema.optional(),
+  errorCode: PaperLibraryErrorCodeSchema.optional(),
+  message: z.string().optional(),
+  startedAt: IsoDateStringSchema,
+  completedAt: IsoDateStringSchema,
+});
+export type PaperLibraryGraphSourceRun = z.infer<typeof PaperLibraryGraphSourceRunSchema>;
+
+export const PaperLibraryGraphSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1),
+  createdAt: IsoDateStringSchema,
+  updatedAt: IsoDateStringSchema,
+  nodes: z.array(PaperLibraryGraphNodeSchema).default([]),
+  edges: z.array(PaperLibraryGraphEdgeSchema).default([]),
+  sourceRuns: z.array(PaperLibraryGraphSourceRunSchema).default([]),
+  warnings: z.array(z.string()).default([]),
+});
+export type PaperLibraryGraph = z.infer<typeof PaperLibraryGraphSchema>;
+
+export const PaperLibraryGraphResponseSchema = CursorWindowResponseSchema.extend({
+  nodes: z.array(PaperLibraryGraphNodeSchema),
+  edges: z.array(PaperLibraryGraphEdgeSchema),
+  sourceRuns: z.array(PaperLibraryGraphSourceRunSchema),
+  warnings: z.array(z.string()).default([]),
+});
+export type PaperLibraryGraphResponse = z.infer<typeof PaperLibraryGraphResponseSchema>;
+
+export const PaperLibraryClusterModelStatusSchema = z.enum([
+  "ready",
+  "model_unavailable",
+  "resource_budget_exhausted",
+]);
+export type PaperLibraryClusterModelStatus = z.infer<typeof PaperLibraryClusterModelStatusSchema>;
+
+export const PaperLibraryEmbeddingSourceSchema = z.enum([
+  "gbrain",
+  "local_hash",
+]);
+export type PaperLibraryEmbeddingSource = z.infer<typeof PaperLibraryEmbeddingSourceSchema>;
+
+export const PaperLibraryClusterModelSchema = z.object({
+  id: z.string().min(1),
+  provider: PaperLibraryEmbeddingSourceSchema,
+  dimensions: z.number().int().positive(),
+  chunking: z.string().min(1),
+  status: PaperLibraryClusterModelStatusSchema,
+  cacheHits: z.number().int().nonnegative().default(0),
+  generatedCount: z.number().int().nonnegative().default(0),
+  reusedGbrainCount: z.number().int().nonnegative().default(0),
+  fallbackCount: z.number().int().nonnegative().default(0),
+  remainingBudget: z.number().int().nonnegative().optional(),
+});
+export type PaperLibraryClusterModel = z.infer<typeof PaperLibraryClusterModelSchema>;
+
+export const PaperLibraryEmbeddingCacheEntrySchema = z.object({
+  key: z.string().min(1),
+  paperId: z.string().min(1),
+  textHash: z.string().min(1),
+  modelId: z.string().min(1),
+  provider: PaperLibraryEmbeddingSourceSchema,
+  dimensions: z.number().int().positive(),
+  chunking: z.string().min(1),
+  embedding: z.array(z.number()),
+  sourcePageSlug: z.string().min(1).optional(),
+  updatedAt: IsoDateStringSchema,
+});
+export type PaperLibraryEmbeddingCacheEntry = z.infer<typeof PaperLibraryEmbeddingCacheEntrySchema>;
+
+export const PaperLibraryEmbeddingRunSchema = z.object({
+  scanId: z.string().min(1),
+  status: PaperLibraryClusterModelStatusSchema,
+  cursor: z.number().int().nonnegative().default(0),
+  totalCount: z.number().int().nonnegative().default(0),
+  processedCount: z.number().int().nonnegative().default(0),
+  batchSize: z.number().int().positive().default(25),
+  updatedAt: IsoDateStringSchema,
+  cancelRequestedAt: IsoDateStringSchema.optional(),
+  model: PaperLibraryClusterModelSchema,
+});
+export type PaperLibraryEmbeddingRun = z.infer<typeof PaperLibraryEmbeddingRunSchema>;
+
+export const PaperLibraryEmbeddingCacheStoreSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  entries: z.record(z.string(), PaperLibraryEmbeddingCacheEntrySchema).default({}),
+  runs: z.record(z.string(), PaperLibraryEmbeddingRunSchema).default({}),
+});
+export type PaperLibraryEmbeddingCacheStore = z.infer<typeof PaperLibraryEmbeddingCacheStoreSchema>;
+
+export const SemanticClusterMemberSchema = z.object({
+  itemId: z.string().min(1),
+  paperId: z.string().min(1),
+  title: z.string().optional(),
+  relativePath: z.string().optional(),
+  confidence: z.number().min(0).max(1).default(0),
+  score: z.number().min(0).max(1).default(0),
+});
+export type SemanticClusterMember = z.infer<typeof SemanticClusterMemberSchema>;
+
+export const SemanticClusterSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  folderName: z.string().min(1),
+  keywords: z.array(z.string().min(1)).default([]),
+  memberCount: z.number().int().nonnegative(),
+  confidence: z.number().min(0).max(1),
+  representativePaperId: z.string().min(1).optional(),
+  members: z.array(SemanticClusterMemberSchema).default([]),
+});
+export type SemanticCluster = z.infer<typeof SemanticClusterSchema>;
+
+export const PaperLibraryClustersSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1),
+  createdAt: IsoDateStringSchema,
+  updatedAt: IsoDateStringSchema,
+  model: PaperLibraryClusterModelSchema,
+  clusters: z.array(SemanticClusterSchema).default([]),
+  unclusteredPaperIds: z.array(z.string().min(1)).default([]),
+  warnings: z.array(z.string()).default([]),
+});
+export type PaperLibraryClusters = z.infer<typeof PaperLibraryClustersSchema>;
+
+export const PaperLibraryClustersResponseSchema = CursorWindowResponseSchema.extend({
+  clusters: z.array(SemanticClusterSchema),
+  unclusteredCount: z.number().int().nonnegative(),
+  model: PaperLibraryClusterModelSchema,
+  warnings: z.array(z.string()).default([]),
+});
+export type PaperLibraryClustersResponse = z.infer<typeof PaperLibraryClustersResponseSchema>;
+
 export const RepairableStateSchema = z.object({
   ok: z.literal(false),
   code: z.enum(["missing", "malformed", "unsupported_version"]),
@@ -401,16 +603,6 @@ export const RepairableStateSchema = z.object({
 export type RepairableState = z.infer<typeof RepairableStateSchema>;
 
 export type PaperLibraryResult<T> = { ok: true; data: T } | PaperLibraryErrorEnvelope;
-
-export const SourceRunStatusSchema = z.enum([
-  "success",
-  "negative",
-  "metadata_unavailable",
-  "rate_limited",
-  "auth_unavailable",
-  "paused",
-]);
-export type SourceRunStatus = z.infer<typeof SourceRunStatusSchema>;
 
 export const EnrichmentCacheEntrySchema = z.object({
   key: z.string().min(1),

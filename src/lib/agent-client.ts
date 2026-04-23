@@ -131,6 +131,18 @@ function authHeaders(apiKey?: string): Record<string, string> {
   return { Authorization: `Bearer ${apiKey}` };
 }
 
+async function isOpenClawGatewayAuthReady(cfg: AgentConfig): Promise<boolean> {
+  if (cfg.type !== "openclaw" || cfg.apiKey) return true;
+  try {
+    const { hasOpenClawGatewayAuthToken } = await import(
+      "@/lib/openclaw/gateway-auth"
+    );
+    return hasOpenClawGatewayAuthToken();
+  } catch {
+    return false;
+  }
+}
+
 // ── Health Check ────────────────────────────────────────────────
 
 /**
@@ -144,6 +156,10 @@ export async function agentHealthCheck(
   if (!cfg) return { status: "disconnected" };
 
   try {
+    if (!(await isOpenClawGatewayAuthReady(cfg))) {
+      return { status: "disconnected" };
+    }
+
     const res = await fetch(`${cfg.url}/health`, {
       headers: authHeaders(cfg.apiKey),
       signal: AbortSignal.timeout(5_000),

@@ -168,6 +168,26 @@ describe("paper-library review and apply routes", () => {
       status: "applied",
     });
 
+    const manifestRoute = await import("@/app/api/brain/paper-library/manifest/route");
+    const manifestResponse = await manifestRoute.GET(new Request(
+      `http://localhost/api/brain/paper-library/manifest?project=project-alpha&id=${applied.manifestId}&limit=10`,
+    ));
+    expect(manifestResponse.status).toBe(200);
+    await expect(manifestResponse.json()).resolves.toMatchObject({
+      ok: true,
+      manifest: {
+        id: applied.manifestId,
+        status: "applied",
+        appliedCount: 1,
+      },
+      operations: [
+        expect.objectContaining({
+          sourceRelativePath: "2024 - Smith - Interesting Paper.pdf",
+          status: "verified",
+        }),
+      ],
+    });
+
     const undoRoute = await import("@/app/api/brain/paper-library/undo/route");
     const undoResponse = await undoRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/undo", {
       project: "project-alpha",

@@ -358,7 +358,10 @@ async function rewriteManifestOperationAt(
   stateRoot: string,
 ): Promise<void> {
   const shardIndex = Math.floor(operationIndex / APPLY_SHARD_SIZE);
-  const shardId = manifest.operationShardIds[shardIndex] ?? String(shardIndex + 1).padStart(4, "0");
+  const shardId = manifest.operationShardIds[shardIndex];
+  if (!shardId) {
+    throw new Error(`Apply manifest ${manifest.id} is missing operation shard for operation index ${operationIndex}.`);
+  }
   const start = shardIndex * APPLY_SHARD_SIZE;
   await writeManifestOperationShard(
     manifest.project,
@@ -506,8 +509,9 @@ export async function applyApprovedPlan(input: {
 }): Promise<{ manifest: ApplyManifest; operations: ApplyManifestOperation[] } | null> {
   const plan = await readApplyPlan(input.project, input.applyPlanId, input.brainRoot);
   if (!plan) return null;
+  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
+  validateApprovalTokenMatch(plan, input.approvalToken);
   if (plan.manifestId && plan.status !== "approved") {
-    validateApprovalTokenMatch(plan, input.approvalToken);
     const existingManifest = await readApplyManifest(input.project, plan.manifestId, input.brainRoot);
     if (existingManifest) {
       return {
@@ -516,8 +520,6 @@ export async function applyApprovedPlan(input: {
       };
     }
   }
-  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
-  validateApprovalTokenMatch(plan, input.approvalToken);
   const existingForIdempotency = await readExistingApplyForIdempotency(
     input.project,
     input.applyPlanId,
@@ -696,5 +698,12 @@ export async function undoApplyManifest(input: {
 }
 
 export function windowApplyOperations(operations: ApplyOperation[], options: { cursor?: string; limit?: number }) {
+  return readCursorWindow(operations, options);
+}
+
+export function windowManifestOperations(
+  operations: ApplyManifestOperation[],
+  options: { cursor?: string; limit?: number },
+) {
   return readCursorWindow(operations, options);
 }
