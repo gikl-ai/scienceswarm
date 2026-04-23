@@ -104,7 +104,7 @@ const CAPABILITY_COLUMNS: Array<{
   {
     key: "compare",
     label: "Compare",
-    supported: (host) => host.profile.capabilities.includes("chat"),
+    supported: (host) => runtimeHostSupportsCompare(host),
     unavailableLabel: "No compare",
   },
   {
@@ -138,6 +138,11 @@ const CAPABILITY_COLUMNS: Array<{
     unavailableLabel: "No list",
   },
 ];
+
+export function runtimeHostSupportsCompare(host: RuntimeHealthHost): boolean {
+  // Compare fan-out uses the runtime host chat capability in the policy layer.
+  return host.profile.capabilities.includes("chat");
+}
 
 function StatusDot({ status }: { status: StatusDotState }) {
   const color =

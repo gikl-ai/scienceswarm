@@ -30,7 +30,11 @@ function optionDisabledReason(
       ? "Misconfigured"
       : "Install or start required";
   }
-  if (host.auth.status === "missing" || host.auth.status === "invalid") {
+  if (
+    host.auth.status === "missing"
+    || host.auth.status === "invalid"
+    || host.auth.status === "unknown"
+  ) {
     return "Login or .env setup required";
   }
   return null;

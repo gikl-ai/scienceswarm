@@ -144,13 +144,23 @@ describe("RuntimeHostMatrix", () => {
             canListNativeSessions: false,
             mcpTools: ["gbrain_search", "gbrain_capture"],
           }),
+          host({
+            id: "openhands",
+            label: "OpenHands",
+            authMode: "local",
+            authProvider: "openhands",
+            privacyClass: "local-network",
+            capabilities: ["task", "mcp-tools"],
+          }),
         ])}
       />,
     );
 
     expect(screen.getByTitle("Codex supports Chat")).toHaveTextContent("Yes");
+    expect(screen.getByTitle("Codex supports Compare")).toHaveTextContent("Yes");
+    expect(screen.getByTitle("No compare")).toHaveTextContent("No");
     expect(screen.getByTitle("Codex supports MCP tools")).toHaveTextContent("Yes");
-    expect(screen.getByTitle("No import")).toHaveTextContent("No");
+    expect(screen.getAllByTitle("No import")[0]).toHaveTextContent("No");
     expect(screen.getByText("wrapper process stop; native session resume")).toBeInTheDocument();
     expect(screen.getByText("2 MCP tools exposed")).toBeInTheDocument();
   });
@@ -198,6 +208,42 @@ describe("RuntimeDefaultsForm", () => {
     });
 
     expect(onPolicyChange).toHaveBeenCalledWith("cloud-ok");
+  });
+
+  it("keeps hosts with unknown auth status out of default selection", () => {
+    const hosts = [
+      host({
+        id: "openclaw",
+        label: "OpenClaw",
+        authMode: "local",
+        authProvider: "openclaw",
+        privacyClass: "local-network",
+      }),
+      host({
+        id: "codex",
+        label: "Codex",
+        authMode: "subscription-native",
+        authProvider: "openai",
+        privacyClass: "hosted",
+        authStatus: "unknown",
+      }),
+    ];
+
+    render(
+      <RuntimeDefaultsForm
+        hosts={hosts}
+        selectedHostId="openclaw"
+        policy="cloud-ok"
+        onSelectedHostIdChange={vi.fn()}
+        onPolicyChange={vi.fn()}
+      />,
+    );
+
+    const select = screen.getByTestId("runtime-default-host-select");
+    expect(within(select).getByRole("option", {
+      name: "Codex - Login or .env setup required",
+    })).toBeDisabled();
+    expect(runtimeHostSelectableForDefault(hosts[1], "cloud-ok")).toBe(false);
   });
 });
 
