@@ -2,6 +2,7 @@ name: Dependency Review
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -9,6 +10,7 @@ permissions:
 jobs:
   dependency-review:
     name: Dependency Review
+    if: "!contains(github.event.pull_request.labels.*.name, 'ci-defer')"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -97,8 +97,11 @@ function signPayload(encodedPayload: string, secret?: string): string {
 function safeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left, "base64url");
   const rightBuffer = Buffer.from(right, "base64url");
-  return leftBuffer.length === rightBuffer.length
-    && timingSafeEqual(leftBuffer, rightBuffer);
+  if (leftBuffer.length !== rightBuffer.length) {
+    timingSafeEqual(rightBuffer, rightBuffer);
+    return false;
+  }
+  return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function uniqueTools(

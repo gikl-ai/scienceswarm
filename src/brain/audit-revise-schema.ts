@@ -70,6 +70,7 @@ const sha256Hex = z
 export const BaseFrontmatterSchema = z.object({
   type: ArtifactTypeSchema,
   project: slug,
+  projects: z.array(slug).min(1).optional(),
   source_filename: z.string().min(1).optional(),
   sha256: sha256Hex.optional(),
   uploaded_at: isoDateTime.optional(),

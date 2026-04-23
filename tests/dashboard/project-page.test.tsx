@@ -1440,7 +1440,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ProjectPage />);
-    expect(await screen.findByText("Chat")).toBeInTheDocument();
+    expect(await screen.findByTestId("chat-input")).toBeInTheDocument();
     expect(screen.queryByText("Dream Cycle")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Search research brain")).not.toBeInTheDocument();
   });

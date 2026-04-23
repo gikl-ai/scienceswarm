@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import SettingsPage from "@/app/dashboard/settings/page";
 import { DEFAULT_OPENAI_MODEL } from "@/lib/openai-models";
 import { hasRecommendedOllamaModel } from "@/lib/ollama-models";
-import type { RuntimeCapabilityContract } from "@/lib/runtime";
+import type { RuntimeHealthResponse } from "@/components/runtime/RuntimeHostMatrix";
 import { FILE_PREVIEW_LOCATION_STORAGE_KEY } from "@/lib/file-preview-preferences";
 import { TEST_TELEGRAM_BOT_TOKEN } from "../helpers/telegram-fixtures";
 
@@ -77,81 +77,139 @@ type LocalHealthFixture = {
   installUrl?: string;
 };
 
-function buildRuntimeContractFixture(
-  overrides?: Partial<RuntimeCapabilityContract>,
-): RuntimeCapabilityContract {
+function runtimeHostFixture(
+  input: {
+    id: string;
+    label: string;
+    authMode: "local" | "subscription-native" | "api-key";
+    authProvider:
+      | "openclaw"
+      | "anthropic"
+      | "openai"
+      | "google-ai"
+      | "vertex-ai"
+      | "ollama"
+      | "openhands";
+    privacyClass: "local-only" | "local-network" | "hosted" | "external-network";
+    healthStatus?: "ready" | "unavailable" | "misconfigured";
+    authStatus?: "not-required" | "authenticated" | "missing" | "invalid" | "unknown";
+    capabilities?: RuntimeHealthResponse["hosts"][number]["profile"]["capabilities"];
+    command?: string;
+    requiresProjectPrivacy?: "local-only" | "cloud-ok" | "execution-ok";
+    mcpTools?: string[];
+    canCancel?: boolean;
+    canResumeNativeSession?: boolean;
+    canListNativeSessions?: boolean;
+  },
+): RuntimeHealthResponse["hosts"][number] {
   return {
-    generatedAt: "2026-04-17T19:00:00.000Z",
-    strictLocalOnly: false,
-    llmProvider: "local",
-    configuredLocalModel: "gemma4:latest",
-    capabilities: [
-      {
-        capabilityId: "chat.local",
-        label: "Local chat",
-        status: "ready",
-        privacy: "local-network",
-        requiredForLocalGuarantee: true,
-        provider: "ollama",
-        model: "gemma4:latest",
-        endpoint: "http://localhost:11434",
-        evidence: [
-          {
-            label: "Ollama daemon",
-            value: "running",
-            source: "probe",
-            status: "ready",
-          },
-        ],
+    profile: {
+      id: input.id,
+      label: input.label,
+      authMode: input.authMode,
+      authProvider: input.authProvider,
+      privacyClass: input.privacyClass,
+      transport: {
+        kind: input.authMode === "api-key" ? "http" : "cli",
+        protocol: input.authMode === "api-key" ? "https" : "stdio",
+        command: input.command,
       },
-      {
-        capabilityId: "execution.openhands.local",
-        label: "OpenHands local execution",
-        status: "blocked",
-        privacy: "local-network",
-        requiredForLocalGuarantee: true,
-        provider: "openhands",
-        model: "openai/gemma4:latest",
-        evidence: [
-          {
-            label: "gbrain writeback",
-            value: "not verified",
-            source: "smoke",
-            status: "blocked",
-          },
-        ],
-        nextAction: "Run the local OpenHands smoke.",
+      capabilities: input.capabilities ?? ["chat"],
+      lifecycle: {
+        canStream: true,
+        canCancel: input.canCancel ?? false,
+        canResumeNativeSession: input.canResumeNativeSession ?? false,
+        canListNativeSessions: input.canListNativeSessions ?? false,
+        cancelSemantics: input.canCancel ? "kill-wrapper-process" : "none",
+        resumeSemantics: input.canResumeNativeSession ? "open-native-session" : "none",
       },
-      {
-        capabilityId: "structuredCritique.hosted",
-        label: "Hosted structured critique",
-        status: "unavailable",
-        privacy: "hosted",
-        requiredForLocalGuarantee: false,
-        evidence: [
-          {
-            label: "Hosted key",
-            value: "not configured",
-            source: "env",
-            status: "unavailable",
-          },
-        ],
-        nextAction: "Configure hosted critique outside strict-local mode.",
+      accountDisclosure: {
+        storesTokensInScienceSwarm: input.authMode === "api-key" ? "api-key-only" : false,
+        requiresProjectPrivacy: input.requiresProjectPrivacy
+          ?? (input.privacyClass === "hosted" ? "cloud-ok" : "local-only"),
       },
+      mcpTools: input.mcpTools ?? [],
+    },
+    health: {
+      status: input.healthStatus ?? "ready",
+      checkedAt: "2026-04-23T01:00:00.000Z",
+      detail: input.healthStatus === "unavailable" ? `${input.label} unavailable` : undefined,
+    },
+    auth: {
+      status: input.authStatus ?? (input.authMode === "local" ? "not-required" : "authenticated"),
+      authMode: input.authMode,
+      provider: input.authProvider,
+    },
+    privacy: {
+      privacyClass: input.privacyClass,
+      adapterProof: input.privacyClass === "hosted" ? "declared-hosted" : "declared-local",
+      observedAt: "2026-04-23T01:00:00.000Z",
+    },
+  };
+}
+
+function buildRuntimeHealthFixture(
+  overrides?: Partial<RuntimeHealthResponse>,
+): RuntimeHealthResponse {
+  return {
+    checkedAt: "2026-04-23T01:00:00.000Z",
+    hosts: [
+      runtimeHostFixture({
+        id: "openclaw",
+        label: "OpenClaw",
+        authMode: "local",
+        authProvider: "openclaw",
+        privacyClass: "local-network",
+        capabilities: ["chat", "task", "artifact-import"],
+        canCancel: true,
+      }),
+      runtimeHostFixture({
+        id: "claude-code",
+        label: "Claude Code",
+        authMode: "subscription-native",
+        authProvider: "anthropic",
+        privacyClass: "hosted",
+        capabilities: ["chat", "task", "mcp-tools"],
+        command: "claude",
+        mcpTools: ["gbrain_search"],
+      }),
+      runtimeHostFixture({
+        id: "codex",
+        label: "Codex",
+        authMode: "subscription-native",
+        authProvider: "openai",
+        privacyClass: "hosted",
+        capabilities: ["chat", "task", "mcp-tools"],
+        command: "codex",
+        mcpTools: ["gbrain_search", "gbrain_capture"],
+      }),
+      runtimeHostFixture({
+        id: "gemini-cli",
+        label: "Gemini CLI",
+        authMode: "subscription-native",
+        authProvider: "google-ai",
+        privacyClass: "hosted",
+        command: "gemini",
+      }),
+      runtimeHostFixture({
+        id: "openhands",
+        label: "OpenHands",
+        authMode: "local",
+        authProvider: "openhands",
+        privacyClass: "local-network",
+        capabilities: ["task", "artifact-import"],
+        healthStatus: "unavailable",
+        authStatus: "unknown",
+        canCancel: true,
+      }),
+      runtimeHostFixture({
+        id: "openai-api",
+        label: "OpenAI API key",
+        authMode: "api-key",
+        authProvider: "openai",
+        privacyClass: "hosted",
+      }),
     ],
-    summary: {
-      state: "attention",
-      title: "OpenHands local execution unavailable",
-      detail: "OpenHands local execution: Run the local OpenHands smoke.",
-      nextAction: "Run the local OpenHands smoke.",
-    },
-    legacy: {
-      chat: true,
-      codeExecution: false,
-      github: false,
-      multiChannel: false,
-      structuredCritique: false,
-    },
     ...overrides,
   };
 }
@@ -161,7 +219,7 @@ function buildFetchStub(options?: {
   health?: HealthFixture;
   openclaw?: OpenClawFixture;
   localHealth?: LocalHealthFixture;
-  runtimeContract?: RuntimeCapabilityContract;
+  runtimeHealth?: RuntimeHealthResponse;
   approvePendingWarning?: string | null;
 }) {
   const state = {
@@ -210,7 +268,7 @@ function buildFetchStub(options?: {
       installHint: options?.localHealth?.installHint,
       installUrl: options?.localHealth?.installUrl,
     },
-    runtimeContract: options?.runtimeContract ?? buildRuntimeContractFixture(),
+    runtimeHealth: options?.runtimeHealth ?? buildRuntimeHealthFixture(),
   };
 
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -370,10 +428,8 @@ function buildFetchStub(options?: {
       return Response.json({ ok: true });
     }
 
-    if (url === "/api/health") {
-      return Response.json({
-        runtimeContract: state.runtimeContract,
-      });
+    if (url === "/api/runtime/health") {
+      return Response.json(state.runtimeHealth);
     }
 
     if (url === "/api/settings/telegram" && method === "POST") {
@@ -995,20 +1051,44 @@ describe("SettingsPage runtime settings", () => {
     expect(chatPane).toHaveAttribute("aria-checked", "true");
   });
 
-  it("renders the runtime capability matrix from the health contract", async () => {
+  it("renders runtime hosts from /api/runtime/health", async () => {
+    const fetchMock = buildFetchStub({
+      runtimeHealth: buildRuntimeHealthFixture({
+        hosts: [
+          runtimeHostFixture({
+            id: "lab-runtime",
+            label: "Lab Runtime",
+            authMode: "local",
+            authProvider: "openclaw",
+            privacyClass: "local-only",
+          }),
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByTestId("runtime-host-matrix")).toBeInTheDocument();
+    expect(screen.getAllByText("Lab Runtime").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/runtime/health",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+  });
+
+  it("disables hosted runtime defaults under local-only policy", async () => {
     vi.stubGlobal("fetch", buildFetchStub());
 
     render(<SettingsPage />);
 
-    expect(await screen.findByText("Capability matrix")).toBeInTheDocument();
-    expect(screen.getByText("OpenHands local execution unavailable")).toBeInTheDocument();
-    expect(screen.getByText("execution.openhands.local")).toBeInTheDocument();
-    expect(screen.getByText("blocked")).toBeInTheDocument();
-    expect(screen.getAllByText("Local network").length).toBeGreaterThan(0);
-    expect(screen.getByText("gbrain writeback")).toBeInTheDocument();
-    expect(screen.getAllByText("Run the local OpenHands smoke.").length).toBeGreaterThan(0);
-    expect(screen.getByText("Hosted structured critique")).toBeInTheDocument();
-    expect(screen.getByText("Hosted")).toBeInTheDocument();
+    const hostSelect = await screen.findByTestId("runtime-default-host-select");
+    const codexOption = within(hostSelect).getByRole("option", {
+      name: "Codex - Blocked by current policy",
+    });
+
+    expect(codexOption).toBeDisabled();
   });
 
   it("still renders the frontier watch composer below the runtime settings", async () => {
