@@ -53,6 +53,24 @@ function makeCompletedJob(overrides?: Record<string, unknown>) {
             summary: "The results are correlational, but the discussion states causation.",
           },
         ],
+        section_feedback: [
+          {
+            section: "Methods",
+            summary:
+              "The methods section should explain the missing control and how the central comparison was constructed.",
+            finding_ids: ["finding-1"],
+          },
+        ],
+        questions_for_authors: [
+          {
+            question: "Can you explain why the central comparison is fair?",
+            rationale:
+              "The current draft relies on the comparison but does not defend it.",
+            finding_ids: ["finding-1"],
+          },
+        ],
+        references_feedback:
+          "No reference problems were found in this synthetic fixture.",
       },
       findings: [
         {
@@ -528,6 +546,19 @@ describe("Critique workspace", () => {
     expect(screen.getByText(/1 error · 1 warning · 1 note/)).toBeInTheDocument();
     expect(screen.getByText("1. Missing controls section")).toBeInTheDocument();
     expect(screen.getByText("2. Causal leap")).toBeInTheDocument();
+    expect(screen.getByText("Summary")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("The draft's main claim is promising but currently under-justified.").length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Section-by-section feedback")).toBeInTheDocument();
+    expect(screen.getByText("Methods")).toBeInTheDocument();
+    expect(
+      screen.getByText(/The methods section should explain the missing control/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Questions for authors")).toBeInTheDocument();
+    expect(
+      screen.getByText("Can you explain why the central comparison is fair?"),
+    ).toBeInTheDocument();
     expect(
       screen.getAllByText("The main conclusion depends on an unstated premise.").length,
     ).toBeGreaterThanOrEqual(1);
