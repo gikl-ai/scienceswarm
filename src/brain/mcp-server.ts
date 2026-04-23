@@ -96,6 +96,7 @@ import {
 import { uniprotFetch, uniprotSearch } from "@/lib/skills/db-uniprot";
 import { getBrainStore } from "./store";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { registerRuntimeMcpTools } from "@/lib/runtime-hosts/mcp/server";
 
 // ── Tool Handler Implementations ──────────────────────────
 // Exported for testability without MCP transport.
@@ -679,6 +680,15 @@ export function createBrainMcpServer(): McpServer {
     },
     async (params) => brainCapture(params),
   );
+
+  // ── Runtime MCP tools ─────────────────────────────────
+  // Runtime-originated tools use token-bound wrappers. The legacy local
+  // brain_* tools above remain available for ordinary MCP clients.
+  registerRuntimeMcpTools(server, {
+    brainSearch: (params) => handleBrainSearch(getConfig(), params),
+    brainRead: (params) => handleBrainRead(getConfig(), params),
+    brainCapture: (params) => brainCapture(params as BrainCaptureParams),
+  });
 
   // ── 10-33. Scientific database wrapper tools ───────
 

@@ -18,6 +18,7 @@ import {
   handleResearchLandscape,
   handleBrainGuide,
   handleBrainRipple,
+  handleBrainCapture,
 } from "@/brain/mcp-server";
 
 let TEST_ROOT = "";
@@ -182,6 +183,45 @@ describe("brain_init", () => {
 
 // brain_ingest / brain_observe tests removed — those MCP tools were
 // deleted in Phase B (PR #239). Capture flows through brain_capture.
+
+describe("brain_capture", () => {
+  it("keeps ordinary local MCP captures working without runtime provenance", async () => {
+    const originalUserHandle = process.env.SCIENCESWARM_USER_HANDLE;
+    process.env.SCIENCESWARM_USER_HANDLE = "@test-researcher";
+    const writes: Array<{ slug: string; content: string }> = [];
+
+    try {
+      const result = await handleBrainCapture(
+        {
+          async putPage(slug, content) {
+            writes.push({ slug, content });
+            return { stdout: "ok\n", stderr: "" };
+          },
+          async linkPages() {
+            return { stdout: "", stderr: "" };
+          },
+        },
+        {
+          content: "Ordinary local capture",
+          title: "Local capture",
+          channel: "openclaw",
+          userId: "alice",
+        },
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(writes).toHaveLength(1);
+      expect(writes[0].content).toContain("title: Local capture");
+      expect(writes[0].content).not.toContain("runtime_gbrain_provenance");
+    } finally {
+      if (originalUserHandle === undefined) {
+        delete process.env.SCIENCESWARM_USER_HANDLE;
+      } else {
+        process.env.SCIENCESWARM_USER_HANDLE = originalUserHandle;
+      }
+    }
+  });
+});
 
 // ── brain_search ──────────────────────────────────────────
 
