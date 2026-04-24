@@ -2393,6 +2393,70 @@ describe("POST /api/chat/unified", () => {
     infoSpy.mockRestore();
   });
 
+  it("streams plain-language server progress before the first gateway event", async () => {
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockImplementationOnce(async (_message, options) => {
+      options?.onEvent?.({
+        method: "agent",
+        payload: {
+          stream: "assistant",
+          data: { delta: "OpenClaw says hi" },
+        },
+      });
+      return "OpenClaw says hi";
+    });
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Hi",
+        projectId: "alpha-project",
+        mode: "reasoning",
+        streamPhases: true,
+      }),
+    });
+
+    const response = await POST(request);
+    const events = await readSseEvents(response);
+
+    const findProgressTextIndex = (text: string) =>
+      events.findIndex((event) => {
+        const progress =
+          event.progress && typeof event.progress === "object" && !Array.isArray(event.progress)
+            ? event.progress as Record<string, unknown>
+            : null;
+        const payload =
+          progress?.payload && typeof progress.payload === "object" && !Array.isArray(progress.payload)
+            ? progress.payload as Record<string, unknown>
+            : null;
+        return payload?.text === text;
+      });
+    const firstGatewayEventIndex = events.findIndex((event) => {
+      const progress =
+        event.progress && typeof event.progress === "object" && !Array.isArray(event.progress)
+          ? event.progress as Record<string, unknown>
+          : null;
+      return progress?.method === "agent";
+    });
+
+    expect(findProgressTextIndex("Sending request to OpenClaw")).toBeGreaterThan(-1);
+    expect(findProgressTextIndex("Waiting for OpenClaw to respond")).toBeGreaterThan(-1);
+    expect(firstGatewayEventIndex).toBeGreaterThan(-1);
+    expect(findProgressTextIndex("Sending request to OpenClaw")).toBeLessThan(firstGatewayEventIndex);
+    expect(findProgressTextIndex("Waiting for OpenClaw to respond")).toBeLessThan(firstGatewayEventIndex);
+  });
+
   it("streams opt-in timing meta without a first gateway event when OpenClaw is quiet", async () => {
     vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
