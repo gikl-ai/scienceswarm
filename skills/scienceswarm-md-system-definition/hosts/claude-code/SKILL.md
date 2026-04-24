@@ -14,9 +14,12 @@ planning or execution.
 2. Define molecular entities, structures, states, cofactors, modifications,
    protonation, charge, membrane, solvent, ions, and relevant therapeutic
    context.
-3. Mark unresolved choices as blocking or non-blocking.
-4. List preparation risks and downstream parameter implications.
-5. Produce a `Molecular System Definition` with
+3. Record identity locks that execution must verify before parameterization.
+4. List plausible system alternatives considered and why they were rejected or
+   deferred.
+5. Mark unresolved choices as blocking or non-blocking.
+6. List preparation risks and downstream parameter implications.
+7. Produce a `Molecular System Definition` with
    `asset_kind: md_system_definition`.
 
 Include a `Confidence Boundary` section in the definition.

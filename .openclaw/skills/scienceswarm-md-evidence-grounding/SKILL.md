@@ -44,7 +44,12 @@ Use these labels consistently:
 - Force fields, water models, ion conditions, ensembles, timesteps, restraints,
   equilibration, production lengths, and analysis metrics.
 - Structures, PDB IDs, UniProt accessions, ChEMBL IDs, and ligand identifiers.
+- Transferability limits: system class, timescale, ligand chemistry, membrane
+  context, force-field family, and assay or simulation endpoint differences.
+- Validation basis: experimental benchmark, prior simulation benchmark,
+  reproduced protocol, or setup-only report.
 - Method limitations or contradictions across papers.
+- Contradictory protocols or negative/null results that affect confidence.
 - Papers the user should read before trusting the setup.
 
 ## Output Shape
@@ -56,15 +61,24 @@ Produce an `Evidence Grounding Packet`:
 
 ## Project-Library Evidence
 
-| Source | Relevant System | Protocol Details | Evidence Class | Notes |
-|---|---|---|---|---|
+| Source | Relevant System | Protocol Details | Evidence Class | Transferability | Validation Basis | Notes |
+|---|---|---|---|---|---|---|
 
 ## External Evidence
 
-| Source | Relevant System | Protocol Details | Evidence Class | Notes |
-|---|---|---|---|---|
+| Source | Relevant System | Protocol Details | Evidence Class | Transferability | Validation Basis | Notes |
+|---|---|---|---|---|---|---|
 
 ## Comparable Protocol Patterns
+
+## Evidence Adequacy Triage
+
+`enough-to-plan | proceed-with-caveats | stop-for-evidence | seek-expert-input`
+
+## Transferability Risks
+
+| Source Or Pattern | Risk | Downstream Impact | Mitigation |
+|---|---|---|---|
 
 ## Key Papers To Read
 

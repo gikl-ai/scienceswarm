@@ -17,8 +17,12 @@ parameter choices.
 3. For each parameter, state recommendation, rationale, evidence class,
    confidence, assumptions, risks, alternatives, source refs, teaching note, and
    expert note.
-4. Mark `do-not-default` choices as blockers.
-5. Save or return a `Parameter Decision Ledger` with
+4. For each parameter, state validation signals and failure indicators.
+5. Include replicates/seeds, controls/comparators, sampling adequacy,
+   convergence criteria, and sensitivity checks when the conclusion depends on
+   stability or convergence.
+6. Mark `do-not-default` choices as blockers.
+7. Save or return a `Parameter Decision Ledger` with
    `asset_kind: md_parameter_decision_ledger` and a `Confidence Boundary`.
 
 Do not choose expert-sensitive parameters without evidence or a clear caveat.

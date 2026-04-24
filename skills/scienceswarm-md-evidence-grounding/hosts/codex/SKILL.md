@@ -14,8 +14,11 @@ second.
 1. Identify evidence needed by the MD Study Brief.
 2. Gather project-library sources before external sources.
 3. Extract protocol details and comparable system choices.
-4. Preserve conflicts and gaps instead of smoothing them over.
-5. Write an `Evidence Grounding Packet` with
+4. Judge transferability, validation basis, and limits for each source before
+   reusing a protocol.
+5. Preserve conflicts, negative/null results, and gaps instead of smoothing
+   them over.
+6. Write an `Evidence Grounding Packet` with
    `asset_kind: md_evidence_grounding_packet`, evidence classes, and a
    `Confidence Boundary`.
 

@@ -13,8 +13,10 @@ Use this skill as the pre-run quality gate for an MD setup.
    and execution handoff.
 2. Check scientific assumptions, parameter traceability, reproducibility, stop
    conditions, and overclaim risk.
-3. Return `approved-to-run`, `approved-with-caveats`, or `blocked`.
-4. Produce a `Protocol Review Note` with
+3. Review controls, replicas, convergence expectations, go/no-go criteria, and
+   common failure modes with detection signals and rescue actions.
+4. Return `approved-to-run`, `approved-with-caveats`, or `blocked`.
+5. Produce a `Protocol Review Note` with
    `asset_kind: md_protocol_review_note`.
 
 Include a `Confidence Boundary` section in the review note.

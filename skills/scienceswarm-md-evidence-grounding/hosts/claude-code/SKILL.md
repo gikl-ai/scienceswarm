@@ -14,9 +14,13 @@ chosen.
 2. Use external sources only when project evidence is insufficient or requested.
 3. Extract comparable systems, protocol details, structures, targets, ligands,
    conflicts, and key papers to read.
-4. Label evidence as `project-literature`, `external-literature`,
+4. Judge transferability, validation basis, and limits for each source before
+   reusing a protocol.
+5. Label evidence as `project-literature`, `external-literature`,
    `common-heuristic`, `tool-default`, or `speculative`.
-5. Produce an `Evidence Grounding Packet` with
+6. Preserve conflicts, negative/null results, and gaps instead of smoothing
+   them over.
+7. Produce an `Evidence Grounding Packet` with
    `asset_kind: md_evidence_grounding_packet`.
 
 Include a `Confidence Boundary` section in the packet.

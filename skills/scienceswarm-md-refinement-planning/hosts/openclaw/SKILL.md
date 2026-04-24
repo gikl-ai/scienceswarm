@@ -68,8 +68,22 @@ Produce a `Refinement Decision Update`:
 
 ## Proposed Changes
 
-| Change | Reason | Risk | Expected Effect |
+| Change | Reason | Risk | Expected Effect | Expected New Information |
+|---|---|---|---|---|
+
+## Rerun Justification
+
+Before recommending another MD run, state what the next run is expected to teach
+that the prior run could not. Repeating a weak setup without a new diagnostic,
+control, parameter change, sampling plan, or method change is not refinement.
+
+| Proposed Run | New Information Expected | Why Prior Evidence Is Insufficient | Stop Condition |
 |---|---|---|---|
+
+## Rejected Decision Values
+
+| Decision Not Chosen | Why Not | What Would Make It Better |
+|---|---|---|
 
 ## What Must Not Change Silently
 
@@ -115,3 +129,7 @@ tags: [molecular-dynamics, md-pipeline, refinement]
 Stop if the refinement would silently change the scientific question, parameter
 changes lack rationale, or the question needs a different method rather than
 another MD run.
+
+If repeated failures remain unresolved after two refinement attempts, stop and
+recommend expert review, a method switch, or experimental validation rather than
+continuing low-value reruns.

@@ -83,10 +83,31 @@ Produce an `MD Execution Handoff Plan`:
 ### 6. Production Run
 ### 7. Initial Analysis
 
+## Stage Gate Checklist
+
+Each stage must have explicit pass and fail signals. Failed validation gates stop
+execution and preserve artifacts for review rather than flowing into the next
+stage.
+
+| Stage | Pass Signal | Fail Signal | Stop Action | Artifacts To Save |
+|---|---|---|---|---|
+
 ## Expected Artifacts
 
 | Artifact | Required? | Brain Asset Target |
 |---|---|---|
+
+## Run Provenance Manifest
+
+Record enough detail for another scientist to reproduce or audit the run:
+
+- Software, package, and workflow versions.
+- Exact command lines and working directory.
+- Input file hashes and generated config files.
+- Random seeds and replica identifiers.
+- Hardware, accelerator, precision, and parallelization notes.
+- Checkpoint and restart policy.
+- Warnings, failed assumptions, and validation-gate outcomes.
 
 ## Stop Conditions
 

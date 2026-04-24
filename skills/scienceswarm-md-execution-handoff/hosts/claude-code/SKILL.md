@@ -16,8 +16,14 @@ contract.
    already defined.
 3. Specify files to generate, commands to run, validation checks, expected
    artifacts, and stop conditions.
-4. Write a coding-agent prompt that forbids silent scientific substitution.
-5. Produce an `Execution Handoff Plan` with
+4. Add stage gates for preparation, parameterization, minimization,
+   equilibration, production, and initial analysis. Failed gates stop execution
+   and preserve artifacts.
+5. Require a run provenance manifest: versions, command lines, input hashes,
+   generated configs, seeds, hardware/precision notes, checkpoints, and
+   warnings.
+6. Write a coding-agent prompt that forbids silent scientific substitution.
+7. Produce an `Execution Handoff Plan` with
    `asset_kind: md_execution_handoff_plan`.
 
 Include a `Confidence Boundary` section in the handoff.

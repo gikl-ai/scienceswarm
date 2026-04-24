@@ -39,6 +39,11 @@ force-field or setup defaults.
 - Membrane composition, leaflet asymmetry, or delivery vehicle composition when
   relevant.
 - Cancer or programmable-therapeutics context that changes system choice.
+- Immutable identity locks that downstream execution must verify before
+  parameterization.
+- Plausible system alternatives that were rejected, such as protonation state,
+  tautomer, biological assembly, membrane composition, conformer, isoform, or
+  chain selection.
 
 ## Output Shape
 
@@ -48,6 +53,11 @@ Produce a `Molecular System Definition`:
 # Molecular System Definition: {study title}
 
 ## System Summary
+
+## System Identity Locks
+
+| Property | Locked Value | Source | How Execution Must Verify |
+|---|---|---|---|
 
 ## Entities
 
@@ -65,6 +75,11 @@ Produce a `Molecular System Definition`:
 ## Unresolved Choices
 
 | Choice | Why It Matters | Options | Blocking? |
+|---|---|---|---|
+
+## System Alternatives Considered
+
+| Alternative | Why It Was Considered | Reason Rejected Or Deferred | Downstream Impact |
 |---|---|---|---|
 
 ## Preparation Risks

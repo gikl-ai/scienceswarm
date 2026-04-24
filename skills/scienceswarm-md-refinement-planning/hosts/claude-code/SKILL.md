@@ -16,7 +16,11 @@ Use this skill after results interpretation, failed execution, or new evidence.
 3. Choose `stop`, `rerun-same-protocol`, `extend-run`, `adjust-parameters`,
    `change-system-definition`, `switch-method`, `seek-expert-review`, or
    `seek-experimental-validation`.
-4. Produce a `Refinement Decision Update` with
+4. Justify why the chosen next run or method will teach something new, and list
+   rejected decision values.
+5. Stop low-value rerun loops. Repeated unresolved failures require expert
+   review, a method switch, or experimental validation.
+6. Produce a `Refinement Decision Update` with
    `asset_kind: md_refinement_decision_update`.
 
 Include a `Confidence Boundary` section in the decision update.

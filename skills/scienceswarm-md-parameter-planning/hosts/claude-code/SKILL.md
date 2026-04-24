@@ -17,9 +17,13 @@ scientific judgment step for non-expert MD users.
    analysis metrics.
 3. For every choice, include rationale, evidence class, confidence,
    assumptions, risks if wrong, alternatives, and what would change the choice.
-4. Label each choice as `standard-default`, `expert-sensitive`, or
+4. For every choice, state validation signals and failure indicators.
+5. Include replicates/seeds, controls/comparators, sampling adequacy,
+   convergence criteria, and sensitivity checks when the conclusion depends on
+   stability or convergence.
+6. Label each choice as `standard-default`, `expert-sensitive`, or
    `do-not-default`.
-5. Produce a `Parameter Decision Ledger` with
+7. Produce a `Parameter Decision Ledger` with
    `asset_kind: md_parameter_decision_ledger`.
 
 Include a `Confidence Boundary` section in the ledger.

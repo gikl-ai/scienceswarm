@@ -15,7 +15,9 @@ review before code or simulation work starts.
    overclaim risks.
 3. Check whether parameters are traceable to evidence or clearly labeled
    heuristics.
-4. Produce a `Protocol Review Note` with
+4. Review controls, replicas, convergence expectations, go/no-go criteria, and
+   common failure modes with detection signals and rescue actions.
+5. Produce a `Protocol Review Note` with
    `asset_kind: md_protocol_review_note`, a verdict, and a
    `Confidence Boundary`.
 

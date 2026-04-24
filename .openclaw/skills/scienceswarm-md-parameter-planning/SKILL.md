@@ -36,6 +36,9 @@ creates if wrong.
 - Thermostat and barostat.
 - Restraints.
 - Sampling strategy.
+- Replicates, random seeds, and restart policy.
+- Controls, comparators, or baseline systems required by the claim.
+- Convergence and stopping criteria.
 - Analysis metrics.
 
 ## Sensitivity Labels
@@ -81,6 +84,14 @@ Produce a `Parameter Decision Ledger`:
 **Risks if wrong:**
 - ...
 
+**Validation signal:**
+What result, warning, plot, or diagnostic would show this choice is behaving as
+expected.
+
+**Failure indicators:**
+What would suggest this choice is wrong, unstable, or insufficient for the
+claim.
+
 **Alternatives considered:**
 
 | Alternative | When it would be better | Tradeoff |
@@ -99,6 +110,16 @@ Plain-English explanation for a non-MD expert.
 Technical caveats for a reviewer or collaborator.
 
 ## Standard Defaults vs Expert-Sensitive Choices
+
+## Simulation Design Completeness
+
+| Item | Plan | Why It Is Enough | Failure Signal | Blocking? |
+|---|---|---|---|---|
+| Replicates / Seeds |  |  |  |  |
+| Controls / Comparators |  |  |  |  |
+| Sampling Adequacy |  |  |  |  |
+| Convergence Criteria |  |  |  |  |
+| Sensitivity Checks |  |  |  |  |
 
 ## Missing Inputs Blocking Confidence
 

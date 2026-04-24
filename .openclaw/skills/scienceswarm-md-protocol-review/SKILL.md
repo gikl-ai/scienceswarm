@@ -32,6 +32,8 @@ agent from turning an under-specified scientific plan into runnable commands.
 - Molecular System Definition.
 - Execution Handoff Plan.
 - Reproducibility.
+- Controls, replicas, sampling adequacy, convergence expectations, and go/no-go
+  criteria.
 - Overclaim risk.
 - Required controls or adjacent methods.
 
@@ -48,13 +50,13 @@ Produce a `Protocol Review Note`:
 
 ## Blocking Issues
 
-| Issue | Why It Blocks | Required Fix | Owner |
-|---|---|---|---|
+| Issue | Severity | Why It Blocks | Required Fix | Owner |
+|---|---|---|---|---|
 
 ## Non-Blocking Concerns
 
-| Concern | Risk | Suggested Mitigation |
-|---|---|---|
+| Concern | Severity | Risk | Suggested Mitigation |
+|---|---|---|---|
 
 ## Scientific Assumption Review
 
@@ -78,6 +80,18 @@ Safer phrasing:
 
 | Item | Status | Notes |
 |---|---|---|
+
+## Failure Mode Review
+
+| Failure Mode | Detection Signal | Severity | Rescue Action | Scientist Impact | Covered By Plan? |
+|---|---|---|---|---|---|
+| Missing or weak parameters |  |  |  |  |  |
+| Bad protonation, tautomer, or charge |  |  |  |  |  |
+| Unstable minimization or equilibration |  |  |  |  |  |
+| LINCS/SHAKE or constraint failures |  |  |  |  |  |
+| Barostat, temperature, or pressure instability |  |  |  |  |  |
+| Ligand drift or broken binding pose interpretation |  |  |  |  |  |
+| Insufficient sampling or inconsistent replicas |  |  |  |  |  |
 
 ## Required Changes Before Run
 

@@ -30,7 +30,10 @@ to inform.
 3. Label guidance as `project-literature`, `external-literature`,
    `common-heuristic`, `tool-default`, or `speculative`.
 4. Be explicit about uncertainty and missing inputs.
-5. Prefer a durable brain asset over a one-off chat answer when the user wants
+5. Map the desired claim to concrete MD observables before recommending a run.
+6. Name what positive, negative, or inconclusive result would change the user's
+   biological, therapeutic, or experimental decision.
+7. Prefer a durable brain asset over a one-off chat answer when the user wants
    to proceed.
 
 ## Questions To Ask
@@ -43,6 +46,12 @@ to inform.
   change, structural stability, diffusion, membrane interaction, aggregation,
   delivery, or another question?
 - What conclusion would the user like to draw afterward?
+- What MD observable would support that conclusion, and what observable would
+  argue against it?
+- What comparison, control, baseline, or replicate pattern is needed to make
+  the result interpretable?
+- What result would make the study inconclusive rather than useful?
+- What adjacent method would be stronger for the desired claim?
 - What structures, sequences, ligands, papers, or prior results are already in
   the project?
 
@@ -72,9 +81,19 @@ Produce an `MD Study Brief` with this structure:
 
 ## Simulation Question
 
+## Claim-To-Observable Map
+
+| Desired Claim | MD Observable | Needed Comparison / Control | Decision Threshold | Inconclusive Result |
+|---|---|---|---|---|
+
 ## MD Suitability Verdict
 
 ## Why This Verdict
+
+## Alternatives Considered
+
+| Method | When It Would Be Better | Why It Is Or Is Not First |
+|---|---|---|
 
 ## Missing Scientific Inputs
 

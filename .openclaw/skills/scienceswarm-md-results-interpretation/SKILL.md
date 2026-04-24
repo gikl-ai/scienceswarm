@@ -69,6 +69,17 @@ Produce a `Results Interpretation Note`:
 | Conclusion | Support Level | Evidence | Caveat |
 |---|---|---|---|
 
+## Claim Audit
+
+| Claim | Observable / Artifact | Support Level | Alternative Explanations | Missing Controls Or Replicas | Next Evidence Needed |
+|---|---|---|---|---|---|
+
+## Null Or Negative Results
+
+Explain whether a lack of observed change, no convergence, no stable contact, or
+conflicting replicas weakens the claim, falsifies it, or only shows that this MD
+setup was insufficient.
+
 ## Overclaims To Avoid
 
 Do not claim:
@@ -78,6 +89,11 @@ Safer phrasing:
 - ...
 
 ## Alternative Explanations
+
+## Falsification Check
+
+What result would have argued against the interpretation, and did the run have
+enough sampling, controls, and analysis quality to observe that result?
 
 ## Recommended Next Step
 

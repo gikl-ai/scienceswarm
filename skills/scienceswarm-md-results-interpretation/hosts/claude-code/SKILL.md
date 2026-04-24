@@ -14,8 +14,12 @@ packet exists.
 2. Assess run quality before interpreting metrics.
 3. Explain RMSD, RMSF, contacts, hydrogen bonds, radius of gyration, ligand pose
    stability, membrane interaction, or other observed metrics.
-4. Classify conclusions as `supported`, `suggestive`, `weak`, or `unsupported`.
-5. Produce a `Results Interpretation Note` with
+4. Audit each claim against observables, alternative explanations, missing
+   controls/replicas, and next evidence needed.
+5. Interpret null or negative results and state what would have falsified the
+   interpretation.
+6. Classify conclusions as `supported`, `suggestive`, `weak`, or `unsupported`.
+7. Produce a `Results Interpretation Note` with
    `asset_kind: md_results_interpretation_note`.
 
 Include a `Confidence Boundary` section in the interpretation note.
