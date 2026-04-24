@@ -328,12 +328,14 @@ describe("Project dashboard smoke test", () => {
     render(<ProjectPage />);
 
     const composer = await screen.findByTestId("project-chat-composer");
+    expect(composer).toHaveClass("shadow-[0_12px_36px_rgba(15,23,42,0.07)]");
     expect(within(composer).getByText("Project Chat")).toBeInTheDocument();
     expect(
       within(composer).getByText("Enter to send. Shift+Enter for a new line."),
     ).toBeInTheDocument();
     expect(within(composer).getByText(/Drop files, type/i)).toBeInTheDocument();
     expect(within(composer).getByText("Chat mode")).toBeInTheDocument();
+    expect(within(composer).getByText("demo-project")).toHaveClass("text-slate-500");
   });
 
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
