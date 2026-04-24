@@ -91,6 +91,7 @@ describe("RuntimePicker", () => {
     expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("OpenClaw");
     expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("Local network");
     expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("Ready to send");
+    expect(screen.getByText(/Choose Cloud ok to use Claude Code, Codex, or Gemini CLI/)).toBeInTheDocument();
   });
 
   it("supports keyboard-reachable mode and compare host controls", () => {
@@ -132,5 +133,35 @@ describe("RuntimePicker", () => {
     fireEvent.click(screen.getByLabelText("Claude Code"));
     expect(onCompareHostIdsChange).toHaveBeenCalledWith(["openclaw", "claude-code"]);
     expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("Ready for preview");
+  });
+
+  it("allows ready native CLIs with unknown auth because the host owns login", () => {
+    render(
+      <RuntimePicker
+        hosts={[
+          host({
+            id: "gemini-cli",
+            label: "Gemini CLI",
+            authMode: "subscription-native",
+            authProvider: "google-ai",
+            privacyClass: "hosted",
+            authStatus: "unknown",
+          }),
+        ]}
+        selectedHostId="gemini-cli"
+        projectPolicy="cloud-ok"
+        mode="chat"
+        compareHostIds={["gemini-cli"]}
+        onSelectedHostIdChange={vi.fn()}
+        onProjectPolicyChange={vi.fn()}
+        onModeChange={vi.fn()}
+        onCompareHostIdsChange={vi.fn()}
+      />,
+    );
+
+    const hostSelect = screen.getByTestId("runtime-host-select");
+    expect(within(hostSelect).getByRole("option", { name: "Gemini CLI" })).not.toBeDisabled();
+    expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("Auth unknown");
+    expect(screen.getByTestId("runtime-selected-summary")).toHaveTextContent("Ready to try; CLI owns login");
   });
 });

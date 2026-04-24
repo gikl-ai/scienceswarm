@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import {
+  RuntimeAccountSetupGuide,
+  subscriptionCliHosts,
+} from "@/components/runtime/RuntimeAccountSetupGuide";
 import { RuntimePicker } from "@/components/runtime/runtime-picker";
 import { SessionDetail } from "@/components/runtime/session-detail";
 import type { RuntimeHealthResponse } from "@/components/runtime/RuntimeHostMatrix";
@@ -39,6 +43,7 @@ export function ProjectRuntimeSection({
     setCompareHostIds,
   } = useProjectRuntimePreferences(projectId || null, hosts);
   const runtimeSessions = useRuntimeSessions(projectId || null);
+  const hasSubscriptionCliHosts = subscriptionCliHosts(hosts).length > 0;
   const [selectedRuntimeSessionIdState, setSelectedRuntimeSessionId] = useState<string | null>(null);
   const selectedRuntimeSessionId = runtimeSessions.sessions.some(
     (session) => session.id === selectedRuntimeSessionIdState,
@@ -88,6 +93,11 @@ export function ProjectRuntimeSection({
 
       {runtimeHealth && projectId && (
         <div className="overflow-hidden rounded-2xl border border-border bg-white">
+          {hasSubscriptionCliHosts && (
+            <div className="border-b border-border bg-white p-4">
+              <RuntimeAccountSetupGuide hosts={hosts} />
+            </div>
+          )}
           <RuntimePicker
             hosts={hosts}
             selectedHostId={selectedHostId}

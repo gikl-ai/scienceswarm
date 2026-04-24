@@ -33,7 +33,10 @@ function optionDisabledReason(
   if (
     host.auth.status === "missing"
     || host.auth.status === "invalid"
-    || host.auth.status === "unknown"
+    || (
+      host.auth.status === "unknown"
+      && host.profile.authMode !== "subscription-native"
+    )
   ) {
     return "Login or .env setup required";
   }
@@ -57,6 +60,11 @@ export function RuntimeDefaultsForm({
   const selectedBlocked = selectedHost
     ? !runtimeHostSelectableForDefault(selectedHost, policy)
     : false;
+  const selectedNativeCliAuthUnknown = Boolean(
+    selectedHost
+      && selectedHost.profile.authMode === "subscription-native"
+      && selectedHost.auth.status === "unknown",
+  );
 
   return (
     <section
@@ -119,7 +127,9 @@ export function RuntimeDefaultsForm({
           <p className="text-xs text-muted">
             {selectedBlocked
               ? "The current policy blocks this host; OpenClaw local remains the fallback."
-              : "Only ready hosts allowed by policy can become the draft default."}
+              : selectedNativeCliAuthUnknown
+                ? "The native CLI owns sign-in; first send can surface host login if needed."
+                : "Only ready hosts allowed by policy can become the draft default."}
           </p>
         </label>
       </div>

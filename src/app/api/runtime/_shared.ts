@@ -85,8 +85,8 @@ export const RUNTIME_SESSION_STATUSES = [
 function defaultRuntimeAdapters(): ResearchRuntimeHost[] {
   return [
     createOpenClawRuntimeHostAdapter(),
-    createClaudeCodeRuntimeHostAdapter(),
-    createCodexRuntimeHostAdapter(),
+    createClaudeCodeRuntimeHostAdapter({ authArgs: ["auth", "status"] }),
+    createCodexRuntimeHostAdapter({ authArgs: ["login", "status"] }),
     createGeminiCliRuntimeHostAdapter(),
     createOpenHandsRuntimeHostAdapter(),
   ];

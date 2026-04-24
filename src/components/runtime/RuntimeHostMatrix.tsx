@@ -155,13 +155,24 @@ function StatusDot({ status }: { status: StatusDotState }) {
 }
 
 function healthDot(host: RuntimeHealthHost): StatusDotState {
-  if (host.health.status === "ready" && authReady(host)) return "ok";
+  if (
+    host.health.status === "ready"
+    && (host.auth.status === "not-required" || host.auth.status === "authenticated")
+  ) {
+    return "ok";
+  }
   if (host.health.status === "unavailable") return "off";
   return "warn";
 }
 
 export function authReady(host: RuntimeHealthHost): boolean {
-  return host.auth.status === "not-required" || host.auth.status === "authenticated";
+  return host.auth.status === "not-required"
+    || host.auth.status === "authenticated"
+    || (
+      host.profile.authMode === "subscription-native"
+      && host.auth.status === "unknown"
+      && host.health.status === "ready"
+    );
 }
 
 export function runtimeHostBlockedByPolicy(

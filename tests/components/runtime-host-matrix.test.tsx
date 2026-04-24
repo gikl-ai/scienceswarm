@@ -9,6 +9,7 @@ import {
   type RuntimeHealthHost,
   type RuntimeHealthResponse,
 } from "@/components/runtime/RuntimeHostMatrix";
+import { RuntimeAccountSetupGuide } from "@/components/runtime/RuntimeAccountSetupGuide";
 import { RuntimeDefaultsForm } from "@/components/runtime/RuntimeDefaultsForm";
 import { RuntimeSetupCallouts } from "@/components/runtime/RuntimeSetupCallouts";
 
@@ -210,7 +211,7 @@ describe("RuntimeDefaultsForm", () => {
     expect(onPolicyChange).toHaveBeenCalledWith("cloud-ok");
   });
 
-  it("keeps hosts with unknown auth status out of default selection", () => {
+  it("keeps API-key hosts with unknown auth status out of default selection", () => {
     const hosts = [
       host({
         id: "openclaw",
@@ -220,9 +221,9 @@ describe("RuntimeDefaultsForm", () => {
         privacyClass: "local-network",
       }),
       host({
-        id: "codex",
-        label: "Codex",
-        authMode: "subscription-native",
+        id: "openai-api",
+        label: "OpenAI API key",
+        authMode: "api-key",
         authProvider: "openai",
         privacyClass: "hosted",
         authStatus: "unknown",
@@ -241,9 +242,88 @@ describe("RuntimeDefaultsForm", () => {
 
     const select = screen.getByTestId("runtime-default-host-select");
     expect(within(select).getByRole("option", {
-      name: "Codex - Login or .env setup required",
+      name: "OpenAI API key - Login or .env setup required",
     })).toBeDisabled();
     expect(runtimeHostSelectableForDefault(hosts[1], "cloud-ok")).toBe(false);
+  });
+
+  it("allows ready subscription CLIs with host-owned auth checks as draft defaults", () => {
+    const hosts = [
+      host({
+        id: "openclaw",
+        label: "OpenClaw",
+        authMode: "local",
+        authProvider: "openclaw",
+        privacyClass: "local-network",
+      }),
+      host({
+        id: "gemini-cli",
+        label: "Gemini CLI",
+        authMode: "subscription-native",
+        authProvider: "google-ai",
+        privacyClass: "hosted",
+        authStatus: "unknown",
+      }),
+    ];
+
+    render(
+      <RuntimeDefaultsForm
+        hosts={hosts}
+        selectedHostId="gemini-cli"
+        policy="cloud-ok"
+        onSelectedHostIdChange={vi.fn()}
+        onPolicyChange={vi.fn()}
+      />,
+    );
+
+    const select = screen.getByTestId("runtime-default-host-select");
+    expect(within(select).getByRole("option", {
+      name: "Gemini CLI",
+    })).not.toBeDisabled();
+    expect(screen.getByText("The native CLI owns sign-in; first send can surface host login if needed.")).toBeInTheDocument();
+    expect(runtimeHostSelectableForDefault(hosts[1], "cloud-ok")).toBe(true);
+  });
+});
+
+describe("RuntimeAccountSetupGuide", () => {
+  it("shows exact provider CLI commands without asking for subscription tokens", () => {
+    render(
+      <RuntimeAccountSetupGuide
+        hosts={[
+          host({
+            id: "claude-code",
+            label: "Claude Code",
+            authMode: "subscription-native",
+            authProvider: "anthropic",
+            privacyClass: "hosted",
+            authStatus: "missing",
+          }),
+          host({
+            id: "codex",
+            label: "Codex",
+            authMode: "subscription-native",
+            authProvider: "openai",
+            privacyClass: "hosted",
+          }),
+          host({
+            id: "gemini-cli",
+            label: "Gemini CLI",
+            authMode: "subscription-native",
+            authProvider: "google-ai",
+            privacyClass: "hosted",
+            authStatus: "unknown",
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("No tokens stored")).toBeInTheDocument();
+    expect(screen.getByText("npm install -g @anthropic-ai/claude-code")).toBeInTheDocument();
+    expect(screen.getByText("claude auth login")).toBeInTheDocument();
+    expect(screen.getByText("codex login status")).toBeInTheDocument();
+    expect(screen.getByText("npm install -g @google/gemini-cli")).toBeInTheDocument();
+    expect(screen.getByText("Choose Login with Google when Gemini asks how to authenticate.")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /token|key/i })).not.toBeInTheDocument();
   });
 });
 
@@ -269,5 +349,25 @@ describe("RuntimeSetupCallouts", () => {
     expect(screen.getByText("OpenHands service is not reachable.")).toBeInTheDocument();
     expect(screen.getByText("Install and start the local OpenHands service.")).toBeInTheDocument();
     expect(screen.queryByText("Ready.")).not.toBeInTheDocument();
+  });
+
+  it("uses exact native CLI setup commands for subscription hosts", () => {
+    render(
+      <RuntimeSetupCallouts
+        hosts={[
+          host({
+            id: "codex",
+            label: "Codex",
+            authMode: "subscription-native",
+            authProvider: "openai",
+            privacyClass: "hosted",
+            healthStatus: "unavailable",
+            authStatus: "missing",
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Install with npm install -g @openai/codex, then run codex login.")).toBeInTheDocument();
   });
 });
