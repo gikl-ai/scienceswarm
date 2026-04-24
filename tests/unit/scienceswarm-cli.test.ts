@@ -282,14 +282,16 @@ exit 0
       { encoding: "utf8", mode: 0o755 },
     );
 
-    const output = runCli(["open"], {
+    const output = runCli(["open", "default"], {
       SCIENCESWARM_DIR: tmpRoot,
       FRONTEND_PORT: "43989",
       HOME: tmpRoot,
       PATH: `${binRoot}:/bin:/usr/bin`,
     });
 
-    expect(output).toContain("Chrome was not available; trying the system default browser.");
+    expect(output).toContain(
+      "Opening http://127.0.0.1:43989/dashboard/project in the system default browser",
+    );
     expect(fs.readFileSync(wslviewLogPath, "utf8").trim()).toBe(
       "http://localhost:43989/dashboard/project",
     );
