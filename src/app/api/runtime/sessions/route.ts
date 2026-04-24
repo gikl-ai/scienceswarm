@@ -204,6 +204,13 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     if (sessionId) {
       const services = getRuntimeApiServices();
+      const currentSession = services.sessionStore.getSession(sessionId);
+      if (currentSession?.status === "cancelled") {
+        return Response.json({
+          session: enrichedSession(currentSession),
+          events: services.eventStore.listEvents(sessionId),
+        });
+      }
       services.sessionStore.trySetSessionStatus({
         sessionId,
         status: "failed",

@@ -137,7 +137,13 @@ export class RuntimeCliTimeoutError extends RuntimeHostError {
 }
 
 export class LocalCliTransport implements CliTransport {
-  private readonly activeProcesses = new Map<string, ChildProcessWithoutNullStreams>();
+  private readonly activeProcesses = new Map<
+    string,
+    {
+      child: ChildProcessWithoutNullStreams;
+      forceKillTimer: NodeJS.Timeout | null;
+    }
+  >();
 
   async run(request: CliTransportRunRequest): Promise<CliTransportRunResult> {
     const args = request.args ?? [];
@@ -150,7 +156,10 @@ export class LocalCliTransport implements CliTransport {
         stdio: ["pipe", "pipe", "pipe"],
       });
       if (request.sessionId) {
-        this.activeProcesses.set(request.sessionId, child);
+        this.activeProcesses.set(request.sessionId, {
+          child,
+          forceKillTimer: null,
+        });
       }
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
@@ -171,10 +180,15 @@ export class LocalCliTransport implements CliTransport {
         }
       };
       const clearActiveProcess = () => {
+        if (!request.sessionId) return;
+        const activeProcess = this.activeProcesses.get(request.sessionId);
         if (
-          request.sessionId
-          && this.activeProcesses.get(request.sessionId) === child
+          activeProcess
+          && activeProcess.child === child
         ) {
+          if (activeProcess.forceKillTimer) {
+            clearTimeout(activeProcess.forceKillTimer);
+          }
           this.activeProcesses.delete(request.sessionId);
         }
       };
@@ -312,18 +326,22 @@ export class LocalCliTransport implements CliTransport {
   }
 
   async cancel(sessionId: string): Promise<boolean> {
-    const child = this.activeProcesses.get(sessionId);
+    const activeProcess = this.activeProcesses.get(sessionId);
+    const child = activeProcess?.child;
     if (!child || child.exitCode !== null || child.signalCode !== null) {
       return false;
     }
 
     child.kill("SIGTERM");
-    const forceKillTimer = setTimeout(() => {
+    if (activeProcess.forceKillTimer) {
+      clearTimeout(activeProcess.forceKillTimer);
+    }
+    activeProcess.forceKillTimer = setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) {
         child.kill("SIGKILL");
       }
     }, 250);
-    forceKillTimer.unref?.();
+    activeProcess.forceKillTimer.unref?.();
     return true;
   }
 }
