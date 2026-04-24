@@ -1331,7 +1331,16 @@ export function ChatMessage({
         }`
       : role === "system"
         ? "w-full max-w-[min(92vw,72rem)] rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text bg-white border-2 border-border text-muted text-xs font-mono"
-        : "w-full max-w-[min(90vw,56rem)] px-1 py-2 text-[15px] leading-7 select-text cursor-text text-slate-900 sm:px-2";
+        : "w-full max-w-[min(90vw,56rem)] px-1 py-3 select-text cursor-text text-slate-900 sm:px-2";
+  const assistantSurfaceClass = isAssistantTurn
+    ? "mx-auto flex w-full max-w-[48rem] flex-col"
+    : "";
+  const contentClass = isAssistantTurn
+    ? `whitespace-pre-wrap select-text text-[15px] leading-7 tracking-[0.005em] text-slate-900 sm:text-base sm:leading-8 ${selectionClass}`
+    : `whitespace-pre-wrap select-text ${selectionClass}`;
+  const footerRowClass = isAssistantTurn
+    ? "mt-4 flex items-center justify-end gap-3"
+    : "mt-3 flex items-center justify-end gap-3";
 
   useEffect(() => () => {
     if (copyFeedbackTimerRef.current !== null) {
@@ -1367,15 +1376,8 @@ export function ChatMessage({
     scheduleCopyFeedbackReset();
   };
 
-  return (
-    <div
-      className={`flex ${role === "user" ? "justify-end" : "justify-center"}`}
-    >
-      <div
-        data-testid="chat-bubble"
-        data-chat-selectable={role === "user" ? "true" : undefined}
-        className={bubbleClass}
-      >
+  const messageBody = (
+    <>
         {isOpenClawToolsTurn && (
           <div className={`mb-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
             role === "user"
@@ -1470,12 +1472,13 @@ export function ChatMessage({
         {/* Message content */}
         <div
           ref={contentRef}
-          className={`whitespace-pre-wrap select-text ${selectionClass}`}
+          data-testid={isAssistantTurn ? "assistant-reply-content" : undefined}
+          className={contentClass}
         >
           {renderContent(content, projectId)}
         </div>
 
-        <div className="mt-3 flex items-center justify-end gap-3">
+        <div className={footerRowClass}>
           {hasCopyableText && (
             <button
               type="button"
@@ -1489,6 +1492,25 @@ export function ChatMessage({
           )}
           <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
         </div>
+    </>
+  );
+
+  return (
+    <div
+      className={`flex ${role === "user" ? "justify-end" : "justify-center"}`}
+    >
+      <div
+        data-testid="chat-bubble"
+        data-chat-selectable={role === "user" ? "true" : undefined}
+        className={bubbleClass}
+      >
+        {isAssistantTurn ? (
+          <div data-testid="assistant-reply-surface" className={assistantSurfaceClass}>
+            {messageBody}
+          </div>
+        ) : (
+          messageBody
+        )}
       </div>
     </div>
   );
