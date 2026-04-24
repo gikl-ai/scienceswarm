@@ -11,6 +11,7 @@ const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
   };
   scripts: Record<string, string>;
 };
+const startScript = fs.readFileSync("start.sh", "utf-8");
 
 describe("package.json scripts", () => {
   // Regression: `next dev` alone falls back to Next.js's built-in default
@@ -35,5 +36,13 @@ describe("package.json scripts", () => {
 
   it("forces gbrain to reuse the hoisted PGLite package", () => {
     expect(pkg.overrides?.gbrain?.["@electric-sql/pglite"]).toBe("0.4.4");
+  });
+
+  it("starts HTTPS dev server with explicit ScienceSwarm certificate paths", () => {
+    expect(startScript).toContain("FRONTEND_HTTPS_KEY=\"$DATA_ROOT/certificates/localhost-key.pem\"");
+    expect(startScript).toContain("FRONTEND_HTTPS_CERT=\"$DATA_ROOT/certificates/localhost.pem\"");
+    expect(startScript).toContain("--experimental-https-key");
+    expect(startScript).toContain("--experimental-https-cert");
+    expect(startScript).toContain("openssl req -x509");
   });
 });
