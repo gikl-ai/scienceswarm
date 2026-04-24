@@ -3449,7 +3449,9 @@ export function useUnifiedChat(
                             ? progressUpdate.assistantText
                             : mergeStreamingText(m.content, progressUpdate.assistantText)
                           : m.content,
-                        activityLog: progressUpdate.activityLines.length > 0
+                        activityLog:
+                          progressUpdate.activityLines.length > 0
+                          && progressUpdate.progressEntries.length === 0
                           ? appendActivityLog(m.activityLog, progressUpdate.activityLines)
                           : m.activityLog,
                         progressLog: progressUpdate.progressEntries.length > 0

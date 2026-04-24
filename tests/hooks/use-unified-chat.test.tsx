@@ -4058,8 +4058,8 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("thinking-log").textContent).not.toContain(
       "Planning how to inspect the chart files.\nPlanning how to inspect the chart files.",
     );
-    expect(screen.getByTestId("activity-log").textContent).toContain("Tool read_file:");
-    expect(screen.getByTestId("activity-log").textContent).toContain(
+    expect(screen.getByTestId("activity-log").textContent).not.toContain("Tool read_file:");
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
       "Tool read_file result: Loaded 42 rows.",
     );
     expect(screen.getByTestId("progress-log").textContent).toContain(
@@ -4144,7 +4144,7 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("progress-log").textContent).toContain(
       "activity:Read figures/cat-svg-preview/index.html",
     );
-    expect(screen.getByTestId("activity-log").textContent).toContain(
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
       "Tool read: figures/cat-svg-preview/index.html",
     );
   });
@@ -4227,7 +4227,7 @@ describe("useUnifiedChat persistence", () => {
     expect(progressLog).not.toContain("/Users/example/.scienceswarm/projects/alpha-project/docs/results_table.csv");
 
     const activityLog = screen.getByTestId("activity-log").textContent ?? "";
-    expect(activityLog).toContain("Search **needle** in docs/results_table.csv | Read docs/summary.md");
+    expect(activityLog).not.toContain("Search **needle** in docs/results_table.csv | Read docs/summary.md");
   });
 
   it("formats structured image generation tool calls without dumping raw JSON into progress", async () => {
@@ -4310,7 +4310,7 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
       "{\"prompt\":\"A charming cat sitting and looking at the viewer, warm soft lighting.",
     );
-    expect(screen.getByTestId("activity-log").textContent).toContain(
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
       "Tool image_generate: cat-image.png (1024x1024)",
     );
   });
@@ -4708,7 +4708,7 @@ describe("useUnifiedChat persistence", () => {
     expect(progressLog).toContain("assistant:activity:Sending request to OpenClaw");
     expect(progressLog).toContain("activity:Waiting for OpenClaw to respond");
     expect(progressLog).toContain("activity:Read docs/results_table.csv");
-    expect(screen.getByTestId("activity-log").textContent).toContain(
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
       "Tool read_file: docs/results_table.csv | Tool read_file result: Loaded 42 rows.",
     );
   });
@@ -5122,7 +5122,7 @@ describe("useUnifiedChat persistence", () => {
     expect(progressLog).not.toContain("Status: idle");
 
     const activityLog = screen.getByTestId("activity-log").textContent ?? "";
-    expect(activityLog).toContain(
+    expect(activityLog).not.toContain(
       "Tool read_file: docs/results_table.csv | Tool read_file result: Loaded 42 rows.",
     );
     expect(activityLog).not.toContain("Turn started");
