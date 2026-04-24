@@ -4958,34 +4958,34 @@ function ProjectPageContent() {
                   <div className="mx-auto w-full max-w-[60rem]">
                     <div
                       data-testid="project-chat-composer"
-                      className={`rounded-[28px] border bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)] transition-colors ${
+                      className={`rounded-[28px] border bg-white shadow-[0_12px_36px_rgba(15,23,42,0.07)] transition-colors ${
                         chatInputDragOver
                           ? "border-accent ring-4 ring-accent/10"
                           : "border-slate-200/90 focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
                       }`}
                     >
-                      <div className="flex flex-col gap-3 border-b border-slate-200/80 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex flex-col gap-2.5 border-b border-slate-200/70 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                             Project Chat
                           </p>
-                          <p className="mt-1 text-sm font-medium text-foreground">
+                          <p className="mt-1 text-[13px] font-medium leading-5 text-slate-900">
                             Ask about the project, run a task, or compare runtimes without leaving the thread.
                           </p>
-                          <p className="mt-1 text-xs text-muted">
+                          <p className="mt-1 text-[11px] text-slate-500">
                             Enter to send. Shift+Enter for a new line.
                           </p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium">
                           {activeProjectSlug && (
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                            <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-slate-50/85 px-2.5 py-1 text-slate-500">
                               {activeProjectSlug}
                             </span>
                           )}
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                          <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-slate-50/85 px-2.5 py-1 text-slate-500">
                             {composerModeCopy}
                           </span>
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                          <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-slate-50/85 px-2.5 py-1 text-slate-500">
                             {composerPolicyCopy}
                           </span>
                         </div>
