@@ -190,6 +190,12 @@ const EXPLORE_COMMAND_PREFIXES = [
   "Waited for background terminal",
   "Interacted with background terminal",
 ];
+const COMPACT_STEP_VERB_LABELS: Record<Step["verb"], string> = {
+  reading: "Reading",
+  searching: "Searching",
+  drafting: "Drafting",
+  running: "Running",
+};
 
 function isExploredCommand(text: string): boolean {
   return EXPLORE_COMMAND_PREFIXES.some((prefix) => text.startsWith(prefix));
@@ -482,7 +488,82 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
   return blocks;
 }
 
-function buildProgressSectionChanges(blocks: ProgressTranscriptBlock[]): ReactNode[] {
+function summarizeCompactPhaseStatus(phases: ChatTaskPhase[]): string[] {
+  if (phases.length === 0) {
+    return [];
+  }
+
+  let activePhase: ChatTaskPhase | null = null;
+  let failedPhase: ChatTaskPhase | null = null;
+  let completedCount = 0;
+
+  for (let index = phases.length - 1; index >= 0; index -= 1) {
+    const phase = phases[index];
+    if (phase.status === "active" && activePhase === null) {
+      activePhase = phase;
+    } else if (phase.status === "failed" && failedPhase === null) {
+      failedPhase = phase;
+    }
+  }
+
+  for (const phase of phases) {
+    if (phase.status === "completed") {
+      completedCount += 1;
+    }
+  }
+
+  if (failedPhase) {
+    return [`Failed: ${failedPhase.label}`];
+  }
+  if (activePhase) {
+    return [`Phase: ${activePhase.label}`];
+  }
+  if (completedCount > 0) {
+    return [`${completedCount}/${phases.length} phases complete`];
+  }
+  return [`${phases.length} phases queued`];
+}
+
+function summarizeCompactSteps(steps: Step[]): string[] {
+  if (steps.length === 0) {
+    return [];
+  }
+
+  let latestRunningOrErrorStep: Step | null = null;
+  let doneCount = 0;
+
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    const step = steps[index];
+    if (step.status === "done") {
+      doneCount += 1;
+      continue;
+    }
+    if (latestRunningOrErrorStep === null) {
+      latestRunningOrErrorStep = step;
+    }
+  }
+
+  if (latestRunningOrErrorStep) {
+    const verbLabel = COMPACT_STEP_VERB_LABELS[latestRunningOrErrorStep.verb];
+    const target = latestRunningOrErrorStep.target.trim();
+    if (latestRunningOrErrorStep.status === "error") {
+      return [`${verbLabel} ${target} failed`];
+    }
+    return [`${verbLabel} ${target}`];
+  }
+
+  if (doneCount > 0) {
+    return [`${doneCount} step${doneCount === 1 ? "" : "s"} complete`];
+  }
+
+  return [];
+}
+
+function buildProgressSectionChanges(
+  blocks: ProgressTranscriptBlock[],
+  options: { compact?: boolean } = {},
+): ReactNode[] {
+  const compact = options.compact === true;
   const elements: ReactNode[] = [];
   let lastSection: "thinking" | "activity" | null = null;
 
@@ -493,13 +574,22 @@ function buildProgressSectionChanges(blocks: ProgressTranscriptBlock[]): ReactNo
     if (nextSection !== lastSection) {
       const sectionMeta = PROGRESS_SECTION_META[nextSection];
       elements.push(
-        <div
-          key={`section-${nextSection}-${index}`}
-          className={`mb-2 inline-flex w-fit items-center gap-2 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.1em] ${sectionMeta.className}`}
-        >
-          <span aria-hidden="true">{sectionMeta.icon}</span>
-          <span>{sectionMeta.title}</span>
-        </div>,
+        compact ? (
+          <div
+            key={`section-${nextSection}-${index}`}
+            className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"
+          >
+            {nextSection === "thinking" ? "Thinking" : "Activity"}
+          </div>
+        ) : (
+          <div
+            key={`section-${nextSection}-${index}`}
+            className={`mb-2 inline-flex w-fit items-center gap-2 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.1em] ${sectionMeta.className}`}
+          >
+            <span aria-hidden="true">{sectionMeta.icon}</span>
+            <span>{sectionMeta.title}</span>
+          </div>
+        ),
       );
       lastSection = nextSection;
     }
@@ -508,13 +598,13 @@ function buildProgressSectionChanges(blocks: ProgressTranscriptBlock[]): ReactNo
       elements.push(
         <div
           key={`${index}-explored`}
-          className="space-y-1"
+          className={compact ? "space-y-1.5" : "space-y-1"}
         >
           <div className={`flex items-start gap-2 ${PROGRESS_SECTION_META.activity.rowClassName}`}>
             <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
             <span className="font-medium">Explored</span>
           </div>
-          <div className="space-y-1 pl-5 text-muted">
+          <div className={`${compact ? "space-y-1 pl-4" : "space-y-1 pl-5"} text-muted`}>
             {block.lines.map((line, lineIndex) => (
               <div
                 key={`${index}-${lineIndex}-${line}`}
@@ -1093,9 +1183,14 @@ export function ChatMessage({
 
   const badge = channel ? CHANNEL_BADGES[channel] : undefined;
   const isCrossChannel = channel && channel !== "web";
+  const isLiveAssistantTurn = role === "assistant" && Boolean(isStreaming);
   const visibleTaskPhases =
     role === "assistant" && Array.isArray(taskPhases) && taskPhases.length > 0
       ? taskPhases
+      : [];
+  const visibleSteps =
+    role === "assistant" && Array.isArray(steps) && steps.length > 0
+      ? steps
       : [];
   const visibleActivityLog =
     role === "assistant" && Array.isArray(activityLog) && activityLog.length > 0
@@ -1128,11 +1223,24 @@ export function ChatMessage({
             : []
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
+  const compactLiveRunSummary = isLiveAssistantTurn
+    ? [
+        ...summarizeCompactPhaseStatus(visibleTaskPhases),
+        ...summarizeCompactSteps(visibleSteps),
+      ]
+    : [];
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
   const useCompactAssistantTranscript =
-    role === "assistant" && progressTranscript.length > 0;
+    role === "assistant" && !isLiveAssistantTurn && progressTranscript.length > 0;
+  const showCompactLiveTranscript =
+    isLiveAssistantTurn
+    && (
+      visibleProgressLog.length > 0
+      || visibleTaskPhases.length > 0
+      || visibleSteps.length > 0
+    );
   const isOpenClawToolsTurn = chatMode === "openclaw-tools" && role !== "system";
   const contentRef = useRef<HTMLDivElement | null>(null);
   const copyFeedbackTimerRef = useRef<number | null>(null);
@@ -1256,22 +1364,53 @@ export function ChatMessage({
           </div>
         )}
 
-        {!useCompactAssistantTranscript && (
+        {!useCompactAssistantTranscript && !showCompactLiveTranscript && (
           <TaskPhaseRail phases={visibleTaskPhases} className="mb-3" />
         )}
 
         {/* Agent step cards (above content; no-op when absent) */}
-        {!useCompactAssistantTranscript && role === "assistant" && <StepCards steps={steps} />}
+        {!useCompactAssistantTranscript && !showCompactLiveTranscript && role === "assistant" && (
+          <StepCards steps={visibleSteps} />
+        )}
 
         {/* Streaming indicator */}
-        {role === "assistant" && content === "" && isStreaming && visibleProgressLog.length === 0 && (
+        {role === "assistant" && content === "" && isStreaming && !showCompactLiveTranscript && visibleProgressLog.length === 0 && (
           <div className="flex items-center gap-2 text-accent/60">
             <Spinner size="h-4 w-4" testId="chat-streaming-spinner" />
             <span className="text-xs">Thinking…</span>
           </div>
         )}
 
-        {visibleProgressLog.length > 0 && (
+        {showCompactLiveTranscript && (
+          <div
+            aria-live="polite"
+            className="mb-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
+            role="log"
+          >
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+              <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+                <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
+                <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
+              </span>
+              {compactLiveRunSummary.map((summary, index) => (
+                <span
+                  key={`${summary}-${index}`}
+                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600"
+                >
+                  {summary}
+                </span>
+              ))}
+            </div>
+
+            {progressTranscript.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {buildProgressSectionChanges(progressTranscript, { compact: true })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!showCompactLiveTranscript && visibleProgressLog.length > 0 && (
           <div
             aria-live="polite"
             className="mb-3 space-y-3 text-[13px] leading-6 text-foreground/95"
