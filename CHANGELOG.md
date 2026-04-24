@@ -30,11 +30,13 @@ All notable changes to this project will be documented in this file.
 - `dashboard/project` redirects to `/setup` when the brain is missing instead of showing a half-working UI.
 - Sidebar Reasoning icon swapped from a magnifying-glass-on-document to a two-network glyph (a larger graph alongside a smaller one), reflecting that the reasoning audit shows how a model produces a derived trace.
 - The `scienceswarm status` health probe now respects HTTPS local frontends, so healthy self-signed local installs report `Frontend health: ok`.
+- Settings > Project runtime now shows explicit Claude Code, Codex, and Gemini CLI setup commands, making subscription-backed runtime connection visible without asking ScienceSwarm to store provider tokens.
 
 ### Fixed
 
 - OpenClaw thinking traces no longer replay stale assistant content into the next user turn on reused web conversations.
 - gbrain's runtime import now uses the exported engine factory and a single PGlite version, avoiding bundled extension lookups under `/_next/static/media/*.tar.gz` during Next.js development.
+- Claude Code and Codex runtime health now run native CLI auth checks, while ready subscription CLIs with host-owned auth can be selected with clear first-send login copy instead of staying blocked as unknown.
 
 ### Removed
 

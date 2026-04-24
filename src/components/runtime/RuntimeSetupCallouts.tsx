@@ -1,14 +1,9 @@
 import type { RuntimeHealthHost } from "./RuntimeHostMatrix";
+import { runtimeCliSetupAction } from "./RuntimeAccountSetupGuide";
 
 function setupAction(host: RuntimeHealthHost): string {
   if (host.profile.authMode === "subscription-native") {
-    if (host.health.status === "unavailable") {
-      const command = host.profile.transport.command;
-      return command
-        ? `Install ${command}, then sign in with its native CLI.`
-        : "Install the native CLI, then sign in there.";
-    }
-    return "Sign in with the native CLI; ScienceSwarm stores no subscription token.";
+    return runtimeCliSetupAction(host);
   }
 
   if (host.profile.authMode === "api-key") {
@@ -26,7 +21,10 @@ function needsSetup(host: RuntimeHealthHost): boolean {
   return host.health.status !== "ready"
     || host.auth.status === "missing"
     || host.auth.status === "invalid"
-    || host.auth.status === "unknown";
+    || (
+      host.auth.status === "unknown"
+      && host.profile.authMode !== "subscription-native"
+    );
 }
 
 function statusCopy(host: RuntimeHealthHost): string {

@@ -30,6 +30,12 @@ function hostById(hosts: RuntimeHealthHost[], hostId: string): RuntimeHealthHost
   return hosts.find((host) => host.profile.id === hostId) ?? null;
 }
 
+function nativeCliAuthUnknown(host: RuntimeHealthHost | null): boolean {
+  return host?.profile.authMode === "subscription-native"
+    && host.auth.status === "unknown"
+    && host.health.status === "ready";
+}
+
 export function RuntimePicker({
   hosts,
   selectedHostId,
@@ -57,9 +63,16 @@ export function RuntimePicker({
   const selectedReason = selectedHost
     ? runtimeHostDisabledReason({ host: selectedHost, policy: projectPolicy, mode })
     : "Runtime host unavailable";
-  const readyLabel = mode === "chat" ? "Ready to send" : "Ready for preview";
+  const readyLabel = nativeCliAuthUnknown(selectedHost)
+    ? "Ready to try; CLI owns login"
+    : mode === "chat"
+      ? "Ready to send"
+      : "Ready for preview";
   const compareHosts = hosts.filter((host) =>
     runtimeHostDisabledReason({ host, policy: projectPolicy, mode: "compare" }) === null
+  );
+  const hasSubscriptionCliHosts = hosts.some(
+    (host) => host.profile.authMode === "subscription-native",
   );
 
   return (
@@ -140,6 +153,13 @@ export function RuntimePicker({
           </select>
         </label>
       </div>
+
+      {projectPolicy === "local-only" && hasSubscriptionCliHosts && (
+        <p className="text-xs text-muted">
+          Choose Cloud ok to use Claude Code, Codex, or Gemini CLI after signing in
+          through their native CLIs.
+        </p>
+      )}
 
       {mode === "compare" && (
         <fieldset className="space-y-2" data-testid="runtime-compare-hosts">

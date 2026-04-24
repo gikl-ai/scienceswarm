@@ -175,6 +175,30 @@ policy. If a future rollback or host removal leaves old sessions with an
 unknown host id, ScienceSwarm keeps those rows as read-only history rather than
 deleting them.
 
+To connect a subscription-backed CLI, sign in with the provider's own command.
+ScienceSwarm does not collect Claude, Codex, or Gemini credentials.
+
+```bash
+# Claude Code
+npm install -g @anthropic-ai/claude-code
+claude auth login
+claude auth status
+
+# Codex
+npm install -g @openai/codex
+codex login
+codex login status
+
+# Gemini CLI
+npm install -g @google/gemini-cli
+gemini
+# If Gemini opens without asking for an auth method, its native CLI session is usable.
+```
+
+After the CLI is installed and signed in, open Settings > Project runtime,
+switch Project policy from `local-only` to `cloud-ok`, select Claude Code,
+Codex, or Gemini CLI, and approve the preview before sending hosted context.
+
 Rollback smoke after reverting or patching a runtime-host PR:
 
 ```bash
