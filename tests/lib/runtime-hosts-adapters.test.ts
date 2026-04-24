@@ -316,9 +316,25 @@ describe("runtime host adapters", () => {
       vi.stubEnv("SCIENCESWARM_DIR", dataRoot);
       vi.stubEnv("BRAIN_ROOT", brainRoot);
 
-      const transport = new FakeCliTransport((request) =>
-        fakeResult(request, "{\"type\":\"result\",\"result\":\"Capsule answer\",\"session_id\":\"claude-native-capsule\"}")
-      );
+      type CapturedMcpConfig = {
+        mcpServers: {
+          scienceswarm: {
+            command: string;
+            args: string[];
+            env: Record<string, string>;
+          };
+        };
+      };
+      let mcpConfigAtLaunch: CapturedMcpConfig | null = null;
+      const transport = new FakeCliTransport(async (request) => {
+        const mcpConfigIndex = request.args?.indexOf("--mcp-config") ?? -1;
+        const mcpConfigPath = request.args?.[mcpConfigIndex + 1] ?? "";
+        mcpConfigAtLaunch = JSON.parse(await readFile(mcpConfigPath, "utf8"));
+        return fakeResult(
+          request,
+          "{\"type\":\"result\",\"result\":\"Capsule answer\",\"session_id\":\"claude-native-capsule\"}",
+        );
+      });
       const adapter = createClaudeCodeRuntimeHostAdapter({
         transport,
         sessionRoot,
@@ -354,21 +370,27 @@ describe("runtime host adapters", () => {
       expect(appendedPrompt).toContain("Current project: `project-alpha`.");
       expect(appendedPrompt).toContain("Use narrow gbrain reads.");
       expect(appendedPrompt).toContain("runtime-scoped MCP server named `scienceswarm`");
+      expect(appendedPrompt).toContain("runtime server injects its access token");
+      expect(appendedPrompt).not.toContain("- token:");
 
       const mcpConfigIndex = launch?.args?.indexOf("--mcp-config") ?? -1;
       expect(mcpConfigIndex).toBeGreaterThanOrEqual(0);
       const mcpConfigPath = launch?.args?.[mcpConfigIndex + 1] ?? "";
-      const mcpConfig = JSON.parse(await readFile(mcpConfigPath, "utf8")) as {
-        mcpServers: { scienceswarm: { command: string; args: string[]; env: Record<string, string> } };
-      };
-      expect(mcpConfig.mcpServers.scienceswarm.command).toBe("/bin/zsh");
+      expect(mcpConfigAtLaunch).not.toBeNull();
+      const mcpConfig = mcpConfigAtLaunch as unknown as CapturedMcpConfig;
+      expect(mcpConfig.mcpServers.scienceswarm.command).toBe("/bin/sh");
       expect(mcpConfig.mcpServers.scienceswarm.args.join(" ")).toContain(
         "src/lib/runtime-hosts/mcp/runtime-stdio-server.ts",
       );
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_DIR).toBe(dataRoot);
       expect(mcpConfig.mcpServers.scienceswarm.env.BRAIN_ROOT).toBe(brainRoot);
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET)
-        .toEqual(expect.any(String));
+        .toBeUndefined();
+      expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN)
+        .toBeUndefined();
+      expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET).toEqual(expect.any(String));
+      expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN).toEqual(expect.any(String));
+      await expect(readFile(mcpConfigPath, "utf8")).rejects.toThrow();
 
       await expect(readFile(path.join(launch?.cwd ?? "", "CLAUDE.md"), "utf8"))
         .resolves.toContain("Read `SCIENCESWARM.md` first");

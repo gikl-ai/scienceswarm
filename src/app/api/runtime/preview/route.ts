@@ -36,6 +36,7 @@ export async function POST(request: Request): Promise<Response> {
       projectPolicy: projectPolicyFromBody(body),
       mode,
       dataIncluded: dataIncludedFromBodyWithRuntimeContext({
+        services,
         body,
         projectId,
         hostId,

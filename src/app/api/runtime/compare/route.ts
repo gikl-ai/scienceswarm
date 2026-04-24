@@ -63,6 +63,7 @@ export async function POST(request: Request): Promise<Response> {
     const conversationId = optionalStringField(body, "conversationId") ?? null;
     const inputFileRefs = optionalStringArrayField(body, "inputFileRefs") ?? [];
     const compareDataIncluded = dataIncludedFromBodyWithRuntimeContext({
+      services,
       body,
       projectId,
       hostId: selectedHostIds[0],
@@ -81,6 +82,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const childPreviews = selectedHostIds.map((hostId) => {
       const childDataIncluded = dataIncludedFromBodyWithRuntimeContext({
+        services,
         body,
         projectId,
         hostId,

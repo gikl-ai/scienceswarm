@@ -36,6 +36,9 @@ function createRuntimeMcpServer(): McpServer {
   });
 
   registerRuntimeMcpTools(server, {
+    defaultAuth: {
+      token: process.env.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN,
+    },
     brainSearch: (params) => handleBrainSearch(getConfig(), params),
     brainRead: (params) => handleBrainRead(getConfig(), params),
     brainCapture: (params) => brainCapture(params as BrainCaptureParams),
