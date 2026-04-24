@@ -819,15 +819,25 @@ function buildProgressSectionChanges(
     }
 
     const rowClassName = PROGRESS_SECTION_META[block.section].rowClassName;
+    const isMarkdownBlock = shouldRenderProgressMarkdownBlock(block.entry.text);
     elements.push(
       <div
         key={`${index}-${block.entry.kind}-${block.entry.text}`}
-        className={`flex items-start gap-2 whitespace-pre-wrap ${rowClassName}`}
+        className={`flex items-start gap-2 ${isMarkdownBlock ? "" : "whitespace-pre-wrap"} ${rowClassName}`}
       >
-        <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
-        <span className="min-w-0 flex-1">
-          {renderInlineMarkdownLite(block.entry.text, `progress-${index}`)}
+        <span
+          aria-hidden="true"
+          className={`text-slate-400 ${isMarkdownBlock ? "pt-1.5" : "pt-0.5"}`}
+        >
+          {isMarkdownBlock ? "↳ " : "• "}
         </span>
+        {isMarkdownBlock
+          ? renderProgressMarkdown(block.entry.text, `progress-${index}`)
+          : (
+            <span className="min-w-0 flex-1">
+              {renderInlineMarkdownLite(block.entry.text, `progress-${index}`)}
+            </span>
+          )}
       </div>,
     );
   });
@@ -1143,6 +1153,38 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
   }
 
   return elements;
+}
+
+function shouldRenderProgressMarkdownBlock(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed.includes("\n")) {
+    return false;
+  }
+
+  return (
+    /```/.test(trimmed) ||
+    /^#{1,6}\s/m.test(trimmed) ||
+    /^>\s/m.test(trimmed) ||
+    /^\s*(?:[-*+]|\d+\.)\s/m.test(trimmed)
+  );
+}
+
+function renderProgressMarkdown(value: string, keyPrefix: string) {
+  return (
+    <div
+      key={keyPrefix}
+      className="min-w-0 flex-1 [&>div>p:first-child]:mt-0 [&>div>ul:last-child]:mb-0 [&>div>ol:last-child]:mb-0 [&>div>pre:last-child]:mb-0"
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeSanitize]}
+        skipHtml
+        components={ASSISTANT_MARKDOWN_COMPONENTS}
+      >
+        {value}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 function renderAssistantMarkdownSegment(value: string, keyPrefix: string) {
