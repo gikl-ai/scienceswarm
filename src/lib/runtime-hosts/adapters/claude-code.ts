@@ -161,26 +161,57 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
     const sessionId = `claude-code-task-${this.sessionIdGenerator()}`;
     const wrapperSessionId = request.runtimeSessionId ?? sessionId;
     const now = new Date().toISOString();
+    const stream = new ClaudeCodeStreamAccumulator({
+      hostId: this.runtimeProfile.id,
+      sessionId: wrapperSessionId,
+    });
 
-    await this.transport.run({
+    const result = await this.transport.run({
       hostId: this.runtimeProfile.id,
       sessionId: wrapperSessionId,
       command: this.command,
       args: this.buildPromptArgs(request),
       env: this.cliEnv(),
       timeoutMs: this.timeoutMs,
+      onStdoutLine: (line) => {
+        const event = stream.acceptLine(line);
+        if (event) request.onEvent?.(event);
+      },
     });
+    const parsed = stream.hasLines
+      ? stream.result()
+      : parseClaudeCodeStreamOutput({
+          hostId: this.runtimeProfile.id,
+          sessionId: wrapperSessionId,
+          lines: result.output.lines,
+        });
+    const message = parsed.message || result.output.text;
+    const nativeSessionId = parsed.nativeSessionId
+      ?? (isNativeClaudeCodeSessionId(request.conversationId) ? request.conversationId : null);
+    const events = parsed.events.some((event) =>
+      event.type === "message" && typeof event.payload.text === "string"
+    )
+      ? parsed.events
+      : [
+          ...parsed.events,
+          this.messageEvent({
+            sessionId: wrapperSessionId,
+            text: message,
+            nativeSessionId: nativeSessionId ?? wrapperSessionId,
+          }),
+        ];
 
     return {
-      id: sessionId,
+      id: nativeSessionId ?? wrapperSessionId,
       hostId: this.runtimeProfile.id,
       projectId: request.projectId,
-      conversationId: request.conversationId,
+      conversationId: nativeSessionId,
       mode: request.mode,
       status: "completed",
       createdAt: now,
       updatedAt: now,
       preview: request.preview,
+      events,
     };
   }
 

@@ -178,6 +178,12 @@ export async function POST(request: Request): Promise<Response> {
         conversationId: result.sessionId,
       });
     } else {
+      for (const event of result.events ?? []) {
+        services.eventStore.appendEvent({
+          ...event,
+          sessionId: session.id,
+        });
+      }
       services.sessionStore.updateSession(session.id, {
         status: result.status,
         conversationId: result.conversationId,
@@ -193,7 +199,7 @@ export async function POST(request: Request): Promise<Response> {
             : "status",
         payload: {
           status: result.status,
-          nativeSessionId: result.id,
+          nativeSessionId: result.conversationId ?? result.id,
         },
       });
     }

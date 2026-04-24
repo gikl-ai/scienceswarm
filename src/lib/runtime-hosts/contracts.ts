@@ -200,6 +200,7 @@ export interface RuntimeSessionRecord {
   readOnly?: boolean;
   preview?: TurnPreview;
   errorCode?: string;
+  events?: RuntimeEvent[];
 }
 
 export interface RuntimeEvent {

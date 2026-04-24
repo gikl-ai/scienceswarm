@@ -378,6 +378,79 @@ describe("runtime session APIs", () => {
     );
   });
 
+  it("persists task-mode adapter events and native conversation ids", async () => {
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      adapters: [
+        {
+          ...adapter(requireRuntimeHostProfile("claude-code")),
+          executeTask: async (turn) => ({
+            id: "claude-task-native",
+            hostId: "claude-code",
+            projectId: turn.projectId,
+            conversationId: "claude-task-native",
+            mode: turn.mode,
+            status: "completed",
+            createdAt: "2026-04-22T12:00:00Z",
+            updatedAt: "2026-04-22T12:00:00Z",
+            preview: turn.preview,
+            events: [
+              {
+                id: `${turn.runtimeSessionId}:task-message`,
+                sessionId: turn.runtimeSessionId ?? "wrapper-session",
+                hostId: "claude-code",
+                type: "message",
+                createdAt: "2026-04-22T12:00:00Z",
+                payload: {
+                  text: "Claude task output",
+                  nativeSessionId: "claude-task-native",
+                },
+              },
+            ],
+          }),
+        },
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+
+    const response = await sessionsPOST(jsonRequest(
+      "http://localhost/api/runtime/sessions",
+      {
+        hostId: "claude-code",
+        projectId: "project-alpha",
+        projectPolicy: "execution-ok",
+        mode: "task",
+        prompt: "Run the task",
+        approvalState: "approved",
+      },
+    ));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.session).toMatchObject({
+      status: "completed",
+      conversationId: "claude-task-native",
+    });
+    expect(body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "rt-session-session-1:task-message",
+        type: "message",
+        payload: expect.objectContaining({
+          text: "Claude task output",
+          nativeSessionId: "claude-task-native",
+        }),
+      }),
+      expect.objectContaining({
+        id: "rt-session-session-1:runtime-completed",
+        type: "done",
+        payload: expect.objectContaining({
+          nativeSessionId: "claude-task-native",
+        }),
+      }),
+    ]));
+  });
+
   it("cancels a streaming runtime wrapper when the SSE request is aborted", async () => {
     const cancelled: string[] = [];
     let rejectTurn: ((error: Error) => void) | null = null;

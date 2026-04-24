@@ -224,6 +224,49 @@ describe("runtime host adapters", () => {
     });
   });
 
+  it("preserves Claude Code native sessions and output events for task turns", async () => {
+    const transport = new FakeCliTransport((request) =>
+      fakeResult(
+        request,
+        [
+          "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"claude-task-native\"}",
+          "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Task draft\"}]}}",
+          "{\"type\":\"result\",\"result\":\"Task answer\",\"session_id\":\"claude-task-native\"}",
+        ].join("\n"),
+      )
+    );
+    const adapter = createClaudeCodeRuntimeHostAdapter({
+      transport,
+      sessionIdGenerator: () => "wrapper-session",
+    });
+
+    await expect(
+      adapter.executeTask({
+        ...requestFor(requireRuntimeHostProfile("claude-code"), "task"),
+        runtimeSessionId: "rt-session-task",
+        conversationId: null,
+      }),
+    ).resolves.toMatchObject({
+      id: "claude-task-native",
+      conversationId: "claude-task-native",
+      status: "completed",
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          sessionId: "rt-session-task",
+          type: "message",
+          payload: expect.objectContaining({
+            text: "Task answer",
+            nativeSessionId: "claude-task-native",
+          }),
+        }),
+      ]),
+    });
+    expect(transport.requests.at(-1)).toMatchObject({
+      sessionId: "rt-session-task",
+    });
+    expect(transport.requests.at(-1)?.args).not.toContain("--resume");
+  });
+
   it("captures only top-level Claude Code session ids for native resume", () => {
     const nestedOnly = parseClaudeCodeStreamOutput({
       hostId: "claude-code",
