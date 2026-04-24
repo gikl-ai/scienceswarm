@@ -5354,7 +5354,7 @@ describe("useUnifiedChat persistence", () => {
   // direction to switch to; the tests lose their meaning along with the
   // "Switch Direct" harness button.
 
-  it("times out a slash command that never starts and removes the empty placeholder", async () => {
+  it("times out a slash command that never starts and keeps the placeholder with a failure progress row", async () => {
     vi.useFakeTimers();
 
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -5418,9 +5418,15 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("error").textContent).toBe(
       "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
     );
-    expect(screen.getByTestId("message-count").textContent).toBe("3");
+    expect(screen.getByTestId("message-count").textContent).toBe("4");
     const restoredMessages = (screen.getByTestId("message-log").textContent || "").split("\n");
-    expect(restoredMessages.filter((message) => message.startsWith("assistant:"))).toHaveLength(1);
+    expect(restoredMessages.filter((message) => message.startsWith("assistant:"))).toHaveLength(2);
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:activity:Chat failed: ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
+    );
+    expect(screen.getByTestId("activity-log").textContent).toContain(
+      "assistant:Chat failed: ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
+    );
   });
 
   it("blocks send when local provider is selected but the configured model is missing", async () => {
