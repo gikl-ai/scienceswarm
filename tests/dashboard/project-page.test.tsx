@@ -321,20 +321,24 @@ describe("Project dashboard smoke test", () => {
     expect(column).toHaveClass("gap-6");
   });
 
-  it("renders the refreshed composer surface with guidance and runtime context", async () => {
+  it("renders a compact composer surface without guidance copy or status pills", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ProjectPage />);
 
     const composer = await screen.findByTestId("project-chat-composer");
-    expect(within(composer).getByText("Project Chat")).toBeInTheDocument();
+    const input = within(composer).getByLabelText("Chat with your project");
+
+    expect(input).toHaveAttribute("placeholder", "");
+    expect(within(composer).queryByText("Project Chat")).not.toBeInTheDocument();
     expect(
-      within(composer).getByText("Enter to send. Shift+Enter for a new line."),
-    ).toBeInTheDocument();
-    expect(within(composer).getByText(/Drop files, type/i)).toBeInTheDocument();
-    expect(within(composer).getByText("Chat mode")).toBeInTheDocument();
-    expect(within(composer).getByText("demo-project")).toHaveClass("text-dim");
+      within(composer).queryByText("Enter to send. Shift+Enter for a new line."),
+    ).not.toBeInTheDocument();
+    expect(within(composer).queryByText(/Drop files, type/i)).not.toBeInTheDocument();
+    expect(within(composer).queryByText("Chat mode")).not.toBeInTheDocument();
+    expect(within(composer).queryByText("Local only")).not.toBeInTheDocument();
+    expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
   });
 
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
