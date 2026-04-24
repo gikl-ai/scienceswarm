@@ -1,5 +1,8 @@
 import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 import { Check, CopySimple, WarningCircle } from "@phosphor-icons/react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 import type {
   ChatTaskPhase,
   MessageProgressEntry,
@@ -220,6 +223,82 @@ const ASSISTANT_LIST_CLASS =
 const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-slate-500";
 const ASSISTANT_METADATA_CLASS =
   "text-[10px] font-medium tracking-[0.02em] text-slate-400";
+const ASSISTANT_BLOCKQUOTE_CLASS =
+  "mb-4 border-l-2 border-slate-200 pl-4 italic text-slate-600";
+const ASSISTANT_LINK_CLASS =
+  "font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition-colors hover:decoration-slate-500";
+const ASSISTANT_CODE_BLOCK_CLASS =
+  "mb-4 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-950 px-4 py-3 text-[13px] leading-6 text-slate-100";
+
+function sanitizeMarkdownHref(href: string | undefined): string | null {
+  if (!href) {
+    return null;
+  }
+  if (href.startsWith("#") || href.startsWith("/") || href.startsWith("./")) {
+    return href;
+  }
+  if (href.startsWith("../")) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(href);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:") {
+      return href;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
+  h1: ({ children }) => <h1 className={ASSISTANT_TITLE_CLASS}>{children}</h1>,
+  h2: ({ children }) => <h2 className={ASSISTANT_SUBTITLE_CLASS}>{children}</h2>,
+  h3: ({ children }) => <h3 className={ASSISTANT_SECTION_CLASS}>{children}</h3>,
+  p: ({ children }) => <p className={`mb-4 ${ASSISTANT_BODY_TEXT_CLASS}`}>{children}</p>,
+  ul: ({ children }) => (
+    <ul className={`${ASSISTANT_LIST_CLASS} list-disc space-y-2 marker:text-slate-400`}>{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className={`${ASSISTANT_LIST_CLASS} list-decimal space-y-2 marker:font-medium marker:text-slate-500`}>{children}</ol>
+  ),
+  li: ({ children }) => <li className="pl-1">{children}</li>,
+  blockquote: ({ children }) => <blockquote className={ASSISTANT_BLOCKQUOTE_CLASS}>{children}</blockquote>,
+  pre: ({ children }) => <pre className={ASSISTANT_CODE_BLOCK_CLASS}>{children}</pre>,
+  code: ({ className, children }) => {
+    const languageClass = typeof className === "string" ? className : "";
+    const isBlock = languageClass.length > 0 || String(children).includes("\n");
+    if (isBlock) {
+      return <code className="font-mono">{children}</code>;
+    }
+    return (
+      <code className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-slate-800">
+        {children}
+      </code>
+    );
+  },
+  a: ({ href, children }) => {
+    const safeHref = sanitizeMarkdownHref(href);
+    if (!safeHref) {
+      return <span className="text-slate-400">{children}</span>;
+    }
+    const external = safeHref.startsWith("http://") || safeHref.startsWith("https://");
+    return (
+      <a
+        href={safeHref}
+        className={ASSISTANT_LINK_CLASS}
+        target={external ? "_blank" : undefined}
+        rel={external ? "noreferrer noopener" : undefined}
+      >
+        {children}
+      </a>
+    );
+  },
+  strong: ({ children }) => <strong className="font-semibold text-slate-900">{children}</strong>,
+  em: ({ children }) => <em className="italic text-slate-700">{children}</em>,
+};
 
 function isExploredCommand(text: string): boolean {
   return EXPLORE_COMMAND_PREFIXES.some((prefix) => text.startsWith(prefix));
@@ -999,92 +1078,22 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
   return elements;
 }
 
-function renderInlineMarkdownWithBreaks(value: string, keyPrefix: string) {
-  return value.split("\n").flatMap((line, index) => {
-    const nodes: ReactNode[] = [];
-    if (index > 0) {
-      nodes.push(<br key={`${keyPrefix}-br-${index}`} />);
-    }
-    nodes.push(
-      <span key={`${keyPrefix}-line-${index}`}>
-        {renderInlineMarkdownLite(line, `${keyPrefix}-line-${index}`)}
-      </span>,
-    );
-    return nodes;
-  });
-}
+function renderAssistantMarkdownSegment(value: string, keyPrefix: string) {
+  if (value.trim().length === 0) {
+    return [];
+  }
 
-function renderAssistantTextSegment(value: string, keyPrefix: string) {
-  const blocks = value
-    .replace(/\r\n?/g, "\n")
-    .split(/\n{2,}/)
-    .map((block) => block.replace(/^\n+|\n+$/g, ""))
-    .filter((block) => block.trim().length > 0);
-
-  return blocks.map((block, blockIndex) => {
-    const blockKey = `${keyPrefix}-block-${blockIndex}`;
-    const lines = block.split("\n");
-    const headingMatch = block.match(/^(#{1,3})\s+(.+)$/);
-    if (headingMatch && lines.length === 1) {
-      const headingText = headingMatch[2];
-      const headingClass =
-        headingMatch[1].length === 1
-          ? ASSISTANT_TITLE_CLASS
-          : headingMatch[1].length === 2
-            ? ASSISTANT_SUBTITLE_CLASS
-            : ASSISTANT_SECTION_CLASS;
-      const HeadingTag =
-        headingMatch[1].length === 1
-          ? "h1"
-          : headingMatch[1].length === 2
-            ? "h2"
-            : "h3";
-
-      return (
-        <HeadingTag key={blockKey} className={headingClass}>
-          {renderInlineMarkdownLite(headingText, `${blockKey}-heading`)}
-        </HeadingTag>
-      );
-    }
-
-    const unorderedItems = lines.map((line) => line.match(/^\s*[-*]\s+(.+)$/)?.[1] ?? null);
-    if (unorderedItems.every((item) => typeof item === "string")) {
-      return (
-        <ul
-          key={blockKey}
-          className={`${ASSISTANT_LIST_CLASS} list-disc space-y-2 marker:text-slate-400`}
-        >
-          {unorderedItems.map((item, itemIndex) => (
-            <li key={`${blockKey}-ul-${itemIndex}`} className="pl-1">
-              {renderInlineMarkdownLite(item ?? "", `${blockKey}-ul-${itemIndex}`)}
-            </li>
-          ))}
-        </ul>
-      );
-    }
-
-    const orderedItems = lines.map((line) => line.match(/^\s*\d+\.\s+(.+)$/)?.[1] ?? null);
-    if (orderedItems.every((item) => typeof item === "string")) {
-      return (
-        <ol
-          key={blockKey}
-          className={`${ASSISTANT_LIST_CLASS} list-decimal space-y-2 marker:font-medium marker:text-slate-500`}
-        >
-          {orderedItems.map((item, itemIndex) => (
-            <li key={`${blockKey}-ol-${itemIndex}`} className="pl-1">
-              {renderInlineMarkdownLite(item ?? "", `${blockKey}-ol-${itemIndex}`)}
-            </li>
-          ))}
-        </ol>
-      );
-    }
-
-    return (
-      <p key={blockKey} className={`mb-4 ${ASSISTANT_BODY_TEXT_CLASS}`}>
-        {renderInlineMarkdownWithBreaks(block, `${blockKey}-paragraph`)}
-      </p>
-    );
-  });
+  return [
+    <ReactMarkdown
+      key={keyPrefix}
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeSanitize]}
+      skipHtml
+      components={ASSISTANT_MARKDOWN_COMPONENTS}
+    >
+      {value}
+    </ReactMarkdown>,
+  ];
 }
 
 function getCopyableMessageText(root: HTMLDivElement | null, fallback: string): string {
@@ -1299,7 +1308,7 @@ function renderContent(
       }
     }
     if (assistantTypography) {
-      return renderAssistantTextSegment(part, `content-${i}`);
+      return renderAssistantMarkdownSegment(part, `content-${i}`);
     }
     return [
       <span key={i}>{renderInlineMarkdownLite(part, `content-${i}`)}</span>,
