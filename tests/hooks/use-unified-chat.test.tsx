@@ -5307,7 +5307,7 @@ describe("useUnifiedChat persistence", () => {
       );
     });
     expect(screen.getByTestId("activity-log").textContent).toContain(
-      "Waiting for OpenClaw to respond | Chat failed: OpenClaw transport failed | Chat aborted: User interrupted the run",
+      "Sending request to OpenClaw | Waiting for OpenClaw to respond",
     );
   });
 
