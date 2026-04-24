@@ -5,6 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StrictMode, act, useState } from "react";
 import { useUnifiedChat } from "@/hooks/use-unified-chat";
 
+const RUNTIME_ACTIVE_FILE_TEST_CONTENT = [
+  "Current file contents",
+  "--- End selected workspace context ---",
+  "x".repeat(8_050),
+].join("\n");
+
 function ChatHarness({ projectName }: { projectName: string }) {
   const [lastAddResult, setLastAddResult] = useState("");
   const {
@@ -54,7 +60,7 @@ function ChatHarness({ projectName }: { projectName: string }) {
             projectPolicy: "cloud-ok",
             activeFile: {
               path: "notes/current.md",
-              content: "Current file contents",
+              content: RUNTIME_ACTIVE_FILE_TEST_CONTENT,
             },
           })
         }
@@ -534,18 +540,31 @@ describe("useUnifiedChat persistence", () => {
         expect.objectContaining({
           kind: "workspace-file",
           label: "notes/current.md",
+          bytes: 8_000,
         }),
       ]),
     });
-    expect(runtimeBodies[0].prompt).toBe([
-      "Summarize the selected file with Codex",
-      "",
-      "--- Explicitly selected workspace context ---",
-      "Path: notes/current.md",
-      "Content:",
-      "Current file contents",
-      "--- End selected workspace context ---",
-    ].join("\n"));
+    const runtimePrompt = String(runtimeBodies[0].prompt);
+    expect(runtimePrompt).toContain("Explicitly selected workspace context (JSON):");
+    expect(runtimePrompt).not.toContain("--- Explicitly selected workspace context ---");
+    const contextPayload = JSON.parse(runtimePrompt.slice(runtimePrompt.indexOf("{"))) as {
+      kind: string;
+      path: string;
+      content: string;
+      truncated: boolean;
+      originalCharacters: number;
+      includedCharacters: number;
+      omittedCharacters: number;
+    };
+    expect(contextPayload).toMatchObject({
+      kind: "selected-workspace-file",
+      path: "notes/current.md",
+      content: RUNTIME_ACTIVE_FILE_TEST_CONTENT.slice(0, 8_000),
+      truncated: true,
+      originalCharacters: RUNTIME_ACTIVE_FILE_TEST_CONTENT.length,
+      includedCharacters: 8_000,
+      omittedCharacters: RUNTIME_ACTIVE_FILE_TEST_CONTENT.length - 8_000,
+    });
     expect(screen.getByTestId("message-log").textContent).toContain(
       "user:Summarize the selected file with Codex",
     );

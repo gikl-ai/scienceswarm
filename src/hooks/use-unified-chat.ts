@@ -2324,6 +2324,23 @@ function textBytes(value: string): number {
   return new TextEncoder().encode(value).length;
 }
 
+const RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS = 8_000;
+
+function runtimeActiveFileContextPayload(activeFile: ActiveFileContext) {
+  const rawContent = activeFile.content;
+  const content = rawContent.slice(0, RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS);
+  const truncated = content.length < rawContent.length;
+  return {
+    kind: "selected-workspace-file",
+    path: activeFile.path.trim() || "selected workspace file",
+    content,
+    truncated,
+    originalCharacters: rawContent.length,
+    includedCharacters: content.length,
+    omittedCharacters: truncated ? rawContent.length - content.length : 0,
+  };
+}
+
 function buildRuntimeApiDataIncluded(
   content: string,
   activeFile: ActiveFileContext | undefined,
@@ -2341,10 +2358,11 @@ function buildRuntimeApiDataIncluded(
   ];
 
   if (activeFile) {
+    const contextPayload = runtimeActiveFileContextPayload(activeFile);
     data.push({
       kind: "workspace-file",
-      label: activeFile.path,
-      bytes: textBytes(activeFile.content),
+      label: contextPayload.path,
+      bytes: textBytes(contextPayload.content),
     });
   }
 
@@ -2381,15 +2399,12 @@ function buildRuntimeApiPrompt(
   activeFile: ActiveFileContext | undefined,
 ): string {
   if (!activeFile) return content;
-  const path = activeFile.path.trim() || "selected workspace file";
+  const contextPayload = runtimeActiveFileContextPayload(activeFile);
   return [
     content.trimEnd(),
     "",
-    "--- Explicitly selected workspace context ---",
-    `Path: ${path}`,
-    "Content:",
-    activeFile.content,
-    "--- End selected workspace context ---",
+    "Explicitly selected workspace context (JSON):",
+    JSON.stringify(contextPayload, null, 2),
   ].join("\n");
 }
 
