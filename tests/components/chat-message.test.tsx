@@ -72,7 +72,7 @@ describe("ChatMessage", () => {
     expect(screen.getByTestId("assistant-reply-content")).toHaveClass("text-slate-900");
   });
 
-  it("renders assistant markdown headings and lists with the new typography scale", () => {
+  it("renders assistant markdown headings and lists with stronger transcript hierarchy", () => {
     render(
       <ChatMessage
         role="assistant"
@@ -81,10 +81,14 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { level: 1, name: "Research update" })).toHaveClass("text-[2rem]");
-    expect(screen.getByRole("heading", { level: 2, name: "Next steps" })).toHaveClass("text-[1.4rem]");
+    expect(screen.getByRole("heading", { level: 1, name: "Research update" })).toHaveClass("text-[2.25rem]");
+    expect(screen.getByRole("heading", { level: 1, name: "Research update" })).toHaveClass("mb-6");
+    expect(screen.getByRole("heading", { level: 2, name: "Next steps" })).toHaveClass("mt-10");
+    expect(screen.getByRole("heading", { level: 2, name: "Next steps" })).toHaveClass("text-[1.7rem]");
     expect(screen.getByRole("list")).toHaveClass("list-disc");
-    expect(screen.getByText("Validate the chart").closest("li")).toHaveClass("pl-1");
+    expect(screen.getByRole("list")).toHaveClass("pl-6");
+    expect(screen.getByRole("list")).toHaveClass("space-y-2.5");
+    expect(screen.getByText("Validate the chart").closest("li")).toHaveClass("pl-2");
   });
 
   it("uses softer caption and metadata typography for assistant media and footer", () => {
@@ -128,11 +132,12 @@ describe("ChatMessage", () => {
     expect(copyButton).toHaveClass("text-muted/65");
   });
 
-  it("renders nested lists, block quotes, and code fences in assistant markdown", () => {
+  it("adds section spacing and stronger code block separation in assistant markdown", () => {
     render(
       <ChatMessage
         role="assistant"
         content={
+          "Paragraph lead.\n\n" +
           "#### Detailed checklist\n\n" +
           "1. Outline the experiment\n   - Collect the baseline samples\n\n" +
           "> Keep the calibration notebook nearby.\n\n" +
@@ -142,11 +147,16 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { level: 4, name: "Detailed checklist" })).toHaveClass("text-[1.05rem]");
+    expect(screen.getByText("Paragraph lead.")).toHaveClass("mb-5");
+    expect(screen.getByRole("heading", { level: 4, name: "Detailed checklist" })).toHaveClass("mt-6");
+    expect(screen.getByRole("heading", { level: 4, name: "Detailed checklist" })).toHaveClass("text-[1rem]");
     expect(screen.getAllByRole("list")).toHaveLength(2);
-    expect(screen.getAllByRole("list")[0]).toHaveClass("pl-4");
-    expect(screen.getByText("Keep the calibration notebook nearby.").closest("blockquote")).toHaveClass("border-l-2");
-    expect(screen.getByText("const total = 2;").closest("pre")).toHaveClass("bg-slate-950");
+    expect(screen.getAllByRole("list")[0]).toHaveClass("pl-6");
+    expect(screen.getAllByRole("list")[0]).toHaveClass("space-y-2.5");
+    expect(screen.getByText("Keep the calibration notebook nearby.").closest("blockquote")).toHaveClass("my-6");
+    expect(screen.getByText("const total = 2;").closest("pre")).toHaveClass("my-6");
+    expect(screen.getByText("const total = 2;").closest("pre")).toHaveClass("rounded-3xl");
+    expect(screen.getByText("const total = 2;").closest("pre")).toHaveClass("px-5");
   });
 
   it("keeps language-less fenced code blocks on the block-code surface", () => {
@@ -159,6 +169,7 @@ describe("ChatMessage", () => {
     );
 
     expect(screen.getByText("ready()").closest("pre")).toHaveClass("bg-slate-950");
+    expect(screen.getByText("ready()").closest("pre")).toHaveClass("py-4");
   });
 
   it("renders safe markdown links and suppresses unsafe html and relative links", () => {
@@ -223,8 +234,8 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { level: 1, name: "Experiment summary" })).toHaveClass("mb-5");
-    expect(screen.getByRole("heading", { level: 2, name: "Follow-up" })).toHaveClass("mt-8");
+    expect(screen.getByRole("heading", { level: 1, name: "Experiment summary" })).toHaveClass("mb-6");
+    expect(screen.getByRole("heading", { level: 2, name: "Follow-up" })).toHaveClass("mt-10");
     expect(screen.getByRole("heading", { level: 2, name: "Follow-up" })).toHaveClass("first:mt-0");
     expect(screen.getByRole("list")).toHaveClass("mb-5");
     expect(screen.getByTestId("assistant-media-gallery")).toHaveClass("my-6");
