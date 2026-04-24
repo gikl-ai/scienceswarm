@@ -223,76 +223,24 @@ exit 0
     );
   });
 
-  it("prints actionable restart guidance before handing off to the dev server", () => {
-    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-restart-"));
-    const binRoot = path.join(tmpRoot, "bin");
-    const openLogPath = path.join(tmpRoot, "open.log");
-    fs.mkdirSync(binRoot, { recursive: true });
-    fs.writeFileSync(
-      path.join(binRoot, "curl"),
-      `#!/usr/bin/env bash
-case "$4" in
-  http://*:44001/api/health|https://*:44001/api/health)
-    exit 0
-    ;;
-esac
-exit 1
-`,
-      { encoding: "utf8", mode: 0o755 },
-    );
-    fs.writeFileSync(
-      path.join(binRoot, "open"),
-      `#!/usr/bin/env bash
-printf '%s\\n' "$*" > ${JSON.stringify(openLogPath)}
-exit 0
-`,
-      { encoding: "utf8", mode: 0o755 },
-    );
-    fs.writeFileSync(
-      path.join(binRoot, "npx"),
-      `#!/usr/bin/env bash
-if [ "$1" = "tsx" ]; then
-  exit 0
-fi
-if [ "$1" = "next" ] && [ "$2" = "dev" ]; then
-  printf 'fake next dev ready\\n'
-  sleep 1
-  exit 0
-fi
-exit 0
-`,
-      { encoding: "utf8", mode: 0o755 },
-    );
+  it("documents restart auto-open controls without starting the foreground server", () => {
+    const output = runCli(["restart", "--help"]);
 
-    const output = runCli(["restart", "--browser", "safari"], {
-      SCIENCESWARM_DIR: tmpRoot,
-      BRAIN_ROOT: path.join(tmpRoot, "brain"),
-      CI: "",
-      ENABLE_DREAM_RUNNER: "false",
-      FRONTEND_HOST: "127.0.0.1",
-      FRONTEND_PORT: "44001",
-      FRONTEND_PUBLIC_HOST: "127.0.0.1",
-      FRONTEND_USE_HTTPS: "false",
-      HOME: tmpRoot,
-      PATH: `${binRoot}:/usr/bin:/bin:/usr/sbin:/sbin`,
-      SCIENCESWARM_NO_OPEN: "false",
-      SCIENCESWARM_OPEN_WAIT_ATTEMPTS: "1",
-      SCIENCESWARM_OPEN_WAIT_SECONDS: "0",
-    });
+    expect(output).toContain("Usage: scienceswarm restart");
+    expect(output).toContain("--no-open");
+    expect(output).toContain("--browser <name>");
+    expect(output).toContain("--open <dashboard|setup|/path>");
+    expect(output).toContain("opens the dashboard when healthy");
+  });
 
-    expect(output).toContain("ScienceSwarm restart");
-    expect(output).toContain("Opens the dashboard automatically after the frontend health check passes.");
-    expect(output).toContain("If the browser does not appear:");
-    expect(output).toContain("Open dashboard manually: ./scienceswarm open");
-    expect(output).toContain("Dashboard: http://127.0.0.1:44001/dashboard/project");
-    expect(output).toContain("Protocol:  use http:// only on this port; https:// will fail.");
-    expect(output).toContain("Keep this terminal open. It is the live ScienceSwarm server log.");
-    expect(output).toContain("ScienceSwarm will open dashboard in safari after the frontend is healthy.");
-    expect(output).toContain("Opening http://127.0.0.1:44001/dashboard/project in Safari");
-    expect(output).toContain("fake next dev ready");
-    expect(fs.readFileSync(openLogPath, "utf8").trim()).toBe(
-      "-a Safari http://127.0.0.1:44001/dashboard/project",
-    );
+  it("wires start.sh to auto-open after the frontend health check", () => {
+    const startScript = fs.readFileSync(path.join(repoRoot, "start.sh"), "utf8");
+
+    expect(startScript).toContain("auto_open_when_frontend_ready()");
+    expect(startScript).toContain("probe_frontend_health");
+    expect(startScript).toContain("./scienceswarm open");
+    expect(startScript).toContain("start_auto_open_watcher");
+    expect(startScript).toContain("SCIENCESWARM_NO_OPEN=true");
   });
 
   it("falls back to http probing when https mode is enabled but the https probe fails", () => {
