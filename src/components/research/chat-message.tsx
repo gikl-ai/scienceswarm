@@ -234,10 +234,10 @@ function sanitizeMarkdownHref(href: string | undefined): string | null {
   if (!href) {
     return null;
   }
-  if (href.startsWith("#") || href.startsWith("/") || href.startsWith("./")) {
+  if (href.startsWith("#") || (href.startsWith("/") && !href.startsWith("//")) || href.startsWith("./")) {
     return href;
   }
-  if (href.startsWith("../")) {
+  if (href.startsWith("../") || href.startsWith("//")) {
     return null;
   }
 
@@ -269,7 +269,9 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   pre: ({ children }) => <pre className={ASSISTANT_CODE_BLOCK_CLASS}>{children}</pre>,
   code: ({ className, children }) => {
     const languageClass = typeof className === "string" ? className : "";
-    const isBlock = languageClass.length > 0 || String(children).includes("\n");
+    const isBlock =
+      languageClass.length > 0
+      || (typeof children === "string" && children.includes("\n"));
     if (isBlock) {
       return <code className="font-mono">{children}</code>;
     }

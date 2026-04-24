@@ -129,12 +129,25 @@ describe("ChatMessage", () => {
     expect(screen.getByText("const total = 2;").closest("pre")).toHaveClass("bg-slate-950");
   });
 
+  it("keeps language-less fenced code blocks on the block-code surface", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"```\nready()\n```"}
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByText("ready()").closest("pre")).toHaveClass("bg-slate-950");
+  });
+
   it("renders safe markdown links and suppresses unsafe html and relative links", () => {
     render(
       <ChatMessage
         role="assistant"
         content={
           "[Guide](https://example.com/guide)\n\n" +
+          "[Protocol Relative](//attacker.com)\n\n" +
           "[Unsafe](../api/chat/unified)\n\n" +
           "<button>Do not render</button>"
         }
@@ -144,6 +157,8 @@ describe("ChatMessage", () => {
 
     expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute("href", "https://example.com/guide");
     expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute("target", "_blank");
+    expect(screen.queryByRole("link", { name: "Protocol Relative" })).not.toBeInTheDocument();
+    expect(screen.getByText("Protocol Relative")).toHaveClass("text-slate-400");
     expect(screen.queryByRole("link", { name: "Unsafe" })).not.toBeInTheDocument();
     expect(screen.getByText("Unsafe")).toHaveClass("text-slate-400");
     expect(screen.queryByRole("button", { name: "Do not render" })).not.toBeInTheDocument();
