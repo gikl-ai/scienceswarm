@@ -27,9 +27,9 @@ const CLI_CONNECTION_GUIDES: Record<string, RuntimeCliConnectionGuide> = {
   "gemini-cli": {
     installCommand: "npm install -g @google/gemini-cli",
     signInCommand: "gemini",
-    checkCommand: "gemini --version",
+    checkCommand: "gemini",
     signInCopy: "Choose Login with Google when Gemini asks how to authenticate.",
-    checkCopy: "Gemini validates account access inside its own CLI flow.",
+    checkCopy: "If Gemini opens without asking for an auth method, its native CLI session is usable.",
   },
 };
 
@@ -41,6 +41,12 @@ function statusTone(host: RuntimeHealthHost): "ok" | "warn" | "neutral" {
   if (host.health.status !== "ready") return "warn";
   if (host.auth.status === "authenticated") return "ok";
   if (host.auth.status === "not-required") return "ok";
+  if (
+    host.profile.authMode === "subscription-native"
+    && host.auth.status === "unknown"
+  ) {
+    return "neutral";
+  }
   return "warn";
 }
 

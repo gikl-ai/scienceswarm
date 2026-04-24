@@ -192,7 +192,7 @@ codex login status
 # Gemini CLI
 npm install -g @google/gemini-cli
 gemini
-gemini --version
+# If Gemini opens without asking for an auth method, its native CLI session is usable.
 ```
 
 After the CLI is installed and signed in, open Settings > Project runtime,

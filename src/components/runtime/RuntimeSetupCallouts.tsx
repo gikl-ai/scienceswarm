@@ -21,7 +21,10 @@ function needsSetup(host: RuntimeHealthHost): boolean {
   return host.health.status !== "ready"
     || host.auth.status === "missing"
     || host.auth.status === "invalid"
-    || host.auth.status === "unknown";
+    || (
+      host.auth.status === "unknown"
+      && host.profile.authMode !== "subscription-native"
+    );
 }
 
 function statusCopy(host: RuntimeHealthHost): string {

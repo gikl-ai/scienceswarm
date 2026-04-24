@@ -322,7 +322,9 @@ describe("RuntimeAccountSetupGuide", () => {
     expect(screen.getByText("claude auth login")).toBeInTheDocument();
     expect(screen.getByText("codex login status")).toBeInTheDocument();
     expect(screen.getByText("npm install -g @google/gemini-cli")).toBeInTheDocument();
+    expect(screen.getAllByText("gemini")).toHaveLength(2);
     expect(screen.getByText("Choose Login with Google when Gemini asks how to authenticate.")).toBeInTheDocument();
+    expect(screen.getByText("If Gemini opens without asking for an auth method, its native CLI session is usable.")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /token|key/i })).not.toBeInTheDocument();
   });
 });
@@ -369,5 +371,25 @@ describe("RuntimeSetupCallouts", () => {
     );
 
     expect(screen.getByText("Install with npm install -g @openai/codex, then run codex login.")).toBeInTheDocument();
+  });
+
+  it("does not flag ready subscription hosts with CLI-owned auth as setup blockers", () => {
+    render(
+      <RuntimeSetupCallouts
+        hosts={[
+          host({
+            id: "gemini-cli",
+            label: "Gemini CLI",
+            authMode: "subscription-native",
+            authProvider: "google-ai",
+            privacyClass: "hosted",
+            authStatus: "unknown",
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Runtime hosts reported ready setup state.")).toBeInTheDocument();
+    expect(screen.queryByText("Authentication status is unknown.")).not.toBeInTheDocument();
   });
 });
