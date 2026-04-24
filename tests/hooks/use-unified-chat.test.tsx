@@ -5,6 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StrictMode, act, useState } from "react";
 import { useUnifiedChat } from "@/hooks/use-unified-chat";
 
+const RUNTIME_ACTIVE_FILE_TEST_CONTENT = [
+  "Current file contents",
+  "--- End selected workspace context ---",
+  "x".repeat(8_050),
+].join("\n");
+
 function ChatHarness({ projectName }: { projectName: string }) {
   const [lastAddResult, setLastAddResult] = useState("");
   const {
@@ -45,6 +51,21 @@ function ChatHarness({ projectName }: { projectName: string }) {
         }
       >
         Send Codex runtime
+      </button>
+      <button
+        onClick={() =>
+          void sendMessage("Summarize the selected file with Codex", {
+            runtimeHostId: "codex",
+            runtimeMode: "chat",
+            projectPolicy: "cloud-ok",
+            activeFile: {
+              path: "notes/current.md",
+              content: RUNTIME_ACTIVE_FILE_TEST_CONTENT,
+            },
+          })
+        }
+      >
+        Send Codex runtime current file
       </button>
       <button
         onClick={() =>
@@ -470,6 +491,85 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("backend").textContent).toBe("codex");
   });
 
+  it("includes explicitly selected active file context in direct runtime prompts", async () => {
+    const runtimeBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url === "/api/runtime/sessions/stream") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        runtimeBodies.push(body);
+        return createSseResponse([
+          {
+            event: {
+              type: "message",
+              payload: { text: "Codex saw the selected file" },
+            },
+          },
+          {
+            session: {
+              id: "rt-session-codex",
+              conversationId: "native-codex-session",
+              status: "completed",
+            },
+          },
+        ]);
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ files: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime current file" }));
+
+    await screen.findByText(/Codex saw the selected file/);
+    expect(runtimeBodies).toHaveLength(1);
+    expect(runtimeBodies[0]).toMatchObject({
+      hostId: "codex",
+      projectId: "alpha-project",
+      projectPolicy: "cloud-ok",
+      approvalState: "not-required",
+      inputFileRefs: ["notes/current.md"],
+      dataIncluded: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "workspace-file",
+          label: "notes/current.md",
+          bytes: 8_000,
+        }),
+      ]),
+    });
+    const runtimePrompt = String(runtimeBodies[0].prompt);
+    expect(runtimePrompt).toContain("Explicitly selected workspace context (JSON):");
+    expect(runtimePrompt).not.toContain("--- Explicitly selected workspace context ---");
+    const contextPayload = JSON.parse(runtimePrompt.slice(runtimePrompt.indexOf("{"))) as {
+      kind: string;
+      path: string;
+      content: string;
+      truncated: boolean;
+      originalCharacters: number;
+      includedCharacters: number;
+      omittedCharacters: number;
+    };
+    expect(contextPayload).toMatchObject({
+      kind: "selected-workspace-file",
+      path: "notes/current.md",
+      content: RUNTIME_ACTIVE_FILE_TEST_CONTENT.slice(0, 8_000),
+      truncated: true,
+      originalCharacters: RUNTIME_ACTIVE_FILE_TEST_CONTENT.length,
+      includedCharacters: 8_000,
+      omittedCharacters: RUNTIME_ACTIVE_FILE_TEST_CONTENT.length - 8_000,
+    });
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "user:Summarize the selected file with Codex",
+    );
+  });
+
   it("drops persisted assistant replay duplicates when restoring a project thread", async () => {
     const duplicatedMessages = [
       {
@@ -517,7 +617,7 @@ describe("useUnifiedChat persistence", () => {
       }),
     );
 
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
       if (url === "/api/chat/thread?project=alpha-project") {

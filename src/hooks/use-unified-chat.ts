@@ -145,8 +145,8 @@ interface StoredChatState {
 
 /**
  * A file the user is currently viewing/previewing in the workspace.
- * Sent alongside the chat message so the LLM knows what "it" or "this file"
- * refers to, without polluting the displayed chat bubble.
+ * Included as explicitly selected context for runtime hosts so the LLM knows
+ * what "it" or "this file" refers to without changing the displayed bubble.
  */
 export interface ActiveFileContext {
   /** Display path shown to the user, e.g. "results.md" */
@@ -2324,6 +2324,23 @@ function textBytes(value: string): number {
   return new TextEncoder().encode(value).length;
 }
 
+const RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS = 8_000;
+
+function runtimeActiveFileContextPayload(activeFile: ActiveFileContext) {
+  const rawContent = activeFile.content;
+  const content = rawContent.slice(0, RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS);
+  const truncated = content.length < rawContent.length;
+  return {
+    kind: "selected-workspace-file",
+    path: activeFile.path.trim() || "selected workspace file",
+    content,
+    truncated,
+    originalCharacters: rawContent.length,
+    includedCharacters: content.length,
+    omittedCharacters: truncated ? rawContent.length - content.length : 0,
+  };
+}
+
 function buildRuntimeApiDataIncluded(
   content: string,
   activeFile: ActiveFileContext | undefined,
@@ -2341,10 +2358,11 @@ function buildRuntimeApiDataIncluded(
   ];
 
   if (activeFile) {
+    const contextPayload = runtimeActiveFileContextPayload(activeFile);
     data.push({
       kind: "workspace-file",
-      label: activeFile.path,
-      bytes: textBytes(activeFile.content),
+      label: contextPayload.path,
+      bytes: textBytes(contextPayload.content),
     });
   }
 
@@ -2362,16 +2380,32 @@ function buildRuntimeApiDataIncluded(
 
 function buildRuntimeApiInputFileRefs(
   content: string,
+  activeFile: ActiveFileContext | undefined,
   files: UploadedFile[],
 ): string[] {
   return Array.from(
     new Set([
       ...extractPromptSourceFiles(content),
+      ...(activeFile ? [activeFile.path] : []),
       ...files
         .map(getUploadedFileReference)
         .filter((value) => value.length > 0),
     ]),
   );
+}
+
+function buildRuntimeApiPrompt(
+  content: string,
+  activeFile: ActiveFileContext | undefined,
+): string {
+  if (!activeFile) return content;
+  const contextPayload = runtimeActiveFileContextPayload(activeFile);
+  return [
+    content.trimEnd(),
+    "",
+    "Explicitly selected workspace context (JSON):",
+    JSON.stringify(contextPayload, null, 2),
+  ].join("\n");
 }
 
 function isRuntimeSendOptions(
@@ -3578,11 +3612,12 @@ export function useUnifiedChat(
         requestFiles,
         context.dataIncluded,
       );
-      const inputFileRefs = buildRuntimeApiInputFileRefs(content, requestFiles);
+      const inputFileRefs = buildRuntimeApiInputFileRefs(content, activeFile, requestFiles);
+      const prompt = buildRuntimeApiPrompt(content, activeFile);
       const baseBody = {
         projectId: context.projectName,
         projectPolicy: context.projectPolicy,
-        prompt: content,
+        prompt,
         conversationId: activeConversationId,
         approvalState: context.approvalState,
         dataIncluded,
