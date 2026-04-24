@@ -12,11 +12,13 @@ function json(body: unknown, status = 200) {
 
 const ENV_PATH = join(process.cwd(), ".env");
 const READY_ENV_LINES = [
+  `SCIENCESWARM_DIR=${process.cwd()}`,
   "AGENT_BACKEND=openclaw",
   "LLM_PROVIDER=local",
   "OLLAMA_MODEL=gemma4:latest",
 ];
 const RESET_ENV_LINES = [
+  "SCIENCESWARM_DIR=",
   "AGENT_BACKEND=",
   "LLM_PROVIDER=",
   "OLLAMA_MODEL=",
@@ -53,7 +55,7 @@ test.afterAll(async () => {
 });
 
 test("paper library command center supports review, apply, and undo flows", async ({ page }) => {
-  let scanStatus: "review" | "apply" | "applied" | "undone" = "review";
+  let scanStatus: "idle" | "review" | "apply" | "applied" | "undone" = "idle";
   let approved = false;
   let applied = false;
   let undone = false;
@@ -68,7 +70,13 @@ test("paper library command center supports review, apply, and undo flows", asyn
 
   await page.route(/.*\/api\/brain\/paper-library\/scan(\?.*)?$/, async (route) => {
     if (route.request().method() === "POST") {
+      scanStatus = "review";
       await route.fulfill(json({ ok: true, scanId: "scan-1" }));
+      return;
+    }
+
+    if (scanStatus === "idle") {
+      await route.fulfill(json({ ok: true }));
       return;
     }
 
