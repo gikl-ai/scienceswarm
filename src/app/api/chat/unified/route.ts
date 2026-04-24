@@ -9009,9 +9009,19 @@ export async function handleUnifiedChatPost(
         });
       const shouldBuildRichPromptContext =
         !useCompactArtifactContext && !useMinimalConversationalContext;
-      const promptContextPhase = chatTiming.startPhase(
-        "prompt_context_construction",
-      );
+      const promptContextSkipReason = useMinimalConversationalContext
+        ? "lightweight_conversation"
+        : useCompactArtifactContext
+          ? "compact_artifact_context"
+          : null;
+      const promptContextPhase = shouldBuildRichPromptContext
+        ? chatTiming.startPhase("prompt_context_construction")
+        : null;
+      if (promptContextSkipReason) {
+        chatTiming.recordSkippedPhase("prompt_context_construction", {
+          reason: promptContextSkipReason,
+        });
+      }
       const projectPrompt = shouldBuildRichPromptContext
         ? await buildScienceSwarmPromptContextText({
             projectId: validatedProjectId,
@@ -9065,7 +9075,9 @@ export async function handleUnifiedChatPost(
         userIntentMessage,
         { forceToolExecution },
       );
-      chatTiming.endPhase(promptContextPhase);
+      if (promptContextPhase) {
+        chatTiming.endPhase(promptContextPhase);
+      }
       if (streamPhases === true) {
         attemptedOpenClawTurn = true;
         return streamOpenClawResponse({
