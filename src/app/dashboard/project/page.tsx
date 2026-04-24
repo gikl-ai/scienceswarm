@@ -320,7 +320,7 @@ function buildCompactLiveRunStateSummary(message: {
 
   return {
     label,
-    chips: chips.slice(0, 2),
+    chips,
   };
 }
 
@@ -1789,7 +1789,8 @@ function ProjectPageContent() {
   );
   const showCompactProjectRunState = isStreaming && !chatPaneVisible;
   const showTopBarActivityChrome =
-    isCritiquing || isAutoAnalyzing || isInterpretingPacket || isPlanningExperiments;
+    (isCritiquing || isAutoAnalyzing || isInterpretingPacket || isPlanningExperiments)
+    && !showCompactProjectRunState;
   // Merge workspace files with gbrain-backed artifact nodes.
   const mergedFileTree: FileNode[] = useMemo(() => {
     if (gbrainNodes.length === 0) return workspaceTree as FileNode[];
