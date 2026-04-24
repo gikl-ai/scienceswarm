@@ -704,6 +704,7 @@ function shouldRunOpenClawArtifactImportRepair(params: {
 }
 
 function shouldUseCompactOpenClawRecentChatContext(params: {
+  userMessage: string;
   files: UploadedFileDescriptor[];
   activeFile: { path: string; content: string } | null;
   referenceNotes?: WorkspaceReferenceNotes | null;
@@ -711,6 +712,7 @@ function shouldUseCompactOpenClawRecentChatContext(params: {
 }): boolean {
   return (
     !params.forceToolExecution &&
+    !shouldForceOpenClawToolExecution(params.userMessage) &&
     params.files.length === 0 &&
     params.activeFile === null &&
     !hasWorkspaceReferenceNotes(params.referenceNotes)
@@ -9124,6 +9126,7 @@ export async function handleUnifiedChatPost(
             messages,
             rawMessage ?? "",
             shouldUseCompactOpenClawRecentChatContext({
+              userMessage: userIntentMessage,
               files: mergedFiles,
               activeFile,
               referenceNotes,
