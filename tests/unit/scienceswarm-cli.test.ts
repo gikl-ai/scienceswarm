@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -20,6 +20,28 @@ function runCli(
     },
     encoding: "utf8",
   });
+}
+
+function runCliFailure(
+  args: string[],
+  extraEnv: Record<string, string | undefined> = {},
+): { stdout: string; stderr: string; status: number | null } {
+  const result = spawnSync("bash", [cliPath, ...args], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      ...extraEnv,
+    },
+    encoding: "utf8",
+  });
+  if (result.status === 0) {
+    throw new Error(`expected scienceswarm ${args.join(" ")} to fail`);
+  }
+  return {
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+    status: result.status,
+  };
 }
 
 function processIsAlive(pid: number): boolean {
@@ -305,6 +327,39 @@ exit 0
     expect(output).toContain("--browser <name>");
     expect(output).toContain("--open <dashboard|setup|/path>");
     expect(output).toContain("opens the dashboard when healthy");
+  });
+
+  it("validates restart options before stopping a managed launcher", () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-restart-validate-"));
+    const runRoot = path.join(tmpRoot, "run");
+    fs.mkdirSync(runRoot, { recursive: true });
+
+    const helper = spawn("bash", ["-lc", "exec -a start.sh sleep 300"], {
+      cwd: repoRoot,
+      detached: true,
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        HOME: tmpRoot,
+      },
+    });
+    helper.unref();
+    if (typeof helper.pid !== "number") {
+      throw new Error("expected detached helper pid");
+    }
+    cleanupPids.add(helper.pid);
+    fs.writeFileSync(path.join(runRoot, "launcher.pid"), `${helper.pid}\n`, "utf8");
+
+    const result = runCliFailure(["restart", "--no_open"], {
+      SCIENCESWARM_DIR: tmpRoot,
+      FRONTEND_PORT: "43988",
+      HOME: tmpRoot,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("unknown restart option '--no_open'");
+    expect(processIsAlive(helper.pid)).toBe(true);
+    expect(fs.existsSync(path.join(runRoot, "launcher.pid"))).toBe(true);
   });
 
   it("wires start.sh to auto-open after the frontend health check", () => {

@@ -558,6 +558,12 @@ cmd_start() {
   exec ./start.sh "$@"
 }
 
+print_restart_usage() {
+  note "Usage: scienceswarm restart [--no-open] [--browser <name>] [--open <dashboard|setup|/path>]"
+  note "Stops the managed local runtime, starts a fresh foreground server log, then opens the dashboard when healthy."
+  note "Use --no-open for headless runs. Use scienceswarm open manually if the browser does not appear."
+}
+
 print_open_usage() {
   note "Usage: scienceswarm open [browser] [dashboard|setup|/path]"
   note "       scienceswarm open [dashboard|setup|/path] --browser <browser>"
@@ -645,16 +651,43 @@ cmd_stop() {
 }
 
 cmd_restart() {
+  local restart_args=()
   local scheme=""
+  local option=""
 
-  case "${1:-}" in
-    -h|--help)
-      note "Usage: scienceswarm restart [--no-open] [--browser <name>] [--open <dashboard|setup|/path>]"
-      note "Stops the managed local runtime, starts a fresh foreground server log, then opens the dashboard when healthy."
-      note "Use --no-open for headless runs. Use scienceswarm open manually if the browser does not appear."
-      return 0
-      ;;
-  esac
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        print_restart_usage
+        return 0
+        ;;
+      --no-open)
+        restart_args+=("$1")
+        ;;
+      --browser=*|--open=*)
+        option="${1%%=*}"
+        [ -n "${1#*=}" ] || die "missing value after $option"
+        restart_args+=("$1")
+        ;;
+      --browser|--open)
+        option="$1"
+        restart_args+=("$1")
+        shift
+        [ "$#" -gt 0 ] || die "missing value after $option"
+        case "$1" in
+          --*)
+            die "missing value after $option"
+            ;;
+        esac
+        restart_args+=("$1")
+        ;;
+      *)
+        die "unknown restart option '$1'. Run scienceswarm restart --help."
+        ;;
+    esac
+    shift
+  done
+  set -- "${restart_args[@]}"
 
   load_repo_env
   scheme="$(frontend_configured_scheme)"
