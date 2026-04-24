@@ -182,14 +182,14 @@ export function ComposerRuntimeSwitcher({
     >
       <button
         type="button"
-        className="inline-flex min-h-11 max-w-[15rem] items-center gap-3 rounded-full border border-slate-200 bg-slate-50/85 px-3.5 py-2 text-left transition-colors hover:border-accent/60 hover:bg-white focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex min-h-11 max-w-[15rem] items-center gap-3 rounded-full border border-rule bg-sunk/85 px-3.5 py-2 text-left transition-colors hover:border-accent/60 hover:bg-white focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label="Change runtime"
         disabled={loading && hosts.length === 0}
         onClick={() => onOpenChange(!open)}
       >
-        <span className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm">
+        <span className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-rule bg-raised text-dim shadow-sm">
           {loading && hosts.length === 0 ? (
             <CircleNotch size={15} className="animate-spin text-muted" />
           ) : selectedHost?.profile.privacyClass === "hosted" ? (
@@ -201,10 +201,10 @@ export function ComposerRuntimeSwitcher({
           )}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-slate-900">
+          <span className="block truncate text-sm font-semibold text-strong">
             {selectedHost?.profile.label ?? "Runtime"}
           </span>
-          <span className="block truncate text-[11px] font-medium text-slate-500">
+          <span className="block truncate text-[11px] font-medium text-dim">
             {triggerCopy}
           </span>
         </span>
@@ -215,7 +215,7 @@ export function ComposerRuntimeSwitcher({
         <div
           role="dialog"
           aria-label="Runtime switcher"
-          className="absolute bottom-full right-0 z-40 mb-2 w-[min(26rem,calc(100vw-1.5rem))] rounded-[26px] border border-slate-200 bg-white p-3 text-sm shadow-[0_24px_80px_rgba(15,23,42,0.18)]"
+          className="absolute bottom-full right-0 z-40 mb-2 w-[min(26rem,calc(100vw-1.5rem))] rounded-[26px] border border-rule bg-raised p-3 text-sm shadow-[0_24px_80px_rgba(15,23,42,0.18)]"
           onKeyDown={(event) => {
             if (event.key === "Escape") onOpenChange(false);
           }}
@@ -255,7 +255,7 @@ export function ComposerRuntimeSwitcher({
                     className={`min-h-10 px-2 text-xs font-semibold transition-colors ${
                       mode === nextMode
                         ? "bg-foreground text-white"
-                        : "text-muted hover:bg-slate-50 hover:text-foreground"
+                        : "text-muted hover:bg-sunk hover:text-foreground"
                     }`}
                     onClick={() => onModeChange(nextMode)}
                     aria-pressed={mode === nextMode}
@@ -278,7 +278,7 @@ export function ComposerRuntimeSwitcher({
                     className={`min-h-10 px-2 text-xs font-semibold transition-colors ${
                       projectPolicy === policy
                         ? "bg-accent text-white"
-                        : "text-muted hover:bg-slate-50 hover:text-foreground"
+                        : "text-muted hover:bg-sunk hover:text-foreground"
                     }`}
                     onClick={() => {
                       onProjectPolicyChange(policy);
@@ -318,7 +318,7 @@ export function ComposerRuntimeSwitcher({
                   className={`flex min-h-16 w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${
                     disabled
                       ? "cursor-not-allowed border-border bg-surface text-muted"
-                      : "border-slate-200 bg-white text-foreground hover:border-accent/40 hover:bg-slate-50"
+                      : "border-rule bg-raised text-foreground hover:border-accent/40 hover:bg-sunk"
                   }`}
                   disabled={disabled}
                   onClick={() => {
@@ -330,10 +330,10 @@ export function ComposerRuntimeSwitcher({
                   <span
                     className={`mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-full ${
                       reason && !canAutoSwitchPolicy
-                        ? "bg-amber-500"
+                        ? "bg-warn"
                         : host.health.status === "ready"
-                          ? "bg-emerald-500"
-                          : "bg-zinc-400"
+                          ? "bg-ok"
+                          : "bg-dim"
                     }`}
                     aria-hidden="true"
                   />
@@ -397,7 +397,7 @@ export function ComposerRuntimeSwitcher({
           )}
 
           {error && (
-            <p className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <p className="mt-3 rounded-2xl border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
               {error}
             </p>
           )}

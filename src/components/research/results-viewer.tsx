@@ -119,7 +119,7 @@ function BarChart({ data, title }: { data: DataPoint[]; title: string }) {
                 className="h-full rounded-full transition-all duration-500"
                 style={{
                   width: `${(d.value / max) * 100}%`,
-                  backgroundColor: d.color || "#0891b2",
+                  backgroundColor: d.color || "var(--accent)",
                 }}
               />
             </div>
@@ -139,7 +139,7 @@ function StatCard({ label, value, unit, trend }: { label: string; value: string;
         <span className="text-2xl font-bold font-mono">{value}</span>
         {unit && <span className="text-sm text-muted">{unit}</span>}
         {trend && (
-          <span className={`text-xs ml-2 ${trend === "up" ? "text-green-600" : trend === "down" ? "text-red-500" : "text-muted"}`}>
+          <span className={`text-xs ml-2 ${trend === "up" ? "text-ok" : trend === "down" ? "text-danger" : "text-muted"}`}>
             {trend === "up" ? "▲" : trend === "down" ? "▼" : "—"}
           </span>
         )}
@@ -556,7 +556,7 @@ export function ResultsViewer({
           </div>
 
           {(chartEdit.error || chartEdit.status) && (
-            <p className={`text-xs ${chartEdit.error ? "text-red-600" : "text-emerald-700"}`}>
+            <p className={`text-xs ${chartEdit.error ? "text-danger" : "text-ok"}`}>
               {chartEdit.error ?? chartEdit.status}
             </p>
           )}

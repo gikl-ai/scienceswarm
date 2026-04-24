@@ -178,8 +178,8 @@ function Toast({
     <div
       className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
         type === "success"
-          ? "bg-emerald-500 text-white"
-          : "bg-red-500 text-white"
+          ? "bg-ok text-strong"
+          : "bg-danger text-strong"
       }`}
     >
       {message}

@@ -235,7 +235,7 @@ export function ProjectList({
         </div>
       )}
       {status === "error" && (
-        <div className="p-4 text-xs text-red-600">Could not load projects.</div>
+        <div className="p-4 text-xs text-danger">Could not load projects.</div>
       )}
       {status === "ready" && projects.length === 0 && (
         <div className="flex flex-col items-center gap-3 p-6 text-center">

@@ -41,12 +41,12 @@ function sortPlugins(plugins: InstalledMarketPluginRecord[]): InstalledMarketPlu
 
 function toneForHostStatus(status: MarketPluginHostRecord["status"]): string {
   if (status === "installed") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    return "border-ok/30 bg-ok/10 text-ok";
   }
   if (status === "partial") {
-    return "border-amber-200 bg-amber-50 text-amber-800";
+    return "border-warn/30 bg-warn/10 text-warn";
   }
-  return "border-slate-200 bg-slate-50 text-slate-700";
+  return "border-rule bg-sunk text-body";
 }
 
 function summarizeTrust(preview: Pick<InstalledMarketPluginRecord, "trust"> | Pick<MarketPluginInstallPreview, "trust">): string {
@@ -296,9 +296,9 @@ export function InstalledMarketPluginsBrowser({
 
   if (pluginsStatus === "error") {
     return (
-      <div className="rounded-[24px] border border-red-200 bg-red-50 p-5 text-sm text-red-800 shadow-sm">
+      <div className="rounded-[24px] border border-danger/30 bg-danger/10 p-5 text-sm text-danger shadow-sm">
         <p className="font-semibold">Could not load private market installs.</p>
-        <p className="mt-2 text-red-700">{pluginsError ?? "Unknown error"}</p>
+        <p className="mt-2 text-danger">{pluginsError ?? "Unknown error"}</p>
       </div>
     );
   }
@@ -314,7 +314,7 @@ export function InstalledMarketPluginsBrowser({
           <p className="mt-2 text-sm text-muted">
             Install third-party plugin bundles privately from upstream, keep the full bundle snapshot under your local ScienceSwarm state, and project usable skills into OpenClaw, Codex, and Claude Code without promoting them into the public catalog.
           </p>
-          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-900">
+          <div className="mt-4 rounded-2xl border border-warn/30 bg-warn/10 px-3 py-3 text-xs text-warn">
             <div className="flex items-start gap-2">
               <WarningCircle size={16} className="mt-0.5 shrink-0" />
               <p>
@@ -397,13 +397,13 @@ export function InstalledMarketPluginsBrowser({
                 {installState.state === "saving" ? "Installing..." : "Install privately"}
               </button>
               {inspectState.state === "error" && (
-                <p className="text-sm text-red-700">{inspectState.message}</p>
+                <p className="text-sm text-danger">{inspectState.message}</p>
               )}
               {inspectState.state === "saved" && (
-                <p className="text-sm text-emerald-700">{inspectState.message}</p>
+                <p className="text-sm text-ok">{inspectState.message}</p>
               )}
               {installState.state === "error" && (
-                <p className="text-sm text-red-700">{installState.message}</p>
+                <p className="text-sm text-danger">{installState.message}</p>
               )}
             </div>
           </div>
@@ -538,7 +538,7 @@ export function InstalledMarketPluginsBrowser({
                               <p className="text-xs font-semibold text-foreground">
                                 {projection.sourceSlug}
                                 {projection.mode === "aliased" && (
-                                  <span className="ml-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-amber-800">
+                                  <span className="ml-2 rounded-full border border-warn/30 bg-warn/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-warn">
                                     aliased as {projection.hostSlug}
                                   </span>
                                 )}
@@ -611,7 +611,7 @@ export function InstalledMarketPluginsBrowser({
                   type="button"
                   onClick={() => { void handleDelete(selectedPlugin.id); }}
                   disabled={deleteState.state === "saving"}
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 text-sm font-semibold text-red-900 transition-colors hover:border-red-400 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-danger/40 bg-danger/10 px-4 text-sm font-semibold text-danger transition-colors hover:border-danger/60 hover:bg-danger/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Trash size={16} />
                   {deleteState.state === "saving" ? "Removing..." : "Uninstall plugin"}
@@ -620,36 +620,36 @@ export function InstalledMarketPluginsBrowser({
             </div>
 
             {refreshState.state === "saved" && (
-              <div className="mt-4 flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              <div className="mt-4 flex items-start gap-2 rounded-2xl border border-ok/30 bg-ok/10 px-4 py-3 text-sm text-ok">
                 <CheckCircle size={18} className="mt-0.5 shrink-0" />
                 <div>
                   <p className="font-semibold">Plugin refreshed.</p>
-                  <p className="mt-1 text-emerald-700">{refreshState.message}</p>
+                  <p className="mt-1 text-ok">{refreshState.message}</p>
                 </div>
               </div>
             )}
 
             {refreshState.state === "error" && (
-              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <div className="mt-4 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
                 <p className="font-semibold">Refresh failed.</p>
-                <p className="mt-1 text-red-700">{refreshState.message}</p>
+                <p className="mt-1 text-danger">{refreshState.message}</p>
               </div>
             )}
 
             {deleteState.state === "saved" && (
-              <div className="mt-4 flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              <div className="mt-4 flex items-start gap-2 rounded-2xl border border-ok/30 bg-ok/10 px-4 py-3 text-sm text-ok">
                 <CheckCircle size={18} className="mt-0.5 shrink-0" />
                 <div>
                   <p className="font-semibold">Plugin removed.</p>
-                  <p className="mt-1 text-emerald-700">{deleteState.message}</p>
+                  <p className="mt-1 text-ok">{deleteState.message}</p>
                 </div>
               </div>
             )}
 
             {deleteState.state === "error" && (
-              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <div className="mt-4 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
                 <p className="font-semibold">Remove failed.</p>
-                <p className="mt-1 text-red-700">{deleteState.message}</p>
+                <p className="mt-1 text-danger">{deleteState.message}</p>
               </div>
             )}
 
@@ -705,7 +705,7 @@ export function InstalledMarketPluginsBrowser({
                           <p className="text-xs font-semibold text-foreground">
                             {projection.hostSlug}
                             {projection.mode === "aliased" && (
-                              <span className="ml-2 text-[10px] uppercase tracking-[0.12em] text-amber-800">
+                              <span className="ml-2 text-[10px] uppercase tracking-[0.12em] text-warn">
                                 alias for {projection.sourceSlug}
                               </span>
                             )}

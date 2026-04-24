@@ -502,12 +502,12 @@ function mergeStoredJobs(
 function statusBadgeClasses(status: StructuredCritiqueStatus): string {
   switch (status) {
     case "COMPLETED":
-      return "bg-emerald-500/10 text-emerald-700 border-emerald-200";
+      return "bg-ok/10 text-ok border-ok/30";
     case "FAILED":
     case "CANCELLED":
-      return "bg-rose-500/10 text-rose-700 border-rose-200";
+      return "bg-danger/10 text-danger border-danger/30";
     case "RUNNING":
-      return "bg-amber-500/10 text-amber-700 border-amber-200";
+      return "bg-warn/10 text-warn border-warn/30";
     default:
       return "bg-surface text-muted border-border";
   }
@@ -881,22 +881,22 @@ function normalizeSeverity(s?: string): "error" | "warning" | "note" {
 function severityDotClass(severity: "error" | "warning" | "note"): string {
   switch (severity) {
     case "error":
-      return "bg-red-600";
+      return "bg-danger";
     case "warning":
-      return "bg-amber-500";
+      return "bg-warn";
     case "note":
-      return "bg-gray-400";
+      return "bg-dim";
   }
 }
 
 function severityTextClass(severity: "error" | "warning" | "note"): string {
   switch (severity) {
     case "error":
-      return "text-red-600";
+      return "text-danger";
     case "warning":
-      return "text-amber-600";
+      return "text-warn";
     case "note":
-      return "text-gray-500";
+      return "text-dim";
   }
 }
 
@@ -977,11 +977,11 @@ function buildFindingFilterOptions(findings: Finding[]): FindingFilterOption[] {
 function findingKindChipClasses(kind?: string): string {
   switch (kind) {
     case "fallacy":
-      return "bg-orange-100 text-orange-700";
+      return "bg-warn/10 text-warn";
     case "gap":
-      return "bg-blue-100 text-blue-700";
+      return "bg-accent/10 text-accent";
     default:
-      return "bg-gray-100 text-gray-700";
+      return "bg-sunk text-dim";
   }
 }
 
@@ -1007,11 +1007,11 @@ function deriveQuality(findings: Finding[]): QualityLevel {
 function qualityBadgeClasses(level: QualityLevel): string {
   switch (level) {
     case "GOOD":
-      return "bg-emerald-100 text-emerald-700";
+      return "bg-ok/10 text-ok";
     case "FAIR":
-      return "bg-amber-100 text-amber-700";
+      return "bg-warn/10 text-warn";
     case "POOR":
-      return "bg-red-100 text-red-700";
+      return "bg-danger/10 text-danger";
   }
 }
 
@@ -1104,10 +1104,10 @@ function SkeletonRows() {
     <div className="space-y-1">
       {Array.from({ length: 7 }).map((_, i) => (
         <div key={i} className="flex items-center gap-2 py-2 px-3">
-          <div className="h-2 w-2 rounded-full bg-gray-200 animate-pulse" />
+          <div className="h-2 w-2 rounded-full bg-rule animate-pulse" />
           <div className="flex-1 space-y-1">
-            <div className="h-3 w-24 rounded bg-gray-200 animate-pulse" />
-            <div className="h-2.5 w-40 rounded bg-gray-100 animate-pulse" />
+            <div className="h-3 w-24 rounded bg-rule animate-pulse" />
+            <div className="h-2.5 w-40 rounded bg-rule-soft animate-pulse" />
           </div>
         </div>
       ))}
@@ -1142,29 +1142,29 @@ function SubmittedInputSummary({
 }) {
   return (
     <div
-      className={`rounded-lg border border-emerald-200 bg-emerald-50/70 ${
+      className={`rounded-lg border border-ok/30 bg-ok/10 ${
         compact ? "px-3 py-2" : "px-4 py-3"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-widest text-emerald-700">
+          <p className="text-[10px] font-medium uppercase tracking-widest text-ok">
             Submitted
           </p>
-          <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
+          <p className="mt-0.5 truncate text-sm font-medium text-strong">
             {formatSubmittedInputTitle(input)}
           </p>
           {input.kind === "text" ? (
-            <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-body">
               {input.preview}
             </p>
           ) : null}
         </div>
-        <span className="shrink-0 rounded-full border border-emerald-200 bg-white px-2 py-1 text-[10px] font-medium text-emerald-700">
+        <span className="shrink-0 rounded-full border border-ok/30 bg-raised px-2 py-1 text-[10px] font-medium text-ok">
           received
         </span>
       </div>
-      <p className="mt-1 text-xs text-slate-600">{formatSubmittedInputMeta(input)}</p>
+      <p className="mt-1 text-xs text-body">{formatSubmittedInputMeta(input)}</p>
     </div>
   );
 }
@@ -1178,9 +1178,9 @@ function ReasoningWaitGuidance({
 }) {
   const estimate = buildReasoningWaitEstimate(input, job);
   return (
-    <div className="max-w-md rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left">
-      <p className="text-xs font-semibold text-amber-900">{estimate.label}</p>
-      <p className="mt-1 text-xs leading-5 text-amber-800">{estimate.detail}</p>
+    <div className="max-w-md rounded-lg border border-warn/30 bg-warn/10 px-4 py-3 text-left">
+      <p className="text-xs font-semibold text-warn">{estimate.label}</p>
+      <p className="mt-1 text-xs leading-5 text-warn">{estimate.detail}</p>
     </div>
   );
 }
@@ -1203,7 +1203,7 @@ function TopStrip({
   const counts = hasFindings ? countBySeverity(findings) : null;
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 bg-white px-6 py-3">
+    <div className="flex flex-wrap items-center gap-3 border-b border-rule-soft bg-raised px-6 py-3">
       <Link
         href="/dashboard/project"
         className="text-sm font-medium text-muted hover:text-accent transition-colors mr-1"
@@ -1260,8 +1260,8 @@ function IssueQueueItem({
   const confidence = formatConfidence(finding.confidence);
   const rawType = finding.flaw_type?.trim();
   const selectedBg = isSelected
-    ? "bg-teal-50 border-l-[3px] border-l-teal-500"
-    : "border-l-[3px] border-l-transparent hover:bg-gray-50";
+    ? "bg-sunk border-l-[3px] border-l-accent"
+    : "border-l-[3px] border-l-transparent hover:bg-sunk";
 
   return (
     <button
@@ -1292,24 +1292,24 @@ function IssueQueueItem({
             </p>
           ) : null}
           {finding.impact ? (
-            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">
-              <span className="font-medium text-slate-600">Impact: </span>
+            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-dim">
+              <span className="font-medium text-body">Impact: </span>
               {finding.impact}
             </p>
           ) : null}
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             {finding.argument_id ? (
-              <span className="rounded bg-white px-1.5 py-0.5 text-[10px] font-mono text-gray-600 ring-1 ring-gray-100">
+              <span className="rounded bg-raised px-1.5 py-0.5 text-[10px] font-mono text-dim ring-1 ring-rule-soft">
                 {finding.argument_id}
               </span>
             ) : null}
             {rawType ? (
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono text-gray-600">
+              <span className="rounded bg-sunk px-1.5 py-0.5 text-[10px] font-mono text-dim">
                 {rawType}
               </span>
             ) : null}
             {confidence ? (
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+              <span className="rounded bg-sunk px-1.5 py-0.5 text-[10px] font-medium text-dim">
                 {confidence}
               </span>
             ) : null}
@@ -1343,7 +1343,7 @@ function FindingIdList({ findingIds }: { findingIds?: string[] }) {
       {findingIds.map((findingId) => (
         <span
           key={findingId}
-          className="rounded bg-white px-1.5 py-0.5 font-mono text-[10px] text-gray-600 ring-1 ring-gray-100"
+          className="rounded bg-raised px-1.5 py-0.5 font-mono text-[10px] text-dim ring-1 ring-rule-soft"
         >
           {findingId}
         </span>
@@ -1360,7 +1360,7 @@ function DisplayItemCard({
   index?: number;
 }) {
   return (
-    <div className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+    <div className="rounded-lg border border-rule-soft bg-sunk/70 p-3">
       <div className="text-sm font-medium text-foreground">
         {typeof index === "number" ? `${index + 1}. ` : null}
         {item.title}
@@ -1389,13 +1389,13 @@ function ProjectSavePanel({
     (selected.size > 0 || hasNewProject);
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3">
+    <div className="rounded-lg border border-rule bg-sunk/80 p-3">
       <div className="flex items-center justify-between gap-3">
         <div className={SECTION_LABEL}>Destination projects</div>
         <button
           type="button"
           onClick={controls.onClose}
-          className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:text-foreground"
+          className="rounded border border-rule bg-raised px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:text-foreground"
         >
           Close
         </button>
@@ -1405,11 +1405,11 @@ function ProjectSavePanel({
         <div className="mt-3 text-xs text-muted">Loading projects...</div>
       ) : controls.projectStatus === "error" ? (
         <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs text-rose-700">Projects unavailable.</span>
+          <span className="text-xs text-danger">Projects unavailable.</span>
           <button
             type="button"
             onClick={controls.onReloadProjects}
-            className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-gray-300"
+            className="rounded border border-rule bg-raised px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-accent"
           >
             Retry
           </button>
@@ -1419,17 +1419,17 @@ function ProjectSavePanel({
           {controls.projects.map((project) => (
             <label
               key={project.slug}
-              className={`flex cursor-pointer items-start gap-2 rounded border bg-white p-2 text-xs transition-colors ${
+              className={`flex cursor-pointer items-start gap-2 rounded border bg-raised p-2 text-xs transition-colors ${
                 selected.has(project.slug)
-                  ? "border-emerald-300 text-emerald-800"
-                  : "border-gray-200 text-foreground hover:border-gray-300"
+                  ? "border-ok/40 text-ok"
+                  : "border-rule text-foreground hover:border-accent"
               }`}
             >
               <input
                 type="checkbox"
                 checked={selected.has(project.slug)}
                 onChange={() => controls.onToggleProjectSlug(project.slug)}
-                className="mt-0.5 h-3.5 w-3.5 accent-emerald-600"
+                className="mt-0.5 h-3.5 w-3.5 accent-ok"
               />
               <span className="min-w-0">
                 <span className="block truncate font-medium">{project.name}</span>
@@ -1449,7 +1449,7 @@ function ProjectSavePanel({
             value={controls.newProjectName}
             onChange={(event) => controls.onNewProjectNameChange(event.target.value)}
             placeholder="Project name"
-            className="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-xs font-normal text-foreground outline-none transition-colors focus:border-accent"
+            className="mt-1 w-full rounded border border-rule bg-raised px-2 py-1.5 text-xs font-normal text-foreground outline-none transition-colors focus:border-accent"
           />
         </label>
         <label className="text-xs font-medium text-foreground">
@@ -1458,13 +1458,13 @@ function ProjectSavePanel({
             value={controls.newProjectDescription}
             onChange={(event) => controls.onNewProjectDescriptionChange(event.target.value)}
             placeholder="Optional"
-            className="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-xs font-normal text-foreground outline-none transition-colors focus:border-accent"
+            className="mt-1 w-full rounded border border-rule bg-raised px-2 py-1.5 text-xs font-normal text-foreground outline-none transition-colors focus:border-accent"
           />
         </label>
       </div>
 
       {controls.error ? (
-        <div className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+        <div className="mt-3 rounded border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
           {controls.error}
         </div>
       ) : null}
@@ -1474,7 +1474,7 @@ function ProjectSavePanel({
           type="button"
           onClick={controls.onSave}
           disabled={!canSave}
-          className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg bg-accent px-3 py-2 text-xs font-medium text-strong transition-colors hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSaving || controls.isCreatingProject ? "Saving..." : "Save critique"}
         </button>
@@ -1533,7 +1533,7 @@ function ReportOverview({
       : [];
 
   return (
-    <div className="border-b border-gray-100 px-6 py-5 space-y-4">
+    <div className="border-b border-rule-soft px-6 py-5 space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className={SECTION_LABEL}>Analysis overview</div>
@@ -1549,14 +1549,14 @@ function ReportOverview({
                 }
               }}
               disabled={!reportMarkdown}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-rule px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               Export Markdown
             </button>
             <button
               type="button"
               onClick={() => window.print()}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300"
+              className="rounded-lg border border-rule px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-accent"
             >
               Export PDF
             </button>
@@ -1564,13 +1564,13 @@ function ReportOverview({
               <>
                 {saveStatus.state === "saved" ? (
                   <>
-                    <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                    <span className="rounded-lg border border-ok/30 bg-ok/10 px-3 py-2 text-xs font-medium text-ok">
                       Saved in {formatSavedProjectLabel(savedProjectSlugs, destinationControls?.projects ?? [])}
                     </span>
                     {savedProjectLinks.length === 1 ? (
                       <Link
                         href={savedProjectLinks[0]?.href ?? saveStatus.url}
-                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:border-emerald-300"
+                        className="rounded-lg border border-ok/30 bg-ok/10 px-3 py-2 text-xs font-medium text-ok transition-colors hover:border-ok/50"
                       >
                         Open in file tree
                       </Link>
@@ -1579,7 +1579,7 @@ function ReportOverview({
                         <Link
                           key={link.projectSlug}
                           href={link.href}
-                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:border-emerald-300"
+                          className="rounded-lg border border-ok/30 bg-ok/10 px-3 py-2 text-xs font-medium text-ok transition-colors hover:border-ok/50"
                         >
                           Open {link.label}
                         </Link>
@@ -1588,14 +1588,14 @@ function ReportOverview({
                     <Link
                       href={saveStatus.url}
                       title="Open the durable saved analysis URL"
-                      className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300"
+                      className="rounded-lg border border-rule px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-accent"
                     >
                       Open saved analysis
                     </Link>
                     <button
                       type="button"
                       onClick={destinationControls?.onOpen}
-                      className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-lg border border-rule px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Manage projects
                     </button>
@@ -1605,7 +1605,7 @@ function ReportOverview({
                     type="button"
                     onClick={destinationControls?.onOpen}
                     disabled={saveStatus.state === "saving"}
-                    className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-lg border border-rule px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {saveStatus.state === "saving" ? "Saving..." : "Save to project..."}
                   </button>
@@ -1622,7 +1622,7 @@ function ReportOverview({
         />
       ) : null}
       {!destinationControls?.isOpen && saveStatus.state === "error" ? (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+        <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
           {saveStatus.error}
         </div>
       ) : null}
@@ -1635,7 +1635,7 @@ function ReportOverview({
             className="max-w-4xl text-sm leading-7 text-foreground"
           />
           {displayModel.atAGlance ? (
-            <p className="max-w-4xl rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-muted">
+            <p className="max-w-4xl rounded-lg border border-rule-soft bg-sunk px-3 py-2 text-sm text-muted">
               {displayModel.atAGlance}
             </p>
           ) : null}
@@ -1674,7 +1674,7 @@ function ReportOverview({
       ) : null}
 
       {questionsForAuthors.length > 0 ? (
-        <details className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+        <details className="rounded-lg border border-rule-soft bg-sunk/70 p-3">
           <summary className="cursor-pointer text-sm font-medium text-foreground">
             Questions for authors
           </summary>
@@ -1690,7 +1690,7 @@ function ReportOverview({
       ) : null}
 
       {displayModel?.referencesFeedbackMarkdown ? (
-        <details className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+        <details className="rounded-lg border border-rule-soft bg-sunk/70 p-3">
           <summary className="cursor-pointer text-sm font-medium text-foreground">
             Reference and methods notes
           </summary>
@@ -1702,13 +1702,13 @@ function ReportOverview({
       ) : null}
 
       {reportMarkdown ? (
-        <details className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+        <details className="rounded-lg border border-rule-soft bg-sunk/70 p-3">
           <summary className="cursor-pointer text-sm font-medium text-foreground">
             Report markdown
           </summary>
           <CritiqueMarkdownBlock
             content={reportMarkdown}
-            className="mt-3 max-h-[32rem] overflow-auto rounded border border-gray-100 bg-white px-3 py-2 text-sm leading-6 text-foreground"
+            className="mt-3 max-h-[32rem] overflow-auto rounded border border-rule-soft bg-raised px-3 py-2 text-sm leading-6 text-foreground"
           />
         </details>
       ) : null}
@@ -1732,7 +1732,7 @@ function BrainArtifactViewer({ artifact }: { artifact: BrainArtifactPage }) {
 
   return (
     <article className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-6 py-6">
-      <div className="border-b border-gray-100 pb-5">
+      <div className="border-b border-rule-soft pb-5">
         <div className={SECTION_LABEL}>{formatArtifactType(artifact.type)}</div>
         <h1 className="mt-2 text-2xl font-semibold text-foreground">
           {artifact.title}
@@ -1741,7 +1741,7 @@ function BrainArtifactViewer({ artifact }: { artifact: BrainArtifactPage }) {
         {details.length > 0 ? (
           <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {details.map(([label, value]) => (
-              <div key={label} className="border-l border-gray-200 pl-3">
+              <div key={label} className="border-l border-rule pl-3">
                 <dt className={SECTION_LABEL}>{label}</dt>
                 <dd className="mt-1 break-words text-sm text-foreground">
                   {value}
@@ -1785,7 +1785,7 @@ function FilterChips({
         className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
           allActive
             ? "border-accent bg-accent/10 font-medium text-accent"
-            : "border-gray-200 bg-white text-muted hover:border-gray-300"
+            : "border-rule bg-raised text-muted hover:border-accent"
         }`}
       >
         All {totalCount}
@@ -1802,7 +1802,7 @@ function FilterChips({
             className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
               isActive
                 ? "border-accent bg-accent/10 font-medium text-accent"
-                : "border-gray-200 bg-white text-muted hover:border-gray-300"
+                : "border-rule bg-raised text-muted hover:border-accent"
             }`}
           >
             {option.label} {option.count}
@@ -1847,7 +1847,7 @@ function FindingDetail({
   );
 
   return (
-    <article className="border-b border-gray-100 px-6 py-5">
+    <article className="border-b border-rule-soft px-6 py-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className={SECTION_LABEL}>Selected issue</div>
@@ -1866,7 +1866,7 @@ function FindingDetail({
             </span>
           </span>
           {rawType ? (
-            <span className="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-700">
+            <span className="rounded bg-sunk px-2 py-0.5 font-mono text-xs text-dim">
               {rawType}
             </span>
           ) : null}
@@ -1886,7 +1886,7 @@ function FindingDetail({
           {finding.evidence_quote ? (
             <section>
               <div className={`${SECTION_LABEL} mb-1`}>Evidence quoted</div>
-              <blockquote className="border-l-2 border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-7 text-muted">
+              <blockquote className="border-l-2 border-rule bg-sunk px-4 py-3 text-sm leading-7 text-muted">
                 {finding.evidence_quote}
               </blockquote>
             </section>
@@ -1895,7 +1895,7 @@ function FindingDetail({
           {finding.impact ? (
             <section>
               <div className={`${SECTION_LABEL} mb-1`}>Why it matters</div>
-              <p className="rounded border border-amber-100 bg-amber-50/70 p-3 text-sm leading-7 text-amber-900">
+              <p className="rounded border border-warn/20 bg-warn/10 p-3 text-sm leading-7 text-warn">
                 {finding.impact}
               </p>
             </section>
@@ -1904,7 +1904,7 @@ function FindingDetail({
           {finding.suggested_fix ? (
             <section>
               <div className={`${SECTION_LABEL} mb-1`}>Suggested fix</div>
-              <p className="rounded border border-emerald-100 bg-emerald-50 p-3 text-sm leading-7 text-emerald-950">
+              <p className="rounded border border-ok/20 bg-ok/10 p-3 text-sm leading-7 text-ok">
                 {finding.suggested_fix}
               </p>
             </section>
@@ -1912,7 +1912,7 @@ function FindingDetail({
         </div>
 
         {detailRows.length > 0 ? (
-          <dl className="grid content-start gap-3 rounded-lg border border-gray-100 bg-gray-50/70 p-4 sm:grid-cols-2 xl:grid-cols-1">
+          <dl className="grid content-start gap-3 rounded-lg border border-rule-soft bg-sunk/70 p-4 sm:grid-cols-2 xl:grid-cols-1">
             {detailRows.map((row) => (
               <div key={row.label}>
                 <dt className={SECTION_LABEL}>{row.label}</dt>
@@ -1968,7 +1968,7 @@ function EmptyWorkspacePanel({
         <button
           type="button"
           onClick={onShowExampleReport}
-          className="mt-5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-gray-300 hover:bg-gray-50"
+          className="mt-5 rounded-lg border border-rule px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent hover:bg-sunk"
         >
           View example report
         </button>
@@ -2892,7 +2892,7 @@ function StructuredCritiquePageContent() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] bg-gray-50/50">
+    <div className="flex flex-col h-[calc(100vh-64px)] bg-sunk/50">
       {/* Top strip */}
       <TopStrip
         findings={showSummaryStrip ? allFindings : undefined}
@@ -2904,7 +2904,7 @@ function StructuredCritiquePageContent() {
             <button
               type="button"
               onClick={() => void signOut()}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-gray-300"
+              className="rounded-lg border border-rule px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-accent"
             >
               Sign out
             </button>
@@ -2912,7 +2912,7 @@ function StructuredCritiquePageContent() {
             <button
               type="button"
               onClick={() => void beginSignIn()}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-gray-300"
+              className="rounded-lg border border-rule px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-accent"
             >
               {isSigningIn ? "Connecting…" : "Sign in"}
             </button>
@@ -2922,7 +2922,7 @@ function StructuredCritiquePageContent() {
 
       {/* Error banner */}
       {error && !isFullFailure && !isTimedOutJob ? (
-        <div className="border-b border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-700">
+        <div className="border-b border-danger/30 bg-danger/10 px-6 py-3 text-sm text-danger">
           <strong className="font-semibold">Error:</strong> {error}
         </div>
       ) : null}
@@ -2930,15 +2930,15 @@ function StructuredCritiquePageContent() {
       {/* Main layout: left panel + center panel */}
       <div className="flex flex-1 min-h-0">
         {/* Left panel */}
-        <div className="w-[280px] flex-shrink-0 border-r border-gray-100 bg-white flex flex-col overflow-y-auto">
+        <div className="w-[280px] flex-shrink-0 border-r border-rule-soft bg-raised flex flex-col overflow-y-auto">
           {/* Input section */}
-          <div className="p-4 border-b border-gray-100">
+          <div className="p-4 border-b border-rule-soft">
             <div className={`${SECTION_LABEL} mb-3`}>
               Input
             </div>
 
             {/* PDF / Text toggle */}
-            <div className="flex gap-1 mb-3 rounded bg-gray-100 p-0.5">
+            <div className="flex gap-1 mb-3 rounded bg-sunk p-0.5">
               <button
                 type="button"
                 onClick={() => {
@@ -2970,11 +2970,11 @@ function StructuredCritiquePageContent() {
             </div>
 
             {inputMode === "pdf" ? (
-              <label className="flex cursor-pointer flex-col gap-1 rounded-lg border border-dashed border-gray-200 bg-gray-50/60 p-3 transition-colors hover:border-accent hover:bg-gray-50">
+              <label className="flex cursor-pointer flex-col gap-1 rounded-lg border border-dashed border-rule bg-sunk/60 p-3 transition-colors hover:border-accent hover:bg-sunk">
                 {uploadAccepted && isAnalyzing ? (
                   <>
-                    <span className="text-sm font-medium text-emerald-600">
-                      Submitted PDF &#10003;
+                    <span className="text-sm font-medium text-ok">
+                      Submitted PDF ✓
                     </span>
                     <span className="text-xs text-muted">
                       {submittedInput?.kind === "pdf"
@@ -3011,7 +3011,7 @@ function StructuredCritiquePageContent() {
                   setShowExampleReport(false);
                 }}
                 placeholder="Paste the text you want deeply analyzed..."
-                className="w-full rounded-lg border border-gray-200 bg-gray-50/60 p-3 text-sm resize-none h-24 focus:outline-none focus:border-accent"
+                className="w-full rounded-lg border border-rule bg-sunk/60 p-3 text-sm resize-none h-24 focus:outline-none focus:border-accent"
               />
             )}
 
@@ -3021,8 +3021,8 @@ function StructuredCritiquePageContent() {
               </div>
             ) : null}
 
-            <details className="group mt-3 rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-2 text-[11px] leading-5 text-slate-700">
-              <summary className="cursor-pointer list-none font-semibold text-slate-900">
+            <details className="group mt-3 rounded-lg border border-rule bg-sunk/70 px-3 py-2 text-[11px] leading-5 text-body">
+              <summary className="cursor-pointer list-none font-semibold text-strong">
                 What this checks
                 <span className="float-right text-[10px] text-muted group-open:hidden">
                   Show
@@ -3080,7 +3080,7 @@ function StructuredCritiquePageContent() {
                 {REASONING_AUDIT_LOADING_AUTH_MESSAGE}
               </p>
             ) : structuredCritiqueAvailable === false ? (
-              <p className="mt-2 text-xs text-amber-700">
+              <p className="mt-2 text-xs text-warn">
                 {structuredCritiqueUnavailableMessage
                   ?? STRUCTURED_CRITIQUE_UNAVAILABLE_FALLBACK}
               </p>
@@ -3101,10 +3101,10 @@ function StructuredCritiquePageContent() {
               </p>
             ) : null}
             {!isSignedIn && authDetail ? (
-              <p className="mt-2 text-xs text-amber-700">{authDetail}</p>
+              <p className="mt-2 text-xs text-warn">{authDetail}</p>
             ) : null}
-            <details className="group mt-3 rounded-lg border border-sky-200 bg-sky-50/70 px-3 py-2 text-[11px] leading-5 text-slate-700">
-              <summary className="cursor-pointer list-none font-semibold text-slate-900">
+            <details className="group mt-3 rounded-lg border border-rule bg-sunk/70 px-3 py-2 text-[11px] leading-5 text-body">
+              <summary className="cursor-pointer list-none font-semibold text-strong">
                 Cloud and model notice
                 <span className="float-right text-[10px] text-muted group-open:hidden">
                   Show
@@ -3119,7 +3119,7 @@ function StructuredCritiquePageContent() {
                 frontier LLM providers. {SCIENCESWARM_CRITIQUE_CLOUD_DISCLAIMER}
               </p>
               <p className="mt-2">
-                <span className="font-semibold text-slate-900">Free for now:</span>{" "}
+                <span className="font-semibold text-strong">Free for now:</span>{" "}
                 {SCIENCESWARM_CRITIQUE_FRONTIER_MODELS_DISCLAIMER}
               </p>
             </details>
@@ -3159,7 +3159,7 @@ function StructuredCritiquePageContent() {
 
             {/* Filters */}
             {allFindings.length > 0 ? (
-              <div className="border-t border-gray-100 py-2">
+              <div className="border-t border-rule-soft py-2">
                 <div className="px-3 pb-1">
                   <span className={SECTION_LABEL}>
                     Filter by issue type
@@ -3176,7 +3176,7 @@ function StructuredCritiquePageContent() {
             ) : null}
 
             {/* Recent Reasoning Analyses */}
-            <div className="border-t border-gray-100">
+            <div className="border-t border-rule-soft">
               <button
                 type="button"
                 onClick={() => setHistoryExpanded((v) => !v)}
@@ -3205,8 +3205,8 @@ function StructuredCritiquePageContent() {
                           onClick={() => handleSelectHistoryJob(job)}
                           className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
                             selectedJobId === job.id
-                              ? "bg-teal-50 text-foreground"
-                              : "text-muted hover:bg-gray-50 hover:text-foreground"
+                              ? "bg-sunk text-foreground"
+                              : "text-muted hover:bg-sunk hover:text-foreground"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -3236,15 +3236,15 @@ function StructuredCritiquePageContent() {
                           onClick={() => handleSelectPersistedCritique(entry)}
                           className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
                             selectedJobId === `brain:${entry.brain_slug}`
-                              ? "bg-teal-50 text-foreground"
-                              : "text-muted hover:bg-gray-50 hover:text-foreground"
+                              ? "bg-sunk text-foreground"
+                              : "text-muted hover:bg-sunk hover:text-foreground"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="truncate font-medium">
                               {entry.source_filename || entry.title || entry.brain_slug}
                             </span>
-                            <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                            <span className="shrink-0 rounded-full border border-ok/30 bg-ok/10 px-1.5 py-0.5 text-[10px] font-medium text-ok">
                               brain
                             </span>
                           </div>
@@ -3256,7 +3256,7 @@ function StructuredCritiquePageContent() {
                       <button
                         type="button"
                         onClick={handleClearHistory}
-                        className="px-3 py-1 text-[10px] text-muted hover:text-rose-600 transition-colors"
+                        className="px-3 py-1 text-[10px] text-muted hover:text-danger transition-colors"
                       >
                         Clear local history
                       </button>
@@ -3282,7 +3282,7 @@ function StructuredCritiquePageContent() {
                   <SubmittedInputSummary input={activeSubmittedInput} />
                 </div>
               ) : null}
-              <div className="w-64 h-2 rounded-full bg-gray-100 overflow-hidden">
+              <div className="w-64 h-2 rounded-full bg-sunk overflow-hidden">
                 <div className="h-full w-[60%] bg-accent rounded-full animate-pulse" />
               </div>
               <p className="text-sm text-muted">
@@ -3293,7 +3293,7 @@ function StructuredCritiquePageContent() {
                 job={activeJob}
               />
               {activeJobPendingRecoveryMessage ? (
-                <p className="max-w-md text-center text-xs text-amber-700">
+                <p className="max-w-md text-center text-xs text-warn">
                   {activeJobPendingRecoveryMessage}
                 </p>
               ) : null}
@@ -3304,7 +3304,7 @@ function StructuredCritiquePageContent() {
           {/* State: partial failure */}
           {isPartialFailure ? (
             <div className="px-6 pt-4">
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 mb-4">
+              <div className="rounded-lg border border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn mb-4">
                 Analysis partially completed. {allFindings.length} finding
                 {allFindings.length !== 1 ? "s were" : " was"} generated before an error occurred.
               </div>
@@ -3327,7 +3327,7 @@ function StructuredCritiquePageContent() {
           {/* State: full failure */}
           {isFullFailure && !isAnalyzing ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 px-6">
-              <p className="max-w-xl text-center text-sm text-rose-600 font-medium">
+              <p className="max-w-xl text-center text-sm text-danger font-medium">
                 {getStructuredCritiqueDisplayError(
                   readJobFailureMessage(selectedJob),
                 )}
@@ -3393,7 +3393,7 @@ function StructuredCritiquePageContent() {
                   <SubmittedInputSummary input={activeSubmittedInput} />
                 </div>
               ) : null}
-              <p className={`text-sm ${isTimedOutJob ? "text-amber-700" : "text-muted"}`}>
+              <p className={`text-sm ${isTimedOutJob ? "text-warn" : "text-muted"}`}>
                 {isTimedOutJob ? timedOutMessage : buildPendingStatusMessage(selectedJob)}
               </p>
               <ReasoningWaitGuidance
@@ -3401,7 +3401,7 @@ function StructuredCritiquePageContent() {
                 job={selectedJob}
               />
               {!isTimedOutJob && buildPendingRecoveryMessage(selectedJob) ? (
-                <p className="max-w-md text-xs text-amber-700">
+                <p className="max-w-md text-xs text-warn">
                   {buildPendingRecoveryMessage(selectedJob)}
                 </p>
               ) : null}
@@ -3409,7 +3409,7 @@ function StructuredCritiquePageContent() {
                 <button
                   type="button"
                   onClick={handleResumePolling}
-                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-gray-300"
+                  className="rounded-lg border border-rule px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent"
                 >
                   Resume polling
                 </button>

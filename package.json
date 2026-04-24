@@ -37,7 +37,7 @@
     "import-pdfs": "npx tsx scripts/import-pdfs.ts",
     "radar:run": "NODE_OPTIONS=--preserve-symlinks npx tsx scripts/run-research-radar.ts",
     "dream:run": "NODE_OPTIONS=--preserve-symlinks npx tsx scripts/run-dream-cycle.ts",
-    "quality": "npm run test && npm run lint && npm run typecheck && npm run build",
+    "quality": "npm run test && npm run lint && npm run typecheck && npm run build && npm run design:drift:strict",
     "design:drift": "node --experimental-strip-types scripts/check-design-drift.ts",
     "design:drift:strict": "node --experimental-strip-types scripts/check-design-drift.ts --error"
   },

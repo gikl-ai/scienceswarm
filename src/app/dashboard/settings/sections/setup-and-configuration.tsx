@@ -32,8 +32,8 @@ export function SetupAndConfigurationSection({
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
               strictLocalOnlyEnabled
-                ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border border-amber-200 bg-amber-50 text-amber-700"
+                ? "border border-ok/30 bg-ok/10 text-ok"
+                : "border border-warn/30 bg-warn/10 text-warn"
             }`}
           >
             <StatusDot status={strictLocalOnlyEnabled ? "ok" : "warn"} />

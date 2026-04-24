@@ -491,13 +491,13 @@ export default function SetupPage() {
       })()}
       {hydrated && summary?.type === "summary" && summary.status === "ok" && (
         <section
-          className="rounded-[28px] border-2 border-emerald-200 bg-emerald-50 p-5 shadow-sm"
+          className="rounded-[28px] border-2 border-ok/30 bg-ok/10 p-5 shadow-sm"
           data-testid="bootstrap-done"
         >
-          <h2 className="text-xl font-semibold text-emerald-900">
+          <h2 className="text-xl font-semibold text-ok">
             OpenClaw is connected.
           </h2>
-          <p className="mt-2 text-sm text-emerald-900">
+          <p className="mt-2 text-sm text-ok">
             {submittedTelegram
               ? "Check Telegram for your ScienceSwarm bot. "
               : "Telegram can be connected later from Settings. "}
@@ -522,13 +522,13 @@ export default function SetupPage() {
       )}
       {hydrated && showCoreReadyCard && (
         <section
-          className="rounded-[28px] border-2 border-sky-200 bg-sky-50 p-5 shadow-sm"
+          className="rounded-[28px] border-2 border-rule bg-sunk p-5 shadow-sm"
           data-testid="bootstrap-core-ready"
         >
-          <h2 className="text-xl font-semibold text-sky-900">
+          <h2 className="text-xl font-semibold text-body">
             Workspace core is ready.
           </h2>
-          <p className="mt-2 text-sm text-sky-900">
+          <p className="mt-2 text-sm text-body">
             Your local research store, OpenClaw runtime, and local model are ready.
             Code execution is still warming up, so some setup tasks may keep running in
             the background. You can open the import workspace now and finish the rest
@@ -546,26 +546,26 @@ export default function SetupPage() {
       )}
       {hydrated && summary?.type === "summary" && summary.status === "failed" && (
         <section
-          className="rounded-[28px] border-2 border-red-200 bg-red-50 p-5 shadow-sm"
+          className="rounded-[28px] border-2 border-danger/30 bg-danger/10 p-5 shadow-sm"
           data-testid="bootstrap-failed"
           role="alert"
         >
-          <h2 className="text-xl font-semibold text-red-900">
+          <h2 className="text-xl font-semibold text-danger">
             Setup did not complete.
           </h2>
           {summary.error ? (
-            <p className="mt-2 text-sm text-red-900" data-testid="bootstrap-failed-error">
+            <p className="mt-2 text-sm text-danger" data-testid="bootstrap-failed-error">
               {summary.error}
             </p>
           ) : (
-            <p className="mt-2 text-sm text-red-900">
+            <p className="mt-2 text-sm text-danger">
               See the per-task errors above. Fix the issue and try setup again.
             </p>
           )}
           <button
             type="button"
             onClick={resetSetup}
-            className="mt-4 rounded-xl border border-red-300 px-5 py-2.5 text-sm font-semibold text-red-900 transition-colors hover:bg-red-100"
+            className="mt-4 rounded-xl border border-danger/40 px-5 py-2.5 text-sm font-semibold text-danger transition-colors hover:bg-danger/10"
             data-testid="bootstrap-retry"
           >
             Start setup again
@@ -574,13 +574,13 @@ export default function SetupPage() {
       )}
       {hydrated && summary?.type === "summary" && summary.status === "partial" && (
         <section
-          className="rounded-[28px] border-2 border-amber-200 bg-amber-50 p-5 shadow-sm"
+          className="rounded-[28px] border-2 border-warn/30 bg-warn/10 p-5 shadow-sm"
           data-testid="bootstrap-partial"
         >
-          <h2 className="text-xl font-semibold text-amber-900">
+          <h2 className="text-xl font-semibold text-warn">
             {shouldAutoContinue(summary) ? "Core setup is ready." : "Setup partially complete."}
           </h2>
-          <p className="mt-2 text-sm text-amber-900">
+          <p className="mt-2 text-sm text-warn">
             {shouldAutoContinue(summary)
               ? "ScienceSwarm can continue with local chat and the import workspace. Optional runtime pieces can be finished later from /dashboard/settings."
               : "Some components failed. ScienceSwarm will run with what is available. Retry the rest from /dashboard/settings later."}
@@ -600,7 +600,7 @@ export default function SetupPage() {
             <button
               type="button"
               onClick={resetSetup}
-              className="mt-4 rounded-xl border border-amber-300 px-5 py-2.5 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100"
+              className="mt-4 rounded-xl border border-warn/40 px-5 py-2.5 text-sm font-semibold text-warn transition-colors hover:bg-warn/10"
             >
               Start setup again
             </button>

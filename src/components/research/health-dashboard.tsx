@@ -31,7 +31,7 @@ function StatusDot({ ok }: { ok: boolean }) {
   return (
     <span
       className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
-        ok ? "bg-green-500" : "bg-red-400"
+        ok ? "bg-ok" : "bg-danger"
       }`}
     />
   );
@@ -76,7 +76,7 @@ export function HealthDashboard() {
   // If we had a fetch error, show a minimal warning
   if (error && !health) {
     return (
-      <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-700 text-xs">
+      <div className="px-4 py-2 bg-warn/10 border-b border-warn/30 text-warn text-xs">
         Unable to reach health endpoint.
       </div>
     );
@@ -109,18 +109,18 @@ export function HealthDashboard() {
   ];
 
   return (
-    <div className="border-b border-amber-200 bg-amber-50/60 text-xs flex-shrink-0">
+    <div className="border-b border-warn/30 bg-warn/10 text-xs flex-shrink-0">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-2 hover:bg-amber-50 transition-colors text-left"
+        className="w-full flex items-center gap-3 px-4 py-2 hover:bg-warn/10 transition-colors text-left"
       >
-        <span className={`font-medium ${runtime?.state === "blocked" ? "text-red-700" : allGreen ? "text-emerald-700" : "text-amber-600"}`}>
+        <span className={`font-medium ${runtime?.state === "blocked" ? "text-danger" : allGreen ? "text-ok" : "text-warn"}`}>
           {runtimeTitle}
         </span>
         <span className="text-muted truncate">
           {runtimeHint}
         </span>
-        <span className="ml-auto text-amber-400">
+        <span className="ml-auto text-warn">
           {expanded ? "Hide details" : "Details"}
         </span>
       </button>
@@ -131,7 +131,7 @@ export function HealthDashboard() {
             ? "Next step: import a local project or open chat to turn the runtime into project results."
             : runtimeHint}
           {runtime?.nextAction && !allGreen && (
-            <span className="inline-flex items-center rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+            <span className="inline-flex items-center rounded-full border border-warn/30 bg-raised px-2 py-0.5 text-[10px] font-semibold text-warn">
               {runtime.nextAction}
             </span>
           )}
@@ -144,19 +144,19 @@ export function HealthDashboard() {
           <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-1.5">
               <StatusDot ok={openaiOk} />
-              <span className={openaiOk ? "text-foreground" : "text-red-600"}>
+              <span className={openaiOk ? "text-foreground" : "text-danger"}>
                 OpenAI {openaiOk ? "" : "(no API key)"}
               </span>
             </div>
             <div className="flex items-center gap-1.5">
               <StatusDot ok={openhandsOk} />
-              <span className={openhandsOk ? "text-foreground" : "text-amber-700"}>
+              <span className={openhandsOk ? "text-foreground" : "text-warn"}>
                 OpenHands {openhandsOk ? "" : "(not running)"}
               </span>
             </div>
             <div className="flex items-center gap-1.5">
               <StatusDot ok={agentOk} />
-              <span className={agentOk ? "text-foreground" : "text-amber-700"}>
+              <span className={agentOk ? "text-foreground" : "text-warn"}>
                 Agent {openclawOk ? "(OpenClaw)" : nanoclawOk ? "(NanoClaw)" : "(not running)"}
               </span>
             </div>

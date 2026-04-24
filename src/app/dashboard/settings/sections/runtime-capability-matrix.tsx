@@ -8,10 +8,10 @@ import type {
 import { Section, StatusDot } from "./_primitives";
 
 const STATUS_STYLES: Record<RuntimeCapabilityStatus, string> = {
-  ready: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  unavailable: "border-zinc-200 bg-zinc-50 text-zinc-700",
-  misconfigured: "border-amber-200 bg-amber-50 text-amber-700",
-  blocked: "border-red-200 bg-red-50 text-red-700",
+  ready: "border-ok/30 bg-ok/10 text-ok",
+  unavailable: "border-rule bg-sunk text-dim",
+  misconfigured: "border-warn/30 bg-warn/10 text-warn",
+  blocked: "border-danger/30 bg-danger/10 text-danger",
 };
 
 const PRIVACY_LABELS: Record<RuntimePrivacyClass, string> = {

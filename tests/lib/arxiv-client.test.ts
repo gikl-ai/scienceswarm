@@ -190,7 +190,7 @@ describe("fetchArxivMetadata", () => {
         <updated>2024-01-01T00:00:00Z</updated>
         <published>2024-01-01T00:00:00Z</published>
         <title>Don&#x2019;t Panic &amp; Carry On</title>
-        <summary>An em-dash&#8212;right here&#8212;and an &amp;-sign.</summary>
+        <summary>An em-dash—right here—and an &amp;-sign.</summary>
         <author><name>Jane O&apos;Neil</name></author>
         <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
       </entry>

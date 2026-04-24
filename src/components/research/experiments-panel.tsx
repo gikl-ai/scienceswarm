@@ -15,10 +15,10 @@ export interface Experiment {
 }
 
 const statusConfig: Record<string, { color: string; icon: string }> = {
-  pending: { color: "bg-zinc-100 text-zinc-600", icon: "○" },
-  running: { color: "bg-blue-50 text-blue-600", icon: "◉" },
-  completed: { color: "bg-green-50 text-green-700", icon: "✓" },
-  failed: { color: "bg-red-50 text-red-600", icon: "✕" },
+  pending: { color: "bg-sunk text-dim", icon: "○" },
+  running: { color: "bg-accent/10 text-accent", icon: "◉" },
+  completed: { color: "bg-ok/10 text-ok", icon: "✓" },
+  failed: { color: "bg-danger/10 text-danger", icon: "✕" },
 };
 
 export function ExperimentsPanel({

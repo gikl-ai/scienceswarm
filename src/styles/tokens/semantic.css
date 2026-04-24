@@ -168,3 +168,67 @@
   --color-warn:         var(--warn);
   --color-danger:       var(--danger);
 }
+
+/* ── Data-viz series colors (chart use only; NOT UI chrome) ─── */
+:root {
+  --chart-indigo: #7c8cff; /* data-viz only; not a UI color */
+  --chart-mint:   #6ac28a; /* data-viz only; not a UI color */
+  --chart-amber:  #d9a05b; /* data-viz only; not a UI color */
+  --chart-rose:   #d87a90; /* data-viz only; not a UI color */
+  --chart-violet: #a685e5; /* data-viz only; not a UI color */
+
+  /* Multi-series chart palettes (chart-generator.ts only; NOT UI chrome) */
+  --chart-ocean-1: #0891b2;
+  --chart-ocean-2: #0e7490;
+  --chart-ocean-3: #155e75;
+  --chart-ocean-4: #06b6d4;
+  --chart-ocean-5: #22d3ee;
+  --chart-ocean-6: #67e8f9;
+  --chart-ocean-7: #164e63;
+  --chart-ocean-8: #0284c7;
+  --chart-ocean-9: #0369a1;
+  --chart-ocean-10: #7c3aed;
+  --chart-emerald-1: #059669;
+  --chart-emerald-2: #047857;
+  --chart-emerald-3: #10b981;
+  --chart-emerald-4: #34d399;
+  --chart-emerald-5: #6ee7b7;
+  --chart-emerald-6: #065f46;
+  --chart-emerald-7: #22c55e;
+  --chart-emerald-8: #16a34a;
+  --chart-emerald-9: #4ade80;
+  --chart-emerald-10: #86efac;
+  --chart-sunset-1: #f97316;
+  --chart-sunset-2: #ea580c;
+  --chart-sunset-3: #dc2626;
+  --chart-sunset-4: #fb7185;
+  --chart-sunset-5: #f59e0b;
+  --chart-sunset-6: #f43f5e;
+  --chart-sunset-7: #7c2d12;
+  --chart-sunset-8: #c2410c;
+  --chart-sunset-9: #e11d48;
+  --chart-sunset-10: #fdba74;
+  --chart-mono-1: #334155;
+  --chart-mono-2: #475569;
+  --chart-mono-3: #64748b;
+  --chart-mono-4: #94a3b8;
+  --chart-mono-5: #0f172a;
+  --chart-mono-6: #1e293b;
+  --chart-mono-7: #475569;
+  --chart-mono-8: #64748b;
+  --chart-mono-9: #94a3b8;
+  --chart-mono-10: #cbd5e1;
+  --chart-text: #1e293b;
+  --chart-grid: #e2e8f0;
+  --chart-bg:   #ffffff;
+}
+
+/* ── Third-party brand mark colors (SVG logos only; NOT UI chrome) ── */
+:root {
+  --brand-gdrive-blue:      #0066DA; /* Google Drive logo mark only */
+  --brand-gdrive-green:     #00AC47; /* Google Drive logo mark only */
+  --brand-gdrive-red:       #EA4335; /* Google Drive logo mark only */
+  --brand-gdrive-darkgreen: #00832D; /* Google Drive logo mark only */
+  --brand-gdrive-lightblue: #2684FC; /* Google Drive logo mark only */
+  --brand-gdrive-paleblue:  #AECBFA; /* Google Drive logo mark only */
+}

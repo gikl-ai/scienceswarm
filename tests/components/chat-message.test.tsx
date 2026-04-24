@@ -69,7 +69,7 @@ describe("ChatMessage", () => {
     );
 
     expect(screen.getByTestId("assistant-reply-surface")).toHaveClass("mx-auto");
-    expect(screen.getByTestId("assistant-reply-content")).toHaveClass("text-slate-900");
+    expect(screen.getByTestId("assistant-reply-content")).toHaveClass("text-strong");
   });
 
   it("renders assistant markdown headings and lists with stronger transcript hierarchy", () => {
@@ -112,8 +112,8 @@ describe("ChatMessage", () => {
     );
 
     expect(screen.getByText("docs/results_chart.png")).toHaveClass("text-[11px]");
-    expect(screen.getByText(expectedFooter)).toHaveClass("text-slate-400");
-    expect(screen.getByText(expectedFooter)).toHaveClass("bg-slate-100/85");
+    expect(screen.getByText(expectedFooter)).toHaveClass("text-quiet");
+    expect(screen.getByText(expectedFooter)).toHaveClass("bg-sunk/85");
     expect(screen.getByTestId("assistant-reply-surface")).toHaveClass("group/assistant");
     expect(screen.getByRole("button", { name: "Copy message" })).toHaveClass("opacity-0");
   });
@@ -168,7 +168,7 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByText("ready()").closest("pre")).toHaveClass("bg-slate-950");
+    expect(screen.getByText("ready()").closest("pre")).toHaveClass("bg-ink");
     expect(screen.getByText("ready()").closest("pre")).toHaveClass("py-4");
   });
 
@@ -189,9 +189,9 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute("href", "https://example.com/guide");
     expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute("target", "_blank");
     expect(screen.queryByRole("link", { name: "Protocol Relative" })).not.toBeInTheDocument();
-    expect(screen.getByText("Protocol Relative")).toHaveClass("text-slate-400");
+    expect(screen.getByText("Protocol Relative")).toHaveClass("text-quiet");
     expect(screen.queryByRole("link", { name: "Unsafe" })).not.toBeInTheDocument();
-    expect(screen.getByText("Unsafe")).toHaveClass("text-slate-400");
+    expect(screen.getByText("Unsafe")).toHaveClass("text-quiet");
     expect(screen.queryByRole("button", { name: "Do not render" })).not.toBeInTheDocument();
   });
 
@@ -210,11 +210,11 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { level: 2, name: "Findings" })).toHaveClass("text-sky-950");
-    expect(screen.getByRole("heading", { level: 3, name: "Risks" })).toHaveClass("text-emerald-900");
-    expect(screen.getByRole("link", { name: "Docs" })).toHaveClass("text-blue-700");
-    expect(screen.getByText("Watch the local gateway logs.").closest("blockquote")).toHaveClass("bg-sky-50/75");
-    expect(screen.getByText("const ready = true;").closest("pre")).toHaveClass("border-slate-300");
+    expect(screen.getByRole("heading", { level: 2, name: "Findings" })).toHaveClass("text-strong");
+    expect(screen.getByRole("heading", { level: 3, name: "Risks" })).toHaveClass("text-strong");
+    expect(screen.getByRole("link", { name: "Docs" })).toHaveClass("text-accent");
+    expect(screen.getByText("Watch the local gateway logs.").closest("blockquote")).toHaveClass("bg-sunk/75");
+    expect(screen.getByText("const ready = true;").closest("pre")).toHaveClass("border-rule");
   });
 
   it("adds calmer section rhythm between assistant headings, lists, and galleries", () => {

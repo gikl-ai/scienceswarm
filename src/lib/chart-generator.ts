@@ -27,58 +27,58 @@ export type ChartPalette = "ocean" | "emerald" | "sunset" | "mono";
 
 const PALETTES: Record<ChartPalette, string[]> = {
   ocean: [
-    "#0891b2",
-    "#0e7490",
-    "#155e75",
-    "#06b6d4",
-    "#22d3ee",
-    "#67e8f9",
-    "#164e63",
-    "#0284c7",
-    "#0369a1",
-    "#7c3aed",
+    "var(--chart-ocean-1)",
+    "var(--chart-ocean-2)",
+    "var(--chart-ocean-3)",
+    "var(--chart-ocean-4)",
+    "var(--chart-ocean-5)",
+    "var(--chart-ocean-6)",
+    "var(--chart-ocean-7)",
+    "var(--chart-ocean-8)",
+    "var(--chart-ocean-9)",
+    "var(--chart-ocean-10)",
   ],
   emerald: [
-    "#059669",
-    "#047857",
-    "#10b981",
-    "#34d399",
-    "#6ee7b7",
-    "#065f46",
-    "#22c55e",
-    "#16a34a",
-    "#4ade80",
-    "#86efac",
+    "var(--chart-emerald-1)",
+    "var(--chart-emerald-2)",
+    "var(--chart-emerald-3)",
+    "var(--chart-emerald-4)",
+    "var(--chart-emerald-5)",
+    "var(--chart-emerald-6)",
+    "var(--chart-emerald-7)",
+    "var(--chart-emerald-8)",
+    "var(--chart-emerald-9)",
+    "var(--chart-emerald-10)",
   ],
   sunset: [
-    "#f97316",
-    "#ea580c",
-    "#dc2626",
-    "#fb7185",
-    "#f59e0b",
-    "#f43f5e",
-    "#7c2d12",
-    "#c2410c",
-    "#e11d48",
-    "#fdba74",
+    "var(--chart-sunset-1)",
+    "var(--chart-sunset-2)",
+    "var(--chart-sunset-3)",
+    "var(--chart-sunset-4)",
+    "var(--chart-sunset-5)",
+    "var(--chart-sunset-6)",
+    "var(--chart-sunset-7)",
+    "var(--chart-sunset-8)",
+    "var(--chart-sunset-9)",
+    "var(--chart-sunset-10)",
   ],
   mono: [
-    "#334155",
-    "#475569",
-    "#64748b",
-    "#94a3b8",
-    "#0f172a",
-    "#1e293b",
-    "#475569",
-    "#64748b",
-    "#94a3b8",
-    "#cbd5e1",
+    "var(--chart-mono-1)",
+    "var(--chart-mono-2)",
+    "var(--chart-mono-3)",
+    "var(--chart-mono-4)",
+    "var(--chart-mono-5)",
+    "var(--chart-mono-6)",
+    "var(--chart-mono-7)",
+    "var(--chart-mono-8)",
+    "var(--chart-mono-9)",
+    "var(--chart-mono-10)",
   ],
 };
 
-const TEXT_COLOR = "#1e293b";
-const GRID_COLOR = "#e2e8f0";
-const BG_COLOR = "#ffffff";
+const TEXT_COLOR = "var(--chart-text)";
+const GRID_COLOR = "var(--chart-grid)";
+const BG_COLOR = "var(--chart-bg)";
 
 // ── Chart Dimensions ──────────────────────────────────────────
 
@@ -509,11 +509,11 @@ function renderHeatmap(spec: ChartSpec): string {
       const key = `${xl}::${yl}`;
       const val = grid.get(key) ?? 0;
       const t = maxV > minV ? (val - minV) / (maxV - minV) : 0;
-      const color = interpolateColor("#f8fafc", colors[0], t);
+      const color = interpolateColor("var(--surface-raised)", colors[0], t);
 
       parts.push(`<rect x="${xi * cellW}" y="${yi * cellH}" width="${cellW - 1}" height="${cellH - 1}" fill="${color}" rx="2"/>`);
       if (cellW > 25 && cellH > 16) {
-        parts.push(`<text x="${xi * cellW + cellW / 2}" y="${yi * cellH + cellH / 2 + 3}" text-anchor="middle" font-size="8" fill="${t > 0.5 ? "#fff" : TEXT_COLOR}">${val}</text>`);
+        parts.push(`<text x="${xi * cellW + cellW / 2}" y="${yi * cellH + cellH / 2 + 3}" text-anchor="middle" font-size="8" fill="${t > 0.5 ? "var(--text-strong)" : TEXT_COLOR}">${val}</text>`);
       }
     });
   });
@@ -547,7 +547,7 @@ function interpolateColor(startHex: string, endHex: string, t: number): string {
 // ── Empty / Error Chart ───────────────────────────────────────
 
 function renderEmpty(d: Dims, title: string, message: string): string {
-  const inner = `<text x="${d.plotW / 2}" y="${d.plotH / 2}" text-anchor="middle" font-size="13" fill="#94a3b8">${escSvg(message)}</text>`;
+  const inner = `<text x="${d.plotW / 2}" y="${d.plotH / 2}" text-anchor="middle" font-size="13" fill="var(--text-dim)">${escSvg(message)}</text>`;
   return svgWrap(d, inner, title);
 }
 
@@ -581,11 +581,11 @@ export function generateChartHTML(specs: ChartSpec[]): string {
     '<meta charset="UTF-8"/>',
     '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>',
     "<title>ScienceSwarm Charts</title>",
-    '<script src="https://cdn.tailwindcss.com"></script>',
+    '<style>body{font-family:sans-serif;background:rgb(249,250,251);padding:2rem;}</style>',
     "</head>",
-    '<body class="font-sans bg-slate-50 p-8">',
+    '<body>',
     '<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-[1400px] mx-auto">',
-    ...charts.map((svg) => `<div class="bg-white border-2 border-slate-200 rounded-xl p-4 [&_svg]:w-full [&_svg]:h-auto">${svg}</div>`),
+    ...charts.map((svg) => `<div class="style="background:white;border:2px solid rgb(226,232,240);border-radius:0.75rem;padding:1rem;"">${svg}</div>`),
     "</div>",
     "</body>",
     "</html>",

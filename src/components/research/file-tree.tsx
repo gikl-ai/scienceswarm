@@ -93,7 +93,7 @@ export function FileTreeNode({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onDelete(fullPath, node); }}
-              className="flex-shrink-0 px-2 py-1 text-[10px] text-muted opacity-0 group-hover:opacity-100 hover:text-red-600 transition-opacity"
+              className="flex-shrink-0 px-2 py-1 text-[10px] text-muted opacity-0 group-hover:opacity-100 hover:text-danger transition-opacity"
               title="Delete folder"
               aria-label={`Delete ${node.name}`}
             >
@@ -137,7 +137,7 @@ export function FileTreeNode({
         <span>{node.icon || getFileIcon(node.name)}</span>
         <span className="truncate">{node.name}</span>
         {node.hasCompanion && <span className="text-[9px] flex-shrink-0" title="Has companion .md">*</span>}
-        {node.changed && <span className="text-[9px] text-amber-500 flex-shrink-0" title="Changed since import">~</span>}
+        {node.changed && <span className="text-[9px] text-warn flex-shrink-0" title="Changed since import">~</span>}
         {node.pageType && (
           <span
             className="ml-auto text-[9px] bg-accent/10 text-accent px-1 py-0.5 rounded flex-shrink-0"
@@ -152,7 +152,7 @@ export function FileTreeNode({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onDelete(fullPath, node); }}
-          className="flex-shrink-0 px-2 py-1 text-[10px] text-muted opacity-0 group-hover:opacity-100 hover:text-red-600 transition-opacity"
+          className="flex-shrink-0 px-2 py-1 text-[10px] text-muted opacity-0 group-hover:opacity-100 hover:text-danger transition-opacity"
           title="Delete file"
           aria-label={`Delete ${node.name}`}
         >

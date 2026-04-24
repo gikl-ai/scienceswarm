@@ -167,7 +167,7 @@ export function FileVisualizer({
             aria-label={`Edit ${fileName}`}
           />
           <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-white px-3 py-2">
-            <div className="text-xs text-red-700">{saveError}</div>
+            <div className="text-xs text-danger">{saveError}</div>
             <div className="flex items-center gap-2">
               <button
                 type="button"

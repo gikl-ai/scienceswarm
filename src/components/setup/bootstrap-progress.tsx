@@ -116,7 +116,7 @@ export function BootstrapProgress({ events, activeTasks }: BootstrapProgressProp
                     </div>
                   )}
                 {status === "failed" && e?.error && (
-                  <div className="mt-1 text-xs text-red-700" role="alert">
+                  <div className="mt-1 text-xs text-danger" role="alert">
                     {e.error}
                   </div>
                 )}

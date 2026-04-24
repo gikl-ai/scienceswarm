@@ -12,11 +12,11 @@ const PRIVACY_LABELS: Record<RuntimePrivacyClass, string> = {
 function toneClass(tone: ChipTone): string {
   switch (tone) {
     case "ok":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+      return "border-ok/30 bg-ok/10 text-ok";
     case "warn":
-      return "border-amber-200 bg-amber-50 text-amber-700";
+      return "border-warn/30 bg-warn/10 text-warn";
     case "danger":
-      return "border-red-200 bg-red-50 text-red-700";
+      return "border-danger/30 bg-danger/10 text-danger";
     default:
       return "border-border bg-surface text-muted";
   }

@@ -48,19 +48,19 @@ const channelIcons: Record<string, string> = {
 };
 
 const channelColors: Record<string, string> = {
-  whatsapp: "bg-green-100 text-green-700 border-green-200",
-  telegram: "bg-blue-100 text-blue-700 border-blue-200",
-  slack: "bg-purple-100 text-purple-700 border-purple-200",
-  discord: "bg-indigo-100 text-indigo-700 border-indigo-200",
-  web: "bg-gray-100 text-gray-700 border-gray-200",
-  line: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  sms: "bg-amber-100 text-amber-700 border-amber-200",
-  email: "bg-red-100 text-red-700 border-red-200",
+  whatsapp: "bg-ok/10 text-ok border-ok/30",
+  telegram: "bg-accent/10 text-accent border-accent/30",
+  slack: "bg-raised text-body border-rule",
+  discord: "bg-raised text-body border-rule",
+  web: "bg-sunk text-body border-rule",
+  line: "bg-ok/10 text-ok border-ok/30",
+  sms: "bg-warn/10 text-warn border-warn/30",
+  email: "bg-raised text-body border-rule",
 };
 
 function ChannelBadge({ channel }: { channel: string }) {
   const icon = channelIcons[channel] || "\u{1F4E8}";
-  const color = channelColors[channel] || "bg-gray-100 text-gray-700 border-gray-200";
+  const color = channelColors[channel] || "bg-sunk text-body border-rule";
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${color}`}>
       {icon} {channel}
@@ -93,7 +93,7 @@ const demoUsers: ClawUser[] = [
     id: "u3",
     displayName: "Alex Kim",
     channels: [
-      { platform: "discord", externalId: "alexk#4821" },
+      { platform: "discord", externalId: "alexk_4821" },
       { platform: "web", externalId: "alex.kim@lab" },
       { platform: "telegram", externalId: "alexkim_dev" },
     ],
@@ -260,15 +260,15 @@ export function CommunicationsPanel() {
             <span
               className={`flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full border ${
                 health?.status === "connected"
-                  ? "bg-green-50 text-green-700 border-green-200"
-                  : "bg-red-50 text-red-700 border-red-200"
+                  ? "bg-ok/10 text-ok border-ok/30"
+                  : "bg-danger/10 text-danger border-danger/30"
               }`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
                   health?.status === "connected"
-                    ? "bg-green-500"
-                    : "bg-red-400"
+                    ? "bg-ok"
+                    : "bg-danger"
                 }`}
               />
               {health?.status === "connected" ? "Connected" : "Disconnected"}
@@ -317,7 +317,7 @@ export function CommunicationsPanel() {
 
         {/* Broadcast panel */}
         {showBroadcast && (
-          <div className="p-3 border-b-2 border-border bg-amber-50/50">
+          <div className="p-3 border-b-2 border-border bg-warn/10">
             <p className="text-[10px] text-muted mb-2 font-medium">
               Send to all connected users:
             </p>
@@ -508,7 +508,7 @@ export function CommunicationsPanel() {
                       className={`max-w-xl rounded-xl px-4 py-3 text-sm shadow-sm ${
                         msg.userId === "system"
                           ? "bg-white border-2 border-border"
-                          : "bg-blue-50 border-2 border-blue-200"
+                          : "bg-accent/10 border-2 border-accent/30"
                       }`}
                     >
                       <div className="flex items-center gap-2 mb-1">
@@ -574,7 +574,7 @@ export function CommunicationsPanel() {
                 </button>
               </div>
               {sendError && (
-                <p className="text-xs text-red-600 mt-1 px-1">{sendError}</p>
+                <p className="text-xs text-danger mt-1 px-1">{sendError}</p>
               )}
             </div>
           </>

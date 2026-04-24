@@ -43,25 +43,25 @@ export function TelegramBotReady({
 
   return (
     <section
-      className="rounded-[28px] border-2 border-emerald-200 bg-emerald-50 p-5 shadow-sm"
+      className="rounded-[28px] border-2 border-ok/30 bg-ok/10 p-5 shadow-sm"
       data-testid="telegram-bot-ready"
     >
-      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-700">
+      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-ok">
         MEET YOUR CLAW
       </p>
       <h2
-        className="mt-2 text-2xl font-semibold text-emerald-900"
+        className="mt-2 text-2xl font-semibold text-ok"
         data-testid="creature-name"
       >
         {capitalizedCreature}
       </h2>
       <p
-        className="mt-1 text-sm text-emerald-900"
+        className="mt-1 text-sm text-ok"
         data-testid="creature-tagline"
       >
         {displayName}
       </p>
-      <p className="mt-3 text-sm text-emerald-900">
+      <p className="mt-3 text-sm text-ok">
         Open <strong>{capitalizedCreature}</strong> on your phone or desktop
         and hit <em>Start</em> to begin chatting.
       </p>
@@ -73,7 +73,7 @@ export function TelegramBotReady({
           <img
             src={qrDataUrl}
             alt={`QR code to open ${capitalizedCreature} on Telegram`}
-            className="h-32 w-32 rounded-lg border border-emerald-300"
+            className="h-32 w-32 rounded-lg border border-ok/40"
             data-testid="telegram-qr"
           />
         )}
@@ -81,7 +81,7 @@ export function TelegramBotReady({
           href={botUrl}
           target="_blank"
           rel="noreferrer"
-          className="font-mono text-sm text-emerald-900 underline"
+          className="font-mono text-sm text-ok underline"
         >
           {botUrl}
         </a>

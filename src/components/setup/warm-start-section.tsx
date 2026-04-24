@@ -282,7 +282,7 @@ export function WarmStartSection({
       {state.kind === "error" && (
         <div
           role="alert"
-          className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger"
           data-testid="warm-start-error"
         >
           <p className="font-medium">{state.message}</p>

@@ -323,10 +323,10 @@ function buildResultsData(
       { label: "Chart outputs", value: String(chartAssets.length) },
     ],
     chartData: [
-      { label: "Papers", value: papers.length, color: "#0891b2" },
-      { label: "Experiments", value: experiments.length, color: "#0e7490" },
-      { label: "Data", value: dataFiles.length, color: "#155e75" },
-      { label: "Charts", value: chartAssets.length, color: "#0284c7" },
+      { label: "Papers", value: papers.length, color: "var(--chart-ocean-1)" },
+      { label: "Experiments", value: experiments.length, color: "var(--chart-ocean-2)" },
+      { label: "Data", value: dataFiles.length, color: "var(--chart-ocean-3)" },
+      { label: "Charts", value: chartAssets.length, color: "var(--chart-ocean-8)" },
     ],
     tableHeaders: ["Type", "Result file", "Path"],
     tableRows: nonChartResultFiles.slice(0, 8).map((file) => [

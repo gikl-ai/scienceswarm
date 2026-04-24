@@ -47,10 +47,10 @@ export function TelegramCodePrompt({
     <form
       onSubmit={handleSubmit}
       data-testid="telegram-code-prompt"
-      className="rounded-[28px] border-2 border-sky-200 bg-sky-50 p-5 shadow-sm"
+      className="rounded-[28px] border-2 border-rule bg-sunk p-5 shadow-sm"
     >
-      <h2 className="text-xl font-semibold text-sky-900">Check Telegram</h2>
-      <p className="mt-1 text-sm text-sky-900">
+      <h2 className="text-xl font-semibold text-strong">Check Telegram</h2>
+      <p className="mt-1 text-sm text-body">
         Telegram sent you a login code. Enter it here to finish Telegram setup.
       </p>
       <input
@@ -61,11 +61,11 @@ export function TelegramCodePrompt({
         onChange={(e) => setCode(e.target.value)}
         placeholder="12345"
         data-testid="telegram-code-input"
-        className="mt-3 block w-full rounded-xl border border-sky-300 bg-white px-3 py-2 text-sm"
+        className="mt-3 block w-full rounded-xl border border-rule bg-raised px-3 py-2 text-sm"
         required
       />
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-700">
+        <p role="alert" className="mt-2 text-sm text-danger">
           {error}
         </p>
       )}
@@ -73,7 +73,7 @@ export function TelegramCodePrompt({
         type="submit"
         disabled={submitting || code.trim().length === 0}
         data-testid="telegram-code-submit"
-        className="mt-3 rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700 disabled:opacity-50"
+        className="mt-3 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-strong transition-colors hover:bg-accent-dim disabled:opacity-50"
       >
         {submitting ? "Submitting…" : "Submit"}
       </button>

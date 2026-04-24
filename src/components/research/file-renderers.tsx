@@ -403,7 +403,7 @@ function NotebookOutputView({ output, index }: { output: NotebookOutput; index: 
 
   if (output.output_type === "error") {
     return (
-      <pre className="overflow-auto rounded border border-red-200 bg-red-50 px-3 py-2 font-mono text-xs leading-5 text-red-800">
+      <pre className="overflow-auto rounded border border-danger/30 bg-danger/10 px-3 py-2 font-mono text-xs leading-5 text-danger">
         {truncateOutput(readNotebookText(output.traceback) || [output.ename, output.evalue].filter(Boolean).join(": "))}
       </pre>
     );

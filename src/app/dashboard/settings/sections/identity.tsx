@@ -136,7 +136,7 @@ export function IdentitySection({
               >
                 {field.label}
                 {field.required && (
-                  <span className="text-red-400 ml-0.5">*</span>
+                  <span className="text-danger ml-0.5">*</span>
                 )}
               </label>
               <div className="flex items-center gap-2">
@@ -165,12 +165,12 @@ export function IdentitySection({
                   </span>
                 )}
                 {state === "saved" && (
-                  <span className="text-xs text-emerald-500 whitespace-nowrap">
+                  <span className="text-xs text-ok whitespace-nowrap">
                     Saved
                   </span>
                 )}
                 {state === "error" && (
-                  <span className="text-xs text-red-400 whitespace-nowrap">
+                  <span className="text-xs text-danger whitespace-nowrap">
                     Error
                   </span>
                 )}

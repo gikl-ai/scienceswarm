@@ -62,7 +62,7 @@ function StepPill({ step }: StepPillProps) {
 
   const colorClasses =
     step.status === "error"
-      ? "border-red-200 bg-red-50 text-red-700"
+      ? "border-danger/30 bg-danger/10 text-danger"
       : step.status === "done"
         ? "border-border bg-muted/5 text-muted"
         : "border-accent/30 bg-accent/5 text-accent";

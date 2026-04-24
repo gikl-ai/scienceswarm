@@ -83,7 +83,7 @@ export function BootstrapForm({
       </p>
       {showWindowsNote && (
         <p
-          className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-900"
+          className="mt-3 rounded-2xl border border-rule bg-sunk px-3 py-2 text-xs leading-5 text-body"
           data-testid="bootstrap-windows-note"
         >
           Windows users: ScienceSwarm currently supports Windows via WSL2. Keep
@@ -234,7 +234,7 @@ export function BootstrapForm({
       {error && (
         <p
           role="alert"
-          className="mt-3 text-sm text-red-700"
+          className="mt-3 text-sm text-danger"
           data-testid="form-error"
         >
           {error}
