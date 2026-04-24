@@ -116,6 +116,7 @@ describe("ChatMessage", () => {
       <ChatMessage
         role="assistant"
         content={
+          "#### Detailed checklist\n\n" +
           "1. Outline the experiment\n   - Collect the baseline samples\n\n" +
           "> Keep the calibration notebook nearby.\n\n" +
           "```ts\nconst total = 2;\n```"
@@ -124,7 +125,9 @@ describe("ChatMessage", () => {
       />,
     );
 
+    expect(screen.getByRole("heading", { level: 4, name: "Detailed checklist" })).toHaveClass("text-[1.05rem]");
     expect(screen.getAllByRole("list")).toHaveLength(2);
+    expect(screen.getAllByRole("list")[0]).toHaveClass("pl-4");
     expect(screen.getByText("Keep the calibration notebook nearby.").closest("blockquote")).toHaveClass("border-l-2");
     expect(screen.getByText("const total = 2;").closest("pre")).toHaveClass("bg-slate-950");
   });

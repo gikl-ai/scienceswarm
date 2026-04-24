@@ -219,7 +219,7 @@ const ASSISTANT_SUBTITLE_CLASS =
 const ASSISTANT_SECTION_CLASS =
   "mb-3 text-[1.05rem] leading-6 font-semibold tracking-[-0.015em] text-slate-900";
 const ASSISTANT_LIST_CLASS =
-  "mb-4 pl-6 text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
+  "mb-4 pl-4 text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
 const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-slate-500";
 const ASSISTANT_METADATA_CLASS =
   "text-[10px] font-medium tracking-[0.02em] text-slate-400";
@@ -257,6 +257,9 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   h1: ({ children }) => <h1 className={ASSISTANT_TITLE_CLASS}>{children}</h1>,
   h2: ({ children }) => <h2 className={ASSISTANT_SUBTITLE_CLASS}>{children}</h2>,
   h3: ({ children }) => <h3 className={ASSISTANT_SECTION_CLASS}>{children}</h3>,
+  h4: ({ children }) => <h4 className={ASSISTANT_SECTION_CLASS}>{children}</h4>,
+  h5: ({ children }) => <h5 className={ASSISTANT_SECTION_CLASS}>{children}</h5>,
+  h6: ({ children }) => <h6 className={ASSISTANT_SECTION_CLASS}>{children}</h6>,
   p: ({ children }) => <p className={`mb-4 ${ASSISTANT_BODY_TEXT_CLASS}`}>{children}</p>,
   ul: ({ children }) => (
     <ul className={`${ASSISTANT_LIST_CLASS} list-disc space-y-2 marker:text-slate-400`}>{children}</ul>
@@ -1084,10 +1087,11 @@ function renderAssistantMarkdownSegment(value: string, keyPrefix: string) {
   if (value.trim().length === 0) {
     return [];
   }
+  const markdownKey = keyPrefix;
 
   return [
     <ReactMarkdown
-      key={keyPrefix}
+      key={markdownKey}
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeSanitize]}
       skipHtml
