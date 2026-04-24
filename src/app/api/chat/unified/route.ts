@@ -2193,7 +2193,9 @@ async function sendOpenClawMessageWithArtifactRetry(params: {
   userMessage: string;
   files: UploadedFileDescriptor[];
   projectId: string | null;
+  onBeforeInitialSend?: () => void;
 }): Promise<string> {
+  params.onBeforeInitialSend?.();
   const response = await params.sendToOpenClaw(params.message, params.options);
   if (response.trim().length > 0) {
     return response;
@@ -7578,6 +7580,13 @@ function streamOpenClawResponse(params: {
             },
           });
         };
+        const sendServerProgress = (text: string): boolean =>
+          sendEvent({
+            progress: {
+              type: "server_progress",
+              payload: { text },
+            },
+          });
         const closeStream = () => {
           if (streamClosed) {
             return;
@@ -7781,6 +7790,10 @@ function streamOpenClawResponse(params: {
             }
 
             const response = await sendOpenClawMessageWithArtifactRetry({
+              onBeforeInitialSend: () => {
+                sendServerProgress("Sending request to OpenClaw");
+                sendServerProgress("Waiting for OpenClaw to respond");
+              },
               sendToOpenClaw: sendToOpenClawWithProgress,
               message:
                 params.preparedMessage ??
