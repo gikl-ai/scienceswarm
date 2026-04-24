@@ -1535,6 +1535,22 @@ async function mergeReferencedWorkspaceFiles(
   };
 }
 
+function shouldMergeReferencedWorkspaceFiles(params: {
+  message: string;
+  files: UploadedFileDescriptor[];
+  projectId: string | null;
+}): boolean {
+  if (extractWorkspaceReferenceCandidates(params.message).length > 0) {
+    return true;
+  }
+
+  return (
+    params.projectId !== null &&
+    params.files.length === 0 &&
+    shouldImplicitlyAttachProjectFiles(params.message)
+  );
+}
+
 function buildWorkspaceReferenceNotesSection(
   referenceNotes?: WorkspaceReferenceNotes | null,
 ): string[] {
@@ -8501,14 +8517,30 @@ export async function handleUnifiedChatPost(
     // Use rawMessage (the original user text) for reference extraction so
     // path-like tokens inside the injected active-file content don't trigger
     // spurious workspace file resolution.
-    const { files: mergedFiles, referenceNotes } = await chatTiming.measure(
-      "file_reference_merge",
-      () => mergeReferencedWorkspaceFiles(
-        rawMessage ?? "",
-        files,
-        validatedProjectId,
-      ),
-    );
+    const shouldMergeWorkspaceReferences = shouldMergeReferencedWorkspaceFiles({
+      message: rawMessage ?? "",
+      files,
+      projectId: validatedProjectId,
+    });
+    const { files: mergedFiles, referenceNotes } =
+      shouldMergeWorkspaceReferences
+        ? await chatTiming.measure(
+            "file_reference_merge",
+            () => mergeReferencedWorkspaceFiles(
+              rawMessage ?? "",
+              files,
+              validatedProjectId,
+            ),
+          )
+        : (() => {
+            chatTiming.recordSkippedPhase("file_reference_merge", {
+              reason: "no_file_references",
+            });
+            return {
+              files,
+              referenceNotes: { resolved: [], ambiguous: [] },
+            };
+          })();
 
     const rateLimitResponse = enforceRateLimitOnce();
     if (rateLimitResponse) {
