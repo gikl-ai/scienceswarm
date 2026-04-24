@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { homedir } from "node:os";
+import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 
 import type { RuntimeHostAuthStatus, RuntimeHostHealth } from "../contracts";
 import { RuntimeHostError } from "../errors";
@@ -17,6 +20,8 @@ export interface CliTransportRunRequest {
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
   requireJson?: boolean;
+  onStdoutLine?: (line: string) => void;
+  onStderrLine?: (line: string) => void;
 }
 
 export interface CliTransportRunResult {
@@ -30,6 +35,53 @@ export interface CliTransportRunResult {
 export interface CliTransport {
   run(request: CliTransportRunRequest): Promise<CliTransportRunResult>;
   cancel?(sessionId: string): Promise<boolean>;
+}
+
+function appendPathEntries(
+  env: NodeJS.ProcessEnv | undefined,
+): NodeJS.ProcessEnv | undefined {
+  if (!env) return env;
+  const currentPath = env.PATH ?? env.Path ?? "";
+  const home = homedir();
+  const candidates = [
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    path.join(home, ".npm-global/bin"),
+    path.join(home, ".local/bin"),
+    path.join(home, ".volta/bin"),
+    path.join(home, ".bun/bin"),
+  ];
+  const existing = new Set(currentPath.split(path.delimiter).filter(Boolean));
+  const extra = candidates.filter((entry) => !existing.has(entry));
+  if (extra.length === 0) return env;
+  return {
+    ...env,
+    PATH: [currentPath, ...extra].filter(Boolean).join(path.delimiter),
+  };
+}
+
+class LineEmitter {
+  private pending = "";
+  private readonly decoder = new StringDecoder("utf8");
+
+  constructor(private readonly onLine?: (line: string) => void) {}
+
+  push(chunk: Buffer): void {
+    if (!this.onLine) return;
+    this.pending += this.decoder.write(chunk).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const lines = this.pending.split("\n");
+    this.pending = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.trim()) this.onLine(line);
+    }
+  }
+
+  flush(): void {
+    if (!this.onLine) return;
+    this.pending += this.decoder.end().replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    if (this.pending.trim()) this.onLine(this.pending);
+    this.pending = "";
+  }
 }
 
 export class RuntimeCliMissingError extends RuntimeHostError {
@@ -91,11 +143,13 @@ export class LocalCliTransport implements CliTransport {
     return await new Promise<CliTransportRunResult>((resolve, reject) => {
       const child = spawn(request.command, args, {
         cwd: request.cwd,
-        env: request.env,
+        env: appendPathEntries(request.env),
         stdio: ["pipe", "pipe", "pipe"],
       });
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
+      const stdoutLines = new LineEmitter(request.onStdoutLine);
+      const stderrLines = new LineEmitter(request.onStderrLine);
       let settled = false;
       let timer: NodeJS.Timeout | null = null;
       let forceKillTimer: NodeJS.Timeout | null = null;
@@ -139,8 +193,14 @@ export class LocalCliTransport implements CliTransport {
         finishTimeout();
       }, timeoutMs);
 
-      child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
-      child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
+      child.stdout?.on("data", (chunk: Buffer) => {
+        stdout.push(chunk);
+        stdoutLines.push(chunk);
+      });
+      child.stderr?.on("data", (chunk: Buffer) => {
+        stderr.push(chunk);
+        stderrLines.push(chunk);
+      });
       child.on("error", (error) => {
         clearTimers();
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -158,6 +218,8 @@ export class LocalCliTransport implements CliTransport {
         clearTimers();
         if (settled) return;
         settled = true;
+        stdoutLines.flush();
+        stderrLines.flush();
 
         const output = normalizeCliOutput({
           stdout: Buffer.concat(stdout),

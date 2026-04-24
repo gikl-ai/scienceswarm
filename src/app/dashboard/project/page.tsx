@@ -50,6 +50,7 @@ import type {
 } from "@/lib/runtime-hosts/contracts";
 import { TurnPreviewSheet } from "@/components/runtime/turn-preview-sheet";
 import { CompareResults } from "@/components/runtime/compare-results";
+import { ComposerRuntimeSwitcher } from "@/components/runtime/composer-runtime-switcher";
 import {
   useRuntimeHosts,
 } from "@/hooks/use-runtime-hosts";
@@ -1649,7 +1650,12 @@ function ProjectPageContent() {
     mode: runtimeMode,
     selectedHostId: selectedRuntimeHostId,
     compareHostIds,
+    setProjectPolicy: setRuntimeProjectPolicy,
+    setMode: setRuntimeMode,
+    setSelectedHostId: setSelectedRuntimeHostId,
+    setCompareHostIds: setRuntimeCompareHostIds,
   } = useProjectRuntimePreferences(activeProjectSlug, runtimeHosts.hosts);
+  const [runtimeSwitcherOpen, setRuntimeSwitcherOpen] = useState(false);
   const [pendingRuntimeSend, setPendingRuntimeSend] =
     useState<PendingRuntimeSend | null>(null);
   const [runtimePreviewBusy, setRuntimePreviewBusy] = useState(false);
@@ -4893,6 +4899,21 @@ function ProjectPageContent() {
                         }}
                       />
                     )}
+                    <ComposerRuntimeSwitcher
+                      hosts={runtimeHosts.hosts}
+                      selectedHostId={selectedRuntimeHostId}
+                      projectPolicy={runtimeProjectPolicy}
+                      mode={runtimeMode}
+                      compareHostIds={compareHostIds}
+                      loading={runtimeHosts.loading}
+                      error={runtimeHosts.error}
+                      open={runtimeSwitcherOpen}
+                      onOpenChange={setRuntimeSwitcherOpen}
+                      onSelectedHostIdChange={setSelectedRuntimeHostId}
+                      onProjectPolicyChange={setRuntimeProjectPolicy}
+                      onModeChange={setRuntimeMode}
+                      onCompareHostIdsChange={setRuntimeCompareHostIds}
+                    />
                     <button
                       onClick={handleSend}
                       disabled={isChatBusy || !input.trim()}
@@ -4950,6 +4971,7 @@ function ProjectPageContent() {
         onChangeHost={() => {
           setPendingRuntimeSend(null);
           setRuntimePreviewError(null);
+          setRuntimeSwitcherOpen(true);
           inputRef.current?.focus();
         }}
       />

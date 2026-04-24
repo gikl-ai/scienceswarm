@@ -40,6 +40,23 @@ vi.mock("next/link", () => ({
 import ProjectPage from "@/app/dashboard/project/page";
 import { FILE_PREVIEW_LOCATION_STORAGE_KEY } from "@/lib/file-preview-preferences";
 
+function createRuntimeStreamResponse(events: unknown[]): Response {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  }), {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+    },
+  });
+}
+
 async function expandAllFolders() {
   fireEvent.click(await screen.findByRole("button", { name: "Expand all folders" }));
 }
@@ -1301,22 +1318,24 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/runtime/sessions" && method === "POST") {
+      if (url === "/api/runtime/sessions/stream" && method === "POST") {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
         runtimeSessionBodies.push(body);
-        return Response.json({
-          session: {
-            id: "runtime-session-codex",
-            conversationId: "codex-native-session",
-            status: "completed",
-          },
-          events: [
-            {
+        return createRuntimeStreamResponse([
+          {
+            event: {
               type: "message",
               payload: { text: "Codex direct answer" },
             },
-          ],
-        });
+          },
+          {
+            session: {
+              id: "runtime-session-codex",
+              conversationId: "codex-native-session",
+              status: "completed",
+            },
+          },
+        ]);
       }
 
       if (url === "/api/projects") {
@@ -1350,6 +1369,7 @@ describe("Project dashboard smoke test", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("runtime-picker")).not.toBeInTheDocument();
     });
+    expect(await screen.findByTestId("composer-runtime-switcher")).toBeInTheDocument();
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "Talk to Codex directly" } });
@@ -1588,22 +1608,24 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/runtime/sessions" && method === "POST") {
+      if (url === "/api/runtime/sessions/stream" && method === "POST") {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
         runtimeSessionBodies.push(body);
-        return Response.json({
-          session: {
-            id: "runtime-session-codex",
-            conversationId: "codex-native-session",
-            status: "completed",
-          },
-          events: [
-            {
+        return createRuntimeStreamResponse([
+          {
+            event: {
               type: "message",
               payload: { text: "Codex auto-approved answer" },
             },
-          ],
-        });
+          },
+          {
+            session: {
+              id: "runtime-session-codex",
+              conversationId: "codex-native-session",
+              status: "completed",
+            },
+          },
+        ]);
       }
 
       if (url === "/api/projects") {
@@ -1637,6 +1659,7 @@ describe("Project dashboard smoke test", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("runtime-picker")).not.toBeInTheDocument();
     });
+    expect(await screen.findByTestId("composer-runtime-switcher")).toBeInTheDocument();
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "Talk to Codex with auto approval" } });

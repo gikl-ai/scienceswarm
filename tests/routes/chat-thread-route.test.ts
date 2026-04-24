@@ -224,6 +224,65 @@ describe("chat thread route", () => {
     });
   });
 
+  it("preserves native runtime output when reading a non-OpenClaw thread", async () => {
+    const { GET, POST } = await import("@/app/api/chat/thread/route");
+
+    const writeResponse = await POST(new Request("http://localhost/api/chat/thread", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project: "alpha-project",
+        conversationId: "claude-native-session",
+        conversationBackend: "claude-code",
+        messages: [
+          {
+            id: "m1",
+            role: "assistant",
+            content: [
+              "[session] claude-code owns this line",
+              "[agents/auth-profiles] this is literal model output, not OpenClaw noise",
+              "Visible Claude answer",
+            ].join("\n"),
+            thinking: "[session] Claude stream metadata should stay untouched",
+            timestamp: "2026-04-11T10:00:01.000Z",
+          },
+        ],
+        artifactProvenance: [],
+      }),
+    }));
+
+    expect(writeResponse.status).toBe(200);
+    await expect(writeResponse.json()).resolves.toEqual({ ok: true });
+
+    const persistedPath = path.join(
+      dataRoot,
+      "projects",
+      "alpha-project",
+      ".brain",
+      "state",
+      "chat.json",
+    );
+    const persisted = await readFile(persistedPath, "utf-8");
+    expect(persisted).toContain("\"conversationBackend\": \"claude-code\"");
+
+    const readResponse = await GET(new Request("http://localhost/api/chat/thread?project=alpha-project"));
+    expect(readResponse.status).toBe(200);
+    await expect(readResponse.json()).resolves.toMatchObject({
+      conversationId: "claude-native-session",
+      conversationBackend: "claude-code",
+      messages: [
+        {
+          content: [
+            "[session] claude-code owns this line",
+            "[agents/auth-profiles] this is literal model output, not OpenClaw noise",
+            "Visible Claude answer",
+          ].join("\n"),
+          thinking: "[session] Claude stream metadata should stay untouched",
+        },
+      ],
+    });
+  });
+
   it("maps persisted OpenClaw context overflow to a recoverable message", async () => {
     await writeChatThread({
       version: 1,

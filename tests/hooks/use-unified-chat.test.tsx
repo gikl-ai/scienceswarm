@@ -41,7 +41,6 @@ function ChatHarness({ projectName }: { projectName: string }) {
             runtimeHostId: "codex",
             runtimeMode: "chat",
             projectPolicy: "cloud-ok",
-            approvalState: "approved",
           })
         }
       >
@@ -343,33 +342,39 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
   });
 
-  it("stores approved runtime host ids for new non-OpenClaw sessions", async () => {
+  it("stores runtime host ids for new non-OpenClaw sessions", async () => {
+    let resolveHealth: (response: Response) => void = () => {};
+    const delayedHealth = new Promise<Response>((resolve) => {
+      resolveHealth = resolve;
+    });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url === "/api/chat/unified?action=health") {
-        return Response.json({ openclaw: "connected" });
+        return delayedHealth;
       }
-      if (url === "/api/runtime/sessions") {
+      if (url === "/api/runtime/sessions/stream") {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
         expect(body).toMatchObject({
           hostId: "codex",
           projectId: "alpha-project",
           projectPolicy: "cloud-ok",
-          approvalState: "approved",
+          approvalState: "not-required",
         });
-        return Response.json({
-          session: {
-            id: "rt-session-codex",
-            conversationId: "native-codex-session",
-            status: "completed",
-          },
-          events: [
-            {
+        return createSseResponse([
+          {
+            event: {
               type: "message",
-              payload: { text: "Codex runtime response" },
+              payload: { text: "Codex runtime response\n[session] keep this native line" },
             },
-          ],
-        });
+          },
+          {
+            session: {
+              id: "rt-session-codex",
+              conversationId: "native-codex-session",
+              status: "completed",
+            },
+          },
+        ]);
       }
       if (url.startsWith("/api/workspace")) {
         return Response.json({ files: [] });
@@ -383,8 +388,15 @@ describe("useUnifiedChat persistence", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime" }));
 
     await screen.findByText(/Codex runtime response/);
-    expect(screen.getByTestId("backend").textContent).toBe("codex");
-    expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
+    await act(async () => {
+      resolveHealth(Response.json({ openclaw: "connected" }));
+      await delayedHealth;
+    });
+    expect(screen.getByTestId("message-log").textContent).toContain("[session] keep this native line");
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("codex");
+      expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
+    });
 
     await waitFor(() => {
       const stored = JSON.parse(
@@ -392,6 +404,70 @@ describe("useUnifiedChat persistence", () => {
       ) as { conversationBackend?: string };
       expect(stored.conversationBackend).toBe("codex");
     });
+  });
+
+  it("streams direct runtime events into the active assistant message", async () => {
+    const runtimeStream = createDeferredSseResponse();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url === "/api/runtime/sessions/stream") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        expect(body).toMatchObject({
+          hostId: "codex",
+          projectId: "alpha-project",
+          projectPolicy: "cloud-ok",
+          approvalState: "not-required",
+        });
+        return runtimeStream.response;
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ files: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime" }));
+
+    await act(async () => {
+      runtimeStream.send({
+        event: {
+          type: "message",
+          payload: { text: "Streaming Codex" },
+        },
+      });
+    });
+
+    await screen.findByText(/Streaming Codex/);
+
+    await act(async () => {
+      runtimeStream.send({
+        event: {
+          type: "message",
+          payload: {
+            text: "Streaming Codex final answer",
+            nativeSessionId: "native-codex-session",
+          },
+        },
+      });
+      runtimeStream.send({
+        session: {
+          id: "rt-session-codex",
+          conversationId: "native-codex-session",
+          status: "completed",
+        },
+      });
+      runtimeStream.close();
+    });
+
+    await screen.findByText(/Streaming Codex final answer/);
+    expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
+    expect(screen.getByTestId("backend").textContent).toBe("codex");
   });
 
   it("drops persisted assistant replay duplicates when restoring a project thread", async () => {

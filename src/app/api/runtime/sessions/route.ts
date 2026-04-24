@@ -121,7 +121,7 @@ export async function POST(request: Request): Promise<Response> {
     const turnRequest = buildRuntimeTurnRequest({
       hostId,
       projectId,
-      conversationId: conversationId ?? session.id,
+      conversationId,
       mode,
       prompt,
       promptHash: optionalStringField(body, "promptHash"),
