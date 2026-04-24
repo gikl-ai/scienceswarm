@@ -460,4 +460,59 @@ describe("runtime session APIs", () => {
       result: { cancelled: true },
     });
   });
+
+  it("does not append a failure event when non-streaming CLI cancellation wins the race", async () => {
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      adapters: [
+        {
+          ...adapter(requireRuntimeHostProfile("codex")),
+          sendTurn: async (turn) => {
+            if (!turn.runtimeSessionId) {
+              throw new Error("expected runtimeSessionId");
+            }
+            await cancelPOST(
+              new Request(
+                `http://localhost/api/runtime/sessions/${turn.runtimeSessionId}/cancel`,
+                { method: "POST" },
+              ),
+              params(turn.runtimeSessionId),
+            );
+            throw new RuntimeHostError({
+              code: "RUNTIME_TRANSPORT_ERROR",
+              status: 502,
+              message: "Runtime CLI exited due to signal SIGTERM.",
+              userMessage: "Runtime host command was interrupted.",
+              recoverable: true,
+            });
+          },
+        },
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+
+    const response = await sessionsPOST(jsonRequest(
+      "http://localhost/api/runtime/sessions",
+      {
+        hostId: "codex",
+        projectId: "project-alpha",
+        projectPolicy: "cloud-ok",
+        mode: "chat",
+        prompt: "Hosted turn",
+        approvalState: "approved",
+      },
+    ));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.session).toMatchObject({
+      status: "cancelled",
+    });
+    expect(body.events).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({ type: "error" }),
+      ]),
+    );
+  });
 });
