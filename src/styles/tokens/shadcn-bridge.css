@@ -1,0 +1,110 @@
+/*
+ * shadcn-bridge.css — compatibility layer for raw shadcn primitives
+ * ────────────────────────────────────────────────────────────────
+ * shadcn primitives (src/components/ui/*.tsx) author their styles
+ * against a fixed vocabulary of CSS custom properties:
+ *
+ *   --background / --foreground / --card / --card-foreground /
+ *   --popover / --popover-foreground / --primary / --primary-foreground /
+ *   --secondary / --secondary-foreground / --muted / --muted-foreground /
+ *   --accent / --accent-foreground / --destructive /
+ *   --destructive-foreground / --border / --input / --ring / --radius
+ *
+ * Our semantic token layer (semantic.css) names things differently —
+ * --surface-ink, --text-strong, --rule, and so on. This file maps
+ * shadcn's names onto ours so raw primitives look correct inside the
+ * ScienceSwarm surface, while application code continues to consume
+ * the semantic tokens directly.
+ *
+ * ⚠ Name collision: shadcn uses bg-accent / text-accent-foreground as
+ *   the hover/selected tint (Button "ghost", DropdownMenuItem hover,
+ *   CommandItem selection, ...). Our --accent is the action-moment
+ *   blue (status LEDs, send button, caret) and we DO NOT want shadcn's
+ *   hover states to flash at full accent saturation. The bridge keeps
+ *   semantic.css's --color-accent → real accent mapping untouched for
+ *   app code, and the ss-* wrappers override hover classes to use the
+ *   low-saturation wash (--accent-faint) where needed.
+ *
+ * Keep this file tiny. If a shadcn primitive starts reaching for
+ * something not listed here, prefer a ss-* wrapper override over
+ * growing the bridge.
+ * ────────────────────────────────────────────────────────────────
+ */
+
+/* Shared (theme-independent) mappings — resolve through the
+   theme-aware semantic tokens defined in semantic.css. */
+:root {
+  --background:            var(--surface-ink);
+  --foreground:            var(--text-strong);
+
+  --card:                  var(--surface-raised);
+  --card-foreground:       var(--text-strong);
+
+  --popover:               var(--surface-raised);
+  --popover-foreground:    var(--text-strong);
+
+  --primary:               var(--accent);
+  --primary-foreground:    var(--accent-fg);
+
+  --secondary:             var(--surface-sunk);
+  --secondary-foreground:  var(--text-body);
+
+  --muted:                 var(--surface-sunk);
+  --muted-foreground:      var(--text-dim);
+
+  /* shadcn's --accent-foreground pairs with bg-accent in hover states.
+     Kept neutral so the wash stays legible over surfaces. The --accent
+     custom property itself is NOT remapped here — app code reads the
+     semantic.css value. Wrappers override hover classes when they want
+     the lower-saturation surface. */
+  --accent-foreground:     var(--text-strong);
+
+  --destructive:           var(--danger);
+  --destructive-foreground: var(--accent-fg);
+
+  --border:                var(--rule);
+  --input:                 var(--rule);
+  --ring:                  var(--accent-ring);
+
+  --radius:                var(--radius-2);
+}
+
+/* Sheet overlay is internal to the raw primitive (not exported) so we
+   can't restyle it from the ss-sheet wrapper. Swap the hardcoded
+   bg-black/50 for the token overlay via the data-slot selector. */
+[data-slot="sheet-overlay"] {
+  background: var(--surface-overlay);
+}
+
+/* ── Tailwind v4 @theme bridge ──────────────────────────────────
+   shadcn primitives use Tailwind utility classes like bg-background,
+   border-border, text-foreground, ring-ring. Tailwind v4 resolves
+   those against color tokens registered in @theme. We register them
+   here (not in semantic.css) so the bridge stays opt-in: removing
+   shadcn would delete this file and leave semantic.css untouched.
+   --------------------------------------------------------------- */
+@theme inline {
+  --color-background:           var(--background);
+  --color-foreground:           var(--foreground);
+  --color-card:                 var(--card);
+  --color-card-foreground:      var(--card-foreground);
+  --color-popover:              var(--popover);
+  --color-popover-foreground:   var(--popover-foreground);
+  --color-primary:              var(--primary);
+  --color-primary-foreground:   var(--primary-foreground);
+  --color-secondary:            var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:                var(--muted);
+  --color-muted-foreground:     var(--muted-foreground);
+  --color-accent-foreground:    var(--accent-foreground);
+  --color-destructive:          var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border:               var(--border);
+  --color-input:                var(--input);
+  --color-ring:                 var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
