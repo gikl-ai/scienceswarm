@@ -20,7 +20,14 @@ import {
   runtimeInvalidRequest,
   turnModeFromBody,
 } from "../_shared";
+import type { RuntimeEvent } from "@/lib/runtime-hosts/contracts";
 import { RuntimeHostError } from "@/lib/runtime-hosts/errors";
+
+function isMessageTextEvent(event: RuntimeEvent): boolean {
+  return event.type === "message"
+    && typeof event.payload.text === "string"
+    && event.payload.text.length > 0;
+}
 
 function enrichedSession(session: ReturnType<
   ReturnType<typeof getRuntimeApiServices>["sessionStore"]["getSession"]
@@ -135,22 +142,28 @@ export async function POST(request: Request): Promise<Response> {
       : await adapter.sendTurn(turnRequest);
 
     if ("message" in result) {
+      let appendedMessageEvent = false;
       for (const event of result.events ?? []) {
+        if (isMessageTextEvent(event)) {
+          appendedMessageEvent = true;
+        }
         services.eventStore.appendEvent({
           ...event,
           sessionId: session.id,
         });
       }
-      services.eventStore.appendEvent({
-        id: `${session.id}:runtime-message`,
-        sessionId: session.id,
-        hostId,
-        type: "message",
-        payload: {
-          text: result.message,
-          nativeSessionId: result.sessionId,
-        },
-      });
+      if (!appendedMessageEvent) {
+        services.eventStore.appendEvent({
+          id: `${session.id}:runtime-message`,
+          sessionId: session.id,
+          hostId,
+          type: "message",
+          payload: {
+            text: result.message,
+            nativeSessionId: result.sessionId,
+          },
+        });
+      }
       for (const [index, artifact] of (result.artifacts ?? []).entries()) {
         services.eventStore.appendEvent({
           id: `${session.id}:artifact:${index}:${artifact.sourcePath}`,

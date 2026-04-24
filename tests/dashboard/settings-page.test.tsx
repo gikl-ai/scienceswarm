@@ -1016,7 +1016,7 @@ describe("SettingsPage runtime settings", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("ollama-model-select")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "gemma4:26b" })).toBeInTheDocument();
-    expect(screen.getByText("LLM Provider")).toBeInTheDocument();
+    expect(await screen.findByText("LLM Provider")).toBeInTheDocument();
   });
 
   it("treats gemma4:26b as pending until that exact model is available", async () => {

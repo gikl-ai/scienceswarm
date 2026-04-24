@@ -23,6 +23,8 @@ function ChatHarness({ projectName }: { projectName: string }) {
     chatMode,
     setChatMode,
     isStreaming,
+    canCancelActiveTurn,
+    cancelActiveTurn,
     workspaceTree,
     artifactProvenance,
     generatedArtifacts,
@@ -66,6 +68,17 @@ function ChatHarness({ projectName }: { projectName: string }) {
         }
       >
         Send Codex runtime current file
+      </button>
+      <button
+        onClick={() =>
+          void sendMessage("Summarize attached files with Codex", {
+            runtimeHostId: "codex",
+            runtimeMode: "chat",
+            projectPolicy: "cloud-ok",
+          })
+        }
+      >
+        Send Codex runtime attached files
       </button>
       <button
         onClick={() =>
@@ -115,6 +128,19 @@ function ChatHarness({ projectName }: { projectName: string }) {
       >
         Add valid gbrain context
       </button>
+      <button
+        onClick={() => {
+          setLastAddResult(String(addWorkspaceFileToChatContext({
+            path: "notes/context.md",
+            name: "Context Note",
+            source: "workspace",
+            content: "Context note body for direct runtime.",
+          })));
+        }}
+      >
+        Add text context
+      </button>
+      <button onClick={() => void cancelActiveTurn()}>Stop runtime</button>
       <div data-testid="conversation-id">{conversationId || ""}</div>
       <div data-testid="backend">{backend}</div>
       <div data-testid="runtime-compare-result">
@@ -122,6 +148,7 @@ function ChatHarness({ projectName }: { projectName: string }) {
       </div>
       <div data-testid="chat-mode">{chatMode}</div>
       <div data-testid="is-streaming">{String(isStreaming)}</div>
+      <div data-testid="can-cancel">{String(canCancelActiveTurn)}</div>
       <div data-testid="workspace-root-count">{String(workspaceTree.length)}</div>
       <div data-testid="uploaded-files-log">
         {uploadedFiles.map((file) => `${file.source}:${file.workspacePath}:${file.brainSlug || ""}`).join("\n")}
@@ -568,6 +595,114 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("message-log").textContent).toContain(
       "user:Summarize the selected file with Codex",
     );
+  });
+
+  it("includes explicitly selected text file context in direct runtime prompts", async () => {
+    const runtimeBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url === "/api/runtime/sessions/stream") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        runtimeBodies.push(body);
+        return createSseResponse([
+          {
+            event: {
+              type: "message",
+              sessionId: "rt-session-codex",
+              payload: { text: "Codex saw the attached note" },
+            },
+          },
+          {
+            session: {
+              id: "rt-session-codex",
+              conversationId: "native-codex-session",
+              status: "completed",
+            },
+          },
+        ]);
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ files: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add text context" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime attached files" }));
+
+    await screen.findByText(/Codex saw the attached note/);
+    expect(runtimeBodies).toHaveLength(1);
+    expect(runtimeBodies[0]).toMatchObject({
+      inputFileRefs: ["notes/context.md"],
+      dataIncluded: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "workspace-file",
+          label: "notes/context.md",
+          bytes: 37,
+        }),
+      ]),
+    });
+    const runtimePrompt = String(runtimeBodies[0].prompt);
+    expect(runtimePrompt).toContain("Explicitly selected attached file context (JSON):");
+    expect(runtimePrompt).toContain("Context note body for direct runtime.");
+  });
+
+  it("cancels an active direct runtime stream by runtime session id", async () => {
+    const runtimeStream = createDeferredSseResponse();
+    const cancelRequests: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url === "/api/runtime/sessions/stream") {
+        return runtimeStream.response;
+      }
+      if (url === "/api/runtime/sessions/rt-session-codex/cancel" && method === "POST") {
+        cancelRequests.push(url);
+        return Response.json({
+          sessionId: "rt-session-codex",
+          result: { cancelled: true },
+        });
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ files: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime" }));
+    await act(async () => {
+      runtimeStream.send({
+        event: {
+          id: "rt-session-codex:runtime-started",
+          sessionId: "rt-session-codex",
+          type: "status",
+          payload: { status: "running" },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("can-cancel").textContent).toBe("true");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop runtime" }));
+
+    await waitFor(() => {
+      expect(cancelRequests).toEqual(["/api/runtime/sessions/rt-session-codex/cancel"]);
+      expect(screen.getByTestId("can-cancel").textContent).toBe("false");
+    });
   });
 
   it("drops persisted assistant replay duplicates when restoring a project thread", async () => {

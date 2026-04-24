@@ -321,6 +321,109 @@ describe("runtime session APIs", () => {
     );
   });
 
+  it("does not duplicate adapter-provided message events on non-streaming sessions", async () => {
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      adapters: [
+        {
+          ...adapter(requireRuntimeHostProfile("codex")),
+          sendTurn: async (turn) => ({
+            hostId: "codex",
+            sessionId: "codex-native-session",
+            message: "Adapter final text",
+            events: [
+              {
+                id: `${turn.runtimeSessionId}:adapter-message`,
+                sessionId: turn.runtimeSessionId ?? "wrapper-session",
+                hostId: "codex",
+                type: "message",
+                createdAt: "2026-04-22T12:00:00Z",
+                payload: {
+                  text: "Adapter final text",
+                  nativeSessionId: "codex-native-session",
+                },
+              },
+            ],
+          }),
+        },
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+
+    const response = await sessionsPOST(jsonRequest(
+      "http://localhost/api/runtime/sessions",
+      {
+        hostId: "codex",
+        projectId: "project-alpha",
+        projectPolicy: "cloud-ok",
+        mode: "chat",
+        prompt: "Hosted turn",
+        approvalState: "approved",
+      },
+    ));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(
+      body.events.filter((event: { type?: string }) => event.type === "message"),
+    ).toHaveLength(1);
+    expect(body.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "rt-session-session-1:adapter-message",
+          payload: expect.objectContaining({ text: "Adapter final text" }),
+        }),
+      ]),
+    );
+  });
+
+  it("cancels a streaming runtime wrapper when the SSE request is aborted", async () => {
+    const cancelled: string[] = [];
+    let rejectTurn: ((error: Error) => void) | null = null;
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      adapters: [
+        {
+          ...adapter(requireRuntimeHostProfile("codex")),
+          sendTurn: async () =>
+            new Promise((_, reject) => {
+              rejectTurn = reject;
+            }),
+          cancel: async (sessionId) => {
+            cancelled.push(sessionId);
+            rejectTurn?.(new Error("cancelled by client disconnect"));
+            return { sessionId, cancelled: true };
+          },
+        },
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+    const controller = new AbortController();
+
+    const response = await streamPOST(new Request(
+      "http://localhost/api/runtime/sessions/stream",
+      {
+        method: "POST",
+        signal: controller.signal,
+        body: JSON.stringify({
+          hostId: "codex",
+          projectId: "project-alpha",
+          projectPolicy: "cloud-ok",
+          mode: "chat",
+          prompt: "Hosted turn",
+          approvalState: "approved",
+        }),
+      },
+    ));
+    controller.abort();
+    await response.text();
+
+    expect(cancelled).toEqual(["rt-session-session-1"]);
+    expect(sessions.getSession("rt-session-session-1")?.status).toBe("cancelled");
+  });
+
   it("stores semantic RuntimeHostError codes on failed sessions", async () => {
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,

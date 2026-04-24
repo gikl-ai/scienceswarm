@@ -91,6 +91,7 @@ interface WorkspaceChatContextFile {
   source?: "workspace" | "gbrain";
   brainSlug?: string;
   displayPath?: string;
+  content?: string;
 }
 
 interface WorkspaceTreeNode {
@@ -174,6 +175,8 @@ export interface UseUnifiedChat {
     activeFileOrOptions?: ActiveFileContext | RuntimeSendOptions,
   ) => Promise<void>;
   isStreaming: boolean;
+  canCancelActiveTurn: boolean;
+  cancelActiveTurn: () => Promise<boolean>;
   error: string | null;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   backend: Backend;
@@ -2326,6 +2329,12 @@ function textBytes(value: string): number {
 
 const RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS = 8_000;
 
+function isTextReadableFile(file: File): boolean {
+  if (file.type.startsWith("text/")) return true;
+  return /\.(c|cc|cpp|csv|css|go|h|hpp|html|java|js|json|jsx|md|mjs|py|r|rb|rs|sql|ts|tsx|txt|xml|yaml|yml)$/i
+    .test(file.name);
+}
+
 function runtimeActiveFileContextPayload(activeFile: ActiveFileContext) {
   const rawContent = activeFile.content;
   const content = rawContent.slice(0, RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS);
@@ -2333,6 +2342,21 @@ function runtimeActiveFileContextPayload(activeFile: ActiveFileContext) {
   return {
     kind: "selected-workspace-file",
     path: activeFile.path.trim() || "selected workspace file",
+    content,
+    truncated,
+    originalCharacters: rawContent.length,
+    includedCharacters: content.length,
+    omittedCharacters: truncated ? rawContent.length - content.length : 0,
+  };
+}
+
+function runtimeAttachedFileContextPayload(file: UploadedFile) {
+  const rawContent = file.content ?? "";
+  const content = rawContent.slice(0, RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS);
+  const truncated = content.length < rawContent.length;
+  return {
+    kind: file.source === "gbrain" ? "selected-gbrain-excerpt" : "selected-workspace-file",
+    path: getUploadedFileReference(file),
     content,
     truncated,
     originalCharacters: rawContent.length,
@@ -2372,6 +2396,7 @@ function buildRuntimeApiDataIncluded(
     data.push({
       kind: file.source === "gbrain" ? "gbrain-excerpt" : "workspace-file",
       label,
+      ...(file.content ? { bytes: textBytes(file.content) } : {}),
     });
   }
 
@@ -2397,15 +2422,30 @@ function buildRuntimeApiInputFileRefs(
 function buildRuntimeApiPrompt(
   content: string,
   activeFile: ActiveFileContext | undefined,
+  files: UploadedFile[] = [],
 ): string {
-  if (!activeFile) return content;
-  const contextPayload = runtimeActiveFileContextPayload(activeFile);
-  return [
-    content.trimEnd(),
-    "",
-    "Explicitly selected workspace context (JSON):",
-    JSON.stringify(contextPayload, null, 2),
-  ].join("\n");
+  const promptParts = [content.trimEnd()];
+  if (activeFile) {
+    const contextPayload = runtimeActiveFileContextPayload(activeFile);
+    promptParts.push(
+      "",
+      "Explicitly selected workspace context (JSON):",
+      JSON.stringify(contextPayload, null, 2),
+    );
+  }
+
+  const attachedContext = selectExplicitRequestFiles(content, files)
+    .filter((file) => typeof file.content === "string" && file.content.length > 0)
+    .map(runtimeAttachedFileContextPayload);
+  if (attachedContext.length > 0) {
+    promptParts.push(
+      "",
+      "Explicitly selected attached file context (JSON):",
+      JSON.stringify(attachedContext, null, 2),
+    );
+  }
+
+  return promptParts.length === 1 ? content : promptParts.join("\n");
 }
 
 function isRuntimeSendOptions(
@@ -2769,6 +2809,7 @@ export function useUnifiedChat(
   const [openClawConnected, setOpenClawConnected] = useState<boolean | null>(null);
   const [artifactProvenance, setArtifactProvenanceState] = useState<ArtifactProvenanceEntry[]>([]);
   const [runtimeCompareResult, setRuntimeCompareResult] = useState<RuntimeCompareResult | null>(null);
+  const [canCancelActiveTurn, setCanCancelActiveTurn] = useState(false);
   // Tracks whether hydration from localStorage/server has committed. The
   // cross-channel poll effect uses this to avoid registering a setInterval
   // whose closure captures a stale `scopedConversationId = null` on the
@@ -2803,6 +2844,8 @@ export function useUnifiedChat(
   const userBackendOverrideVersionRef = useRef(0);
   const sendQueueRef = useRef<QueuedSend[]>([]);
   const sendQueueProcessingRef = useRef(false);
+  const activeRuntimeSessionIdRef = useRef<string | null>(null);
+  const activeRuntimeReaderRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const scopedConversationId = getScopedConversationId(conversationId, conversationBackend, backend);
 
   // Keep state updater callbacks pure. The layout effect below mirrors the
@@ -3498,83 +3541,99 @@ export function useUnifiedChat(
   ) => {
     const reader = res.body?.getReader();
     if (!reader) throw new Error("No response stream");
+    activeRuntimeReaderRef.current = reader;
 
     const decoder = new TextDecoder();
     let buffer = "";
     let streamDone = false;
     let nextConversationId: string | null = null;
+    const noteRuntimeSessionId = (value: unknown) => {
+      if (typeof value !== "string" || value.trim().length === 0) return;
+      activeRuntimeSessionIdRef.current = value;
+      setCanCancelActiveTurn(true);
+    };
 
-    while (!streamDone) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+    try {
+      while (!streamDone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const data = line.slice(6);
-        if (data === "[DONE]") {
-          streamDone = true;
-          break;
-        }
-
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(data) as unknown;
-        } catch {
-          continue;
-        }
-        if (parsed === "[DONE]") {
-          streamDone = true;
-          break;
-        }
-
-        const envelope = asRecord(parsed);
-        if (!envelope) continue;
-        if (typeof envelope.error === "string" && envelope.error.trim().length > 0) {
-          await reader.cancel().catch(() => undefined);
-          throw new Error(envelope.error);
-        }
-
-        const event = asRecord(envelope.event);
-        if (event) {
-          const payload = asRecord(event.payload) ?? {};
-          const eventText = firstNonEmptyString(payload.text, payload.message);
-          if (
-            event.type === "message"
-            && eventText
-            && isSendContextCurrent(context)
-          ) {
-            applyMessagesUpdate((prev) =>
-              prev.map((message) =>
-                message.id === assistantId
-                  ? {
-                      ...message,
-                      content: assistantTextForBackend(eventText, context.backend, {
-                        trimEnd: false,
-                      }),
-                      chatMode: context.chatMode,
-                    }
-                  : message,
-              ),
-            );
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6);
+          if (data === "[DONE]") {
+            streamDone = true;
+            break;
           }
 
-          const nativeSessionId = firstNonEmptyString(payload.nativeSessionId);
-          if (nativeSessionId) {
-            nextConversationId = nativeSessionId;
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(data) as unknown;
+          } catch {
+            continue;
           }
-        }
+          if (parsed === "[DONE]") {
+            streamDone = true;
+            break;
+          }
 
-        const session = asRecord(envelope.session);
-        if (session) {
-          nextConversationId = firstNonEmptyString(
-            session.conversationId,
-            session.id,
-          ) ?? nextConversationId;
+          const envelope = asRecord(parsed);
+          if (!envelope) continue;
+          if (typeof envelope.error === "string" && envelope.error.trim().length > 0) {
+            await reader.cancel().catch(() => undefined);
+            throw new Error(envelope.error);
+          }
+
+          const event = asRecord(envelope.event);
+          if (event) {
+            noteRuntimeSessionId(event.sessionId);
+            const payload = asRecord(event.payload) ?? {};
+            const eventText = firstNonEmptyString(payload.text, payload.message);
+            if (
+              event.type === "message"
+              && eventText
+              && isSendContextCurrent(context)
+            ) {
+              applyMessagesUpdate((prev) =>
+                prev.map((message) =>
+                  message.id === assistantId
+                    ? {
+                        ...message,
+                        content: assistantTextForBackend(eventText, context.backend, {
+                          trimEnd: false,
+                        }),
+                        chatMode: context.chatMode,
+                      }
+                    : message,
+                ),
+              );
+            }
+
+            const nativeSessionId = firstNonEmptyString(payload.nativeSessionId);
+            if (nativeSessionId) {
+              nextConversationId = nativeSessionId;
+            }
+          }
+
+          const session = asRecord(envelope.session);
+          if (session) {
+            noteRuntimeSessionId(session.id);
+            nextConversationId = firstNonEmptyString(
+              session.conversationId,
+              session.id,
+            ) ?? nextConversationId;
+          }
         }
       }
+    } finally {
+      if (activeRuntimeReaderRef.current === reader) {
+        activeRuntimeReaderRef.current = null;
+      }
+      activeRuntimeSessionIdRef.current = null;
+      setCanCancelActiveTurn(false);
     }
 
     if (nextConversationId && isSendProjectCurrent(context)) {
@@ -3614,7 +3673,7 @@ export function useUnifiedChat(
         context.dataIncluded,
       );
       const inputFileRefs = buildRuntimeApiInputFileRefs(content, activeFile, requestFiles);
-      const prompt = buildRuntimeApiPrompt(content, activeFile);
+      const prompt = buildRuntimeApiPrompt(content, activeFile, requestFiles);
       const baseBody = {
         projectId: context.projectName,
         projectPolicy: context.projectPolicy,
@@ -4248,6 +4307,25 @@ export function useUnifiedChat(
     ]
   );
 
+  const cancelActiveTurn = useCallback(async (): Promise<boolean> => {
+    const sessionId = activeRuntimeSessionIdRef.current;
+    const reader = activeRuntimeReaderRef.current;
+    if (reader) {
+      await reader.cancel().catch(() => undefined);
+    }
+    if (!sessionId) {
+      setCanCancelActiveTurn(false);
+      return false;
+    }
+
+    const response = await fetch(
+      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/cancel`,
+      { method: "POST" },
+    ).catch(() => null);
+    setCanCancelActiveTurn(false);
+    return response?.ok === true;
+  }, []);
+
   // ── Workspace operations ──
 
   const refreshWorkspace = useCallback(async (signal?: AbortSignal) => {
@@ -4410,6 +4488,11 @@ export function useUnifiedChat(
       for (const file of files) {
         let uploadedBrainSlug: string | undefined;
         let uploadedSource: UploadedFile["source"] = "workspace";
+        const textContent = isTextReadableFile(file)
+          ? await file.text()
+            .then((text) => text.slice(0, RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS))
+            .catch(() => undefined)
+          : undefined;
         try {
           // Canonical audit-revise ingest route: writes a typed gbrain page
           // (paper/dataset/code) AND dual-writes the original bytes to the
@@ -4488,6 +4571,7 @@ export function useUnifiedChat(
                     workspacePath: entry?.workspacePath || `${folder}/${file.name}`,
                     source: "workspace",
                     displayPath: entry?.workspacePath || `${folder}/${file.name}`,
+                    content: textContent,
                   },
                 ]);
                 continue;
@@ -4528,7 +4612,7 @@ export function useUnifiedChat(
         const displayPath = latestOrganized?.name
           ? `${latestOrganized.folder || "other"}/${latestOrganized.name}`
           : file.name;
-        // Track in uploaded files (lightweight, no full content)
+        // Keep only capped text-readable content for explicit direct-runtime context.
         setUploadedFiles((prev) => [
           ...prev,
           {
@@ -4540,6 +4624,7 @@ export function useUnifiedChat(
             source: uploadedSource,
             brainSlug: uploadedBrainSlug,
             displayPath,
+            content: textContent,
           },
         ]);
       }
@@ -4633,6 +4718,7 @@ export function useUnifiedChat(
           brainSlug,
           workspacePath: `gbrain:${brainSlug}`,
           displayPath: file.displayPath || `gbrain:${brainSlug}`,
+          content: file.content,
         }
       : {
           name,
@@ -4642,6 +4728,7 @@ export function useUnifiedChat(
           source: "workspace",
           workspacePath,
           displayPath: file.displayPath || workspacePath,
+          content: file.content,
         };
 
     setUploadedFiles((prev) => {
@@ -4687,6 +4774,8 @@ export function useUnifiedChat(
     setMessages,
     sendMessage: sendMessageFn,
     isStreaming,
+    canCancelActiveTurn,
+    cancelActiveTurn,
     error,
     setError,
     backend,
