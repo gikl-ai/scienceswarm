@@ -251,6 +251,78 @@ const CHAT_PLACEHOLDER_ROTATE_MS = 4000;
 const PROJECT_TREE_VISIBILITY_STORAGE_KEY =
   "scienceswarm:project-tree-visibility";
 type ProjectTreeVisibilityMode = "auto" | "open" | "closed";
+const STEP_VERB_LABELS: Record<string, string> = {
+  reading: "Reading",
+  searching: "Searching",
+  drafting: "Drafting",
+  running: "Running",
+};
+
+function formatCompactStepLabel(step: {
+  verb?: string;
+  target?: string;
+} | null | undefined): string | null {
+  if (!step) {
+    return null;
+  }
+
+  const target = typeof step.target === "string" ? step.target.trim() : "";
+  const verb = typeof step.verb === "string" ? STEP_VERB_LABELS[step.verb] ?? step.verb : "";
+  if (!verb && !target) {
+    return null;
+  }
+  if (!target) {
+    return verb || null;
+  }
+  if (!verb) {
+    return target;
+  }
+  return `${verb} ${target}`;
+}
+
+function buildCompactLiveRunStateSummary(message: {
+  taskPhases?: Array<{ label?: string; status?: string }>;
+  steps?: Array<{ verb?: string; target?: string; status?: string }>;
+  progressLog?: Array<{ text?: string }>;
+} | null | undefined): { label: string; chips: string[] } {
+  const phases = Array.isArray(message?.taskPhases) ? message.taskPhases : [];
+  const activePhase = phases.find((phase) => phase.status === "active");
+  const failedPhase = phases.find((phase) => phase.status === "failed");
+  const completedPhaseCount = phases.filter((phase) => phase.status === "completed").length;
+  const steps = Array.isArray(message?.steps) ? message.steps : [];
+  const runningStep = steps.find((step) => step.status === "running");
+  const runningStepLabel = formatCompactStepLabel(runningStep);
+  const latestProgress = Array.isArray(message?.progressLog)
+    ? [...message.progressLog]
+      .reverse()
+      .find((entry) => typeof entry.text === "string" && entry.text.trim().length > 0)
+      ?.text?.trim() ?? ""
+    : "";
+
+  const label =
+    (typeof failedPhase?.label === "string" && failedPhase.label.trim().length > 0
+      ? failedPhase.label.trim()
+      : null)
+    ?? (typeof activePhase?.label === "string" && activePhase.label.trim().length > 0
+      ? activePhase.label.trim()
+      : null)
+    ?? runningStepLabel
+    ?? (latestProgress.length > 0 ? latestProgress : null)
+    ?? "Working…";
+
+  const chips: string[] = [];
+  if (phases.length > 1) {
+    chips.push(`${completedPhaseCount}/${phases.length} phases`);
+  }
+  if (runningStepLabel && runningStepLabel !== label) {
+    chips.push(runningStepLabel);
+  }
+
+  return {
+    label,
+    chips: chips.slice(0, 2),
+  };
+}
 
 function runtimeTextBytes(value: string): number {
   return new TextEncoder().encode(value).length;
@@ -1703,6 +1775,21 @@ function ProjectPageContent() {
   const activeAssistantMessageId = isStreaming
     ? [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null
     : null;
+  const activeAssistantMessage = useMemo(
+    () =>
+      activeAssistantMessageId
+        ? messages.find((message) => message.id === activeAssistantMessageId) ?? null
+        : null,
+    [activeAssistantMessageId, messages],
+  );
+  const chatPaneVisible = paneMode !== "visualizer-only";
+  const compactLiveRunState = useMemo(
+    () => buildCompactLiveRunStateSummary(activeAssistantMessage),
+    [activeAssistantMessage],
+  );
+  const showCompactProjectRunState = isStreaming && !chatPaneVisible;
+  const showTopBarActivityChrome =
+    isCritiquing || isAutoAnalyzing || isInterpretingPacket || isPlanningExperiments;
   // Merge workspace files with gbrain-backed artifact nodes.
   const mergedFileTree: FileNode[] = useMemo(() => {
     if (gbrainNodes.length === 0) return workspaceTree as FileNode[];
@@ -4262,7 +4349,27 @@ function ProjectPageContent() {
               </span>
             )}
 
-            {(isStreaming || isCritiquing || isAutoAnalyzing || isInterpretingPacket || isPlanningExperiments) && (
+            {showCompactProjectRunState && (
+              <div
+                aria-live="polite"
+                className="inline-flex max-w-[22rem] items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-700"
+                data-testid="project-chat-run-state-row"
+                role="status"
+              >
+                <Spinner size="h-3.5 w-3.5" />
+                <span className="min-w-0 truncate">{compactLiveRunState.label}</span>
+                {compactLiveRunState.chips.map((chip) => (
+                  <span
+                    key={chip}
+                    className="hidden rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 md:inline-flex"
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {showTopBarActivityChrome && (
               <div className="flex items-center gap-2 text-xs font-medium text-accent">
                 <Spinner size="h-3.5 w-3.5" testId="chat-activity-spinner" />
                 {isCritiquing

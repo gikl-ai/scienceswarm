@@ -57,6 +57,35 @@ function createRuntimeStreamResponse(events: unknown[]): Response {
   });
 }
 
+function createDeferredSseResponse(): {
+  response: Response;
+  send: (event: unknown) => void;
+  close: () => void;
+} {
+  const encoder = new TextEncoder();
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
+
+  return {
+    response: new Response(new ReadableStream({
+      start(controller) {
+        controllerRef = controller;
+      },
+    }), {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "X-Chat-Backend": "openclaw",
+      },
+    }),
+    send(event: unknown) {
+      controllerRef?.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+    },
+    close() {
+      controllerRef?.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controllerRef?.close();
+    },
+  };
+}
+
 async function expandAllFolders() {
   fireEvent.click(await screen.findByRole("button", { name: "Expand all folders" }));
 }
@@ -3060,10 +3089,7 @@ describe("Project dashboard smoke test", () => {
   });
 
   it("restores chat with the latest response after chat is closed during a send", async () => {
-    let resolveChat!: (response: Response) => void;
-    const chatResponse = new Promise<Response>((resolve) => {
-      resolveChat = resolve;
-    });
+    const stream = createDeferredSseResponse();
 
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -3129,7 +3155,7 @@ describe("Project dashboard smoke test", () => {
       }
 
       if (url === "/api/chat/unified" && method === "POST") {
-        return chatResponse;
+        return Promise.resolve(stream.response);
       }
 
       if (url === "/api/projects") {
@@ -3155,15 +3181,19 @@ describe("Project dashboard smoke test", () => {
     fireEvent.change(input, { target: { value: "keep streaming" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByTestId("chat-activity-spinner")).toBeInTheDocument();
+    expect(await screen.findByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-activity-spinner")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
     expect(screen.getByRole("button", { name: "Show chat" })).toBeInTheDocument();
+    expect(screen.getByTestId("project-chat-run-state-row")).toHaveTextContent("Working");
+    expect(screen.queryByTestId("chat-activity-spinner")).not.toBeInTheDocument();
 
-    resolveChat(Response.json({
-      response: "restored answer",
+    stream.send({
+      text: "restored answer",
       conversationId: "conv-demo",
       messages: [],
-    }));
+    });
+    stream.close();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -3174,6 +3204,127 @@ describe("Project dashboard smoke test", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Show chat" }));
     expect(await screen.findByText("restored answer")).toBeInTheDocument();
+  });
+
+  it("shows the compact fallback run-state row with active phase details when chat is hidden mid-stream", async () => {
+    const stream = createDeferredSseResponse();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/health") {
+        return Promise.resolve(Response.json({
+          openclaw: "connected",
+          openhands: "disconnected",
+          openai: "configured",
+          features: {
+            chat: true,
+            codeExecution: false,
+            github: false,
+            multiChannel: false,
+            structuredCritique: false,
+          },
+        }));
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Promise.resolve(Response.json({
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+          llmProvider: "openai",
+          ollamaModels: [],
+          configuredLocalModel: null,
+        }));
+      }
+
+      if (url === "/api/brain/status") {
+        return Promise.resolve(Response.json({ pageCount: 0, backend: "filesystem" }));
+      }
+
+      if (url.startsWith("/api/brain/brief?project=")) {
+        return Promise.resolve(Response.json({ project: "demo-project", dueTasks: [], frontier: [] }));
+      }
+
+      if (url === "/api/projects/demo-project/import-summary") {
+        return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=demo-project") {
+        return Promise.resolve(Response.json({ tree: [] }));
+      }
+
+      if (url === "/api/brain/list?project=demo-project") {
+        return Promise.resolve(Response.json([]));
+      }
+
+      if (url === "/api/chat/thread?project=demo-project") {
+        return Promise.resolve(Response.json({
+          version: 1,
+          project: "demo-project",
+          conversationId: null,
+          messages: [],
+        }));
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Promise.resolve(Response.json({ ok: true }));
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return Promise.resolve(stream.response);
+      }
+
+      if (url === "/api/projects") {
+        return Promise.resolve(Response.json({
+          projects: [
+            {
+              id: "demo-project",
+              slug: "demo-project",
+              name: "Demo Project",
+              status: "active",
+            },
+          ],
+        }));
+      }
+
+      return Promise.resolve(Response.json({ status: "disconnected" }));
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ProjectPage />);
+
+    const input = await screen.findByLabelText("Chat with your project");
+    fireEvent.change(input, { target: { value: "keep streaming" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+
+    stream.send({
+      taskPhases: [
+        { id: "reading-file", label: "Reading file", status: "completed" },
+        { id: "drafting-plan", label: "Drafting plan", status: "active" },
+        { id: "done", label: "Done", status: "pending" },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-chat-run-state-row")).toHaveTextContent("Drafting plan");
+      expect(screen.getByTestId("project-chat-run-state-row")).toHaveTextContent("1/3 phases");
+    });
+    expect(screen.queryByTestId("chat-activity-spinner")).not.toBeInTheDocument();
+
+    stream.send({
+      text: "finished answer",
+      conversationId: "conv-demo",
+      messages: [],
+    });
+    stream.close();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("project-chat-run-state-row")).not.toBeInTheDocument();
+    });
   });
 
   it("cycles previously sent prompts with ArrowUp and ArrowDown in the chat input", async () => {
