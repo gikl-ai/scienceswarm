@@ -721,6 +721,22 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("falls back to legacy embed refs when url is present but empty", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"[embed url=\"\" ref=\"snake-game\" title=\"Snake\" height=\"420\" /]"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:12:43.000Z")}
+      />,
+    );
+
+    expect(screen.getByTitle("Snake")).toHaveAttribute(
+      "src",
+      "/api/workspace/raw/project-alpha/snake/index.html",
+    );
+  });
+
   it("blocks MEDIA html paths that attempt traversal before building raw preview URLs", () => {
     render(
       <ChatMessage
