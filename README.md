@@ -85,9 +85,13 @@ checkout path. Runtime state is separate: `SCIENCESWARM_DIR` is the local app-da
 (default `~/.scienceswarm`), and the brain store defaults to
 `<SCIENCESWARM_DIR>/brain` unless you set `BRAIN_ROOT` to move it elsewhere.
 
-Then open <https://localhost:3001/setup>. Safari blocks HTTP by default in local
-debug workflows on some systems, so ScienceSwarm starts with local HTTPS by
-default.
+`./scienceswarm start` opens the dashboard automatically after the local frontend
+is healthy. New installs redirect to setup when needed. To go straight there,
+run `./scienceswarm start --open setup` or open <http://127.0.0.1:3001/setup>.
+ScienceSwarm uses HTTP on the loopback interface by default because browsers
+treat local loopback origins as trustworthy without requiring users to accept a
+self-signed certificate. Set `FRONTEND_USE_HTTPS=true` only when you
+specifically need local TLS.
 
 The setup flow initializes the local research store, verifies local runtimes,
 defaults new installs to the `scientific_research` brain preset, and can
@@ -117,14 +121,14 @@ Important:
   scanning, imports, and file watching
 - Do not point `SCIENCESWARM_DIR` or `BRAIN_ROOT` at mounted Windows drives for
   normal use
-- After `./scienceswarm start` in WSL, open <https://localhost:3001/setup> from
+- After `./scienceswarm start` in WSL, open <http://127.0.0.1:3001/setup> from
   your Windows browser
 
 ### First Use
 
 1. Complete `/setup` and keep the default `scientific_research` preset unless
    you specifically want the broader `generic_scientist` layout
-2. Open `/dashboard/project`
+2. Open `/dashboard/project` with `./scienceswarm open`
 3. Import a folder of papers, notes, code, or datasets
 4. Start chatting with a project that already has context
 5. Run a literature packet from chat or MCP when you want a deterministic
@@ -261,7 +265,11 @@ If you are working on the UI and do not need the full agent stack:
 npm run dev
 ```
 
-The supported local runtime wrapper is `scienceswarm start|stop|restart|status`.
+The supported local runtime wrapper is
+`scienceswarm start|stop|restart|status|open`. `start` and `restart` keep the
+terminal attached as the live server log and open the dashboard automatically
+after the frontend health check passes. For headless runs, use
+`./scienceswarm start --no-open` or `./scienceswarm restart --no-open`.
 
 ## Project Status
 

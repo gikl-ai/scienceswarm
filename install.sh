@@ -145,7 +145,9 @@ echo "    ./scienceswarm start"
 if [ "$CLI_SHIM_INSTALLED" = "true" ] && cli_bin_on_path; then
   echo "    or scienceswarm start"
 fi
-echo "    Then open https://localhost:${FRONTEND_PORT}/setup"
+echo "    The browser opens automatically when the frontend is ready."
+echo "    To open setup directly: ./scienceswarm start --open setup"
+echo "    Manual setup URL: http://127.0.0.1:${FRONTEND_PORT}/setup"
 echo ""
 if [ "$CLI_SHIM_INSTALLED" = "true" ] && cli_bin_on_path; then
   echo "  CLI installed at $CLI_BIN_DIR/scienceswarm"

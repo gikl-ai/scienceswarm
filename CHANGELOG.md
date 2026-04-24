@@ -18,6 +18,9 @@ All notable changes to this project will be documented in this file.
 - `src/lib/config/ports.ts` — central port configuration module.
 - `src/lib/setup/env-migration.ts` — one-shot `.env.local` → `.env` migration on boot.
 - `scripts/print-port.ts` — shell-consumable port helper.
+- `scienceswarm open [browser] [dashboard|setup|path]` opens the detected healthy local frontend URL in Chrome by default, with named-browser overrides such as `safari` and `firefox`.
+- `scienceswarm start` and `scienceswarm restart` now open the dashboard automatically after the frontend health check passes, with `--no-open`, `--browser`, and `--open` options for headless or browser-specific runs.
+- `scienceswarm restart` and `start.sh` now print an explicit local-app handoff: keep the terminal open, wait for frontend readiness, expect the dashboard to open automatically, and use the exact printed protocol/URL if manual recovery is needed.
 - System identity clarified as `ScienceSwarm = OpenClaw + OpenHands + gbrain`, with gbrain-first data-flow rules across setup, chat, and execution paths.
 - Simple-onboarding: single-screen `/setup` form replaces the 7-step installer and multi-section setup page. Installs everything in parallel via `/api/setup/bootstrap` SSE (gbrain, openclaw, openhands docker, ollama+gemma).
 - Personal Telegram bot auto-creation via gramjs + BotFather automation. Users see "Meet Wobblefinch" (or any of 45 whimsical creatures) with a QR code to their personal bot — no token passing.
@@ -30,6 +33,8 @@ All notable changes to this project will be documented in this file.
 - `dashboard/project` redirects to `/setup` when the brain is missing instead of showing a half-working UI.
 - Sidebar Reasoning icon swapped from a magnifying-glass-on-document to a two-network glyph (a larger graph alongside a smaller one), reflecting that the reasoning audit shows how a model produces a derived trace.
 - The `scienceswarm status` health probe now respects HTTPS local frontends, so healthy self-signed local installs report `Frontend health: ok`.
+- `scienceswarm start`, `scienceswarm status`, install output, and README setup instructions now point users at the exact `127.0.0.1` dashboard/setup URL and call out wrong-protocol local URLs.
+- Local frontend startup now defaults to HTTP loopback instead of self-signed HTTPS. Browsers treat loopback HTTP as trustworthy, while untrusted self-signed local certificates can fail differently across Safari, Chrome, Firefox, and Edge. `FRONTEND_USE_HTTPS=true` remains available for explicit local TLS testing.
 - Settings > Project runtime now shows explicit Claude Code, Codex, and Gemini CLI setup commands, making subscription-backed runtime connection visible without asking ScienceSwarm to store provider tokens.
 
 ### Fixed

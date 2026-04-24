@@ -141,8 +141,148 @@ exit 1
     });
 
     expect(output).toContain("Frontend health: ok");
+    expect(output).toContain("Frontend health: ok (https)");
+    expect(output).toContain("Open: https://127.0.0.1:43994/dashboard/project");
+    expect(output).toContain("Setup: https://127.0.0.1:43994/setup");
     expect(fs.readFileSync(curlLogPath, "utf8").trim()).toBe(
       "-kfsS --max-time 2 https://127.0.0.1:43994/api/health",
+    );
+  });
+
+  it("opens the detected healthy local URL in the browser", () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-open-"));
+    const binRoot = path.join(tmpRoot, "bin");
+    const openLogPath = path.join(tmpRoot, "open.log");
+    fs.mkdirSync(binRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(binRoot, "curl"),
+      `#!/usr/bin/env bash
+if [ "$1" = "-fsS" ] && [ "$2" = "--max-time" ] && [ "$3" = "2" ] && [ "$4" = "http://127.0.0.1:43998/api/health" ]; then
+  exit 0
+fi
+exit 1
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+    fs.writeFileSync(
+      path.join(binRoot, "open"),
+      `#!/usr/bin/env bash
+printf '%s\\n' "$*" > ${JSON.stringify(openLogPath)}
+exit 0
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = runCli(["open", "setup"], {
+      SCIENCESWARM_DIR: tmpRoot,
+      FRONTEND_PORT: "43998",
+      HOME: tmpRoot,
+      PATH: `${binRoot}:${process.env.PATH ?? ""}`,
+    });
+
+    expect(output).toContain("Opening http://127.0.0.1:43998/setup in Google Chrome");
+    expect(fs.readFileSync(openLogPath, "utf8").trim()).toBe(
+      "-a Google Chrome http://127.0.0.1:43998/setup",
+    );
+  });
+
+  it("opens a named browser when requested", () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-open-browser-"));
+    const binRoot = path.join(tmpRoot, "bin");
+    const openLogPath = path.join(tmpRoot, "open.log");
+    fs.mkdirSync(binRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(binRoot, "curl"),
+      `#!/usr/bin/env bash
+if [ "$1" = "-fsS" ] && [ "$2" = "--max-time" ] && [ "$3" = "2" ] && [ "$4" = "http://127.0.0.1:43999/api/health" ]; then
+  exit 0
+fi
+exit 1
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+    fs.writeFileSync(
+      path.join(binRoot, "open"),
+      `#!/usr/bin/env bash
+printf '%s\\n' "$*" > ${JSON.stringify(openLogPath)}
+exit 0
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = runCli(["open", "safari", "setup"], {
+      SCIENCESWARM_DIR: tmpRoot,
+      FRONTEND_PORT: "43999",
+      HOME: tmpRoot,
+      PATH: `${binRoot}:${process.env.PATH ?? ""}`,
+    });
+
+    expect(output).toContain("Opening http://127.0.0.1:43999/setup in Safari");
+    expect(fs.readFileSync(openLogPath, "utf8").trim()).toBe(
+      "-a Safari http://127.0.0.1:43999/setup",
+    );
+  });
+
+  it("prints actionable restart guidance before handing off to the dev server", () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-restart-"));
+    const binRoot = path.join(tmpRoot, "bin");
+    const openLogPath = path.join(tmpRoot, "open.log");
+    fs.mkdirSync(binRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(binRoot, "curl"),
+      `#!/usr/bin/env bash
+if [ "$1" = "-fsS" ] && [ "$2" = "--max-time" ] && [ "$3" = "2" ] && [ "$4" = "http://127.0.0.1:44001/api/health" ]; then
+  exit 0
+fi
+exit 1
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+    fs.writeFileSync(
+      path.join(binRoot, "open"),
+      `#!/usr/bin/env bash
+printf '%s\\n' "$*" > ${JSON.stringify(openLogPath)}
+exit 0
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+    fs.writeFileSync(
+      path.join(binRoot, "npx"),
+      `#!/usr/bin/env bash
+if [ "$1" = "tsx" ]; then
+  exit 0
+fi
+if [ "$1" = "next" ] && [ "$2" = "dev" ]; then
+  printf 'fake next dev ready\\n'
+  sleep 1
+  exit 0
+fi
+exit 0
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = runCli(["restart", "--browser", "safari"], {
+      SCIENCESWARM_DIR: tmpRoot,
+      BRAIN_ROOT: path.join(tmpRoot, "brain"),
+      ENABLE_DREAM_RUNNER: "false",
+      FRONTEND_PORT: "44001",
+      HOME: tmpRoot,
+      PATH: `${binRoot}:/usr/bin:/bin:/usr/sbin:/sbin`,
+    });
+
+    expect(output).toContain("ScienceSwarm restart");
+    expect(output).toContain("Opens the dashboard automatically after the frontend health check passes.");
+    expect(output).toContain("If the browser does not appear:");
+    expect(output).toContain("Open dashboard manually: ./scienceswarm open");
+    expect(output).toContain("Dashboard: http://127.0.0.1:44001/dashboard/project");
+    expect(output).toContain("Protocol:  use http:// only on this port; https:// will fail.");
+    expect(output).toContain("Keep this terminal open. It is the live ScienceSwarm server log.");
+    expect(output).toContain("ScienceSwarm will open dashboard in safari after the frontend is healthy.");
+    expect(output).toContain("Opening http://127.0.0.1:44001/dashboard/project in Safari");
+    expect(output).toContain("fake next dev ready");
+    expect(fs.readFileSync(openLogPath, "utf8").trim()).toBe(
+      "-a Safari http://127.0.0.1:44001/dashboard/project",
     );
   });
 
@@ -177,7 +317,7 @@ exit 1
       "-fsS --max-time 2 http://127.0.0.1:43997/api/health",
     ]);
   });
-  it("prefers http probing by default when https mode is not enabled", () => {
+  it("prefers http probing when local https is disabled", () => {
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-http-fallback-"));
     const binRoot = path.join(tmpRoot, "bin");
     const curlLogPath = path.join(tmpRoot, "curl.log");
@@ -197,6 +337,7 @@ exit 1
     const output = runCli(["status"], {
       SCIENCESWARM_DIR: tmpRoot,
       FRONTEND_PORT: "43995",
+      FRONTEND_USE_HTTPS: "false",
       HOME: tmpRoot,
       PATH: `${binRoot}:${process.env.PATH ?? ""}`,
     });
@@ -227,6 +368,7 @@ exit 1
     const output = runCli(["status"], {
       SCIENCESWARM_DIR: tmpRoot,
       FRONTEND_PORT: "43996",
+      FRONTEND_USE_HTTPS: "false",
       HOME: tmpRoot,
       PATH: `${binRoot}:${process.env.PATH ?? ""}`,
     });

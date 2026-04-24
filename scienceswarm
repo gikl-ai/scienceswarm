@@ -27,9 +27,10 @@ Usage:
 
 Commands:
   install    Run install.sh from the ScienceSwarm checkout
-  start      Run start.sh in the foreground
+  start      Start ScienceSwarm, then open the dashboard when ready
+  open       Open the running local dashboard in Chrome or a named browser
   stop       Stop the managed ScienceSwarm launcher and local runtime helpers
-  restart    Stop the current launcher, then start it again
+  restart    Stop the current launcher, start it again, then open the dashboard
   status     Show the current local runtime status
   doctor     Run npm run doctor
   reset      Run npm run setup:reset
@@ -37,7 +38,13 @@ Commands:
 
 Examples:
   scienceswarm start
-  scienceswarm restart
+  scienceswarm start --no-open
+  scienceswarm start --browser safari
+  scienceswarm open
+  scienceswarm open chrome
+  scienceswarm open safari setup
+  scienceswarm open setup
+  scienceswarm restart --browser chrome
   scienceswarm status
   scienceswarm reset -- --keep-telegram-bot
 
@@ -99,6 +106,7 @@ load_repo_env() {
 
   : "${FRONTEND_HOST:=127.0.0.1}"
   : "${FRONTEND_PORT:=3001}"
+  : "${FRONTEND_PUBLIC_HOST:=$FRONTEND_HOST}"
   : "${FRONTEND_USE_HTTPS:=false}"
   DATA_ROOT="${SCIENCESWARM_DIR:-$HOME/.scienceswarm}"
   RUN_ROOT="$DATA_ROOT/run"
@@ -208,6 +216,242 @@ listener_pid_for_port() {
   printf '%s\n' "$pid"
 }
 
+frontend_configured_scheme() {
+  if is_truthy "${FRONTEND_USE_HTTPS:-false}"; then
+    printf '%s\n' "https"
+  else
+    printf '%s\n' "http"
+  fi
+}
+
+frontend_probe_host() {
+  case "${FRONTEND_HOST:-127.0.0.1}" in
+    ""|localhost|0.0.0.0|"::")
+      printf '%s\n' "127.0.0.1"
+      ;;
+    "::1"|"[::1]")
+      printf '%s\n' "[::1]"
+      ;;
+    *)
+      printf '%s\n' "$FRONTEND_HOST"
+      ;;
+  esac
+}
+
+frontend_browser_host() {
+  local host="${FRONTEND_PUBLIC_HOST:-${FRONTEND_HOST:-127.0.0.1}}"
+
+  case "$host" in
+    ""|localhost|0.0.0.0|"::")
+      printf '%s\n' "127.0.0.1"
+      ;;
+    "::1"|"[::1]")
+      printf '%s\n' "[::1]"
+      ;;
+    *)
+      printf '%s\n' "$host"
+      ;;
+  esac
+}
+
+normalize_frontend_path() {
+  case "${1:-dashboard}" in
+    ""|dashboard|project|dashboard/project|/dashboard|/dashboard/project)
+      printf '%s\n' "/dashboard/project"
+      ;;
+    setup|/setup)
+      printf '%s\n' "/setup"
+      ;;
+    /*)
+      printf '%s\n' "$1"
+      ;;
+    *)
+      printf '/%s\n' "$1"
+      ;;
+  esac
+}
+
+frontend_url() {
+  local scheme="$1"
+  local target_path
+  target_path="$(normalize_frontend_path "${2:-dashboard}")"
+
+  printf '%s://%s:%s%s\n' "$scheme" "$(frontend_browser_host)" "$FRONTEND_PORT" "$target_path"
+}
+
+normalize_browser_name() {
+  local raw
+  raw="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+
+  case "$raw" in
+    ""|default|system)
+      printf '%s\n' ""
+      ;;
+    chrome|google|google-chrome|"google chrome")
+      printf '%s\n' "Google Chrome"
+      ;;
+    safari)
+      printf '%s\n' "Safari"
+      ;;
+    firefox|mozilla|"mozilla firefox")
+      printf '%s\n' "Firefox"
+      ;;
+    edge|msedge|"microsoft edge")
+      printf '%s\n' "Microsoft Edge"
+      ;;
+    brave|"brave browser")
+      printf '%s\n' "Brave Browser"
+      ;;
+    arc)
+      printf '%s\n' "Arc"
+      ;;
+    *)
+      printf '%s\n' "$1"
+      ;;
+  esac
+}
+
+is_browser_token() {
+  local raw
+  raw="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+
+  case "$raw" in
+    default|system|chrome|google|google-chrome|"google chrome"|safari|firefox|mozilla|"mozilla firefox"|edge|msedge|"microsoft edge"|brave|"brave browser"|arc)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+browser_cli_candidates() {
+  local app="$1"
+
+  case "$(printf '%s' "$app" | tr '[:upper:]' '[:lower:]')" in
+    "google chrome")
+      printf '%s\n' google-chrome google-chrome-stable chrome chromium chromium-browser
+      ;;
+    safari)
+      printf '%s\n' safari
+      ;;
+    firefox)
+      printf '%s\n' firefox
+      ;;
+    "microsoft edge")
+      printf '%s\n' microsoft-edge microsoft-edge-stable msedge
+      ;;
+    "brave browser")
+      printf '%s\n' brave-browser brave
+      ;;
+    arc)
+      printf '%s\n' arc
+      ;;
+  esac
+}
+
+open_with_browser_app() {
+  local app="$1"
+  local url="$2"
+  local cmd=""
+
+  if [ -n "$app" ] && command -v open >/dev/null 2>&1 && open -a "$app" "$url" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  while IFS= read -r cmd; do
+    [ -n "$cmd" ] || continue
+    if command -v "$cmd" >/dev/null 2>&1; then
+      "$cmd" "$url" >/dev/null 2>&1 &
+      return 0
+    fi
+  done < <(browser_cli_candidates "$app")
+
+  return 1
+}
+
+open_with_system_default() {
+  local url="$1"
+
+  if command -v open >/dev/null 2>&1 && open "$url" >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v xdg-open >/dev/null 2>&1 && xdg-open "$url" >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v wslview >/dev/null 2>&1 && wslview "$url" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
+
+open_frontend_url() {
+  local url="$1"
+  local requested_browser="${2:-}"
+  local browser_app=""
+
+  if [ -n "$requested_browser" ]; then
+    browser_app="$(normalize_browser_name "$requested_browser")"
+    if [ -z "$browser_app" ]; then
+      note "Opening $url in the system default browser"
+      open_with_system_default "$url"
+      return $?
+    fi
+
+    note "Opening $url in $browser_app"
+    open_with_browser_app "$browser_app" "$url"
+    return $?
+  fi
+
+  browser_app="$(normalize_browser_name chrome)"
+  note "Opening $url in $browser_app"
+  if open_with_browser_app "$browser_app" "$url"; then
+    return 0
+  fi
+
+  note "Chrome was not available; trying the system default browser."
+  open_with_system_default "$url"
+}
+
+probe_frontend_scheme() {
+  local scheme="$1"
+  local url
+
+  url="${scheme}://$(frontend_probe_host):${FRONTEND_PORT}/api/health"
+  if [ "$scheme" = "https" ]; then
+    curl -kfsS --max-time 2 "$url" >/dev/null 2>&1
+  else
+    curl -fsS --max-time 2 "$url" >/dev/null 2>&1
+  fi
+}
+
+detect_frontend_health_scheme() {
+  FRONTEND_HEALTH_SCHEME=""
+
+  if is_truthy "${FRONTEND_USE_HTTPS:-false}"; then
+    if probe_frontend_scheme "https"; then
+      FRONTEND_HEALTH_SCHEME="https"
+      return 0
+    fi
+    if probe_frontend_scheme "http"; then
+      FRONTEND_HEALTH_SCHEME="http"
+      return 0
+    fi
+  else
+    if probe_frontend_scheme "http"; then
+      FRONTEND_HEALTH_SCHEME="http"
+      return 0
+    fi
+    if probe_frontend_scheme "https"; then
+      FRONTEND_HEALTH_SCHEME="https"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
 docker_container_running_state() {
   local container_id="$1"
   local raw=""
@@ -301,6 +545,57 @@ cmd_start() {
   exec ./start.sh "$@"
 }
 
+cmd_open() {
+  local requested_browser=""
+  local target_path=""
+  local url=""
+
+  load_repo_env
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -b|--browser)
+        shift
+        [ "$#" -gt 0 ] || die "missing browser name after --browser"
+        requested_browser="$1"
+        ;;
+      --browser=*)
+        requested_browser="${1#--browser=}"
+        ;;
+      -h|--help)
+        note "Usage: scienceswarm open [browser] [dashboard|setup|/path]"
+        note "       scienceswarm open [dashboard|setup|/path] --browser <browser>"
+        note "Examples: scienceswarm open, scienceswarm open safari setup, scienceswarm open --browser firefox /dashboard/project"
+        return 0
+        ;;
+      *)
+        if [ -z "$requested_browser" ] && is_browser_token "$1"; then
+          requested_browser="$1"
+        elif [ -z "$target_path" ]; then
+          target_path="$1"
+        else
+          die "unexpected scienceswarm open argument '$1'"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  target_path="$(normalize_frontend_path "${target_path:-dashboard}")"
+
+  if ! detect_frontend_health_scheme; then
+    die "frontend is unreachable on $(frontend_probe_host):$FRONTEND_PORT. Run scienceswarm start, then retry."
+  fi
+
+  url="$(frontend_url "$FRONTEND_HEALTH_SCHEME" "$target_path")"
+  if open_frontend_url "$url" "$requested_browser"; then
+    note "If the page does not load, run scienceswarm status and use the exact Open URL it prints."
+    return 0
+  fi
+
+  die "could not launch a browser automatically. Open this URL manually: $url"
+}
+
 cmd_stop() {
   local launcher_pid=""
   local listener_pid=""
@@ -324,6 +619,44 @@ cmd_stop() {
 }
 
 cmd_restart() {
+  local scheme=""
+
+  case "${1:-}" in
+    -h|--help)
+      note "Usage: scienceswarm restart [--no-open] [--browser <name>] [--open <dashboard|setup|/path>]"
+      note "Stops the managed local runtime, starts a fresh foreground server log, then opens the dashboard when healthy."
+      note "Use --no-open for headless runs. Use scienceswarm open manually if the browser does not appear."
+      return 0
+      ;;
+  esac
+
+  load_repo_env
+  scheme="$(frontend_configured_scheme)"
+
+  note "ScienceSwarm restart"
+  note ""
+  note "What this command does:"
+  note "  1. Stops the old local ScienceSwarm runtime."
+  note "  2. Starts a fresh local server in this same terminal."
+  note "  3. Opens the dashboard automatically after the frontend health check passes."
+  note "  4. Leaves this terminal attached as the live server log."
+  note ""
+  note "If the browser does not appear:"
+  note "  Open dashboard manually: ./scienceswarm open"
+  note "  Open setup manually:     ./scienceswarm open setup"
+  note "  Browser choice:          ./scienceswarm open safari    # or chrome, firefox, edge, brave, arc"
+  note "  Disable auto-open:       ./scienceswarm restart --no-open"
+  note ""
+  note "Direct URLs for this run:"
+  note "  Dashboard: $(frontend_url "$scheme" dashboard)"
+  note "  Setup:     $(frontend_url "$scheme" setup)"
+  if [ "$scheme" = "https" ]; then
+    note "  Protocol:  use https:// only on this port; http:// will fail."
+    note "  Safari:    self-signed local HTTPS can fail in Safari. Prefer ./scienceswarm open chrome or set FRONTEND_USE_HTTPS=false."
+  else
+    note "  Protocol:  use http:// only on this port; https:// will fail."
+  fi
+  note ""
   cmd_stop
   note "Restarting ScienceSwarm..."
   cmd_start "$@"
@@ -336,6 +669,8 @@ cmd_status() {
   local openhands_running="stopped"
   local frontend_status="stopped"
   local frontend_health="unreachable"
+  local frontend_scheme=""
+  local frontend_preferred_scheme=""
   local gateway_status="stopped"
   local openhands_container_id=""
   local openhands_state=""
@@ -377,16 +712,12 @@ cmd_status() {
     gateway_status="running (pid $gateway_pid)"
   fi
 
-  if is_truthy "${FRONTEND_USE_HTTPS:-false}"; then
-    if curl -kfsS --max-time 2 "https://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
-      frontend_health="ok"
-    elif curl -fsS --max-time 2 "http://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
-      frontend_health="ok"
-    fi
-  elif curl -fsS --max-time 2 "http://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
-    frontend_health="ok"
-  elif curl -kfsS --max-time 2 "https://$FRONTEND_HOST:$FRONTEND_PORT/api/health" >/dev/null 2>&1; then
-    frontend_health="ok"
+  frontend_preferred_scheme="$(frontend_configured_scheme)"
+  if detect_frontend_health_scheme; then
+    frontend_scheme="$FRONTEND_HEALTH_SCHEME"
+    frontend_health="ok ($frontend_scheme)"
+  else
+    frontend_scheme="$frontend_preferred_scheme"
   fi
 
   note "ScienceSwarm status"
@@ -394,6 +725,23 @@ cmd_status() {
   note "  Data root: $DATA_ROOT"
   note "  Frontend: $frontend_status"
   note "  Frontend health: $frontend_health"
+  if [ "$frontend_health" = "unreachable" ]; then
+    note "  Open: unavailable until the frontend is healthy"
+    note "  Expected URL: $(frontend_url "$frontend_scheme" dashboard)"
+    note "  Next step: run scienceswarm start"
+  else
+    note "  Open: $(frontend_url "$frontend_scheme" dashboard)"
+    note "  Setup: $(frontend_url "$frontend_scheme" setup)"
+    note "  Next step: run scienceswarm open"
+    if [ "$frontend_scheme" != "$frontend_preferred_scheme" ]; then
+      note "  Warning: FRONTEND_USE_HTTPS=${FRONTEND_USE_HTTPS:-false}, but $frontend_scheme answered on this port. Use the Open URL above."
+    elif [ "$frontend_scheme" = "https" ]; then
+      note "  Note: this port is serving HTTPS; http:// URLs on this port will fail. HTTPS is opt-in because self-signed local certs are not trusted by every browser."
+    else
+      note "  Note: this port is serving HTTP; https:// URLs on this port will fail."
+    fi
+    note "  Browser: scienceswarm open uses Chrome by default; pass a browser name such as 'safari' or 'firefox' to override."
+  fi
   note "  OpenHands: $openhands_running"
   note "  OpenClaw gateway: $gateway_status"
   note "  OpenClaw mode: $OPENCLAW_MODE"
@@ -420,6 +768,9 @@ case "$COMMAND" in
     ;;
   start)
     cmd_start "$@"
+    ;;
+  open)
+    cmd_open "$@"
     ;;
   stop)
     cmd_stop "$@"
