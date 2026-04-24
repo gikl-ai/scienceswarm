@@ -167,6 +167,28 @@ describe("ChatMessage", () => {
     expect(screen.queryByRole("button", { name: "Do not render" })).not.toBeInTheDocument();
   });
 
+  it("applies restrained semantic colors to headings, links, callouts, and code surfaces", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "## Findings\n\n" +
+          "### Risks\n\n" +
+          "> Watch the local gateway logs.\n\n" +
+          "[Docs](https://example.com/docs)\n\n" +
+          "```ts\nconst ready = true;\n```"
+        }
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 2, name: "Findings" })).toHaveClass("text-sky-950");
+    expect(screen.getByRole("heading", { level: 3, name: "Risks" })).toHaveClass("text-emerald-900");
+    expect(screen.getByRole("link", { name: "Docs" })).toHaveClass("text-blue-700");
+    expect(screen.getByText("Watch the local gateway logs.").closest("blockquote")).toHaveClass("bg-sky-50/75");
+    expect(screen.getByText("const ready = true;").closest("pre")).toHaveClass("border-slate-300");
+  });
+
   it("keeps user turns inside the accent bubble", () => {
     render(
       <ChatMessage
