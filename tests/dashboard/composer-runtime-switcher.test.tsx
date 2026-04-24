@@ -106,6 +106,7 @@ describe("ComposerRuntimeSwitcher", () => {
     const trigger = screen.getByRole("button", { name: "Change runtime" });
     expect(trigger).toHaveTextContent("Chat");
     expect(trigger).toHaveTextContent("Claude Code");
+    expect(trigger).toHaveTextContent("Cloud ok");
 
     fireEvent.click(trigger);
     expect(onOpenChange).toHaveBeenCalledWith(true);
@@ -127,6 +128,8 @@ describe("ComposerRuntimeSwitcher", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Runtime switcher" });
+    expect(within(dialog).getByText("Runtime For This Turn")).toBeInTheDocument();
+    expect(within(dialog).getByText("Project Privacy")).toBeInTheDocument();
     expect(within(dialog).getByText("Check: claude auth status")).toBeInTheDocument();
     expect(within(dialog).getAllByText("Claude Code")[0]).toBeInTheDocument();
 
