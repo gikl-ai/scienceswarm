@@ -2456,6 +2456,9 @@ describe("POST /api/chat/unified", () => {
     expect(firstGatewayEventIndex).toBeGreaterThan(-1);
     expect(findProgressTextIndex("Sending request to OpenClaw")).toBeLessThan(firstGatewayEventIndex);
     expect(findProgressTextIndex("Waiting for OpenClaw to respond")).toBeLessThan(firstGatewayEventIndex);
+    expect(findProgressTextIndex("Sending request to OpenClaw")).toBeLessThan(
+      findProgressTextIndex("Waiting for OpenClaw to respond"),
+    );
   });
 
   it("streams opt-in timing meta without a first gateway event when OpenClaw is quiet", async () => {
