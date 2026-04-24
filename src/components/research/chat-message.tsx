@@ -1862,7 +1862,7 @@ export function ChatMessage({
       {showCompactLiveTranscript && (
         <div
           aria-live="polite"
-          className="mb-3 space-y-2"
+          className="mb-3 space-y-0"
           role="log"
         >
           <ActiveRunStateSurface

@@ -494,6 +494,23 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("keeps the compact live run-state wrapper on a single spacing system", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "thinking", text: "Plan: compare the timing artifact" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByRole("log")).toHaveClass("space-y-0");
+  });
+
   it("falls back to the previous non-empty compact detail when the latest narrative is blank", () => {
     render(
       <ChatMessage
