@@ -231,9 +231,11 @@ exit 0
     fs.writeFileSync(
       path.join(binRoot, "curl"),
       `#!/usr/bin/env bash
-if [ "$1" = "-fsS" ] && [ "$2" = "--max-time" ] && [ "$3" = "2" ] && [ "$4" = "http://127.0.0.1:44001/api/health" ]; then
-  exit 0
-fi
+case "$4" in
+  http://*:44001/api/health|https://*:44001/api/health)
+    exit 0
+    ;;
+esac
 exit 1
 `,
       { encoding: "utf8", mode: 0o755 },
@@ -265,10 +267,17 @@ exit 0
     const output = runCli(["restart", "--browser", "safari"], {
       SCIENCESWARM_DIR: tmpRoot,
       BRAIN_ROOT: path.join(tmpRoot, "brain"),
+      CI: "",
       ENABLE_DREAM_RUNNER: "false",
+      FRONTEND_HOST: "127.0.0.1",
       FRONTEND_PORT: "44001",
+      FRONTEND_PUBLIC_HOST: "127.0.0.1",
+      FRONTEND_USE_HTTPS: "false",
       HOME: tmpRoot,
       PATH: `${binRoot}:/usr/bin:/bin:/usr/sbin:/sbin`,
+      SCIENCESWARM_NO_OPEN: "false",
+      SCIENCESWARM_OPEN_WAIT_ATTEMPTS: "1",
+      SCIENCESWARM_OPEN_WAIT_SECONDS: "0",
     });
 
     expect(output).toContain("ScienceSwarm restart");
