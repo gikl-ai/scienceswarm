@@ -67,7 +67,7 @@ export function SessionDetail({
       </div>
 
       {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+        <p className="mt-3 rounded border border-danger/30 bg-danger/10 p-2 text-xs text-danger">
           {error}
         </p>
       )}

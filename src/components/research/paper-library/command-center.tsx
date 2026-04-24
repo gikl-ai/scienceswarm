@@ -247,11 +247,11 @@ function StatusBadge({
   value: string;
 }) {
   const className = tone === "success"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    ? "border-ok/30 bg-ok/10 text-ok"
     : tone === "warning"
-      ? "border-amber-200 bg-amber-50 text-amber-700"
+      ? "border-warn/30 bg-warn/10 text-warn"
       : tone === "danger"
-        ? "border-red-200 bg-red-50 text-red-700"
+        ? "border-danger/30 bg-danger/10 text-danger"
         : "border-border bg-surface text-muted";
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold ${className}`}>
@@ -1078,8 +1078,8 @@ export function PaperLibraryCommandCenter({
         )
       : null;
   const approvalStatusTone = (approvalToken && !approvalTokenExpired)
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-    : "border-amber-200 bg-amber-50 text-amber-700";
+    ? "border-ok/30 bg-ok/10 text-ok"
+    : "border-warn/30 bg-warn/10 text-warn";
 
   const stepContent = useMemo(() => {
     if (session.step === "review") {
@@ -1125,7 +1125,7 @@ export function PaperLibraryCommandCenter({
           </div>
 
           {reviewError && (
-            <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {reviewError}
             </div>
           )}
@@ -1151,7 +1151,7 @@ export function PaperLibraryCommandCenter({
                         {item.reasonCodes.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {item.reasonCodes.map((reason) => (
-                              <span key={reason} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">
+                              <span key={reason} className="rounded-full border border-warn/30 bg-warn/10 px-2 py-1 text-[11px] font-semibold text-warn">
                                 {reason.replaceAll("_", " ")}
                               </span>
                             ))}
@@ -1347,7 +1347,7 @@ export function PaperLibraryCommandCenter({
           </div>
 
           {applyPlanError && (
-            <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {applyPlanError}
             </div>
           )}
@@ -1379,7 +1379,7 @@ export function PaperLibraryCommandCenter({
               </div>
 
               {activePlan.conflictCount > 0 && (
-                <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                <div role="alert" className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
                   Resolve review items or path conflicts before approving this plan.
                 </div>
               )}
@@ -1404,7 +1404,7 @@ export function PaperLibraryCommandCenter({
                     {operation.conflictCodes.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {operation.conflictCodes.map((code) => (
-                          <span key={code} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">
+                          <span key={code} className="rounded-full border border-warn/30 bg-warn/10 px-2 py-1 text-[11px] font-semibold text-warn">
                             {code.replaceAll("_", " ")}
                           </span>
                         ))}
@@ -1516,19 +1516,19 @@ export function PaperLibraryCommandCenter({
           </div>
 
           {graphError && (
-            <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {graphError}
             </div>
           )}
 
           {clustersError && (
-            <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {clustersError}
             </div>
           )}
 
           {gapsError && (
-            <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {gapsError}
             </div>
           )}
@@ -1550,7 +1550,7 @@ export function PaperLibraryCommandCenter({
                   {graphPage?.warnings.length ? (
                     <div className="mt-3 space-y-2">
                       {graphPage.warnings.map((warning) => (
-                        <div key={warning} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                        <div key={warning} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
                           {warning}
                         </div>
                       ))}
@@ -1623,7 +1623,7 @@ export function PaperLibraryCommandCenter({
                       {clustersPage.warnings.length ? (
                         <div className="mt-3 space-y-2">
                           {clustersPage.warnings.map((warning) => (
-                            <div key={warning} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                            <div key={warning} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
                               {warning}
                             </div>
                           ))}
@@ -1720,7 +1720,7 @@ export function PaperLibraryCommandCenter({
                       {gapPage.warnings.length > 0 && (
                         <div className="mt-4 space-y-2">
                           {gapPage.warnings.map((warning) => (
-                            <div key={warning} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                            <div key={warning} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
                               {warning}
                             </div>
                           ))}
@@ -1897,7 +1897,7 @@ export function PaperLibraryCommandCenter({
           </div>
 
           {manifestError && (
-            <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {manifestError}
             </div>
           )}
@@ -1927,7 +1927,7 @@ export function PaperLibraryCommandCenter({
               {activeManifest.warnings.length > 0 && (
                 <div className="mt-3 space-y-2">
                   {activeManifest.warnings.map((warning) => (
-                    <div key={warning} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                    <div key={warning} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
                       {warning}
                     </div>
                   ))}
@@ -1948,7 +1948,7 @@ export function PaperLibraryCommandCenter({
                           {operation.sourceRelativePath}{" -> "}{operation.destinationRelativePath}
                         </p>
                         {operation.error && (
-                          <p className="mt-1 text-xs text-red-700">{operation.error}</p>
+                          <p className="mt-1 text-xs text-danger">{operation.error}</p>
                         )}
                       </div>
                       <StatusBadge
@@ -2024,7 +2024,7 @@ export function PaperLibraryCommandCenter({
         </div>
 
         {scanError && (
-          <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
             {scanError}
           </div>
         )}
@@ -2081,7 +2081,7 @@ export function PaperLibraryCommandCenter({
               {scan.warnings.length > 0 && (
                 <div className="mt-4 space-y-2">
                   {scan.warnings.map((warning) => (
-                    <div key={warning} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                    <div key={warning} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
                       {warning}
                     </div>
                   ))}
@@ -2259,7 +2259,7 @@ export function PaperLibraryCommandCenter({
 
       {commandError && (
         <div className="border-b border-border bg-white px-4 py-4">
-          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
             {commandError}
           </div>
         </div>

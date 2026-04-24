@@ -14,11 +14,11 @@ import { Spinner } from "@/components/spinner";
 // ── Channel badges ─────────────────────────────────────────────
 
 const CHANNEL_BADGES: Record<string, { icon: string; label: string; color: string }> = {
-  web: { icon: "\u{1F310}", label: "Web", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  telegram: { icon: "\u{1F4F1}", label: "Telegram", color: "bg-sky-50 text-sky-700 border-sky-200" },
-  slack: { icon: "\u{1F4AC}", label: "Slack", color: "bg-purple-50 text-purple-700 border-purple-200" },
-  whatsapp: { icon: "\u{1F4F2}", label: "WhatsApp", color: "bg-green-50 text-green-700 border-green-200" },
-  discord: { icon: "\u{1F3AE}", label: "Discord", color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  web: { icon: "\u{1F310}", label: "Web", color: "bg-accent/10 text-accent border-accent/30" },
+  telegram: { icon: "\u{1F4F1}", label: "Telegram", color: "bg-sunk text-body border-rule" },
+  slack: { icon: "\u{1F4AC}", label: "Slack", color: "bg-sunk text-body border-rule" },
+  whatsapp: { icon: "\u{1F4F2}", label: "WhatsApp", color: "bg-ok/10 text-ok border-ok/30" },
+  discord: { icon: "\u{1F3AE}", label: "Discord", color: "bg-sunk text-body border-rule" },
 };
 
 // ── Props ──────────────────────────────────────────────────────
@@ -177,14 +177,14 @@ const PROGRESS_SECTION_META: Record<
     title: "Thinking Trace",
     compactTitle: "Thinking",
     icon: "🧠",
-    className: "border-sky-200 bg-sky-50 text-sky-700",
-    rowClassName: "text-sky-900/90",
+    className: "border-rule bg-sunk text-body",
+    rowClassName: "text-strong/90",
   },
   activity: {
     title: "OpenClaw Activity",
     compactTitle: "Activity",
     icon: "⚙️",
-    className: "border-border bg-slate-50 text-muted",
+    className: "border-border bg-sunk text-muted",
     rowClassName: "text-muted",
   },
 };
@@ -212,36 +212,36 @@ const LEGACY_HTML_EMBED_ALIASES: Record<string, string> = {
   "snake-webpage": "snake_game.html",
 };
 const ASSISTANT_BODY_TEXT_CLASS =
-  "text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
+  "text-[15px] leading-7 tracking-[0.005em] text-body sm:text-base sm:leading-8";
 const ASSISTANT_PARAGRAPH_CLASS = `mb-5 ${ASSISTANT_BODY_TEXT_CLASS}`;
 const ASSISTANT_TITLE_CLASS =
-  "mb-6 text-[2.25rem] leading-[0.98] font-semibold tracking-[-0.05em] text-slate-950 sm:text-[2.6rem]";
+  "mb-6 text-[2.25rem] leading-[0.98] font-semibold tracking-[-0.05em] text-strong sm:text-[2.6rem]";
 const ASSISTANT_SUBTITLE_CLASS =
-  "mt-10 mb-4 text-[1.7rem] leading-[1.08] font-semibold tracking-[-0.04em] text-sky-950 first:mt-0 sm:text-[1.95rem]";
+  "mt-10 mb-4 text-[1.7rem] leading-[1.08] font-semibold tracking-[-0.04em] text-strong first:mt-0 sm:text-[1.95rem]";
 const ASSISTANT_SECTION_CLASS =
-  "mt-8 mb-3 text-[1.18rem] leading-7 font-semibold tracking-[-0.02em] text-emerald-900 first:mt-0 sm:text-[1.24rem]";
+  "mt-8 mb-3 text-[1.18rem] leading-7 font-semibold tracking-[-0.02em] text-strong first:mt-0 sm:text-[1.24rem]";
 const ASSISTANT_SUBSECTION_CLASS =
-  "mt-6 mb-3 text-[1rem] leading-6 font-semibold tracking-[-0.01em] text-slate-900 first:mt-0";
+  "mt-6 mb-3 text-[1rem] leading-6 font-semibold tracking-[-0.01em] text-strong first:mt-0";
 const ASSISTANT_LIST_CLASS =
-  "mb-5 pl-6 text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
+  "mb-5 pl-6 text-[15px] leading-7 tracking-[0.005em] text-body sm:text-base sm:leading-8";
 const ASSISTANT_LIST_ITEM_CLASS = "pl-2 [&>ol]:mt-3 [&>ul]:mt-3";
-const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-slate-500";
+const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-dim";
 const ASSISTANT_METADATA_CLASS =
-  "text-[10px] font-medium tracking-[0.02em] text-slate-400";
+  "text-[10px] font-medium tracking-[0.02em] text-quiet";
 const ASSISTANT_METADATA_CHIP_CLASS =
-  "inline-flex items-center rounded-full bg-slate-100/85 px-2.5 py-1 text-[10px] font-medium tracking-[0.015em] text-slate-400";
+  "inline-flex items-center rounded-full bg-sunk/85 px-2.5 py-1 text-[10px] font-medium tracking-[0.015em] text-quiet";
 const ASSISTANT_BLOCKQUOTE_CLASS =
-  "my-6 rounded-r-2xl border-l-2 border-sky-300 bg-sky-50/75 px-4 py-3 italic text-sky-900";
+  "my-6 rounded-r-2xl border-l-2 border-rule bg-sunk/75 px-4 py-3 italic text-body";
 const ASSISTANT_LINK_CLASS =
-  "font-medium text-blue-700 underline decoration-blue-200 underline-offset-4 transition-colors hover:text-blue-800 hover:decoration-blue-400";
+  "font-medium text-accent underline decoration-accent/30 underline-offset-4 transition-colors hover:text-accent-dim hover:decoration-accent";
 const ASSISTANT_INLINE_CODE_CLASS =
-  "rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-slate-800";
+  "rounded-md border border-rule bg-sunk/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-strong";
 const ASSISTANT_CODE_BLOCK_CLASS =
-  "my-6 overflow-x-auto rounded-3xl border border-slate-300 bg-slate-950 px-5 py-4 text-[13px] leading-6 text-slate-100 shadow-[0_12px_30px_rgba(15,23,42,0.12)]";
+  "my-6 overflow-x-auto rounded-3xl border border-rule bg-ink px-5 py-4 text-[13px] leading-6 text-quiet shadow-[0_12px_30px_rgba(15,23,42,0.12)]";
 const ASSISTANT_MEDIA_CARD_CLASS =
-  "overflow-hidden rounded-[1.35rem] border border-slate-200/90 bg-white shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]";
+  "overflow-hidden rounded-[1.35rem] border border-rule/90 bg-raised shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]";
 const ASSISTANT_MEDIA_FRAME_CLASS =
-  "block w-full max-h-[26rem] bg-slate-50 object-contain";
+  "block w-full max-h-[26rem] bg-sunk object-contain";
 
 function sanitizeMarkdownHref(href: string | undefined): string | null {
   if (!href) {
@@ -275,10 +275,10 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   h6: ({ children }) => <h6 className={ASSISTANT_SUBSECTION_CLASS}>{children}</h6>,
   p: ({ children }) => <p className={ASSISTANT_PARAGRAPH_CLASS}>{children}</p>,
   ul: ({ children }) => (
-    <ul className={`${ASSISTANT_LIST_CLASS} list-disc space-y-2.5 marker:text-slate-400`}>{children}</ul>
+    <ul className={`${ASSISTANT_LIST_CLASS} list-disc space-y-2.5 marker:text-quiet`}>{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className={`${ASSISTANT_LIST_CLASS} list-decimal space-y-2.5 marker:font-medium marker:text-slate-500`}>{children}</ol>
+    <ol className={`${ASSISTANT_LIST_CLASS} list-decimal space-y-2.5 marker:font-medium marker:text-dim`}>{children}</ol>
   ),
   li: ({ children }) => <li className={ASSISTANT_LIST_ITEM_CLASS}>{children}</li>,
   blockquote: ({ children }) => <blockquote className={ASSISTANT_BLOCKQUOTE_CLASS}>{children}</blockquote>,
@@ -300,7 +300,7 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   a: ({ href, children }) => {
     const safeHref = sanitizeMarkdownHref(href);
     if (!safeHref) {
-      return <span className="text-slate-400">{children}</span>;
+      return <span className="text-quiet">{children}</span>;
     }
     const external = safeHref.startsWith("http://") || safeHref.startsWith("https://");
     return (
@@ -314,8 +314,8 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
       </a>
     );
   },
-  strong: ({ children }) => <strong className="font-semibold text-slate-900">{children}</strong>,
-  em: ({ children }) => <em className="italic text-slate-700">{children}</em>,
+  strong: ({ children }) => <strong className="font-semibold text-strong">{children}</strong>,
+  em: ({ children }) => <em className="italic text-body">{children}</em>,
 };
 
 type RenderedContentPart = {
@@ -769,7 +769,7 @@ function buildProgressSectionChanges(
         compact ? (
           <div
             key={`section-${nextSection}-${index}`}
-            className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"
+            className="text-[10px] font-semibold uppercase tracking-[0.14em] text-dim"
           >
             {sectionMeta.compactTitle}
           </div>
@@ -793,7 +793,7 @@ function buildProgressSectionChanges(
           className={compact ? "space-y-1.5" : "space-y-1"}
         >
           <div className={`flex items-start gap-2 ${PROGRESS_SECTION_META.activity.rowClassName}`}>
-            <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
+            <span aria-hidden="true" className="pt-0.5 text-quiet">• </span>
             <span className="font-medium">Explored</span>
           </div>
           <div className={`${compact ? "space-y-1 pl-4" : "space-y-1 pl-5"} text-muted`}>
@@ -802,7 +802,7 @@ function buildProgressSectionChanges(
                 key={`${index}-${lineIndex}-${line}`}
                 className="flex items-start gap-2 whitespace-pre-wrap"
               >
-                <span aria-hidden="true" className="text-slate-400">
+                <span aria-hidden="true" className="text-quiet">
                   {lineIndex === 0 ? "└ " : "· "}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -828,7 +828,7 @@ function buildProgressSectionChanges(
       >
         <span
           aria-hidden="true"
-          className={`text-slate-400 ${isMarkdownBlock ? "pt-1.5" : "pt-0.5"}`}
+          className={`text-quiet ${isMarkdownBlock ? "pt-1.5" : "pt-0.5"}`}
         >
           {isMarkdownBlock ? "↳ " : "• "}
         </span>
@@ -1595,8 +1595,8 @@ export function ChatMessage({
   const footerTextClass =
     role === "user" ? "text-white/75" : isAssistantTurn ? ASSISTANT_METADATA_CLASS : "text-muted/55";
   const selectionClass = role === "user"
-    ? "selection:bg-white/45 selection:text-slate-900"
-    : "selection:bg-accent/25 selection:text-slate-900";
+    ? "selection:bg-white/45 selection:text-strong"
+    : "selection:bg-accent/25 selection:text-strong";
   const CopyStatusIcon =
     copyState === "copied"
       ? Check
@@ -1614,30 +1614,30 @@ export function ChatMessage({
       ? copyState === "copied"
         ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/15 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
         : copyState === "error"
-          ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/15 text-rose-100 transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
+          ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/15 text-danger/30 transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
           : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-white/70 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
       : copyState === "copied"
-        ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition-all hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
+        ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-ok/30 bg-ok/10 text-ok transition-all hover:bg-ok/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/30"
         : copyState === "error"
-        ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700 transition-all hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
+        ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-danger/30 bg-danger/10 text-danger transition-all hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/30"
         : isAssistantTurn
-          ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-slate-400 opacity-0 transition-all group-hover/assistant:opacity-100 group-focus-within/assistant:opacity-100 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
-          : "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-slate-50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
+          ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-quiet opacity-0 transition-all group-hover/assistant:opacity-100 group-focus-within/assistant:opacity-100 hover:border-rule hover:bg-sunk hover:text-dim focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+          : "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-sunk hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
   const bubbleClass =
     role === "user"
       ? `max-w-2xl rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text ${
           isOpenClawToolsTurn
-            ? "bg-green-600 text-white border-2 border-green-600"
+            ? "bg-ok text-strong border-2 border-ok"
             : "bg-accent text-white border-2 border-accent"
         }`
       : role === "system"
         ? "w-full max-w-[min(92vw,72rem)] rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text bg-white border-2 border-border text-muted text-xs font-mono"
-        : "w-full max-w-[min(90vw,56rem)] px-1 py-3 select-text cursor-text text-slate-900 sm:px-2";
+        : "w-full max-w-[min(90vw,56rem)] px-1 py-3 select-text cursor-text text-strong sm:px-2";
   const assistantSurfaceClass = isAssistantTurn
     ? "group/assistant mx-auto flex w-full max-w-[48rem] flex-col"
     : "";
   const contentClass = isAssistantTurn
-    ? `select-text text-slate-900 [&>*:last-child]:mb-0 ${selectionClass}`
+    ? `select-text text-strong [&>*:last-child]:mb-0 ${selectionClass}`
     : `whitespace-pre-wrap select-text ${selectionClass}`;
   const footerRowClass = isAssistantTurn
     ? "mt-5 flex items-center justify-end gap-2"
@@ -1683,7 +1683,7 @@ export function ChatMessage({
         <div className={`mb-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
           role === "user"
             ? "border-white/30 bg-white/10 text-white"
-            : "border-green-200 bg-white text-green-800"
+            : "border-ok/30 bg-raised text-ok"
         }`}>
           Run with OpenClaw tools
         </div>
@@ -1727,18 +1727,18 @@ export function ChatMessage({
       {showCompactLiveTranscript && (
         <div
           aria-live="polite"
-          className="mb-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
+          className="mb-3 rounded-xl border border-rule bg-sunk/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
           role="log"
         >
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-            <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-dim">
+            <span className="inline-flex items-center gap-1.5 font-medium text-body">
               <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
               <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
             </span>
             {compactLiveRunSummary.map((summary, index) => (
               <span
                 key={`${summary}-${index}`}
-                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600"
+                className="inline-flex items-center rounded-full border border-rule bg-raised px-2 py-0.5 text-[10px] font-medium text-body"
               >
                 {summary}
               </span>
@@ -1762,8 +1762,8 @@ export function ChatMessage({
           {buildProgressSectionChanges(progressTranscript)}
 
           {workingElapsed && (
-            <div className="flex items-start gap-2 whitespace-pre-wrap text-slate-500">
-              <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
+            <div className="flex items-start gap-2 whitespace-pre-wrap text-dim">
+              <span aria-hidden="true" className="pt-0.5 text-quiet">• </span>
               <span>{`Working (${workingElapsed} • esc to interrupt)`}</span>
             </div>
           )}

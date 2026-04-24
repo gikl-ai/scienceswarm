@@ -884,7 +884,7 @@ export function OllamaSection({
         )}
         {configuredModelError && (
           <p
-            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+            className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger"
             data-testid="ollama-model-error"
           >
             {configuredModelError}
@@ -961,7 +961,7 @@ export function OllamaSection({
           )}
           {installError && !installing && (
             <div
-              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+              className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger"
               data-testid="ollama-install-error"
             >
               {installError.length > 240
@@ -972,7 +972,7 @@ export function OllamaSection({
                   type="button"
                   onClick={handleInstallClick}
                   disabled={disabled}
-                  className="rounded-lg border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:border-red-500 disabled:opacity-50"
+                  className="rounded-lg border border-danger/40 bg-raised px-3 py-1 text-xs font-medium text-danger hover:border-danger disabled:opacity-50"
                   data-testid="ollama-install-retry"
                 >
                   Try again
@@ -1082,7 +1082,7 @@ export function OllamaSection({
               )}
               {startError && !effectiveStarting && (
                 <div
-                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+                  className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger"
                   data-testid="ollama-start-error"
                 >
                   {startError.length > 240
@@ -1093,7 +1093,7 @@ export function OllamaSection({
                       type="button"
                       onClick={handleStartClick}
                       disabled={disabled}
-                      className="rounded-lg border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:border-red-500 disabled:opacity-50"
+                      className="rounded-lg border border-danger/40 bg-raised px-3 py-1 text-xs font-medium text-danger hover:border-danger disabled:opacity-50"
                       data-testid="ollama-start-retry"
                     >
                       Try again
@@ -1157,7 +1157,7 @@ export function OllamaSection({
               )}
               {pullError && !pulling && (
                 <div
-                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+                  className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger"
                   data-testid="ollama-pull-error"
                 >
                   {pullError.length > 240
@@ -1168,7 +1168,7 @@ export function OllamaSection({
                       type="button"
                       onClick={handlePullClick}
                       disabled={disabled}
-                      className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:border-red-500 disabled:opacity-50"
+                      className="mt-2 rounded-lg border border-danger/40 bg-raised px-3 py-1 text-xs font-medium text-danger hover:border-danger disabled:opacity-50"
                       data-testid="ollama-pull-retry"
                     >
                       Try again
@@ -1184,7 +1184,7 @@ export function OllamaSection({
       {derived === "ready" && (
         <div className="mt-4 space-y-3">
           <div
-            className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+            className="flex items-center gap-2 rounded-xl border border-ok/30 bg-ok/10 px-3 py-2 text-sm text-ok"
             data-testid="ollama-ready"
           >
             <span aria-hidden="true" className="text-base">

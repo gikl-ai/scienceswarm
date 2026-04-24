@@ -50,7 +50,7 @@ export function RuntimeTaskBoard({
       </div>
 
       {error && (
-        <p className="mx-4 mb-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+        <p className="mx-4 mb-3 rounded border border-danger/30 bg-danger/10 p-2 text-xs text-danger">
           {error}
         </p>
       )}
@@ -99,7 +99,7 @@ export function RuntimeTaskBoard({
                     <button
                       type="button"
                       onClick={() => onCancelSession(session.id)}
-                      className="min-h-8 rounded border border-border px-2 font-semibold text-foreground hover:border-red-300 hover:text-red-700"
+                      className="min-h-8 rounded border border-border px-2 font-semibold text-foreground hover:border-danger/40 hover:text-danger"
                     >
                       Cancel
                     </button>

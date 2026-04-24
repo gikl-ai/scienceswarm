@@ -50,7 +50,7 @@ describe("chart-generator", () => {
 
       expect(svg).toContain("Condition");
       expect(svg).toContain("Signal");
-      expect(svg).toContain("#f97316");
+      expect(svg).toContain("var(--chart-sunset-1)");
     });
   });
 

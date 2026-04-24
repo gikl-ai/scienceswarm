@@ -147,10 +147,10 @@ export function runtimeHostSupportsCompare(host: RuntimeHealthHost): boolean {
 function StatusDot({ status }: { status: StatusDotState }) {
   const color =
     status === "ok"
-      ? "bg-emerald-500"
+      ? "bg-ok"
       : status === "warn"
-        ? "bg-amber-500"
-        : "bg-zinc-400";
+        ? "bg-warn"
+        : "bg-dim";
   return <span className={`inline-block h-2.5 w-2.5 rounded-full ${color}`} />;
 }
 
@@ -274,8 +274,8 @@ function CapabilityMark({
     <span
       className={`inline-flex min-h-7 w-full items-center justify-center rounded border px-2 text-xs font-medium ${
         supported
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-zinc-200 bg-zinc-50 text-zinc-500"
+          ? "border-ok/30 bg-ok/10 text-ok"
+          : "border-rule bg-sunk text-dim"
       }`}
       title={supported ? supportedLabel : unavailableLabel}
     >

@@ -8,28 +8,28 @@ interface TaskPhaseRailProps {
 function phaseStyles(status: ChatTaskPhase["status"]) {
   if (status === "completed") {
     return {
-      pill: "border-emerald-200 bg-emerald-50 text-emerald-700",
-      dot: "bg-emerald-500",
+      pill: "border-ok/30 bg-ok/10 text-ok",
+      dot: "bg-ok",
     };
   }
 
   if (status === "active") {
     return {
-      pill: "border-amber-200 bg-amber-50 text-amber-700",
-      dot: "bg-amber-500 animate-pulse",
+      pill: "border-warn/30 bg-warn/10 text-warn",
+      dot: "bg-warn animate-pulse",
     };
   }
 
   if (status === "failed") {
     return {
-      pill: "border-red-200 bg-red-50 text-red-700",
-      dot: "bg-red-500",
+      pill: "border-danger/30 bg-danger/10 text-danger",
+      dot: "bg-danger",
     };
   }
 
   return {
-    pill: "border-stone-200 bg-stone-50 text-stone-500",
-    dot: "bg-stone-300",
+    pill: "border-rule bg-sunk text-dim",
+    dot: "bg-rule",
   };
 }
 

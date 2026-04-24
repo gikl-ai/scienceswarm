@@ -49,19 +49,19 @@ interface Pipeline {
 // ── Status Config ──────────────────────────────────────────────
 
 const jobStatusConfig: Record<string, { color: string; icon: string }> = {
-  pending: { color: "bg-zinc-100 text-zinc-600", icon: "○" },
-  running: { color: "bg-blue-50 text-blue-600", icon: "◉" },
-  completed: { color: "bg-green-50 text-green-700", icon: "✓" },
-  failed: { color: "bg-red-50 text-red-600", icon: "✕" },
-  paused: { color: "bg-amber-50 text-amber-600", icon: "⏸" },
+  pending: { color: "bg-sunk text-dim", icon: "○" },
+  running: { color: "bg-accent/10 text-accent", icon: "◉" },
+  completed: { color: "bg-ok/10 text-ok", icon: "✓" },
+  failed: { color: "bg-danger/10 text-danger", icon: "✕" },
+  paused: { color: "bg-warn/10 text-warn", icon: "⏸" },
 };
 
 const stepStatusConfig: Record<string, { color: string; bg: string }> = {
-  pending: { color: "border-zinc-300 bg-zinc-50", bg: "bg-zinc-400" },
-  running: { color: "border-blue-400 bg-blue-50", bg: "bg-blue-500" },
-  completed: { color: "border-green-400 bg-green-50", bg: "bg-green-500" },
-  failed: { color: "border-red-400 bg-red-50", bg: "bg-red-500" },
-  skipped: { color: "border-zinc-200 bg-zinc-50 opacity-50", bg: "bg-zinc-300" },
+  pending: { color: "border-rule bg-sunk", bg: "bg-dim" },
+  running: { color: "border-accent/40 bg-accent/10", bg: "bg-accent" },
+  completed: { color: "border-ok/40 bg-ok/10", bg: "bg-ok" },
+  failed: { color: "border-danger/40 bg-danger/10", bg: "bg-danger" },
+  skipped: { color: "border-rule-soft bg-sunk opacity-50", bg: "bg-rule" },
 };
 
 const stepTypeIcons: Record<string, string> = {
@@ -822,13 +822,13 @@ export function SchedulerPanel({
               )}
               <button
                 onClick={() => void patchJob(selectedJob.id, "cancel")}
-                className="text-xs bg-surface border-2 border-border px-3 py-1.5 rounded-lg hover:border-red-300 text-red-500 transition-colors font-medium"
+                className="text-xs bg-surface border-2 border-border px-3 py-1.5 rounded-lg hover:border-danger/40 text-danger transition-colors font-medium"
               >
                 Cancel
               </button>
               <button
                 onClick={() => void removeJob(selectedJob.id)}
-                className="text-xs bg-red-50 border-2 border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-100 text-red-600 transition-colors font-medium"
+                className="text-xs bg-danger/10 border-2 border-danger/30 px-3 py-1.5 rounded-lg hover:bg-danger/20 text-danger transition-colors font-medium"
               >
                 Delete
               </button>
@@ -837,9 +837,9 @@ export function SchedulerPanel({
             {/* Logs */}
             <div>
               <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-2">Logs</h3>
-              <div className="bg-zinc-900 text-zinc-300 rounded-lg p-3 max-h-64 overflow-y-auto font-mono text-[11px] leading-relaxed">
+              <div className="bg-ink text-quiet rounded-lg p-3 max-h-64 overflow-y-auto font-mono text-[11px] leading-relaxed">
                 {selectedJob.logs.length === 0 ? (
-                  <span className="text-zinc-500">No logs yet</span>
+                  <span className="text-dim">No logs yet</span>
                 ) : (
                   selectedJob.logs.map((log, i) => (
                     <div key={i} className="whitespace-pre-wrap">{log}</div>
@@ -924,7 +924,7 @@ export function SchedulerPanel({
               </button>
               <button
                 onClick={() => void removePipeline(selectedPipeline.id)}
-                className="text-xs bg-red-50 border-2 border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-100 text-red-600 transition-colors font-medium"
+                className="text-xs bg-danger/10 border-2 border-danger/30 px-3 py-1.5 rounded-lg hover:bg-danger/20 text-danger transition-colors font-medium"
               >
                 Delete
               </button>

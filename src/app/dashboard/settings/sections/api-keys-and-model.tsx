@@ -114,7 +114,7 @@ export function ApiKeysAndModelSection({
             </label>
           </div>
           {strictLocalOnlyEnabled && (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-warn">
               Strict local-only mode is enabled, so OpenAI is unavailable until you turn that off.
             </p>
           )}

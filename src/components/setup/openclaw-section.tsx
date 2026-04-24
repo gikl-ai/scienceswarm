@@ -141,10 +141,10 @@ function StatusDot({
 }) {
   const className =
     tone === "ready"
-      ? "bg-emerald-500"
+      ? "bg-ok"
       : tone === "progress"
-        ? "bg-amber-500"
-        : "bg-slate-400";
+        ? "bg-warn"
+        : "bg-dim";
   return (
     <span
       aria-hidden="true"
@@ -466,9 +466,9 @@ export function OpenClawSection({
           : { ...pill, busy: false };
   const pillToneClass =
     livePill.tone === "ready"
-      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+      ? "border-ok/40 bg-ok/10 text-ok"
       : livePill.tone === "progress"
-        ? "border-amber-300 bg-amber-50 text-amber-800"
+        ? "border-warn/40 bg-warn/10 text-warn"
         : "border-border bg-surface/60 text-muted";
 
   // Button availability mirrors the CLI state machine: install first,
@@ -615,12 +615,12 @@ export function OpenClawSection({
               failed — in that case fall back to manual controls. On /setup
               (autoStart=false) the full button row is always shown. */}
           {autoStart && !autoStartFailed && running && (
-            <p className="mt-3 text-xs text-emerald-700" data-testid="openclaw-auto-status">
+            <p className="mt-3 text-xs text-ok" data-testid="openclaw-auto-status">
               OpenClaw started automatically and is running.
             </p>
           )}
           {autoStart && !autoStartFailed && startBusy && (
-            <p className="mt-3 flex items-center gap-2 text-xs text-amber-700" data-testid="openclaw-auto-starting">
+            <p className="mt-3 flex items-center gap-2 text-xs text-warn" data-testid="openclaw-auto-starting">
               <LoadingSpinner size="h-3 w-3" />
               <span>Auto-starting OpenClaw...</span>
             </p>
@@ -698,7 +698,7 @@ export function OpenClawSection({
             <div
               role="alert"
               data-testid="openclaw-error"
-              className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800"
+              className="mt-4 rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger"
             >
               <p className="font-medium">Action failed</p>
               <p
@@ -709,12 +709,12 @@ export function OpenClawSection({
               </p>
               {showInstallRecoveryHint && (
               <div className="mt-3">
-                <p className="text-[11px] font-medium text-red-900">
+                <p className="text-[11px] font-medium text-danger">
                   Try installing it yourself, then come back:
                 </p>
                 <pre
                   data-testid="openclaw-install-command"
-                  className="mt-1 overflow-x-auto rounded-lg border border-red-200 bg-white px-3 py-2 font-mono text-[11px] text-red-900"
+                  className="mt-1 overflow-x-auto rounded-lg border border-danger/30 bg-raised px-3 py-2 font-mono text-[11px] text-danger"
                 >
                   {INSTALL_COMMAND}
                 </pre>
@@ -723,7 +723,7 @@ export function OpenClawSection({
                     type="button"
                     data-testid="openclaw-switch-nanoclaw-button"
                     onClick={() => handleBackendChange("nanoclaw")}
-                    className="mt-2 text-[11px] font-medium text-red-900 underline hover:text-red-700"
+                    className="mt-2 text-[11px] font-medium text-danger underline hover:text-danger/80"
                   >
                     Use NanoClaw instead
                   </button>

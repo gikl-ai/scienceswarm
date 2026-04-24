@@ -120,8 +120,8 @@ function sameManifestDraft(left: ManifestDraft, right: ManifestDraft): boolean {
 }
 
 function toneForSyncState(syncState: WorkspaceSkillRecord["adapters"][number]["syncState"]): string {
-  if (syncState === "synced") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (syncState === "pending") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (syncState === "synced") return "border-ok/30 bg-ok/10 text-ok";
+  if (syncState === "pending") return "border-warn/30 bg-warn/10 text-warn";
   return "border-border bg-surface text-muted";
 }
 
@@ -651,9 +651,9 @@ export function WorkspaceSkillsBrowser({
 
   if (skillsStatus === "error") {
     return (
-      <div className="rounded-[24px] border border-red-200 bg-red-50 p-5 text-sm text-red-800 shadow-sm">
+      <div className="rounded-[24px] border border-danger/30 bg-danger/10 p-5 text-sm text-danger shadow-sm">
         <p className="font-semibold">Could not load the ScienceSwarm skills workspace.</p>
-        <p className="mt-2 text-red-700">{skillsError ?? "Unknown error"}</p>
+        <p className="mt-2 text-danger">{skillsError ?? "Unknown error"}</p>
       </div>
     );
   }
@@ -805,10 +805,10 @@ export function WorkspaceSkillsBrowser({
                 {createState.state === "saving" ? "Creating..." : "Create skill"}
               </button>
               {createState.state === "error" && (
-                <p className="text-sm text-red-700">{createState.message}</p>
+                <p className="text-sm text-danger">{createState.message}</p>
               )}
               {createState.state === "saved" && (
-                <p className="text-sm text-emerald-700">{createState.message}</p>
+                <p className="text-sm text-ok">{createState.message}</p>
               )}
             </div>
           </div>
@@ -901,10 +901,10 @@ export function WorkspaceSkillsBrowser({
                 {importState.state === "saving" ? "Importing..." : "Import skill"}
               </button>
               {importState.state === "error" && (
-                <p className="text-sm text-red-700">{importState.message}</p>
+                <p className="text-sm text-danger">{importState.message}</p>
               )}
               {importState.state === "saved" && (
-                <p className="text-sm text-emerald-700">{importState.message}</p>
+                <p className="text-sm text-ok">{importState.message}</p>
               )}
             </div>
           </div>
@@ -1045,13 +1045,13 @@ export function WorkspaceSkillsBrowser({
                       type="button"
                       onClick={() => { void handlePromote(); }}
                       disabled={hasUnsavedChanges || promoteState.state === "saving"}
-                      className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 text-sm font-semibold text-emerald-900 transition-colors hover:border-emerald-400 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-10 items-center gap-2 rounded-lg border border-ok/40 bg-ok/10 px-4 text-sm font-semibold text-ok transition-colors hover:border-ok/60 hover:bg-ok/20 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Globe size={16} />
                       {promoteState.state === "saving" ? "Promoting..." : "Promote to public catalog"}
                     </button>
                   ) : (
-                    <div className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-900">
+                    <div className="inline-flex h-10 items-center gap-2 rounded-lg border border-ok/30 bg-ok/10 px-4 text-sm font-semibold text-ok">
                       <CheckCircle size={16} />
                       Public in ScienceSwarm catalog
                     </div>
@@ -1079,53 +1079,53 @@ export function WorkspaceSkillsBrowser({
               </div>
 
               {saveState.state === "saved" && (
-                <div className="mt-4 flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <div className="mt-4 flex items-start gap-2 rounded-2xl border border-ok/30 bg-ok/10 px-4 py-3 text-sm text-ok">
                   <CheckCircle size={18} className="mt-0.5 shrink-0" />
                   <div>
                     <p className="font-semibold">Workspace skill saved.</p>
-                    <p className="mt-1 text-emerald-700">{saveState.message}</p>
+                    <p className="mt-1 text-ok">{saveState.message}</p>
                   </div>
                 </div>
               )}
 
               {syncState.state === "saved" && (
-                <div className="mt-4 flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <div className="mt-4 flex items-start gap-2 rounded-2xl border border-ok/30 bg-ok/10 px-4 py-3 text-sm text-ok">
                   <CheckCircle size={18} className="mt-0.5 shrink-0" />
                   <div>
                     <p className="font-semibold">Host outputs synced.</p>
-                    <p className="mt-1 text-emerald-700">{syncState.message}</p>
+                    <p className="mt-1 text-ok">{syncState.message}</p>
                   </div>
                 </div>
               )}
 
               {promoteState.state === "saved" && (
-                <div className="mt-4 flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <div className="mt-4 flex items-start gap-2 rounded-2xl border border-ok/30 bg-ok/10 px-4 py-3 text-sm text-ok">
                   <CheckCircle size={18} className="mt-0.5 shrink-0" />
                   <div>
                     <p className="font-semibold">Skill promoted.</p>
-                    <p className="mt-1 text-emerald-700">{promoteState.message}</p>
+                    <p className="mt-1 text-ok">{promoteState.message}</p>
                   </div>
                 </div>
               )}
 
               {saveState.state === "error" && (
-                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div className="mt-4 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
                   <p className="font-semibold">Save failed.</p>
-                  <p className="mt-1 text-red-700">{saveState.message}</p>
+                  <p className="mt-1 text-danger">{saveState.message}</p>
                 </div>
               )}
 
               {syncState.state === "error" && (
-                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div className="mt-4 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
                   <p className="font-semibold">Sync failed.</p>
-                  <p className="mt-1 text-red-700">{syncState.message}</p>
+                  <p className="mt-1 text-danger">{syncState.message}</p>
                 </div>
               )}
 
               {promoteState.state === "error" && (
-                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div className="mt-4 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
                   <p className="font-semibold">Promotion failed.</p>
-                  <p className="mt-1 whitespace-pre-line text-red-700">{promoteState.message}</p>
+                  <p className="mt-1 whitespace-pre-line text-danger">{promoteState.message}</p>
                 </div>
               )}
             </div>
@@ -1398,7 +1398,7 @@ export function WorkspaceSkillsBrowser({
                           </p>
                         </div>
                         {hasAdapterChanges && (
-                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
+                          <span className="rounded-full border border-warn/30 bg-warn/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-warn">
                             Unsaved
                           </span>
                         )}

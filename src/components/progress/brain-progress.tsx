@@ -500,7 +500,7 @@ export function BrainProgress({
           className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface"
         >
           <div
-            className={`h-full transition-[width] duration-300 ${state === "failed" ? "bg-red-500" : "bg-accent"}`}
+            className={`h-full transition-[width] duration-300 ${state === "failed" ? "bg-danger" : "bg-accent"}`}
             style={{ width: `${percent}%` }}
           />
         </div>
@@ -540,7 +540,7 @@ export function BrainProgress({
 
       {errors.length > 0 && (
         <div
-          className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          className="mt-4 rounded-xl border border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn"
           data-testid={`${testId}-error-list`}
         >
           <button
@@ -574,7 +574,7 @@ export function BrainProgress({
       {state === "succeeded" && (
         <div
           role="status"
-          className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          className="mt-4 rounded-xl border border-ok/30 bg-ok/10 px-4 py-3 text-sm text-ok"
           data-testid={`${testId}-success-banner`}
         >
           Imported {completionCount ?? processed} file
@@ -586,7 +586,7 @@ export function BrainProgress({
       {state === "failed" && fatalError && (
         <div
           role="alert"
-          className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger"
           data-testid={`${testId}-error-banner`}
         >
           <p className="font-medium">{fatalError}</p>

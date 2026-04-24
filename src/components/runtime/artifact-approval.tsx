@@ -83,8 +83,8 @@ export function ArtifactApproval({
       {message && (
         <p className={`mt-3 rounded border p-2 text-xs ${
           status === "error"
-            ? "border-red-200 bg-red-50 text-red-700"
-            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            ? "border-danger/30 bg-danger/10 text-danger"
+            : "border-ok/30 bg-ok/10 text-ok"
         }`}
         >
           {message}

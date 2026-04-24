@@ -188,7 +188,7 @@ export function CompiledPageView({
             <div className="mt-1 text-xs text-muted">{page.path}</div>
           </div>
           {contradictionCount > 0 && (
-            <div className="inline-flex items-center gap-1.5 rounded border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+            <div className="inline-flex items-center gap-1.5 rounded border border-warn/40 bg-warn/10 px-2.5 py-1 text-xs font-semibold text-warn">
               <WarningDiamond size={14} weight="bold" />
               {contradictionCount} contradiction{contradictionCount === 1 ? "" : "s"}
             </div>

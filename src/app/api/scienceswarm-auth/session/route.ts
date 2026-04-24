@@ -53,9 +53,9 @@ function buildCompletionHtml(input: {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ScienceSwarm Sign-In</title>
     <style>
-      body { margin: 0; background: #f8fafc; color: #0f172a; font-family: ui-sans-serif, system-ui, sans-serif; }
+      body { margin: 0; background: rgb(249 250 251); color: rgb(17 24 39); font-family: ui-sans-serif, system-ui, sans-serif; }
       main { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-      section { max-width: 420px; border: 1px solid #e2e8f0; border-radius: 20px; background: white; padding: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
+      section { max-width: 420px; border: 1px solid rgb(229 231 235); border-radius: 20px; background: white; padding: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
       p { margin: 0; font-size: 14px; line-height: 1.6; }
     </style>
   </head>

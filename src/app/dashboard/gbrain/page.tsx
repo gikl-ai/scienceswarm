@@ -497,19 +497,19 @@ function GbrainPageContent() {
           {brainBootstrapState.status === "error" && (
             <section
               role="alert"
-              className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+              className="border-b border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger"
             >
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="font-semibold">Research brain is unavailable.</p>
-                  <p className="mt-1 text-xs leading-5 text-red-700">
+                  <p className="mt-1 text-xs leading-5 text-danger">
                     {brainBootstrapState.message}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => { void loadBrainStatus(); }}
-                  className="inline-flex h-8 shrink-0 items-center justify-center rounded border border-red-300 bg-white px-3 text-xs font-semibold text-red-800 transition-colors hover:border-red-500 hover:text-red-900"
+                  className="inline-flex h-8 shrink-0 items-center justify-center rounded border border-danger/40 bg-raised px-3 text-xs font-semibold text-danger transition-colors hover:border-danger"
                 >
                   Retry brain status
                 </button>
@@ -545,18 +545,18 @@ function GbrainPageContent() {
           {brainBootstrapState.status === "missing" && (
             <section
               role="alert"
-              className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+              className="border-b border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn"
             >
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="font-semibold">Paper Library needs local setup.</p>
-                  <p className="mt-1 text-xs leading-5 text-amber-700">
+                  <p className="mt-1 text-xs leading-5 text-warn">
                     {brainBootstrapState.message ?? "Run setup first so ScienceSwarm has a local brain root for paper-library state."}
                   </p>
                 </div>
                 <Link
                   href="/setup"
-                  className="inline-flex h-8 shrink-0 items-center justify-center rounded border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-800 transition-colors hover:border-amber-500 hover:text-amber-900"
+                  className="inline-flex h-8 shrink-0 items-center justify-center rounded border border-warn/40 bg-raised px-3 text-xs font-semibold text-warn transition-colors hover:border-warn"
                 >
                   Open setup
                 </Link>
@@ -596,13 +596,13 @@ function BrainArtifactPanel({
   if (state.status === "error") {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <div className="max-w-lg rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
+        <div className="max-w-lg rounded-2xl border border-danger/30 bg-danger/10 px-5 py-4 text-sm text-danger">
           <p className="font-semibold">Could not open that gbrain page.</p>
-          <p className="mt-2 text-red-700">{state.message}</p>
+          <p className="mt-2 text-danger">{state.message}</p>
           <button
             type="button"
             onClick={onRetry}
-            className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-red-300 bg-white px-3 text-xs font-semibold text-red-800 transition-colors hover:border-red-500 hover:text-red-900"
+            className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-danger/40 bg-raised px-3 text-xs font-semibold text-danger transition-colors hover:border-danger"
           >
             <SpinnerGap size={14} />
             Retry

@@ -34,10 +34,10 @@ interface SimNode extends CitationGraphNode {
 // ── Constants ────────────────────────────────────────
 
 const NODE_COLORS: Record<CitationGraphNode["type"], string> = {
-  paper: "#3b82f6",    // blue
-  concept: "#22c55e",  // green
-  person: "#f97316",   // orange
-  project: "#a855f7",  // purple
+  paper:   "var(--chart-indigo)", /* data-viz only; not a UI color */
+  concept: "var(--chart-mint)",   /* data-viz only; not a UI color */
+  person:  "var(--chart-amber)",  /* data-viz only; not a UI color */
+  project: "var(--chart-violet)", /* data-viz only; not a UI color */
 };
 
 const NODE_RADIUS = 8;
@@ -179,7 +179,7 @@ export function CitationGraph({
 
   if (data.nodes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 text-zinc-400 text-sm">
+      <div className="flex items-center justify-center h-64 text-quiet text-sm">
         No citation data available. Import papers to see the graph.
       </div>
     );
@@ -193,8 +193,8 @@ export function CitationGraph({
           onClick={() => setSelectedType(null)}
           className={`px-2 py-1 rounded transition-colors ${
             !selectedType
-              ? "bg-zinc-200 text-zinc-800 font-medium"
-              : "text-zinc-500 hover:text-zinc-700"
+              ? "bg-card2 text-strong font-medium"
+              : "text-dim hover:text-body"
           }`}
         >
           All ({data.nodes.length})
@@ -210,8 +210,8 @@ export function CitationGraph({
               }
               className={`flex items-center gap-1.5 px-2 py-1 rounded transition-colors ${
                 selectedType === type
-                  ? "bg-zinc-200 text-zinc-800 font-medium"
-                  : "text-zinc-500 hover:text-zinc-700"
+                  ? "bg-card2 text-strong font-medium"
+                  : "text-dim hover:text-body"
               }`}
             >
               <span
@@ -222,7 +222,7 @@ export function CitationGraph({
             </button>
           );
         })}
-        <span className="ml-auto text-zinc-400">
+        <span className="ml-auto text-quiet">
           {data.nodes.filter((n) => !n.isInBrain).length} ghost nodes
         </span>
       </div>
@@ -248,7 +248,7 @@ export function CitationGraph({
               y1={source.y}
               x2={target.x}
               y2={target.y}
-              stroke={isHighlighted ? "#6366f1" : "#d4d4d8"}
+              stroke={isHighlighted ? "var(--chart-indigo)" : "var(--rule)"}
               strokeWidth={isHighlighted ? 2 : 1}
               strokeOpacity={isHighlighted ? 0.8 : 0.4}
               strokeDasharray={
@@ -291,7 +291,7 @@ export function CitationGraph({
                 <text
                   y={-LABEL_OFFSET}
                   textAnchor="middle"
-                  className="text-[10px] fill-zinc-700 select-none pointer-events-none"
+                  className="text-[10px] fill-body select-none pointer-events-none"
                   fontWeight={isRoot ? "bold" : "normal"}
                 >
                   {node.title.length > 30
@@ -305,7 +305,7 @@ export function CitationGraph({
                 <text
                   y={LABEL_OFFSET + 10}
                   textAnchor="middle"
-                  className="text-[9px] fill-zinc-400 select-none pointer-events-none"
+                  className="text-[9px] fill-quiet select-none pointer-events-none"
                 >
                   {node.citationCount} link{node.citationCount === 1 ? "" : "s"}
                 </text>

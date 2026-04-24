@@ -53,8 +53,13 @@ for (const f of gitLsFiles()) {
 
   // Raw shadcn wrappers are allowed to reference tailwind/hex colors
   // internally; only check them for banned fonts and raw-shadcn-import.
+  // src/lib/chart-generator.ts emits standalone SVG and HTML exports
+  // that render outside the app and cannot resolve CSS tokens, so hex
+  // literals are the correct encoding. A hex fallback is also needed
+  // for the numeric heatmap interpolation helper.
   const skipColorChecks =
-    f.startsWith("src/components/ui/") && !f.includes("/ss-");
+    (f.startsWith("src/components/ui/") && !f.includes("/ss-")) ||
+    f === "src/lib/chart-generator.ts";
   // The banned-font check is a critical rule and would self-flag on this
   // script's own regex definition. Restrict it to shipping app code under
   // src/ — scripts/, tests/, docs are out of scope.

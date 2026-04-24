@@ -240,14 +240,14 @@ export function DreamCycleCard({
         {error && (
           <div
             role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
+            className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger"
           >
             <p className="font-semibold">{error.message}</p>
             {error.cause && (
-              <p className="mt-1 leading-5 text-red-700">{error.cause}</p>
+              <p className="mt-1 leading-5 text-danger">{error.cause}</p>
             )}
             {error.nextAction && (
-              <p className="mt-1 leading-5 text-red-700">
+              <p className="mt-1 leading-5 text-danger">
                 <span className="font-semibold">Next:</span> {error.nextAction}
               </p>
             )}
@@ -255,7 +255,7 @@ export function DreamCycleCard({
               type="button"
               onClick={runNow}
               disabled={running || loading}
-              className="mt-2 inline-flex h-8 items-center justify-center gap-2 rounded-md border border-red-300 bg-white px-3 text-xs font-semibold text-red-800 transition-colors hover:border-red-500 hover:text-red-900 disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-2 inline-flex h-8 items-center justify-center gap-2 rounded-md border border-danger/40 bg-raised px-3 text-xs font-semibold text-danger transition-colors hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
             >
               {running ? <Spinner size="h-3.5 w-3.5" /> : <ArrowClockwise size={14} />}
               {running ? "Running" : "Retry Dream Cycle"}

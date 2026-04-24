@@ -15,9 +15,9 @@ export interface Paper {
 }
 
 const statusColors: Record<string, string> = {
-  unread: "bg-zinc-100 text-zinc-600 border-zinc-200",
-  reading: "bg-amber-50 text-amber-700 border-amber-200",
-  reviewed: "bg-green-50 text-green-700 border-green-200",
+  unread: "bg-sunk text-dim border-rule",
+  reading: "bg-warn/10 text-warn border-warn/30",
+  reviewed: "bg-ok/10 text-ok border-ok/30",
   cited: "bg-accent/10 text-accent border-accent/20",
 };
 

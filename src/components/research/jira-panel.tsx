@@ -331,7 +331,7 @@ export function JiraPanel() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center max-w-md">
-          <div className="w-12 h-12 rounded-full bg-red-50 border-2 border-red-200 flex items-center justify-center mx-auto mb-4">
+          <div className="w-12 h-12 rounded-full bg-danger/10 border-2 border-danger/30 flex items-center justify-center mx-auto mb-4">
             <span className="text-xl">{"\u{1F512}"}</span>
           </div>
           <h3 className="font-semibold text-foreground mb-2">Jira Not Connected</h3>
@@ -366,8 +366,8 @@ export function JiraPanel() {
           <div className="flex items-center gap-3">
             {/* Connection status */}
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-green-500" />
-              <span className="text-[10px] font-medium text-green-700">Connected</span>
+              <span className="w-2 h-2 rounded-full bg-ok" />
+              <span className="text-[10px] font-medium text-ok">Connected</span>
             </div>
 
             {/* Project selector */}
@@ -402,19 +402,19 @@ export function JiraPanel() {
             {/* Quick-create buttons */}
             <button
               onClick={() => quickCreate("Task", "[Experiment] ")}
-              className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-lg px-2.5 py-1.5 hover:bg-purple-100 transition-colors"
+              className="text-[10px] bg-raised text-body border border-rule rounded-lg px-2.5 py-1.5 hover:bg-sunk transition-colors"
             >
               {"\u{1F9EA}"} New Experiment
             </button>
             <button
               onClick={() => quickCreate("Task", "[Paper] ")}
-              className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1.5 hover:bg-blue-100 transition-colors"
+              className="text-[10px] bg-accent/10 text-accent border border-accent/30 rounded-lg px-2.5 py-1.5 hover:bg-accent/20 transition-colors"
             >
               {"\u{1F4DD}"} New Paper Section
             </button>
             <button
               onClick={() => quickCreate("Task", "[Review] ")}
-              className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 rounded-lg px-2.5 py-1.5 hover:bg-amber-100 transition-colors"
+              className="text-[10px] bg-warn/10 text-warn border border-warn/30 rounded-lg px-2.5 py-1.5 hover:bg-warn/20 transition-colors"
             >
               {"\u{1F50D}"} New Review Task
             </button>
@@ -492,9 +492,9 @@ export function JiraPanel() {
 
         {/* Error display */}
         {error && (
-          <div className="px-4 py-2 bg-red-50 border-b border-red-200 text-red-700 text-xs flex items-center justify-between">
+          <div className="px-4 py-2 bg-danger/10 border-b border-danger/30 text-danger text-xs flex items-center justify-between">
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">{"\u2715"}</button>
+            <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">{"\u2715"}</button>
           </div>
         )}
 
@@ -582,9 +582,9 @@ export function JiraPanel() {
                       <span className="text-[10px] font-mono font-bold text-accent">{issue.key}</span>
                       <span className="text-xs text-foreground flex-1">{issue.summary}</span>
                       <span className={`text-[9px] font-medium px-2 py-0.5 rounded-full ${
-                        issue.status === "Done" ? "bg-green-50 text-green-700 border border-green-200" :
-                        issue.status === "In Progress" ? "bg-blue-50 text-blue-700 border border-blue-200" :
-                        issue.status === "In Review" ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                        issue.status === "Done" ? "bg-ok/10 text-ok border border-ok/30" :
+                        issue.status === "In Progress" ? "bg-accent/10 text-accent border border-accent/30" :
+                        issue.status === "In Review" ? "bg-warn/10 text-warn border border-warn/30" :
                         "bg-surface text-muted border border-border"
                       }`}>
                         {issue.status}
@@ -627,8 +627,8 @@ export function JiraPanel() {
                       .map((issue) => (
                         <div key={issue.key} className="flex items-start gap-3 pl-2">
                           <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-1 z-10 ${
-                            issue.status === "Done" ? "bg-green-500" :
-                            issue.status === "In Progress" ? "bg-blue-500" :
+                            issue.status === "Done" ? "bg-ok" :
+                            issue.status === "In Progress" ? "bg-accent" :
                             "bg-surface border-2 border-border"
                           }`}>
                             {issue.status === "Done" && <span className="text-white text-[8px]">{"\u2713"}</span>}
@@ -772,9 +772,9 @@ export function JiraPanel() {
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-medium text-muted uppercase">Status</span>
                   <span className={`text-[10px] font-medium px-2.5 py-0.5 rounded-full ${
-                    selectedIssue.status === "Done" ? "bg-green-50 text-green-700 border border-green-200" :
-                    selectedIssue.status === "In Progress" ? "bg-blue-50 text-blue-700 border border-blue-200" :
-                    selectedIssue.status === "In Review" ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                    selectedIssue.status === "Done" ? "bg-ok/10 text-ok border border-ok/30" :
+                    selectedIssue.status === "In Progress" ? "bg-accent/10 text-accent border border-accent/30" :
+                    selectedIssue.status === "In Review" ? "bg-warn/10 text-warn border border-warn/30" :
                     "bg-surface text-muted border border-border"
                   }`}>
                     {selectedIssue.status}

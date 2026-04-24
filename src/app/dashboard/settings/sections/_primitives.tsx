@@ -3,10 +3,10 @@ import type { ReactNode } from "react";
 export function StatusDot({ status }: { status: "ok" | "warn" | "off" }) {
   const color =
     status === "ok"
-      ? "bg-emerald-400"
+      ? "bg-ok"
       : status === "warn"
-        ? "bg-amber-400"
-        : "bg-zinc-400";
+        ? "bg-warn"
+        : "bg-dim";
   return <span className={`inline-block w-2.5 h-2.5 rounded-full ${color}`} />;
 }
 

@@ -286,12 +286,12 @@ export function DrivePanel({
         <div className="w-full max-w-md text-center">
           <div className="text-5xl mb-4">
             <svg viewBox="0 0 87.3 78" className="w-16 h-16 mx-auto">
-              <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3L27.5 55H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066DA"/>
-              <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 50.5C.4 51.9 0 53.45 0 55h27.5z" fill="#00AC47"/>
-              <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75L86.1 59.35c.8-1.4 1.2-2.95 1.2-4.5H59.8l6.15 11.05z" fill="#EA4335"/>
-              <path d="M43.65 25L57.4 1.5C56.05.7 54.5.3 52.95.3H34.35c-1.55 0-3.1.4-4.45 1.2z" fill="#00832D"/>
-              <path d="M59.8 55h27.5c0-1.55-.4-3.1-1.2-4.5L68.3 19.15c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25 59.8 55z" fill="#2684FC"/>
-              <path d="M43.65 25L27.5 55h32.3z" fill="#AECBFA"/>
+              <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3L27.5 55H0c0 1.55.4 3.1 1.2 4.5z" fill="var(--brand-gdrive-blue)"/>
+              <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 50.5C.4 51.9 0 53.45 0 55h27.5z" fill="var(--brand-gdrive-green)"/>
+              <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75L86.1 59.35c.8-1.4 1.2-2.95 1.2-4.5H59.8l6.15 11.05z" fill="var(--brand-gdrive-red)"/>
+              <path d="M43.65 25L57.4 1.5C56.05.7 54.5.3 52.95.3H34.35c-1.55 0-3.1.4-4.45 1.2z" fill="var(--brand-gdrive-darkgreen)"/>
+              <path d="M59.8 55h27.5c0-1.55-.4-3.1-1.2-4.5L68.3 19.15c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25 59.8 55z" fill="var(--brand-gdrive-lightblue)"/>
+              <path d="M43.65 25L27.5 55h32.3z" fill="var(--brand-gdrive-paleblue)"/>
             </svg>
           </div>
           <h3 className="text-lg font-bold mb-2">Connect Google Drive</h3>
@@ -318,8 +318,8 @@ export function DrivePanel({
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2 border-b-2 border-border bg-white flex-shrink-0">
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-green-500" />
-          <span className="text-[10px] font-medium text-green-700">Connected</span>
+          <span className="w-2 h-2 rounded-full bg-ok" />
+          <span className="text-[10px] font-medium text-ok">Connected</span>
         </div>
         <div className="w-px h-5 bg-border" />
 
@@ -376,7 +376,7 @@ export function DrivePanel({
 
         <button
           onClick={handleDisconnect}
-          className="text-[10px] text-muted hover:text-red-500 transition-colors"
+          className="text-[10px] text-muted hover:text-danger transition-colors"
         >
           Disconnect
         </button>
@@ -403,9 +403,9 @@ export function DrivePanel({
 
       {/* Error */}
       {error && (
-        <div className="px-4 py-2 bg-red-50 border-b border-red-200 text-red-700 text-xs flex items-center justify-between">
+        <div className="px-4 py-2 bg-danger/10 border-b border-danger/30 text-danger text-xs flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-4">
+          <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger ml-4">
             x
           </button>
         </div>

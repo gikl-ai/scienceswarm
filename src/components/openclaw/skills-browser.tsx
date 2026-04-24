@@ -240,9 +240,9 @@ export function OpenClawSkillsBrowser({
 
   if (skillsStatus === "error") {
     return (
-      <div className="rounded-[24px] border border-red-200 bg-red-50 p-5 text-sm text-red-800 shadow-sm">
+      <div className="rounded-[24px] border border-danger/30 bg-danger/10 p-5 text-sm text-danger shadow-sm">
         <p className="font-semibold">Could not load OpenClaw skills.</p>
-        <p className="mt-2 text-red-700">{skillsError ?? "Unknown error"}</p>
+        <p className="mt-2 text-danger">{skillsError ?? "Unknown error"}</p>
       </div>
     );
   }
@@ -381,12 +381,12 @@ export function OpenClawSkillsBrowser({
           </div>
 
           {saveState.state === "saved" && (
-            <div className="mt-4 flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <div className="mt-4 flex items-start gap-2 rounded-2xl border border-ok/30 bg-ok/10 px-4 py-3 text-sm text-ok">
               <CheckCircle size={18} className="mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold">Skill saved.</p>
-                <p className="mt-1 text-emerald-700">{saveState.message}</p>
-                <p className="mt-2 text-xs text-emerald-700">
+                <p className="mt-1 text-ok">{saveState.message}</p>
+                <p className="mt-2 text-xs text-ok">
                   Run <code>npm run openclaw:reset-session</code> or restart your OpenClaw profile to reload the edited skill.
                 </p>
               </div>
@@ -394,9 +394,9 @@ export function OpenClawSkillsBrowser({
           )}
 
           {saveState.state === "error" && (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="mt-4 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
               <p className="font-semibold">Skill save failed.</p>
-              <p className="mt-1 text-red-700">{saveState.message}</p>
+              <p className="mt-1 text-danger">{saveState.message}</p>
             </div>
           )}
         </div>
@@ -427,7 +427,7 @@ export function OpenClawSkillsBrowser({
                 </p>
               </div>
               {hasUnsavedChanges && (
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
+                <span className="rounded-full border border-warn/30 bg-warn/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-warn">
                   Unsaved
                 </span>
               )}
@@ -493,9 +493,9 @@ function SkillField({
 function SkillSignalBadge({ signal }: { signal: SkillSignal }) {
   const toneClass =
     signal.tone === "good"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      ? "border-ok/30 bg-ok/10 text-ok"
       : signal.tone === "warning"
-        ? "border-amber-200 bg-amber-50 text-amber-800"
+        ? "border-warn/30 bg-warn/10 text-warn"
         : "border-border bg-surface text-foreground";
 
   return (

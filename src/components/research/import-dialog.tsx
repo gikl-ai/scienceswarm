@@ -620,18 +620,18 @@ export function ImportDialog({
     : 0;
   const statusCardTone = importJob?.status === "failed"
     ? {
-      border: "border-red-200",
-      bg: "bg-red-50",
-      heading: "text-red-700",
-      body: "text-red-900",
-      detail: "text-red-700",
+      border: "border-danger/30",
+      bg: "bg-danger/10",
+      heading: "text-danger",
+      body: "text-danger",
+      detail: "text-danger",
     }
     : {
-      border: "border-sky-200",
-      bg: "bg-sky-50",
-      heading: "text-sky-700",
-      body: "text-sky-900",
-      detail: "text-sky-700",
+      border: "border-rule",
+      bg: "bg-sunk",
+      heading: "text-body",
+      body: "text-strong",
+      detail: "text-body",
     };
   const pathSuggestions = recentPaths
     .filter((recentPath) => !isHiddenRecentImportPath(recentPath))
@@ -742,7 +742,7 @@ export function ImportDialog({
 
           {/* Error */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+            <div className="bg-danger/10 border border-danger/30 rounded-xl px-4 py-3 text-sm text-danger">
               {error}
             </div>
           )}
@@ -897,19 +897,19 @@ export function ImportDialog({
               )}
 
               {structuredPreview?.warnings.length ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Scan warnings</p>
+                <div className="rounded-xl border border-warn/30 bg-warn/10 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-warn">Scan warnings</p>
                   <div className="mt-2 space-y-1">
                     {structuredPreview.warnings.slice(0, 4).map((warning) => (
                       <div key={`${warning.code}-${warning.path || warning.message}`} className="space-y-0.5">
-                        <p className="text-xs text-amber-800">
+                        <p className="text-xs text-warn">
                           {warning.code}: {warning.message}
                         </p>
                         {describeWarningAction(warning.code, {
                           preparedFileCount,
                           previewFileCount: structuredPreview.files.length,
                         }) ? (
-                          <p className="text-[11px] text-amber-700">
+                          <p className="text-[11px] text-warn">
                             {describeWarningAction(warning.code, {
                               preparedFileCount,
                               previewFileCount: structuredPreview.files.length,
@@ -1101,7 +1101,7 @@ function getImportProgressSegmentClass(input: {
   failed: boolean;
 }): string {
   if (input.index < input.activeSegments) {
-    return input.failed ? "bg-red-400" : "bg-sky-500";
+    return input.failed ? "bg-danger" : "bg-accent";
   }
   return "bg-white/70";
 }
@@ -1166,7 +1166,7 @@ function formatBytes(bytes: number): string {
 }
 
 function confidenceTone(confidence: string): string {
-  if (confidence === "high") return "bg-emerald-100 text-emerald-700";
-  if (confidence === "medium") return "bg-amber-100 text-amber-700";
-  return "bg-slate-100 text-slate-700";
+  if (confidence === "high") return "bg-ok/10 text-ok";
+  if (confidence === "medium") return "bg-warn/10 text-warn";
+  return "bg-sunk text-body";
 }

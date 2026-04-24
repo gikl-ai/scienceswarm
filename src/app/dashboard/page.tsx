@@ -136,7 +136,7 @@ function DashboardPageContent() {
             <label className="block text-sm text-muted mb-1.5">What are you researching?</label>
             <textarea value={projectDescription} onChange={(e) => setProjectDescription(e.target.value)} placeholder="Analyzing citation patterns in public benchmark datasets..." rows={3} className="w-full bg-background border-2 border-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-accent transition-colors resize-none" />
           </div>
-          {createError && <p className="text-sm text-red-400">{createError}</p>}
+          {createError && <p className="text-sm text-danger">{createError}</p>}
           <div className="flex gap-3">
             <button onClick={handleCreate} disabled={!projectName.trim() || loading} className="bg-accent text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-40">Create Project</button>
             <Link

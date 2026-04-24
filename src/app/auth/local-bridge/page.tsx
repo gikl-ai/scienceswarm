@@ -86,7 +86,7 @@ function ScienceSwarmLocalBridgeInner() {
   if (!requestedOrigin || !state) {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl items-center justify-center px-6">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+        <div className="rounded-2xl border border-warn/30 bg-warn/10 p-6 text-sm text-warn">
           ScienceSwarm local sign-in is missing the required handoff state.
         </div>
       </main>
@@ -96,7 +96,7 @@ function ScienceSwarmLocalBridgeInner() {
   if (!isSupportedScienceSwarmLocalOrigin(requestedOrigin)) {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl items-center justify-center px-6">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+        <div className="rounded-2xl border border-warn/30 bg-warn/10 p-6 text-sm text-warn">
           ScienceSwarm local sign-in only supports localhost installs.
         </div>
       </main>
@@ -129,7 +129,7 @@ function ScienceSwarmLocalBridgeInner() {
             Loading your ScienceSwarm account…
           </div>
         ) : isSignedIn ? (
-          <div className="mt-8 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <div className="mt-8 rounded-xl border border-ok/30 bg-ok/10 px-4 py-3 text-sm text-ok">
             Finalizing the connection to your local install…
           </div>
         ) : (
@@ -144,12 +144,12 @@ function ScienceSwarmLocalBridgeInner() {
         )}
 
         {!canPostBack ? (
-          <p className="mt-4 text-sm text-amber-700">
+          <p className="mt-4 text-sm text-warn">
             Return to your local ScienceSwarm window after you sign in.
           </p>
         ) : null}
         {error ? (
-          <p className="mt-4 text-sm text-rose-700">{error}</p>
+          <p className="mt-4 text-sm text-danger">{error}</p>
         ) : null}
       </div>
     </main>
@@ -179,7 +179,7 @@ export default function ScienceSwarmLocalBridgePage() {
   if (!isHosted) {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl items-center justify-center px-6">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+        <div className="rounded-2xl border border-warn/30 bg-warn/10 p-6 text-sm text-warn">
           This bridge page must be opened from {getScienceSwarmCloudOrigin()}.
         </div>
       </main>

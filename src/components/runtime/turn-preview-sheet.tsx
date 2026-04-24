@@ -93,7 +93,7 @@ export function TurnPreviewSheet({
 
         <div className="space-y-5 overflow-y-auto px-5 py-4">
           {reminderCopy && (
-            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="rounded border border-warn/30 bg-warn/10 p-3 text-sm text-warn">
               {reminderCopy}
             </p>
           )}
@@ -111,7 +111,7 @@ export function TurnPreviewSheet({
           </div>
 
           {preview.blockReason && (
-            <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <p className="rounded border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
               {preview.blockReason}
             </p>
           )}
@@ -136,7 +136,7 @@ export function TurnPreviewSheet({
             <div className="rounded border border-border bg-surface p-3 text-sm text-foreground">
               {accountSourceLabel(preview.accountDisclosure.accountSource)}
               {preview.accountDisclosure.costCopyRequired && (
-                <span className="ml-2 text-amber-700">May consume provider quota or cost.</span>
+                <span className="ml-2 text-warn">May consume provider quota or cost.</span>
               )}
             </div>
           </section>
@@ -164,7 +164,7 @@ export function TurnPreviewSheet({
           </section>
 
           {error && (
-            <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <p className="rounded border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
               {error}
             </p>
           )}

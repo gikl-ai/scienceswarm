@@ -815,12 +815,12 @@ const VOICE_TITLES: Record<VoiceState, string> = {
 
 const VOICE_STYLES: Record<VoiceState, string> = {
   idle: "bg-surface border-2 border-border text-muted hover:text-accent hover:border-accent",
-  recording: "bg-red-500 border-2 border-red-500 text-white",
-  transcribing: "bg-amber-100 border-2 border-amber-300 text-amber-700",
+  recording: "bg-danger border-2 border-danger text-strong",
+  transcribing: "bg-warn/10 border-2 border-warn/50 text-warn",
   speaking: "bg-accent/10 border-2 border-accent text-accent",
 };
 
-const VOICE_ERROR_STYLE = "bg-red-50 border-2 border-red-500 text-red-700";
+const VOICE_ERROR_STYLE = "bg-danger/10 border-2 border-danger text-danger";
 
 function MicIcon({ className }: { className?: string }) {
   return (
@@ -4401,7 +4401,7 @@ function ProjectPageContent() {
             {showCompactProjectRunState && (
               <div
                 aria-live="polite"
-                className="inline-flex max-w-[22rem] items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-700"
+                className="inline-flex max-w-[22rem] items-center gap-2 rounded-full border border-rule bg-sunk px-3 py-1.5 text-[11px] font-medium text-body"
                 data-testid="project-chat-run-state-row"
                 role="status"
               >
@@ -4410,7 +4410,7 @@ function ProjectPageContent() {
                 {compactLiveRunState.chips.map((chip) => (
                   <span
                     key={chip}
-                    className="hidden rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 md:inline-flex"
+                    className="hidden rounded-full border border-rule bg-raised px-2 py-0.5 text-[10px] font-medium text-dim md:inline-flex"
                   >
                     {chip}
                   </span>
@@ -4491,12 +4491,12 @@ function ProjectPageContent() {
         {brainBootstrapState.status === "error" && (
           <section
             role="alert"
-            className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            className="border-b border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger"
           >
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="font-semibold">Research brain is unavailable.</p>
-                <p className="mt-1 text-xs leading-5 text-red-700">
+                <p className="mt-1 text-xs leading-5 text-danger">
                   {brainBootstrapState.message}
                 </p>
               </div>
@@ -4505,7 +4505,7 @@ function ProjectPageContent() {
                 onClick={() => {
                   void loadBrainStatus();
                 }}
-                className="inline-flex h-8 shrink-0 items-center justify-center rounded border border-red-300 bg-white px-3 text-xs font-semibold text-red-800 transition-colors hover:border-red-500 hover:text-red-900"
+                className="inline-flex h-8 shrink-0 items-center justify-center rounded border border-danger/40 bg-raised px-3 text-xs font-semibold text-danger transition-colors hover:border-danger"
               >
                 Retry brain status
               </button>
@@ -4519,8 +4519,8 @@ function ProjectPageContent() {
         >
           <div className="flex h-full min-h-0 flex-col">
             {latestPdfFile ? (
-              <div className="border-b border-border bg-sky-50 px-3 py-2 text-[11px] leading-5 text-slate-700">
-                <span className="font-semibold text-slate-900">
+              <div className="border-b border-border bg-sunk px-3 py-2 text-[11px] leading-5 text-body">
+                <span className="font-semibold text-strong">
                   Hosted critique:
                 </span>{" "}
                 {SCIENCESWARM_CRITIQUE_CLOUD_DISCLAIMER}{" "}
@@ -4531,7 +4531,7 @@ function ProjectPageContent() {
                       href={SCIENCESWARM_SIGN_IN_URL}
                       target="_blank"
                       rel="noreferrer"
-                      className="font-medium text-slate-900 underline underline-offset-2"
+                      className="font-medium text-strong underline underline-offset-2"
                     >
                       scienceswarm.ai
                     </a>{" "}
@@ -4542,7 +4542,7 @@ function ProjectPageContent() {
               </div>
             ) : null}
             {!isSignedIn && authDetail ? (
-              <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
+              <div className="border-b border-warn/30 bg-warn/10 px-3 py-2 text-[11px] leading-5 text-warn">
                 {authDetail}
               </div>
             ) : null}
@@ -4936,7 +4936,7 @@ function ProjectPageContent() {
                 </div>
 
                 {(error || voiceError) && (
-                  <div className="border-t border-red-200 bg-red-50/95 px-6 py-3 text-red-700 backdrop-blur-sm">
+                  <div className="border-t border-danger/30 bg-danger/10 px-6 py-3 text-danger backdrop-blur-sm">
                     <div className="mx-auto flex w-full max-w-[60rem] items-center justify-between gap-4 text-sm">
                       <span>
                         <strong>Error:</strong> {error || voiceError}
@@ -4946,7 +4946,7 @@ function ProjectPageContent() {
                           clearError();
                           clearVoiceError();
                         }}
-                        className="ml-4 text-red-400 hover:text-red-600"
+                        className="ml-4 text-danger/60 hover:text-danger"
                       >
                         x
                       </button>
@@ -4961,10 +4961,10 @@ function ProjectPageContent() {
                       className={`rounded-[28px] border bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)] transition-colors ${
                         chatInputDragOver
                           ? "border-accent ring-4 ring-accent/10"
-                          : "border-slate-200/90 focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
+                          : "border-rule focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
                       }`}
                     >
-                      <div className="flex flex-col gap-3 border-b border-slate-200/80 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex flex-col gap-3 border-b border-rule/80 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
                             Project Chat
@@ -4978,20 +4978,20 @@ function ProjectPageContent() {
                         </div>
                         <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
                           {activeProjectSlug && (
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                            <span className="inline-flex items-center rounded-full border border-rule bg-sunk px-3 py-1 text-body">
                               {activeProjectSlug}
                             </span>
                           )}
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                          <span className="inline-flex items-center rounded-full border border-rule bg-sunk px-3 py-1 text-body">
                             {composerModeCopy}
                           </span>
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                          <span className="inline-flex items-center rounded-full border border-rule bg-sunk px-3 py-1 text-body">
                             {composerPolicyCopy}
                           </span>
                         </div>
                       </div>
                       {chatContextItems.length > 0 && (
-                        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3 text-xs">
+                        <div className="flex items-center justify-between gap-3 border-b border-rule/80 px-4 py-3 text-xs">
                           <div className="flex min-w-0 items-center gap-2">
                             <span className="shrink-0 font-semibold text-muted">
                               Context: {chatContextItems.length} file
@@ -5090,12 +5090,12 @@ function ProjectPageContent() {
                             }
                             disabled={isChatBusy}
                             rows={2}
-                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[22px] border-0 bg-transparent px-0 py-1 pr-10 text-[15px] leading-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 disabled:opacity-50`}
+                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[22px] border-0 bg-transparent px-0 py-1 pr-10 text-[15px] leading-6 text-strong placeholder:text-quiet focus:outline-none focus:ring-0 disabled:opacity-50`}
                           />
                           <button
                             type="button"
                             onPointerDown={handleComposerResizePointerDown}
-                            className="absolute right-0 top-0 z-10 flex h-7 w-7 cursor-ns-resize items-center justify-center rounded-full border border-transparent text-muted transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
+                            className="absolute right-0 top-0 z-10 flex h-7 w-7 cursor-ns-resize items-center justify-center rounded-full border border-transparent text-muted transition-colors hover:border-rule hover:bg-sunk hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
                             aria-label="Resize message composer"
                             title="Drag up to resize"
                           >
@@ -5108,7 +5108,7 @@ function ProjectPageContent() {
                           </button>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-3 border-t border-slate-200/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-3 border-t border-rule/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-wrap items-center gap-2.5">
                           <ComposerRuntimeSwitcher
                             hosts={runtimeHosts.hosts}
@@ -5139,7 +5139,7 @@ function ProjectPageContent() {
                             />
                           )}
                           <div className="min-w-0 text-[11px] leading-5 text-muted">
-                            <span className="font-semibold text-slate-700">
+                            <span className="font-semibold text-body">
                               {selectedComposerRuntimeHost?.profile.label ?? "Runtime"}
                             </span>{" "}
                             is ready. Drop files, type <span className="font-semibold">@</span> to mention context, or use <span className="font-semibold">/</span> for commands.

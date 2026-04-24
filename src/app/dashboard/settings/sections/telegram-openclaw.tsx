@@ -359,7 +359,7 @@ export function TelegramOpenClawSection({
 
         {telegram.configured && !isPaired && (
           <div
-            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+            className="rounded-lg border border-warn/30 bg-warn/10 p-3 text-sm text-warn"
             data-testid="settings-telegram-pairing-status"
           >
             OpenClaw has a Telegram bot token, but your Telegram account is not paired yet. Send
@@ -386,14 +386,14 @@ export function TelegramOpenClawSection({
         )}
 
         {openclawSource === "external" && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="rounded-lg border border-warn/30 bg-warn/10 p-3 text-sm text-warn">
             This machine is attached to an external OpenClaw runtime. Configure Telegram on that
             OpenClaw instance directly so ScienceSwarm does not overwrite a runtime it does not own.
           </div>
         )}
 
         {!openclawInstalled && openclawSource !== "external" && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="rounded-lg border border-warn/30 bg-warn/10 p-3 text-sm text-warn">
             Install OpenClaw in the card above first. This Telegram section only attaches a bot to
             the current local OpenClaw runtime.
           </div>
@@ -401,7 +401,7 @@ export function TelegramOpenClawSection({
 
         {pendingPairing && (
           <div
-            className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900"
+            className="rounded-lg border border-rule bg-sunk p-4 text-sm text-body"
             data-testid="settings-telegram-pending-pairing"
           >
             <p className="font-medium">
@@ -422,7 +422,7 @@ export function TelegramOpenClawSection({
               >
                 {approvingPending ? "Approving..." : "Approve pending Telegram account"}
               </button>
-              <span className="self-center text-xs text-sky-900/80">
+              <span className="self-center text-xs text-dim">
                 {pendingPairing.username
                   ? `Telegram username: @${pendingPairing.username}`
                   : `Telegram user id: ${pendingPairing.userId}`}
@@ -551,7 +551,7 @@ export function TelegramOpenClawSection({
 
         {inlineSuccess && (
           <div
-            className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+            className="rounded-lg border border-ok/30 bg-ok/10 p-3 text-sm text-ok"
             data-testid="settings-telegram-success"
           >
             {inlineSuccess}
@@ -561,7 +561,7 @@ export function TelegramOpenClawSection({
         {errorMessage && (
           <div
             role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+            className="rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm text-danger"
             data-testid="settings-telegram-error"
           >
             {errorMessage}
@@ -570,7 +570,7 @@ export function TelegramOpenClawSection({
 
         {waitingForClaim && (
           <div
-            className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900"
+            className="rounded-lg border border-rule bg-sunk p-4 text-sm text-body"
             data-testid="settings-telegram-claim"
           >
             <p className="font-medium">Open Telegram to finish connecting this bot.</p>

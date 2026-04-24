@@ -403,7 +403,7 @@ function NotebookOutputView({ output, index }: { output: NotebookOutput; index: 
 
   if (output.output_type === "error") {
     return (
-      <pre className="overflow-auto rounded border border-red-200 bg-red-50 px-3 py-2 font-mono text-xs leading-5 text-red-800">
+      <pre className="overflow-auto rounded border border-danger/30 bg-danger/10 px-3 py-2 font-mono text-xs leading-5 text-danger">
         {truncateOutput(readNotebookText(output.traceback) || [output.ename, output.evalue].filter(Boolean).join(": "))}
       </pre>
     );
@@ -543,7 +543,7 @@ export function MediaRenderer({ preview }: { preview: Extract<FilePreviewState, 
 
   if (preview.kind === "image") {
     return (
-      <div className="flex h-full items-center justify-center bg-[linear-gradient(45deg,#f4f4f5_25%,transparent_25%),linear-gradient(-45deg,#f4f4f5_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f4f4f5_75%),linear-gradient(-45deg,transparent_75%,#f4f4f5_75%)] bg-[length:20px_20px] bg-[position:0_0,0_10px,10px_-10px,-10px_0] p-3">
+      <div className="flex h-full items-center justify-center bg-[linear-gradient(45deg,var(--surface-sunk)_25%,transparent_25%),linear-gradient(-45deg,var(--surface-sunk)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,var(--surface-sunk)_75%),linear-gradient(-45deg,transparent_75%,var(--surface-sunk)_75%)] bg-[length:20px_20px] bg-[position:0_0,0_10px,10px_-10px,-10px_0] p-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={preview.rawUrl}
