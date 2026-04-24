@@ -1563,6 +1563,7 @@ function ProjectPageContent() {
     let syncDraftFrame: number | null = null;
     // Reset restore flag when the active project changes, then re-hydrate.
     const storageKeyChanged = previousChatDraftStorageKeyRef.current !== chatDraftStorageKey;
+    const previousDraftBaseline = draftInputRef.current;
     previousChatDraftStorageKeyRef.current = chatDraftStorageKey;
     chatDraftRestoredRef.current = false;
     if (typeof window === "undefined") return;
@@ -1581,7 +1582,11 @@ function ProjectPageContent() {
       draftInputRef.current = restoredDraft;
       syncDraftFrame = window.requestAnimationFrame(() => {
         const domValue = inputRef.current?.value;
-        if (domValue !== undefined && domValue.length > 0) {
+        if (
+          domValue !== undefined
+          && domValue.length > 0
+          && (!storageKeyChanged || domValue !== previousDraftBaseline)
+        ) {
           draftInputRef.current = domValue;
         }
       });
