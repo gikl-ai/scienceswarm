@@ -56,7 +56,21 @@ describe("ChatMessage", () => {
 
     expect(screen.getByTestId("chat-bubble").parentElement).toHaveClass("justify-center");
     expect(screen.getByTestId("chat-bubble")).toHaveClass("max-w-[min(90vw,56rem)]");
-    expect(screen.getByTestId("chat-bubble")).toHaveClass("leading-7");
+    expect(screen.getByTestId("assistant-reply-surface")).toHaveClass("max-w-[48rem]");
+  });
+
+  it("renders assistant copy on a document-width inner surface", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-reply-surface")).toHaveClass("mx-auto");
+    expect(screen.getByTestId("assistant-reply-content")).toHaveClass("sm:text-base");
+    expect(screen.getByTestId("assistant-reply-content")).toHaveClass("sm:leading-8");
   });
 
   it("keeps user turns inside the accent bubble", () => {
