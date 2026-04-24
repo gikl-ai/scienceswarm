@@ -335,7 +335,7 @@ describe("Project dashboard smoke test", () => {
     ).toBeInTheDocument();
     expect(within(composer).getByText(/Drop files, type/i)).toBeInTheDocument();
     expect(within(composer).getByText("Chat mode")).toBeInTheDocument();
-    expect(within(composer).getByText("demo-project")).toHaveClass("text-slate-500");
+    expect(within(composer).getByText("demo-project")).toHaveClass("text-dim");
   });
 
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
