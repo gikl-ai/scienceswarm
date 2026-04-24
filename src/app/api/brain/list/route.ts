@@ -11,7 +11,11 @@
  * endpoint with no auth requirement for user-facing reads.
  */
 
-import { getBrainStore, ensureBrainStoreReady } from "@/brain/store";
+import {
+  getBrainStore,
+  ensureBrainStoreReady,
+  isBrainBackendUnavailableError,
+} from "@/brain/store";
 import { displayTitleForBrainPage } from "@/brain/page-title";
 import { listProjectPageSummariesFast } from "@/lib/gbrain/project-query-fast-path";
 
@@ -57,6 +61,19 @@ export async function GET(request: Request): Promise<Response> {
 
     return Response.json(projectPages);
   } catch (error) {
+    if (isBrainBackendUnavailableError(error)) {
+      console.warn(
+        "GET /api/brain/list degraded:",
+        error instanceof Error ? error.message : String(error),
+      );
+      return Response.json([], {
+        status: 200,
+        headers: {
+          "x-scienceswarm-degraded": "brain_backend_unavailable",
+        },
+      });
+    }
+
     console.error(
       "GET /api/brain/list failed:",
       error instanceof Error ? error.message : String(error),
