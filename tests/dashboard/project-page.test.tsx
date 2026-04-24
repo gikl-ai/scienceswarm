@@ -3691,6 +3691,184 @@ describe("Project dashboard smoke test", () => {
     expect(switchedInput).toHaveValue("alpha restored draft");
   });
 
+  it("keeps fast typed project drafts available while prompt history navigation unwinds", async () => {
+    const pendingAnimationFrames: FrameRequestCallback[] = [];
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback: FrameRequestCallback) => {
+        pendingAnimationFrames.push(callback);
+        return pendingAnimationFrames.length;
+      });
+    const cancelAnimationFrameSpy = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation(() => {});
+
+    window.localStorage.setItem(
+      "scienceswarm.chat.draft.alpha-project",
+      "alpha restored draft",
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/health") {
+        return Response.json({
+          openclaw: "connected",
+          openhands: "disconnected",
+          openai: "configured",
+          features: {
+            chat: true,
+            codeExecution: false,
+            github: false,
+            multiChannel: false,
+            structuredCritique: false,
+          },
+        });
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "disconnected",
+          llmProvider: "openai",
+          ollamaModels: [],
+          configuredLocalModel: null,
+        });
+      }
+
+      if (url === "/api/projects") {
+        return Response.json({
+          projects: [
+            { id: "demo-project", slug: "demo-project", name: "Demo Project", status: "active" },
+            { id: "alpha-project", slug: "alpha-project", name: "Alpha Project", status: "active" },
+          ],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return Response.json({
+          response: "history answer",
+          conversationId: "conv-history",
+          messages: [],
+        });
+      }
+
+      if (url.startsWith("/api/brain/status")) {
+        return Response.json({ pageCount: 0, backend: "filesystem" });
+      }
+
+      if (url.startsWith("/api/brain/brief?project=")) {
+        const project = new URL(`http://localhost${url}`).searchParams.get("project") ?? "demo-project";
+        return Response.json({ project, dueTasks: [], frontier: [] });
+      }
+
+      if (url.startsWith("/api/projects/") && url.endsWith("/import-summary")) {
+        const project = url.split("/")[3] ?? "demo-project";
+        return Response.json({ project, lastImport: null });
+      }
+
+      if (url.startsWith("/api/projects/") && !url.includes("/import-summary") && !url.includes("/import-state")) {
+        const project = url.split("/")[3] ?? "demo-project";
+        return Response.json({
+          project: {
+            id: project,
+            name: project,
+            path: `/tmp/${project}`,
+          },
+        });
+      }
+
+      if (url.startsWith("/api/projects/") && url.endsWith("/import-state")) {
+        const project = url.split("/")[3] ?? "demo-project";
+        return Response.json({
+          projectId: project,
+          projectName: project,
+          status: "idle",
+          counts: { total: 0, processed: 0, succeeded: 0, failed: 0 },
+          items: [],
+        });
+      }
+
+      if (url.startsWith("/api/workspace/summary?project=")) {
+        const project = new URL(`http://localhost${url}`).searchParams.get("project") ?? "demo-project";
+        return Response.json({
+          summary: {
+            project,
+            files: [],
+            generatedArtifacts: [],
+            activity: [],
+          },
+        });
+      }
+
+      if (url.startsWith("/api/workspace?action=tree&projectId=")) {
+        return Response.json({ tree: [] });
+      }
+
+      if (url.startsWith("/api/brain/pages?project=")) {
+        return Response.json({ pages: [] });
+      }
+
+      if (url.startsWith("/api/brain/list?project=")) {
+        return Response.json([]);
+      }
+
+      if (url.startsWith("/api/chat/thread?project=")) {
+        const project = new URL(`http://localhost${url}`).searchParams.get("project") ?? "demo-project";
+        return Response.json({
+          version: 1,
+          project,
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/settings/file-preview-location") {
+        return Response.json({ location: "workspace-pane" });
+      }
+
+      return Response.json({ status: "disconnected" });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const view = render(<ProjectPage />);
+      const input = await screen.findByLabelText("Chat with your project");
+
+      fireEvent.change(input, { target: { value: "history prompt" } });
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+      expect(await screen.findByText("history answer")).toBeInTheDocument();
+
+      searchParamsValue = "name=alpha-project";
+      view.rerender(<ProjectPage />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Chat with your project")).toHaveValue("alpha restored draft");
+      });
+
+      const switchedInput = screen.getByLabelText("Chat with your project");
+      fireEvent.change(switchedInput, { target: { value: "alpha restored draft plus fast typing" } });
+
+      fireEvent.keyDown(switchedInput, { key: "ArrowUp" });
+      expect(switchedInput).toHaveValue("history prompt");
+
+      fireEvent.keyDown(switchedInput, { key: "ArrowDown" });
+      expect(switchedInput).toHaveValue("alpha restored draft plus fast typing");
+
+      expect(pendingAnimationFrames.length).toBeGreaterThan(0);
+    } finally {
+      requestAnimationFrameSpy.mockRestore();
+      cancelAnimationFrameSpy.mockRestore();
+    }
+  });
+
   it("does not swallow ArrowUp or ArrowDown when prompt history is empty", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
