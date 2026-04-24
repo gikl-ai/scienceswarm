@@ -689,6 +689,38 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("maps legacy MEDIA html aliases to project index previews", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"Here it is.\n\nMEDIA:snake"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:12:40.000Z")}
+      />,
+    );
+
+    expect(screen.getByTitle("snake")).toHaveAttribute(
+      "src",
+      "/api/workspace/raw/project-alpha/snake/index.html",
+    );
+  });
+
+  it("maps legacy embed refs to project index previews", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"[embed ref=\"snake-game\" title=\"Snake\" height=\"420\" /]"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:12:42.000Z")}
+      />,
+    );
+
+    expect(screen.getByTitle("Snake")).toHaveAttribute(
+      "src",
+      "/api/workspace/raw/project-alpha/snake/index.html",
+    );
+  });
+
   it("blocks MEDIA html paths that attempt traversal before building raw preview URLs", () => {
     render(
       <ChatMessage
