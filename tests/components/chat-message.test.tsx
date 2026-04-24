@@ -425,6 +425,25 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("log")).toHaveTextContent("Read docs/results_table.csv");
   });
 
+  it("renders a dedicated run-state surface before transcript progress arrives", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Working (5s • esc to interrupt)",
+    );
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+  });
+
   it("renders assistant progress as a single inline transcript", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
@@ -454,6 +473,44 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Thinking Trace")).not.toBeInTheDocument();
     expect(screen.queryByText("OpenClaw Activity")).not.toBeInTheDocument();
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
+  });
+
+  it("surfaces the latest compact progress detail under the live run-state header", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "thinking", text: "Plan: compare the timing artifact" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Plan: compare the timing artifact",
+    );
+  });
+
+  it("falls back to the previous non-empty compact detail when the latest narrative is blank", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "thinking", text: "   " },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Read docs/results_table.csv",
+    );
   });
 
   it("coalesces consecutive explored file actions into compact summaries", () => {
@@ -495,7 +552,7 @@ describe("ChatMessage", () => {
       />,
     );
 
-    const progressLog = screen.getByRole("log");
+    const progressLog = screen.getByTestId("assistant-progress-transcript");
     const text = progressLog.textContent ?? "";
     const firstPlan = text.indexOf("Plan: inspect files");
     const firstRead = text.indexOf("Read docs/results_table.csv");
@@ -625,12 +682,13 @@ describe("ChatMessage", () => {
       />,
     );
 
-    const progressLog = screen.getByRole("log");
+    const progressLog = screen.getByTestId("assistant-progress-transcript");
     expect(screen.getByRole("heading", { level: 2, name: "Current plan" })).toBeInTheDocument();
     expect(progressLog).toHaveTextContent("Inspect the saved chart");
     expect(progressLog).toHaveTextContent("Compare the timing artifact");
     expect(screen.getByText("const ready = true;").closest("pre")).toHaveClass("bg-ink");
     expect(progressLog).not.toHaveTextContent("## Current plan");
+    expect(screen.getByTestId("assistant-run-state")).not.toHaveTextContent("## Current plan");
   });
 
   it("renders mixed inline formatting inside visible explored transcript rows", () => {
