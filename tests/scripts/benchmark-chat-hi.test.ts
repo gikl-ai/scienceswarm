@@ -224,15 +224,32 @@ describe("benchmark-chat-hi", () => {
         totalDurationMs: 100,
         outcome: "streamed",
         status: 200,
-        phaseCount: 1,
-        phases: [{ name: "chat_readiness", durationMs: 7 }],
-        promptCharCounts: { user_text: 2, guardrails: 40, total: 42 },
+        phaseCount: 2,
+        phases: [
+          { name: "project_materialization", durationMs: 0, skipped: true },
+          { name: "chat_readiness", durationMs: 7, inferred: true },
+        ],
+        promptCharCounts: {
+          user_text: 2,
+          guardrails: 40,
+          recent_chat_context: 0,
+          workspace_files: 0,
+          total: 42,
+        },
       },
     });
     expect(formattedWithTiming).toContain("Total: 100 ms");
-    expect(formattedWithTiming).toContain("Timing phases: chat_readiness 7 ms");
     expect(formattedWithTiming).toContain(
-      "Prompt chars: user_text 2, guardrails 40, total 42",
+      "Timing phases: project_materialization skipped, chat_readiness 7 ms (inferred)",
+    );
+    expect(formattedWithTiming).toContain(
+      "Skipped phases: project_materialization",
+    );
+    expect(formattedWithTiming).toContain(
+      "Prompt chars: total 42, recent_chat_context 0, workspace_files 0, user_text 2, guardrails 40",
+    );
+    expect(formattedWithTiming).toContain(
+      "Prompt highlights: total 42, recent_chat_context 0, workspace_files 0",
     );
 
     expect(
@@ -261,7 +278,9 @@ describe("benchmark-chat-hi", () => {
           promptCharCounts: {},
         },
       }),
-    ).toContain("Timing phases: none\nPrompt chars: none");
+    ).toContain(
+      "Timing phases: none\nSkipped phases: none\nPrompt chars: none\nPrompt highlights: none",
+    );
     expect(
       formatBenchmarkSummary({
         status: 200,
@@ -488,6 +507,12 @@ describe("benchmark-chat-hi", () => {
             phases: [
               { name: "request_parse", startedAtMs: 1000, durationMs: 1.2 },
               {
+                name: "project_materialization",
+                startedAtMs: 1001,
+                durationMs: 0,
+                skipped: true,
+              },
+              {
                 name: "chat_readiness",
                 startedAtMs: 1002,
                 durationMs: 7.5,
@@ -509,9 +534,10 @@ describe("benchmark-chat-hi", () => {
       totalDurationMs: 124,
       outcome: "streamed",
       status: 200,
-      phaseCount: 2,
+      phaseCount: 3,
       phases: [
         { name: "request_parse", durationMs: 1 },
+        { name: "project_materialization", durationMs: 0, skipped: true },
         { name: "chat_readiness", durationMs: 8, inferred: true },
       ],
       promptCharCounts: {
