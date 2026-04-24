@@ -179,8 +179,38 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Task phases")).toBeInTheDocument();
-    expect(screen.getByTestId("step-cards")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Task phases")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("step-cards")).not.toBeInTheDocument();
+    expect(screen.getByRole("log")).toHaveTextContent("Phase: Writing patch");
+    expect(screen.getByRole("log")).toHaveTextContent("1 step complete");
+  });
+
+  it("collapses live task phases and step cards into compact summary chips", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+        ]}
+        taskPhases={[
+          { id: "read", label: "Reading file", status: "completed" },
+          { id: "summarize", label: "Summarizing findings", status: "active" },
+        ]}
+        steps={[
+          { id: "s1", verb: "reading", target: "docs/results_table.csv", status: "done" },
+          { id: "s2", verb: "drafting", target: "summary note", status: "running" },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:30.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.queryByLabelText("Task phases")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("step-cards")).not.toBeInTheDocument();
+    expect(screen.getByRole("log")).toHaveTextContent("Phase: Summarizing findings");
+    expect(screen.getByRole("log")).toHaveTextContent("Drafting summary note");
+    expect(screen.getByRole("log")).toHaveTextContent("Read docs/results_table.csv");
   });
 
   it("renders assistant progress as a single inline transcript", () => {
@@ -202,13 +232,15 @@ describe("ChatMessage", () => {
     );
 
     const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent(/Working \(\d+s • esc to interrupt\)/);
     expect(progressLog).toHaveTextContent("• Explored");
     expect(progressLog).toHaveTextContent("Checking the imported files...");
     expect(progressLog).toHaveTextContent("└ Read docs/results_table.csv");
     expect(progressLog).toHaveTextContent("Search activityLog in use-unified-chat.ts");
-    expect(progressLog).toHaveTextContent(/• Working \(\d+s • esc to interrupt\)/);
-    expect(screen.getByText("Thinking Trace")).toBeInTheDocument();
-    expect(screen.getByText("OpenClaw Activity")).toBeInTheDocument();
+    expect(progressLog).toHaveTextContent("Thinking");
+    expect(progressLog).toHaveTextContent("Activity");
+    expect(screen.queryByText("Thinking Trace")).not.toBeInTheDocument();
+    expect(screen.queryByText("OpenClaw Activity")).not.toBeInTheDocument();
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
   });
 
@@ -230,33 +262,21 @@ describe("ChatMessage", () => {
 
     const progressLog = screen.getByRole("log");
     const text = progressLog.textContent ?? "";
-    const firstThinking = text.indexOf("Thinking Trace");
     const firstPlan = text.indexOf("Plan: inspect files");
-    const firstActivity = text.indexOf("OpenClaw Activity");
     const firstRead = text.indexOf("Read docs/results_table.csv");
-    const secondThinking = text.indexOf("Thinking Trace", firstThinking + 1);
     const secondThought = text.indexOf("Now summarize findings");
-    const secondActivity = text.indexOf("OpenClaw Activity", firstActivity + 1);
     const secondRead = text.indexOf("Read docs/notes.md");
     for (const position of [
-      firstThinking,
       firstPlan,
-      firstActivity,
       firstRead,
-      secondThinking,
       secondThought,
-      secondActivity,
       secondRead,
     ]) {
       expect(position).toBeGreaterThan(-1);
     }
-    expect(firstThinking).toBeLessThan(firstPlan);
-    expect(firstPlan).toBeLessThan(firstActivity);
-    expect(firstActivity).toBeLessThan(firstRead);
-    expect(firstRead).toBeLessThan(secondThinking);
-    expect(secondThinking).toBeLessThan(secondThought);
-    expect(secondThought).toBeLessThan(secondActivity);
-    expect(secondActivity).toBeLessThan(secondRead);
+    expect(firstPlan).toBeLessThan(firstRead);
+    expect(firstRead).toBeLessThan(secondThought);
+    expect(secondThought).toBeLessThan(secondRead);
   });
 
   it("increments the live Working elapsed row every second under fake timers", () => {
@@ -347,7 +367,7 @@ describe("ChatMessage", () => {
     expect(progressLog.querySelector("strong")).toHaveTextContent("Moving forward");
     expect(progressLog.querySelector("em")).toHaveTextContent("embedding");
     expect(progressLog.querySelector("code")).toHaveTextContent("rg");
-    expect(screen.queryByTestId("chat-streaming-spinner")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
   });
 
   it("renders mixed inline formatting inside visible explored transcript rows", () => {
@@ -464,9 +484,9 @@ describe("ChatMessage", () => {
     expect(progressLog).not.toHaveTextContent("Turn started");
     expect(progressLog).not.toHaveTextContent("Tool read_file:");
     expect(progressLog).not.toHaveTextContent("Tool read_file result:");
-    expect(progressLog).toHaveTextContent(/• Working \(\d+s • esc to interrupt\)/);
-    expect(screen.getByText("Thinking Trace")).toBeInTheDocument();
-    expect(screen.getByText("OpenClaw Activity")).toBeInTheDocument();
+    expect(progressLog).toHaveTextContent(/Working \(\d+s • esc to interrupt\)/);
+    expect(screen.queryByText("Thinking Trace")).not.toBeInTheDocument();
+    expect(screen.queryByText("OpenClaw Activity")).not.toBeInTheDocument();
   });
 
   it("renders restored legacy thinking and activity after a completed assistant turn", () => {
@@ -731,7 +751,7 @@ describe("ChatMessage", () => {
     );
   });
 
-  it("suppresses the generic spinner when a live activity log is present", () => {
+  it("keeps the compact live transcript header when a live activity log is present", () => {
     render(
       <ChatMessage
         role="assistant"
@@ -742,7 +762,8 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.queryByTestId("chat-streaming-spinner")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+    expect(screen.getByRole("log")).toHaveTextContent("Working (");
   });
 
   it("adds explicit MIME hints for rendered media sources", () => {
