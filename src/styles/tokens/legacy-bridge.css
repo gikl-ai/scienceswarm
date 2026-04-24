@@ -8,49 +8,50 @@
  *   bg-background, bg-surface, bg-accent-hover
  *   border-border
  *
- * Most of these aren't in Tailwind's built-in palette, and a few
- * collide with shadcn's conventions — notably text-muted, which via
- * the shadcn bridge resolves to the muted *background* color (leaving
- * large stretches of UI with invisible labels in light mode).
+ * Most aren't in Tailwind's built-in palette, and one (--muted)
+ * collides with shadcn's convention where --color-muted is a *BG*
+ * color, not dim text. That collision caused every text-muted
+ * callsite — including alpha modifiers like `text-muted/70` — to
+ * render in the muted-background color (near-invisible labels in
+ * sidebars, composer hints, and many chrome surfaces).
  *
- * This file provides explicit mappings for every legacy class name
- * in the codebase so UIs render correctly while a follow-up migrates
- * the names to the v1 vocabulary (text-dim, bg-raised, border-rule,
- * etc.). After migration this file is removed.
+ * The fix: re-register these names in Tailwind v4's @theme inline
+ * with the scienceswarm interpretation. Because Tailwind generates
+ * all variants (hover, focus, alpha, data-state) from the color
+ * tokens declared in @theme, this restores variant behavior for the
+ * entire legacy class-name surface in one place. Import order: this
+ * file loads LAST in globals.css so these bindings outrank the
+ * shadcn bridge for any overlapping name.
  *
- * Variants (hover:, focus:, data-[state=open]:, …) are hand-authored
- * below since Tailwind's variant generator doesn't extend to
- * hand-written utility rules. Keep this file short; if a new legacy
- * class name surfaces, add it here and to the migration plan.
- *
- * Source order: imported LAST by globals.css, so these mappings
- * outrank Tailwind's @theme-inline-generated utilities for any class
- * whose name appears in both places.
+ * A follow-up will migrate the class names to the v1 vocabulary
+ * (text-dim, bg-raised, border-rule, etc.) and remove this bridge.
  * ────────────────────────────────────────────────────────────────
  */
 
-/* Text tones */
-.text-muted                    { color: var(--text-dim); }
-.text-foreground               { color: var(--text-strong); }
-.text-accent-hover             { color: var(--accent-dim); }
-.hover\:text-muted:hover       { color: var(--text-dim); }
-.hover\:text-foreground:hover  { color: var(--text-strong); }
-.hover\:text-accent-hover:hover { color: var(--accent-dim); }
+@theme inline {
+  /* Legacy scienceswarm names → v1 semantic tokens. Overrides the
+     shadcn-bridge @theme where these keys overlap. */
+  --color-muted:         var(--text-dim);
+  --color-foreground:    var(--text-strong);
+  --color-surface:       var(--surface-raised);
+  --color-background:    var(--surface-ink);
+  --color-accent-hover:  var(--accent-dim);
 
-/* Surfaces */
-.bg-background                 { background-color: var(--surface-ink); }
-.bg-surface                    { background-color: var(--surface-raised); }
-.bg-accent-hover               { background-color: var(--accent-dim); }
-.hover\:bg-background:hover    { background-color: var(--surface-ink); }
-.hover\:bg-surface:hover       { background-color: var(--surface-raised); }
-.hover\:bg-accent-hover:hover  { background-color: var(--accent-dim); }
-.focus\:bg-surface:focus       { background-color: var(--surface-raised); }
+  /* border-border routes through --color-border already mapped in
+     shadcn-bridge to var(--rule); no re-registration needed here. */
+}
 
-/* Rules */
-.border-border                 { border-color: var(--rule); }
-.hover\:border-border:hover    { border-color: var(--rule); }
-
-/* Ring variants — `ring-accent-hover` shows up occasionally. */
-.ring-accent-hover             { --tw-ring-color: var(--accent-dim); }
-.focus\:ring-accent-hover:focus             { --tw-ring-color: var(--accent-dim); }
-.focus-visible\:ring-accent-hover:focus-visible { --tw-ring-color: var(--accent-dim); }
+/* bg-muted stays meaningful for raw shadcn primitives (Select, Sheet,
+   Skeleton, Dialog) that compose a muted *background* rather than
+   muted text. These authored rules beat Tailwind's @theme-generated
+   utility because they live outside @layer utilities.
+   Alpha variants must be authored explicitly: Tailwind generates
+   bg-muted/N directly from --color-muted (now a text token), so the
+   alphas in active use are re-routed onto --surface-sunk here. */
+.bg-muted                    { background-color: var(--surface-sunk); }
+.hover\:bg-muted:hover       { background-color: var(--surface-sunk); }
+.bg-muted\/5                 { background-color: color-mix(in srgb, var(--surface-sunk) 5%, transparent); }
+.hover\:bg-muted\/10:hover   { background-color: color-mix(in srgb, var(--surface-sunk) 10%, transparent); }
+.data-\[state\=active\]\:bg-muted[data-state="active"] {
+  background-color: var(--surface-sunk);
+}
