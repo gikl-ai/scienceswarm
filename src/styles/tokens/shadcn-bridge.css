@@ -69,11 +69,25 @@
   --radius:                var(--radius-2);
 }
 
-/* Sheet overlay is internal to the raw primitive (not exported) so we
-   can't restyle it from the ss-sheet wrapper. Swap the hardcoded
-   bg-black/50 for the token overlay via the data-slot selector. */
-[data-slot="sheet-overlay"] {
+/* Overlays and internal slots are composed inside their raw primitives
+   (not exported), so ss-* wrappers can't restyle them via className.
+   We swap the hardcoded bg-black/50 and bg-border for token values
+   through the data-slot selectors below. */
+[data-slot="sheet-overlay"],
+[data-slot="dialog-overlay"] {
   background: var(--surface-overlay);
+}
+
+/* Raw ScrollArea renders its own ScrollBar internally, so the
+   ss-wrapped SsScrollBar is never mounted. Apply the scrollbar thumb
+   treatment directly via the primitive's data-slot selector. */
+[data-slot="scroll-area-thumb"] {
+  background: var(--rule);
+  opacity: 0.6;
+  transition: opacity 120ms ease;
+}
+[data-slot="scroll-area-scrollbar"]:hover [data-slot="scroll-area-thumb"] {
+  opacity: 1;
 }
 
 /* ── Tailwind v4 @theme bridge ──────────────────────────────────

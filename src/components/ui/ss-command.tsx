@@ -16,7 +16,6 @@
 import * as React from "react";
 import {
   Command,
-  CommandDialog,
   CommandEmpty,
   CommandGroup,
   CommandInput,
@@ -25,6 +24,13 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "./command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./dialog";
 import { cn } from "@/lib/utils";
 
 function SsCommand({
@@ -97,7 +103,46 @@ function SsCommandSeparator({
   );
 }
 
-const SsCommandDialog = CommandDialog;
+// Recompose CommandDialog so the inner Command lands on the
+// `bg-raised` / border-rule surface and items pick up the
+// `--accent-faint` selection band. Aliasing the raw CommandDialog
+// would bypass both the ss-* styling and the themed Dialog shell.
+function SsCommandDialog({
+  title = "Command Palette",
+  description = "Search for a command to run...",
+  children,
+  className,
+  showCloseButton = true,
+  ...props
+}: React.ComponentProps<typeof Dialog> & {
+  title?: string;
+  description?: string;
+  className?: string;
+  showCloseButton?: boolean;
+}) {
+  return (
+    <Dialog {...props}>
+      <DialogHeader className="sr-only">
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription>{description}</DialogDescription>
+      </DialogHeader>
+      <DialogContent
+        className={cn(
+          "bg-raised text-strong border-rule",
+          "rounded-[var(--radius-3)] shadow-[0_18px_50px_-10px_rgba(0,0,0,0.45)]",
+          "overflow-hidden p-0",
+          className,
+        )}
+        showCloseButton={showCloseButton}
+      >
+        <SsCommand className="**:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-dim [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
+          {children}
+        </SsCommand>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const SsCommandList = CommandList;
 const SsCommandEmpty = CommandEmpty;
 const SsCommandGroup = CommandGroup;

@@ -32,9 +32,16 @@ function readTheme(): ResolvedTheme {
 }
 
 export function SsSonner(props: Omit<ToasterProps, "theme">) {
-  const [theme, setTheme] = React.useState<ResolvedTheme>("dark");
+  // Defer mounting until after hydration. SSR can't read the
+  // <html data-theme> attribute, so emitting a concrete theme on the
+  // server and then reconciling on the client produces a hydration
+  // warning. Skipping the first render sidesteps the mismatch and
+  // avoids the post-mount theme flip.
+  const [mounted, setMounted] = React.useState(false);
+  const [theme, setTheme] = React.useState<ResolvedTheme>(() => readTheme());
 
   React.useEffect(() => {
+    setMounted(true);
     setTheme(readTheme());
     const root = document.documentElement;
     const observer = new MutationObserver(() => setTheme(readTheme()));
@@ -42,6 +49,7 @@ export function SsSonner(props: Omit<ToasterProps, "theme">) {
     return () => observer.disconnect();
   }, []);
 
+  if (!mounted) return null;
   return <Toaster theme={theme} {...props} />;
 }
 

@@ -73,17 +73,60 @@ function SsDropdownMenuSeparator({
   );
 }
 
+// The focus/hover band the low-saturation wash applies to all selectable
+// dropdown items. Kept inline so checkbox, radio, and sub-trigger
+// wrappers all resolve the same behaviour as SsDropdownMenuItem.
+const DROPDOWN_FOCUS_CLS =
+  "focus:bg-[var(--accent-faint)] focus:text-strong";
+
+function SsDropdownMenuCheckboxItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuCheckboxItem>) {
+  return (
+    <DropdownMenuCheckboxItem
+      className={cn(DROPDOWN_FOCUS_CLS, className)}
+      {...props}
+    />
+  );
+}
+
+function SsDropdownMenuRadioItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuRadioItem>) {
+  return (
+    <DropdownMenuRadioItem
+      className={cn(DROPDOWN_FOCUS_CLS, className)}
+      {...props}
+    />
+  );
+}
+
+function SsDropdownMenuSubTrigger({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuSubTrigger>) {
+  return (
+    <DropdownMenuSubTrigger
+      className={cn(
+        DROPDOWN_FOCUS_CLS,
+        "data-[state=open]:bg-[var(--accent-faint)] data-[state=open]:text-strong",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 const SsDropdownMenu = DropdownMenu;
 const SsDropdownMenuTrigger = DropdownMenuTrigger;
 const SsDropdownMenuPortal = DropdownMenuPortal;
 const SsDropdownMenuGroup = DropdownMenuGroup;
 const SsDropdownMenuLabel = DropdownMenuLabel;
-const SsDropdownMenuCheckboxItem = DropdownMenuCheckboxItem;
 const SsDropdownMenuRadioGroup = DropdownMenuRadioGroup;
-const SsDropdownMenuRadioItem = DropdownMenuRadioItem;
 const SsDropdownMenuShortcut = DropdownMenuShortcut;
 const SsDropdownMenuSub = DropdownMenuSub;
-const SsDropdownMenuSubTrigger = DropdownMenuSubTrigger;
 const SsDropdownMenuSubContent = DropdownMenuSubContent;
 
 export {
