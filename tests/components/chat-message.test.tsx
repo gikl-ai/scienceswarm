@@ -131,6 +131,33 @@ describe("ChatMessage", () => {
     expect(screen.getByLabelText("Done (completed)")).toBeInTheDocument();
   });
 
+  it("hides separate phase and step chrome when an assistant transcript is already visible", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "thinking", text: "Planning the next change" },
+          { kind: "activity", text: "Read src/components/research/chat-message.tsx" },
+        ]}
+        taskPhases={[
+          { id: "read", label: "Reading file", status: "completed" },
+          { id: "write", label: "Writing patch", status: "active" },
+        ]}
+        steps={[
+          { id: "step-read", verb: "reading", target: "chat-message.tsx", status: "done" },
+          { id: "step-write", verb: "drafting", target: "compact transcript", status: "running" },
+        ]}
+        timestamp={new Date("2026-04-15T07:00:05.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByRole("log")).toHaveTextContent("Planning the next change");
+    expect(screen.queryByLabelText("Task phases")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("step-cards")).not.toBeInTheDocument();
+  });
+
   it("renders assistant progress as a single inline transcript", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));

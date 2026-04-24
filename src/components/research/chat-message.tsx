@@ -1131,6 +1131,8 @@ export function ChatMessage({
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
+  const useCompactAssistantTranscript =
+    role === "assistant" && visibleProgressLog.length > 0;
   const isOpenClawToolsTurn = chatMode === "openclaw-tools" && role !== "system";
   const contentRef = useRef<HTMLDivElement | null>(null);
   const copyFeedbackTimerRef = useRef<number | null>(null);
@@ -1254,10 +1256,12 @@ export function ChatMessage({
           </div>
         )}
 
-        <TaskPhaseRail phases={visibleTaskPhases} className="mb-3" />
+        {!useCompactAssistantTranscript && (
+          <TaskPhaseRail phases={visibleTaskPhases} className="mb-3" />
+        )}
 
         {/* Agent step cards (above content; no-op when absent) */}
-        {role === "assistant" && <StepCards steps={steps} />}
+        {!useCompactAssistantTranscript && role === "assistant" && <StepCards steps={steps} />}
 
         {/* Streaming indicator */}
         {role === "assistant" && content === "" && isStreaming && visibleProgressLog.length === 0 && (
