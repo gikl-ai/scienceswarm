@@ -1378,120 +1378,120 @@ export function ChatMessage({
 
   const messageBody = (
     <>
-        {isOpenClawToolsTurn && (
-          <div className={`mb-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-            role === "user"
-              ? "border-white/30 bg-white/10 text-white"
-              : "border-green-200 bg-white text-green-800"
-          }`}>
-            Run with OpenClaw tools
-          </div>
-        )}
+      {isOpenClawToolsTurn && (
+        <div className={`mb-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+          role === "user"
+            ? "border-white/30 bg-white/10 text-white"
+            : "border-green-200 bg-white text-green-800"
+        }`}>
+          Run with OpenClaw tools
+        </div>
+      )}
 
-        {/* Channel badge + user name for cross-channel messages */}
-        {isCrossChannel && badge && (
-          <div className="flex items-center gap-2 mb-2">
-            <span
-              className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border ${badge.color}`}
-            >
-              <span>{badge.icon}</span>
-              {badge.label}
+      {/* Channel badge + user name for cross-channel messages */}
+      {isCrossChannel && badge && (
+        <div className="flex items-center gap-2 mb-2">
+          <span
+            className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border ${badge.color}`}
+          >
+            <span>{badge.icon}</span>
+            {badge.label}
+          </span>
+          {userName && (
+            <span className="text-[10px] text-muted font-medium">
+              {userName}
             </span>
-            {userName && (
-              <span className="text-[10px] text-muted font-medium">
-                {userName}
-              </span>
-            )}
-            <span className="text-[10px] text-muted/50">via OpenClaw</span>
-          </div>
-        )}
-
-        {!useCompactAssistantTranscript && !showCompactLiveTranscript && (
-          <TaskPhaseRail phases={visibleTaskPhases} className="mb-3" />
-        )}
-
-        {/* Agent step cards (above content; no-op when absent) */}
-        {!useCompactAssistantTranscript && !showCompactLiveTranscript && role === "assistant" && (
-          <StepCards steps={visibleSteps} />
-        )}
-
-        {/* Streaming indicator */}
-        {role === "assistant" && content === "" && isStreaming && !showCompactLiveTranscript && visibleProgressLog.length === 0 && (
-          <div className="flex items-center gap-2 text-accent/60">
-            <Spinner size="h-4 w-4" testId="chat-streaming-spinner" />
-            <span className="text-xs">Thinking…</span>
-          </div>
-        )}
-
-        {showCompactLiveTranscript && (
-          <div
-            aria-live="polite"
-            className="mb-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
-            role="log"
-          >
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-              <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
-                <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
-                <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
-              </span>
-              {compactLiveRunSummary.map((summary, index) => (
-                <span
-                  key={`${summary}-${index}`}
-                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600"
-                >
-                  {summary}
-                </span>
-              ))}
-            </div>
-
-            {progressTranscript.length > 0 && (
-              <div className="mt-2 space-y-2">
-                {buildProgressSectionChanges(progressTranscript, { compact: true })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {!showCompactLiveTranscript && visibleProgressLog.length > 0 && (
-          <div
-            aria-live="polite"
-            className="mb-3 space-y-3 text-[13px] leading-6 text-foreground/95"
-            role="log"
-          >
-            {buildProgressSectionChanges(progressTranscript)}
-
-            {workingElapsed && (
-              <div className="flex items-start gap-2 whitespace-pre-wrap text-slate-500">
-                <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
-                <span>{`Working (${workingElapsed} • esc to interrupt)`}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Message content */}
-        <div
-          ref={contentRef}
-          data-testid={isAssistantTurn ? "assistant-reply-content" : undefined}
-          className={contentClass}
-        >
-          {renderContent(content, projectId)}
-        </div>
-
-        <div className={footerRowClass}>
-          {hasCopyableText && (
-            <button
-              type="button"
-              onClick={copyToClipboard}
-              className={copyButtonClass}
-              aria-label={copyButtonLabel}
-              title={copyButtonLabel}
-            >
-              <CopyStatusIcon size={18} weight="regular" aria-hidden="true" />
-            </button>
           )}
-          <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
+          <span className="text-[10px] text-muted/50">via OpenClaw</span>
         </div>
+      )}
+
+      {!useCompactAssistantTranscript && !showCompactLiveTranscript && (
+        <TaskPhaseRail phases={visibleTaskPhases} className="mb-3" />
+      )}
+
+      {/* Agent step cards (above content; no-op when absent) */}
+      {!useCompactAssistantTranscript && !showCompactLiveTranscript && role === "assistant" && (
+        <StepCards steps={visibleSteps} />
+      )}
+
+      {/* Streaming indicator */}
+      {role === "assistant" && content === "" && isStreaming && !showCompactLiveTranscript && visibleProgressLog.length === 0 && (
+        <div className="flex items-center gap-2 text-accent/60">
+          <Spinner size="h-4 w-4" testId="chat-streaming-spinner" />
+          <span className="text-xs">Thinking…</span>
+        </div>
+      )}
+
+      {showCompactLiveTranscript && (
+        <div
+          aria-live="polite"
+          className="mb-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
+          role="log"
+        >
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+            <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+              <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
+              <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
+            </span>
+            {compactLiveRunSummary.map((summary, index) => (
+              <span
+                key={`${summary}-${index}`}
+                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600"
+              >
+                {summary}
+              </span>
+            ))}
+          </div>
+
+          {progressTranscript.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {buildProgressSectionChanges(progressTranscript, { compact: true })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!showCompactLiveTranscript && visibleProgressLog.length > 0 && (
+        <div
+          aria-live="polite"
+          className="mb-3 space-y-3 text-[13px] leading-6 text-foreground/95"
+          role="log"
+        >
+          {buildProgressSectionChanges(progressTranscript)}
+
+          {workingElapsed && (
+            <div className="flex items-start gap-2 whitespace-pre-wrap text-slate-500">
+              <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
+              <span>{`Working (${workingElapsed} • esc to interrupt)`}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Message content */}
+      <div
+        ref={contentRef}
+        data-testid={isAssistantTurn ? "assistant-reply-content" : undefined}
+        className={contentClass}
+      >
+        {renderContent(content, projectId)}
+      </div>
+
+      <div className={footerRowClass}>
+        {hasCopyableText && (
+          <button
+            type="button"
+            onClick={copyToClipboard}
+            className={copyButtonClass}
+            aria-label={copyButtonLabel}
+            title={copyButtonLabel}
+          >
+            <CopyStatusIcon size={18} weight="regular" aria-hidden="true" />
+          </button>
+        )}
+        <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
+      </div>
     </>
   );
 
