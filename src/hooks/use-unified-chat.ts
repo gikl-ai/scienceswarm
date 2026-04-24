@@ -3944,7 +3944,11 @@ export function useUnifiedChat(
         res = await sendChatRequest("/api/chat/unified");
       }
 
-      if (isSendContextCurrent(context)) {
+      const contentType = res.headers.get("content-type") || "";
+      const backendHeader = res.headers.get("X-Chat-Backend");
+      const modeHeader = normalizeChatMode(res.headers.get("X-Chat-Mode"));
+
+      if (res.ok && isSendContextCurrent(context)) {
         const waitingEntries = buildOpenClawSendPhaseEntries(context, "waiting");
         if (waitingEntries.length > 0) {
           applyMessagesUpdate((prev) =>
@@ -3963,10 +3967,6 @@ export function useUnifiedChat(
           );
         }
       }
-
-      const contentType = res.headers.get("content-type") || "";
-      const backendHeader = res.headers.get("X-Chat-Backend");
-      const modeHeader = normalizeChatMode(res.headers.get("X-Chat-Mode"));
 
       if (contentType.includes("text/event-stream")) {
         const responseBackend = mapResponseBackend(backendHeader) ?? context.backend;
@@ -4209,6 +4209,7 @@ export function useUnifiedChat(
           continue;
         }
 
+        const dispatchEntries = buildOpenClawSendPhaseEntries(queued.context, "dispatch");
         applyMessagesUpdate((prev) =>
           prev.map((message) =>
             message.id === queued.assistantId
@@ -4217,12 +4218,11 @@ export function useUnifiedChat(
                   content: "",
                   activityLog: appendActivityLog(
                     message.activityLog,
-                    buildOpenClawSendPhaseEntries(queued.context, "dispatch")
-                      .map((entry) => entry.text),
+                    dispatchEntries.map((entry) => entry.text),
                   ),
                   progressLog: appendProgressLog(
                     message.progressLog,
-                    buildOpenClawSendPhaseEntries(queued.context, "dispatch"),
+                    dispatchEntries,
                   ),
                 }
               : message,
