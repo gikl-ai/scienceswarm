@@ -162,4 +162,31 @@ describe("ComposerRuntimeSwitcher", () => {
     expect(onSelectedHostIdChange).toHaveBeenCalledWith("claude-code");
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it("prunes compare hosts when the policy changes", () => {
+    const onProjectPolicyChange = vi.fn();
+    const onCompareHostIdsChange = vi.fn();
+
+    render(
+      <ComposerRuntimeSwitcher
+        hosts={hosts}
+        selectedHostId="claude-code"
+        projectPolicy="cloud-ok"
+        mode="compare"
+        compareHostIds={["openclaw", "claude-code"]}
+        open
+        onOpenChange={vi.fn()}
+        onSelectedHostIdChange={vi.fn()}
+        onProjectPolicyChange={onProjectPolicyChange}
+        onModeChange={vi.fn()}
+        onCompareHostIdsChange={onCompareHostIdsChange}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Runtime switcher" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Local only" }));
+
+    expect(onProjectPolicyChange).toHaveBeenCalledWith("local-only");
+    expect(onCompareHostIdsChange).toHaveBeenCalledWith(["openclaw"]);
+  });
 });

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 
 import type { RuntimeHostAuthStatus, RuntimeHostHealth } from "../contracts";
 import { RuntimeHostError } from "../errors";
@@ -61,12 +62,13 @@ function appendPathEntries(
 
 class LineEmitter {
   private pending = "";
+  private readonly decoder = new StringDecoder("utf8");
 
   constructor(private readonly onLine?: (line: string) => void) {}
 
   push(chunk: Buffer): void {
     if (!this.onLine) return;
-    this.pending += chunk.toString("utf8").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    this.pending += this.decoder.write(chunk).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const lines = this.pending.split("\n");
     this.pending = lines.pop() ?? "";
     for (const line of lines) {
@@ -76,6 +78,7 @@ class LineEmitter {
 
   flush(): void {
     if (!this.onLine) return;
+    this.pending += this.decoder.end().replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     if (this.pending.trim()) this.onLine(this.pending);
     this.pending = "";
   }

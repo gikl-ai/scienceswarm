@@ -32,6 +32,14 @@ import {
 } from "../transport/cli";
 import { buildSubscriptionNativeCliEnv } from "../transport/subscription-env";
 
+function isNativeClaudeCodeSessionId(
+  conversationId: string | null,
+): conversationId is string {
+  return typeof conversationId === "string"
+    && conversationId.trim().length > 0
+    && conversationId.startsWith("claude-code-") === false;
+}
+
 export interface ClaudeCodeRuntimeHostAdapterOptions {
   profile?: RuntimeHostProfile;
   transport?: CliTransport;
@@ -223,7 +231,7 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       "--verbose",
       "--include-partial-messages",
     ];
-    if (request.conversationId) {
+    if (isNativeClaudeCodeSessionId(request.conversationId)) {
       args.push("--resume", request.conversationId);
     }
     return args;

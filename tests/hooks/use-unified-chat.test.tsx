@@ -41,7 +41,6 @@ function ChatHarness({ projectName }: { projectName: string }) {
             runtimeHostId: "codex",
             runtimeMode: "chat",
             projectPolicy: "cloud-ok",
-            approvalState: "approved",
           })
         }
       >
@@ -343,7 +342,7 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
   });
 
-  it("stores approved runtime host ids for new non-OpenClaw sessions", async () => {
+  it("stores runtime host ids for new non-OpenClaw sessions", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url === "/api/chat/unified?action=health") {
@@ -355,7 +354,7 @@ describe("useUnifiedChat persistence", () => {
           hostId: "codex",
           projectId: "alpha-project",
           projectPolicy: "cloud-ok",
-          approvalState: "approved",
+          approvalState: "not-required",
         });
         return createSseResponse([
           {
@@ -412,7 +411,7 @@ describe("useUnifiedChat persistence", () => {
           hostId: "codex",
           projectId: "alpha-project",
           projectPolicy: "cloud-ok",
-          approvalState: "approved",
+          approvalState: "not-required",
         });
         return runtimeStream.response;
       }

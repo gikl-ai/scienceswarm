@@ -179,6 +179,26 @@ describe("runtime host adapters", () => {
     expect(transport.requests.at(-1)?.args).not.toContain("--resume");
   });
 
+  it("does not resume Claude Code with synthetic wrapper session ids", async () => {
+    const transport = new FakeCliTransport((request) =>
+      fakeResult(request, "{\"type\":\"result\",\"result\":\"Wrapper answer\",\"session_id\":\"native-after-wrapper\"}")
+    );
+    const adapter = createClaudeCodeRuntimeHostAdapter({
+      transport,
+      sessionIdGenerator: () => "wrapper-session",
+    });
+    const request = {
+      ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+      conversationId: "claude-code-wrapper-session",
+    };
+
+    await expect(adapter.sendTurn(request)).resolves.toMatchObject({
+      sessionId: "native-after-wrapper",
+      message: "Wrapper answer",
+    });
+    expect(transport.requests.at(-1)?.args).not.toContain("--resume");
+  });
+
   it("captures only top-level Claude Code session ids for native resume", () => {
     const nestedOnly = parseClaudeCodeStreamOutput({
       hostId: "claude-code",
@@ -249,11 +269,19 @@ describe("runtime host adapters", () => {
         content: [{ type: "text", text: " and second" }],
       },
     }));
+    const fourth = accumulator.acceptLine(JSON.stringify({
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        delta: { text: " streamed" },
+      },
+    }));
 
     expect(first?.payload.text).toBe("First");
     expect(second?.payload.text).toBe("First chunk");
     expect(third?.payload.text).toBe("First chunk and second");
-    expect(accumulator.result().message).toBe("First chunk and second");
+    expect(fourth?.payload.text).toBe("First chunk and second streamed");
+    expect(accumulator.result().message).toBe("First chunk and second streamed");
   });
 
   it("emits unique message event ids for repeated wrapper turns in one session", async () => {

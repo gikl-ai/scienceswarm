@@ -43,6 +43,17 @@ function findSessionId(value: unknown): string | null {
   return firstString(value.session_id, value.sessionId);
 }
 
+function nestedStreamEventRecord(
+  record: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (record.type !== "stream_event") return null;
+  return isRecord(record.event) ? record.event : null;
+}
+
+function effectiveRecordType(record: Record<string, unknown>): unknown {
+  return nestedStreamEventRecord(record)?.type ?? record.type;
+}
+
 function mergeAssistantMessage(
   current: string,
   next: string,
@@ -76,6 +87,11 @@ function textFromContentArray(value: unknown): string | null {
 }
 
 function extractAssistantText(record: Record<string, unknown>): string | null {
+  const nestedEvent = nestedStreamEventRecord(record);
+  if (nestedEvent) {
+    return extractAssistantText(nestedEvent);
+  }
+
   const message = isRecord(record.message) ? record.message : null;
   const delta = isRecord(record.delta) ? record.delta : null;
 
@@ -104,6 +120,11 @@ function extractAssistantText(record: Record<string, unknown>): string | null {
 }
 
 function eventTypeFor(record: Record<string, unknown>): RuntimeEvent["type"] {
+  const nestedEvent = nestedStreamEventRecord(record);
+  if (nestedEvent) {
+    return eventTypeFor(nestedEvent);
+  }
+
   const type = typeof record.type === "string" ? record.type : "";
   if (type === "assistant" || type === "content_block_delta" || type === "result") {
     return "message";
@@ -152,7 +173,7 @@ export class ClaudeCodeStreamAccumulator {
       this.assistantMessage = mergeAssistantMessage(
         this.assistantMessage,
         text,
-        record.type,
+        effectiveRecordType(record),
       );
     }
 

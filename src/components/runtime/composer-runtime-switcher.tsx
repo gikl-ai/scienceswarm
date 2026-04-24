@@ -140,6 +140,16 @@ export function ComposerRuntimeSwitcher({
       }),
     [hosts],
   );
+  const compareHostIdsForPolicy = (policy: RuntimeProjectPolicy): string[] => {
+    const allowedIds = visibleHosts
+      .filter((host) =>
+        runtimeHostDisabledReason({ host, policy, mode: "compare" }) === null
+      )
+      .map((host) => host.profile.id);
+    const allowed = new Set(allowedIds);
+    const next = compareHostIds.filter((hostId) => allowed.has(hostId));
+    return next.length > 0 ? next : allowedIds.slice(0, 1);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -234,7 +244,12 @@ export function ComposerRuntimeSwitcher({
                     ? "bg-accent text-white"
                     : "text-muted hover:bg-white hover:text-foreground"
                 }`}
-                onClick={() => onProjectPolicyChange(policy)}
+                onClick={() => {
+                  onProjectPolicyChange(policy);
+                  if (mode === "compare") {
+                    onCompareHostIdsChange(compareHostIdsForPolicy(policy));
+                  }
+                }}
                 aria-pressed={projectPolicy === policy}
               >
                 {POLICY_LABELS[policy]}
