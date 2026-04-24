@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatMessage } from "@/components/research/chat-message";
 
@@ -704,6 +704,22 @@ describe("ChatMessage", () => {
     const image = screen.getByAltText("figures/diagram.avif");
     expect(image.tagName).toBe("IMG");
     expect(image.getAttribute("src")).toContain("file=figures%2Fdiagram.avif");
+  });
+
+  it("groups consecutive assistant images into one responsive gallery", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:docs/results_chart.png\nMEDIA:figures/diagram.avif"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-21T10:00:20.000Z")}
+      />,
+    );
+
+    const gallery = screen.getByTestId("assistant-media-gallery");
+    expect(gallery).toHaveClass("sm:grid-cols-2");
+    expect(within(gallery).getByAltText("docs/results_chart.png")).toBeInTheDocument();
+    expect(within(gallery).getByAltText("figures/diagram.avif")).toBeInTheDocument();
   });
 
   it("maps absolute OpenClaw media paths to managed raw previews", () => {

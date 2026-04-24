@@ -229,6 +229,10 @@ const ASSISTANT_LINK_CLASS =
   "font-medium text-blue-700 underline decoration-blue-200 underline-offset-4 transition-colors hover:text-blue-800 hover:decoration-blue-400";
 const ASSISTANT_CODE_BLOCK_CLASS =
   "mb-4 overflow-x-auto rounded-2xl border border-slate-300 bg-slate-950 px-4 py-3 text-[13px] leading-6 text-slate-100 shadow-[0_1px_0_rgba(15,23,42,0.08)]";
+const ASSISTANT_MEDIA_CARD_CLASS =
+  "overflow-hidden rounded-[1.35rem] border border-slate-200/90 bg-white shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]";
+const ASSISTANT_MEDIA_FRAME_CLASS =
+  "block w-full max-h-[26rem] bg-slate-50 object-contain";
 
 function sanitizeMarkdownHref(href: string | undefined): string | null {
   if (!href) {
@@ -304,6 +308,56 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   strong: ({ children }) => <strong className="font-semibold text-slate-900">{children}</strong>,
   em: ({ children }) => <em className="italic text-slate-700">{children}</em>,
 };
+
+type RenderedContentPart = {
+  key: string;
+  kind: "flow" | "gallery-item";
+  node: ReactNode;
+};
+
+function collapseAssistantMediaGalleries(parts: RenderedContentPart[]): ReactNode[] {
+  const collapsed: ReactNode[] = [];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    if (!part || part.kind !== "gallery-item") {
+      if (part) {
+        collapsed.push(part.node);
+      }
+      continue;
+    }
+
+    const galleryItems: RenderedContentPart[] = [part];
+    let cursor = index + 1;
+    while (cursor < parts.length && parts[cursor]?.kind === "gallery-item") {
+      galleryItems.push(parts[cursor]!);
+      cursor += 1;
+    }
+
+    if (galleryItems.length === 1) {
+      collapsed.push(part.node);
+      continue;
+    }
+
+    collapsed.push(
+      <div
+        key={`assistant-gallery-${part.key}`}
+        data-testid="assistant-media-gallery"
+        className="my-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+      >
+        {galleryItems.map((galleryItem) => (
+          <div key={galleryItem.key} className="min-w-0">
+            {galleryItem.node}
+          </div>
+        ))}
+      </div>,
+    );
+
+    index = cursor - 1;
+  }
+
+  return collapsed;
+}
 
 function isExploredCommand(text: string): boolean {
   return EXPLORE_COMMAND_PREFIXES.some((prefix) => text.startsWith(prefix));
@@ -1134,7 +1188,7 @@ function renderContent(
 ) {
   // Split on MEDIA references, embed tags, and markdown images.
   const parts = content.split(/(MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gi);
-  return parts.flatMap((part, i) => {
+  const renderedParts = parts.flatMap<RenderedContentPart>((part, i) => {
     const captionClass = assistantTypography
       ? ASSISTANT_CAPTION_CLASS
       : "mt-1 block font-mono text-[10px] text-muted";
@@ -1146,23 +1200,34 @@ function renderContent(
         preferPathRoute: ext === "html" || ext === "htm",
       });
       if (!src) {
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <span className="font-mono text-xs text-muted">[media blocked: invalid path]</span>
           </div>
-        );
+          ),
+        }];
       }
       if (["png", "jpg", "jpeg", "gif", "webp", "avif"].includes(ext)) {
-        return (
-          <div key={i} className="my-2">
+        return [{
+          key: `content-${i}`,
+          kind: "gallery-item",
+          node: (
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt={filePath} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
+            <img src={src} alt={filePath} className={`${ASSISTANT_MEDIA_FRAME_CLASS} rounded-[1rem]`} />
             <span className={captionClass}>{filePath}</span>
-          </div>
-        );
+          </figure>
+          ),
+        }];
       }
       if (ext === "html" || ext === "htm") {
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <iframe
               src={src}
@@ -1172,10 +1237,14 @@ function renderContent(
             />
             <span className={captionClass}>{filePath}</span>
           </div>
-        );
+          ),
+        }];
       }
       if (ext === "pdf") {
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <iframe
               src={src}
@@ -1185,39 +1254,56 @@ function renderContent(
             />
             <span className={captionClass}>{filePath}</span>
           </div>
-        );
+          ),
+        }];
       }
       if (ext === "svg") {
         // SVG rendered as <img> to prevent script execution
-        return (
-          <div key={i} className="my-2">
+        return [{
+          key: `content-${i}`,
+          kind: "gallery-item",
+          node: (
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt={filePath} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
+            <img src={src} alt={filePath} className={`${ASSISTANT_MEDIA_FRAME_CLASS} rounded-[1rem]`} />
             <span className={captionClass}>{filePath}</span>
-          </div>
-        );
+          </figure>
+          ),
+        }];
       }
       if (["mp4", "webm", "mov", "m4v"].includes(ext)) {
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <video controls className="max-w-full max-h-[50vh] rounded-lg border border-border bg-black">
               <source src={src} type={getVideoMimeType(ext)} />
             </video>
             <span className={captionClass}>{filePath}</span>
           </div>
-        );
+          ),
+        }];
       }
       if (["mp3", "wav", "ogg", "m4a", "flac", "opus", "aac"].includes(ext)) {
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <audio controls className="w-full">
               <source src={src} type={getAudioMimeType(ext)} />
             </audio>
             <span className={captionClass}>{filePath}</span>
           </div>
-        );
+          ),
+        }];
       }
-      return <span key={i} className="font-mono text-xs text-accent underline">{filePath}</span>;
+      return [{
+        key: `content-${i}`,
+        kind: "flow",
+        node: <span key={i} className="font-mono text-xs text-accent underline">{filePath}</span>,
+      }];
     }
     const embedDirective = parseEmbedDirective(part);
     if (embedDirective) {
@@ -1235,19 +1321,27 @@ function renderContent(
           const savedFileName = findLastSavedHtmlFilename(parts.slice(0, i).join(""));
           const fileName = resolveEmbeddedRawPath(embedUrl, savedFileName);
           if (!fileName) {
-            return (
+            return [{
+              key: `content-${i}`,
+              kind: "flow",
+              node: (
               <div key={i} className="my-2">
                 <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
               </div>
-            );
+              ),
+            }];
           }
           const rawPreviewUrl = buildWorkspaceRawPreviewUrl(fileName, projectId, { preferPathRoute: true });
           if (!rawPreviewUrl) {
-            return (
+            return [{
+              key: `content-${i}`,
+              kind: "flow",
+              node: (
               <div key={i} className="my-2">
                 <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
               </div>
-            );
+              ),
+            }];
           }
           embedUrl = rawPreviewUrl;
         } else {
@@ -1257,19 +1351,27 @@ function renderContent(
               preferPathRoute: true,
             });
             if (!rawPreviewUrl) {
-              return (
+              return [{
+                key: `content-${i}`,
+                kind: "flow",
+                node: (
                 <div key={i} className="my-2">
                   <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
                 </div>
-              );
+                ),
+              }];
             }
             embedUrl = rawPreviewUrl;
           } else if (/\.html?$/i.test(embedUrl)) {
-            return (
+            return [{
+              key: `content-${i}`,
+              kind: "flow",
+              node: (
               <div key={i} className="my-2">
                 <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
               </div>
-            );
+              ),
+            }];
           } else {
             // Strip every leading slash and re-add a single one so protocol-
             // relative URLs ("//external.host/...") collapse to a same-origin
@@ -1279,7 +1381,10 @@ function renderContent(
         }
         const embedTitle = embedDirective.title ?? "Embedded content";
         const embedHeight = sanitizeEmbedHeight(embedDirective.height, "60vh");
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <iframe
               src={embedUrl}
@@ -1290,36 +1395,58 @@ function renderContent(
             />
             <span className={captionClass}>{embedTitle}</span>
           </div>
-        );
+          ),
+        }];
       }
-      return null;
+      return [];
     }
     if (part.startsWith("![")) {
       const match = part.match(/!\[([^\]]*)\]\(([^)]+)\)/);
       if (match && isSafeImageUrl(match[2])) {
-        return (
-          <div key={i} className="my-2">
+        return [{
+          key: `content-${i}`,
+          kind: "gallery-item",
+          node: (
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={match[2]} alt={match[1]} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
-          </div>
-        );
+            <img src={match[2]} alt={match[1]} className={`${ASSISTANT_MEDIA_FRAME_CLASS} rounded-[1rem]`} />
+            {match[1] ? <span className={captionClass}>{match[1]}</span> : null}
+          </figure>
+          ),
+        }];
       }
       if (match) {
         // Unsafe external URL — render as text link instead
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <span className="font-mono text-xs text-muted">[image: {match[1] || match[2]}]</span>
           </div>
-        );
+          ),
+        }];
       }
     }
     if (assistantTypography) {
-      return renderAssistantMarkdownSegment(part, `content-${i}`);
+      return renderAssistantMarkdownSegment(part, `content-${i}`).map((node, index) => ({
+        key: `content-${i}-${index}`,
+        kind: "flow" as const,
+        node,
+      }));
     }
-    return [
-      <span key={i}>{renderInlineMarkdownLite(part, `content-${i}`)}</span>,
-    ];
+    return [{
+      key: `content-${i}`,
+      kind: "flow",
+      node: <span key={i}>{renderInlineMarkdownLite(part, `content-${i}`)}</span>,
+    }];
   });
+
+  if (!assistantTypography) {
+    return renderedParts.map((part) => part.node);
+  }
+
+  return collapseAssistantMediaGalleries(renderedParts);
 }
 
 // ── Component ──────────────────────────────────────────────────
