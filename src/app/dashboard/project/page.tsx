@@ -1483,16 +1483,20 @@ function ProjectPageContent() {
   // to avoid SSR mismatch), debounced write on change, cleared on send.
   const chatDraftStorageKey = `scienceswarm.chat.draft.${activeProjectSlug ?? "__global__"}`;
   const chatDraftRestoredRef = useRef(false);
+  const chatDraftEditedSinceProjectChangeRef = useRef(false);
   useEffect(() => {
     // Reset restore flag when the active project changes, then re-hydrate.
     chatDraftRestoredRef.current = false;
+    chatDraftEditedSinceProjectChangeRef.current = false;
     if (typeof window === "undefined") return;
     try {
       const stored = window.localStorage.getItem(chatDraftStorageKey);
       const restoredDraft = stored && stored.length > 0 ? stored : "";
-      setInput(restoredDraft);
-      draftInputRef.current = restoredDraft;
-      promptHistoryIndexRef.current = null;
+      if (!chatDraftEditedSinceProjectChangeRef.current) {
+        setInput(restoredDraft);
+        draftInputRef.current = restoredDraft;
+        promptHistoryIndexRef.current = null;
+      }
     } catch {
       // localStorage unavailable (private mode, disabled, etc.) — ignore.
     } finally {
@@ -3830,6 +3834,7 @@ function ProjectPageContent() {
   );
 
   const handleChatInputChange = useCallback((value: string) => {
+    chatDraftEditedSinceProjectChangeRef.current = true;
     if (promptHistoryIndexRef.current === null) {
       draftInputRef.current = value;
     }

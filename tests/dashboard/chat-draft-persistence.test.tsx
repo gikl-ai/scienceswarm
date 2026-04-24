@@ -151,4 +151,21 @@ describe("chat draft persistence", () => {
     // Other project's draft remains untouched.
     expect(window.localStorage.getItem("scienceswarm.chat.draft.other-project")).toBe("not mine");
   });
+
+  it("does not clobber fresh input when draft restore lands after typing starts", async () => {
+    window.localStorage.setItem("scienceswarm.chat.draft.demo-project", "saved draft");
+
+    vi.stubGlobal("fetch", stubMinimalDashboardFetch());
+
+    render(<ProjectPage />);
+
+    const input = screen.getByLabelText("Chat with your project") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "typed before hydrate" } });
+
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText("Chat with your project") as HTMLTextAreaElement).value,
+      ).toBe("typed before hydrate");
+    });
+  });
 });
