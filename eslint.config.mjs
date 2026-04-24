@@ -63,6 +63,43 @@ const eslintConfig = defineConfig([
       "scienceswarm/require-attribution": "off",
     },
   },
+  // Design-system layering gate: application code imports the ss-* wrapper
+  // layer (re-exported from "@/components/ui" / "@/components/ui/ss-*")
+  // instead of reaching past it to the raw shadcn primitives. See
+  // docs/_local/reference/COMPONENT_ARCHITECTURE.md §3. The raw primitives
+  // themselves (src/components/ui/button.tsx, dialog.tsx, ...) are fine —
+  // only app code is scoped here, so the wrappers can still import them.
+  {
+    files: [
+      "src/app/**/*.{ts,tsx}",
+      "src/components/research/**/*.{ts,tsx}",
+      "src/components/setup/**/*.{ts,tsx}",
+      "src/components/skills/**/*.{ts,tsx}",
+      "src/components/radar/**/*.{ts,tsx}",
+      "src/components/runtime/**/*.{ts,tsx}",
+      "src/components/settings/**/*.{ts,tsx}",
+      "src/components/openclaw/**/*.{ts,tsx}",
+      "src/components/progress/**/*.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/components/ui/*",
+                "!@/components/ui/ss-*",
+                "!@/components/ui/index",
+              ],
+              message:
+                "Import the ss-* wrapper from @/components/ui instead of the raw primitive (see docs/_local/reference/COMPONENT_ARCHITECTURE.md §3).",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;
