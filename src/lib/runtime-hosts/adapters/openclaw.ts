@@ -108,17 +108,20 @@ export class OpenClawRuntimeHostAdapter implements ResearchRuntimeHost {
     const sendAgentMessage = this.sendAgentMessageOverride
       ?? (await import("@/lib/openclaw")).sendAgentMessage;
     const sessionId = request.conversationId ?? `openclaw-${randomUUID()}`;
-    if (request.runtimeSessionId) {
-      this.activeRuntimeSessions.set(request.runtimeSessionId, sessionId);
-    }
 
     let message: string;
     try {
+      if (request.runtimeSessionId) {
+        this.activeRuntimeSessions.set(request.runtimeSessionId, sessionId);
+      }
       message = await sendAgentMessage(request.prompt, {
         session: sessionId,
       });
     } finally {
-      if (request.runtimeSessionId) {
+      if (
+        request.runtimeSessionId
+        && this.activeRuntimeSessions.get(request.runtimeSessionId) === sessionId
+      ) {
         this.activeRuntimeSessions.delete(request.runtimeSessionId);
       }
     }
@@ -150,7 +153,17 @@ export class OpenClawRuntimeHostAdapter implements ResearchRuntimeHost {
 
     const abortChat = this.abortChatOverride
       ?? (await import("@/lib/openclaw/gateway-ws-client")).abortChatViaGateway;
-    const result = await abortChat(openClawSessionKey, { timeoutMs: 10_000 });
+    let result: { aborted: boolean; runIds?: string[] };
+    try {
+      result = await abortChat(openClawSessionKey, { timeoutMs: 10_000 });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "unknown error";
+      return {
+        sessionId,
+        cancelled: false,
+        detail: `Abort request for OpenClaw session ${openClawSessionKey} failed: ${detail}`,
+      };
+    }
 
     return {
       sessionId,
