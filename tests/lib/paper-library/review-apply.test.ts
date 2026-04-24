@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -227,6 +227,126 @@ describe("paper-library review and apply", () => {
     }
     expect(await exists(alphaPath)).toBe(true);
     expect(await exists(betaPath)).toBe(true);
+  });
+
+  it("blocks approval when a rendered destination already exists on disk", async () => {
+    const originalPath = path.join(paperRoot, "source.pdf");
+    await writeFile(originalPath, "fake pdf", "utf-8");
+
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const reviewPage = await listPaperReviewItems({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      limit: 10,
+    });
+    const item = reviewPage?.items[0];
+    if (!item) throw new Error("expected review item");
+
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: item.id,
+      action: "correct",
+      selectedCandidateId: item.candidates[0]?.id,
+      correction: {
+        year: 2024,
+        title: "Collision Paper",
+      },
+      brainRoot,
+    });
+
+    await writeFile(path.join(paperRoot, "2024 - Collision Paper.pdf"), "existing destination", "utf-8");
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{year} - {title}.pdf",
+    });
+    expect(created?.plan).toMatchObject({
+      status: "blocked",
+      conflictCount: 1,
+    });
+    expect(created?.operations[0]?.conflictCodes).toContain("destination_exists");
+    await expect(approveApplyPlan({
+      project: "project-alpha",
+      applyPlanId: created?.plan.id ?? "",
+      brainRoot,
+    })).rejects.toThrow(/validated/i);
+  });
+
+  it("does not create directories through symlinked destination parents during apply", async () => {
+    const originalPath = path.join(paperRoot, "source.pdf");
+    await writeFile(originalPath, "fake pdf", "utf-8");
+    const outsideRoot = await mkdtemp(path.join(os.homedir(), "tmp", "scienceswarm-paper-library-outside-"));
+    const outsideSubdir = path.join(outsideRoot, "sub");
+    await symlink(outsideRoot, path.join(paperRoot, "linked-outside"));
+
+    try {
+      const brainRoot = path.join(dataRoot, "brain");
+      const scan = await startPaperLibraryScan({
+        project: "project-alpha",
+        rootPath: paperRoot,
+        brainRoot,
+      });
+      await waitForScan("project-alpha", scan.id);
+
+      const reviewPage = await listPaperReviewItems({
+        project: "project-alpha",
+        scanId: scan.id,
+        brainRoot,
+        limit: 10,
+      });
+      const item = reviewPage?.items[0];
+      if (!item) throw new Error("expected review item");
+
+      await updatePaperReviewItem({
+        project: "project-alpha",
+        scanId: scan.id,
+        itemId: item.id,
+        action: "correct",
+        selectedCandidateId: item.candidates[0]?.id,
+        correction: {
+          title: "Escaping Parent",
+        },
+        brainRoot,
+      });
+
+      const created = await createApplyPlan({
+        project: "project-alpha",
+        scanId: scan.id,
+        brainRoot,
+        templateFormat: "linked-outside/sub/{title}.pdf",
+      });
+      expect(created?.plan.status).toBe("validated");
+
+      const approval = await approveApplyPlan({
+        project: "project-alpha",
+        applyPlanId: created?.plan.id ?? "",
+        brainRoot,
+      });
+      const applied = await applyApprovedPlan({
+        project: "project-alpha",
+        applyPlanId: approval?.plan.id ?? "",
+        approvalToken: approval?.approvalToken ?? "",
+        brainRoot,
+      });
+
+      expect(applied?.manifest.status).toBe("failed");
+      expect(applied?.operations[0]?.error).toMatch(/symlink|escapes/i);
+      expect(await exists(outsideSubdir)).toBe(false);
+      expect(await exists(originalPath)).toBe(true);
+    } finally {
+      await rm(outsideRoot, { recursive: true, force: true });
+    }
   });
 
   it("clears the active apply plan when a reviewed item changes", async () => {

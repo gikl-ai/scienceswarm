@@ -21,6 +21,7 @@ import {
   createIdentityCandidateFromEvidence,
   extractPaperIdentityEvidence,
 } from "./identity";
+import { enrichIdentityCandidate } from "./identity-enrichment";
 import { snapshotFile } from "./fs-safety";
 import { readJsonFile, writeJsonFile } from "@/lib/state/atomic-json";
 import { isPathAllowed } from "@/lib/import/background-import-job";
@@ -279,22 +280,20 @@ export async function updatePaperLibraryScan(
   return writeScan(updater(scan), stateRoot);
 }
 
-async function walkPdfFiles(rootPath: string): Promise<string[]> {
-  const files: string[] = [];
-  async function walk(dir: string): Promise<void> {
-    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-    entries.sort((left, right) => left.name.localeCompare(right.name));
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        if (!shouldSkipImportDirectory(entry.name)) await walk(path.join(dir, entry.name));
-        continue;
+async function* walkPdfFiles(rootPath: string): AsyncGenerator<string> {
+  const entries = await readdir(rootPath, { withFileTypes: true }).catch(() => []);
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+  for (const entry of entries) {
+    const absolutePath = path.join(rootPath, entry.name);
+    if (entry.isDirectory()) {
+      if (!shouldSkipImportDirectory(entry.name)) {
+        yield* walkPdfFiles(absolutePath);
       }
-      if (!entry.isFile() || shouldSkipImportFile(entry.name) || !isPdf(entry.name)) continue;
-      files.push(path.join(dir, entry.name));
+      continue;
     }
+    if (!entry.isFile() || shouldSkipImportFile(entry.name) || !isPdf(entry.name)) continue;
+    yield absolutePath;
   }
-  await walk(rootPath);
-  return files;
 }
 
 export async function runPaperLibraryScanJob(
@@ -317,18 +316,49 @@ export async function runPaperLibraryScanJob(
 
     const stateRoot = getProjectStateRootForBrainRoot(project, brainRoot);
     const rootRealpath = scan.rootRealpath ?? await realpath(scan.rootPath);
-    const files = await walkPdfFiles(rootRealpath);
-    const reviewItems: PaperReviewItem[] = [];
+    const shardIds: string[] = [];
+    let reviewShardBuffer: PaperReviewItem[] = [];
+    let detectedFiles = 0;
     let identified = 0;
     let failed = 0;
+    let needsReviewCount = 0;
+    let readyForApplyCount = 0;
 
-    for (const [index, absolutePath] of files.entries()) {
+    async function flushReviewShard(): Promise<void> {
+      if (reviewShardBuffer.length === 0) return;
+      const shardId = String(shardIds.length + 1).padStart(4, "0");
+      shardIds.push(shardId);
+      await writeJsonFile(getPaperLibraryReviewShardPath(project, scanId, shardId, stateRoot), PaperReviewShardSchema.parse({
+        version: PAPER_LIBRARY_STATE_VERSION,
+        scanId,
+        items: reviewShardBuffer,
+      }));
+      reviewShardBuffer = [];
+    }
+
+    for await (const absolutePath of walkPdfFiles(rootRealpath)) {
       const fresh = await readPaperLibraryScan(project, scanId, brainRoot);
       if (fresh?.cancelRequestedAt) {
-        await writeScan({ ...fresh, status: "canceled", updatedAt: nowIso(), heartbeatAt: nowIso() }, stateRoot);
+        await flushReviewShard();
+        await writeScan({
+          ...fresh,
+          status: "canceled",
+          updatedAt: nowIso(),
+          heartbeatAt: nowIso(),
+          reviewShardIds: shardIds,
+          counters: {
+            ...scanCounters(fresh),
+            detectedFiles,
+            identified,
+            needsReview: needsReviewCount,
+            readyForApply: readyForApplyCount,
+            failed,
+          },
+        }, stateRoot);
         return;
       }
 
+      detectedFiles += 1;
       const relativePath = path.relative(rootRealpath, absolutePath);
       const snapshot = await snapshotFile(rootRealpath, absolutePath);
       if (!snapshot.ok) {
@@ -349,7 +379,11 @@ export async function runPaperLibraryScanJob(
         pageCount: extracted?.pageCount,
         wordCount: extracted?.wordCount,
       });
-      const candidate = createIdentityCandidateFromEvidence(evidence, relativePath);
+      const candidate = await enrichIdentityCandidate({
+        project,
+        stateRoot,
+        candidate: createIdentityCandidateFromEvidence(evidence, relativePath),
+      });
       const semanticText = buildSemanticText({
         title: candidate.title,
         firstSentence: extracted?.firstSentence,
@@ -358,7 +392,9 @@ export async function runPaperLibraryScanJob(
       });
       const needsReview = candidate.confidence < 0.9 || candidate.conflicts.length > 0;
       if (!needsReview) identified += 1;
-      reviewItems.push({
+      if (needsReview) needsReviewCount += 1;
+      else readyForApplyCount += 1;
+      reviewShardBuffer.push({
         id: randomUUID(),
         scanId,
         paperId: candidate.id,
@@ -376,7 +412,11 @@ export async function runPaperLibraryScanJob(
         updatedAt: nowIso(),
       });
 
-      if (index % 20 === 0 || Date.now() - Date.parse(scan.heartbeatAt ?? scan.updatedAt) > HEARTBEAT_WRITE_INTERVAL_MS) {
+      if (reviewShardBuffer.length >= REVIEW_SHARD_SIZE) {
+        await flushReviewShard();
+      }
+
+      if (detectedFiles % 20 === 0 || Date.now() - Date.parse(scan.heartbeatAt ?? scan.updatedAt) > HEARTBEAT_WRITE_INTERVAL_MS) {
         scan = await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
           ...current,
           status: "identifying",
@@ -386,29 +426,22 @@ export async function runPaperLibraryScanJob(
           currentPath: relativePath,
           counters: {
             ...scanCounters(current),
-            detectedFiles: files.length,
+            detectedFiles,
             identified,
-            needsReview: reviewItems.filter((item) => item.state === "needs_review").length,
+            needsReview: needsReviewCount,
+            readyForApply: readyForApplyCount,
             failed,
           },
+          reviewShardIds: shardIds,
         }));
       }
     }
 
-    const shardIds: string[] = [];
-    for (let start = 0; start < reviewItems.length; start += REVIEW_SHARD_SIZE) {
-      const shardId = String(shardIds.length + 1).padStart(4, "0");
-      shardIds.push(shardId);
-      await writeJsonFile(getPaperLibraryReviewShardPath(project, scanId, shardId, stateRoot), PaperReviewShardSchema.parse({
-        version: PAPER_LIBRARY_STATE_VERSION,
-        scanId,
-        items: reviewItems.slice(start, start + REVIEW_SHARD_SIZE),
-      }));
-    }
+    await flushReviewShard();
 
     await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
       ...current,
-      status: reviewItems.some((item) => item.state === "needs_review") ? "ready_for_review" : "ready_for_apply",
+      status: needsReviewCount > 0 ? "ready_for_review" : "ready_for_apply",
       rootRealpath,
       claimId: undefined,
       heartbeatAt: nowIso(),
@@ -416,10 +449,10 @@ export async function runPaperLibraryScanJob(
       currentPath: null,
       reviewShardIds: shardIds,
       counters: {
-        detectedFiles: files.length,
+        detectedFiles,
         identified,
-        needsReview: reviewItems.filter((item) => item.state === "needs_review").length,
-        readyForApply: reviewItems.filter((item) => item.state === "accepted").length,
+        needsReview: needsReviewCount,
+        readyForApply: readyForApplyCount,
         failed,
       },
     }));

@@ -1,4 +1,4 @@
-const TEMPLATE_VARIABLE_RE = /\{([a-zA-Z0-9_]+)(?:\|([^}]+))?\}/g;
+const TEMPLATE_VARIABLE_RE = /\{([^{}]+)\}/g;
 const RESERVED_WINDOWS_NAMES = new Set(["con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"]);
 
 export const PHASE_1_TEMPLATE_VARIABLES = [
@@ -32,7 +32,8 @@ export interface TemplateProblem {
     | "unsafe_path"
     | "segment_too_long"
     | "path_too_long"
-    | "case_collision";
+    | "case_collision"
+    | "fallback_not_supported";
   message: string;
   variable?: string;
   segment?: string;
@@ -57,7 +58,16 @@ export function parseRenameTemplate(
   TEMPLATE_VARIABLE_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = TEMPLATE_VARIABLE_RE.exec(template)) !== null) {
-    const variable = match[1];
+    const rawVariable = match[1]?.trim() ?? "";
+    const [variable = ""] = rawVariable.split("|", 1);
+    if (rawVariable.includes("|")) {
+      problems.push({
+        code: "fallback_not_supported",
+        message: "Template fallback syntax is not supported yet; every referenced field is required.",
+        variable,
+      });
+      continue;
+    }
     if (!allowed.has(variable)) {
       problems.push({
         code: "unknown_variable",
@@ -106,9 +116,9 @@ export function renderRenameTemplate(
   if (!parsed.ok) return parsed;
 
   const problems: TemplateProblem[] = [];
-  let rendered = template.replace(TEMPLATE_VARIABLE_RE, (_full, variable: RenameTemplateVariable, fallback?: string) => {
+  let rendered = template.replace(TEMPLATE_VARIABLE_RE, (_full, rawVariable: string) => {
+    const variable = rawVariable.trim() as RenameTemplateVariable;
     const rawValue = stringifyTemplateValue(values[variable]);
-    if (!rawValue && fallback !== undefined) return sanitizePathSegment(fallback);
     if (!rawValue) {
       problems.push({
         code: "missing_required_field",

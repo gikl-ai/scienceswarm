@@ -31,7 +31,7 @@ function scanPath(project: string, scanId: string): string {
 }
 
 async function waitForScanFile(project: string, scanId: string): Promise<Record<string, unknown>> {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     const body = JSON.parse(await readFile(scanPath(project, scanId), "utf-8")) as Record<string, unknown>;
     if (body.status === "ready_for_review" || body.status === "ready_for_apply" || body.status === "failed") {
       return body;
@@ -107,6 +107,63 @@ describe("paper-library jobs", () => {
     );
     expect(reviewShard).toContain("2024 Smith 10.1000 test");
     expect(reviewShard).toContain("text_layer_too_thin");
+  });
+
+  it("streams large scans into review shards instead of waiting for one final in-memory batch", async () => {
+    const paperCount = 260;
+    for (let index = 0; index < paperCount; index += 1) {
+      await writeFile(
+        path.join(paperRoot, `2024 - Smith - Streaming Paper ${String(index).padStart(3, "0")}.pdf`),
+        `fake pdf ${index}`,
+        "utf-8",
+      );
+    }
+
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot: path.join(dataRoot, "brain"),
+      idempotencyKey: "streaming-shards",
+    });
+
+    const completed = await waitForScanFile("project-alpha", scan.id);
+    expect(completed).toMatchObject({
+      counters: {
+        detectedFiles: paperCount,
+      },
+      reviewShardIds: ["0001", "0002"],
+    });
+
+    const firstShard = JSON.parse(await readFile(
+      path.join(
+        dataRoot,
+        "projects",
+        "project-alpha",
+        ".brain",
+        "state",
+        "paper-library",
+        "reviews",
+        scan.id,
+        "0001.json",
+      ),
+      "utf-8",
+    )) as { items: unknown[] };
+    const secondShard = JSON.parse(await readFile(
+      path.join(
+        dataRoot,
+        "projects",
+        "project-alpha",
+        ".brain",
+        "state",
+        "paper-library",
+        "reviews",
+        scan.id,
+        "0002.json",
+      ),
+      "utf-8",
+    )) as { items: unknown[] };
+    expect(firstShard.items).toHaveLength(250);
+    expect(secondShard.items).toHaveLength(10);
   });
 
   it("rejects roots outside the user's allowed local area", async () => {
