@@ -279,7 +279,7 @@ describe("benchmark-chat-hi", () => {
         },
       }),
     ).toContain(
-      "Timing phases: none\nSkipped phases: none\nPrompt chars: none\nPrompt highlights: none",
+      "Timing phases: none\nPrompt chars: none\nPrompt highlights: none",
     );
     expect(
       formatBenchmarkSummary({

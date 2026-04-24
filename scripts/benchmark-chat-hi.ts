@@ -269,21 +269,26 @@ function formatTimingPhasesForSummary(
         .join(", ");
 }
 
+const PROMPT_CHAR_COUNT_HIGHLIGHT_KEYS = [
+  "total",
+  "recent_chat_context",
+  "workspace_files",
+] as const;
+
+const PROMPT_CHAR_COUNT_PREFERRED_ORDER = [
+  ...PROMPT_CHAR_COUNT_HIGHLIGHT_KEYS,
+  "user_text",
+  "guardrails",
+  "project_prompt",
+  "active_file",
+] as const;
+
 function formatPromptCharCountsForSummary(
   promptCharCounts: Record<string, number>,
 ): string {
-  const preferredOrder = [
-    "total",
-    "recent_chat_context",
-    "workspace_files",
-    "user_text",
-    "guardrails",
-    "project_prompt",
-    "active_file",
-  ];
   const entries = Object.entries(promptCharCounts).sort(([leftKey], [rightKey]) => {
-    const leftIndex = preferredOrder.indexOf(leftKey);
-    const rightIndex = preferredOrder.indexOf(rightKey);
+    const leftIndex = PROMPT_CHAR_COUNT_PREFERRED_ORDER.indexOf(leftKey as typeof PROMPT_CHAR_COUNT_PREFERRED_ORDER[number]);
+    const rightIndex = PROMPT_CHAR_COUNT_PREFERRED_ORDER.indexOf(rightKey as typeof PROMPT_CHAR_COUNT_PREFERRED_ORDER[number]);
     if (leftIndex === -1 && rightIndex === -1) {
       return leftKey.localeCompare(rightKey);
     }
@@ -302,21 +307,17 @@ function formatPromptCharCountsForSummary(
 
 function formatSkippedTimingPhasesForSummary(
   phases: ChatBenchmarkTimingPhaseSummary[],
-): string {
+): string | null {
   const skipped = phases
     .filter((phase) => phase.skipped)
     .map((phase) => phase.name);
-  return skipped.length === 0 ? "none" : skipped.join(", ");
+  return skipped.length === 0 ? null : skipped.join(", ");
 }
 
 function formatPromptBudgetHighlights(
   promptCharCounts: Record<string, number>,
 ): string {
-  const highlights = [
-    "total",
-    "recent_chat_context",
-    "workspace_files",
-  ].flatMap((key) =>
+  const highlights = PROMPT_CHAR_COUNT_HIGHLIGHT_KEYS.flatMap((key) =>
     typeof promptCharCounts[key] === "number"
       ? [`${key} ${promptCharCounts[key]}`]
       : []
@@ -352,6 +353,10 @@ function formatTimingArtifactUnavailableReason(
 
 export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
   const timingArtifact = summary.timingArtifact;
+  const skippedTimingPhases =
+    timingArtifact && !isTimingArtifactUnavailable(timingArtifact)
+      ? formatSkippedTimingPhasesForSummary(timingArtifact.phases)
+      : null;
   return [
     "Chat Hi Benchmark",
     `Status: ${summary.status} ${summary.ok ? "ok" : "failed"}`,
@@ -381,9 +386,9 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
               timingArtifact.outcome ?? "unknown"
             }, status ${timingArtifact.status ?? "unknown"}`,
             `Timing phases: ${formatTimingPhasesForSummary(timingArtifact.phases)}`,
-            `Skipped phases: ${formatSkippedTimingPhasesForSummary(
-              timingArtifact.phases,
-            )}`,
+            ...(skippedTimingPhases
+              ? [`Skipped phases: ${skippedTimingPhases}`]
+              : []),
             `Prompt chars: ${formatPromptCharCountsForSummary(
               timingArtifact.promptCharCounts,
             )}`,
