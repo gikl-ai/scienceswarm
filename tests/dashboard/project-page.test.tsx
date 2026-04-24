@@ -1421,6 +1421,7 @@ describe("Project dashboard smoke test", () => {
 
     const previewDialog = await screen.findByRole("dialog", { name: "Runtime preview" });
     expect(previewDialog).toBeInTheDocument();
+    expect(input).toHaveValue("");
     expect(runtimePreviewBodies).toEqual([
       expect.objectContaining({
         hostId: "codex",
@@ -1435,6 +1436,7 @@ describe("Project dashboard smoke test", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve and send" }));
 
     expect(await screen.findByText("Codex direct answer")).toBeInTheDocument();
+    expect(input).toHaveValue("");
     expect(runtimeSessionBodies).toEqual([
       expect.objectContaining({
         hostId: "codex",

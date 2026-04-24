@@ -215,6 +215,7 @@ interface PendingRuntimeSend {
   preview: TurnPreview;
   options: RuntimeSendOptions;
   label: string;
+  restoreDraft: string;
 }
 
 type Tab =
@@ -3858,12 +3859,16 @@ function ProjectPageContent() {
           await sendRuntimePrompt(prompt, previewOptions);
           return;
         }
+        setInput("");
+        draftInputRef.current = "";
+        promptHistoryIndexRef.current = null;
         setPendingRuntimeSend({
           prompt,
           activeFile,
           preview: payload.preview,
           options: previewOptions,
           label: `${mode} via ${payload.preview.destinations.map((item) => item.label).join(", ")}`,
+          restoreDraft: prompt,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Runtime preview failed.";
@@ -3897,6 +3902,13 @@ function ProjectPageContent() {
       setRuntimePreviewBusy(false);
     }
   }, [pendingRuntimeSend, sendRuntimePrompt]);
+
+  const restorePendingRuntimeDraft = useCallback((value: string) => {
+    setInput((current) => (current.length === 0 ? value : current));
+    draftInputRef.current = value;
+    promptHistoryIndexRef.current = null;
+    inputRef.current?.focus();
+  }, []);
 
   const moveInputCursorToEnd = useCallback((value: string) => {
     requestAnimationFrame(() => {
@@ -5161,14 +5173,19 @@ function ProjectPageContent() {
         error={runtimePreviewError}
         onApprove={() => void handleApproveRuntimePreview()}
         onCancel={() => {
+          if (pendingRuntimeSend?.restoreDraft) {
+            restorePendingRuntimeDraft(pendingRuntimeSend.restoreDraft);
+          }
           setPendingRuntimeSend(null);
           setRuntimePreviewError(null);
         }}
         onChangeHost={() => {
+          if (pendingRuntimeSend?.restoreDraft) {
+            restorePendingRuntimeDraft(pendingRuntimeSend.restoreDraft);
+          }
           setPendingRuntimeSend(null);
           setRuntimePreviewError(null);
           setRuntimeSwitcherOpen(true);
-          inputRef.current?.focus();
         }}
       />
 
