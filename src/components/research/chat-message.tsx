@@ -411,7 +411,29 @@ function normalizeMediaWorkspacePath(filePath: string): string {
   if (openClawMediaMatch?.[1]) {
     return `__openclaw__/media/${openClawMediaMatch[1]}`;
   }
+  const legacyHtmlAliasPath = resolveLegacyHtmlAliasPath(normalized);
+  if (legacyHtmlAliasPath) {
+    return legacyHtmlAliasPath;
+  }
   return normalized;
+}
+
+function resolveLegacyHtmlAliasPath(value: string): string | null {
+  const normalized = normalizeWorkspaceRelativePath(value);
+  if (!normalized) {
+    return null;
+  }
+  if (/\.[a-z0-9]+$/i.test(normalized)) {
+    return null;
+  }
+
+  const segments = normalized.split("/");
+  const lastSegment = segments[segments.length - 1];
+  if (/-game$/i.test(lastSegment)) {
+    segments[segments.length - 1] = lastSegment.replace(/-game$/i, "");
+  }
+
+  return normalizeWorkspaceRelativePath(`${segments.join("/")}/index.html`);
 }
 
 function normalizeProgressTextForDisplay(text: string): string | null {
@@ -699,6 +721,7 @@ function resolveEmbeddedRawPath(
 
 function parseEmbedDirective(part: string): {
   url?: string;
+  ref?: string;
   title?: string;
   height?: string;
 } | null {
@@ -723,6 +746,7 @@ function parseEmbedDirective(part: string): {
   }
 
   return {
+    ref: values.ref,
     url: values.url,
     title: values.title,
     height: values.height,
@@ -981,8 +1005,12 @@ function renderContent(content: string, projectId: string) {
     }
     const embedDirective = parseEmbedDirective(part);
     if (embedDirective) {
-      if (embedDirective.url) {
-        let embedUrl = embedDirective.url;
+      const legacyEmbedRefPath =
+        typeof embedDirective.ref === "string"
+          ? resolveLegacyHtmlAliasPath(embedDirective.ref)
+          : null;
+      if (embedDirective.url || legacyEmbedRefPath) {
+        let embedUrl = embedDirective.url ?? legacyEmbedRefPath!;
         // OpenClaw canvas/internal URLs need proxying through workspace API
         if (embedUrl.includes("__openclaw__") || embedUrl.includes("canvas/documents")) {
           // Find the most recent saved HTML filename anywhere earlier in the
