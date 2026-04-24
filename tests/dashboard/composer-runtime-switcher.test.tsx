@@ -83,7 +83,7 @@ const hosts = [
 ];
 
 describe("ComposerRuntimeSwitcher", () => {
-  it("renders a compact composer trigger and opens Claude Code-first controls", () => {
+  it("renders a compact route trigger and opens a viewport-safe runtime sheet", () => {
     const onOpenChange = vi.fn();
     const onModeChange = vi.fn();
 
@@ -128,12 +128,13 @@ describe("ComposerRuntimeSwitcher", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Runtime switcher" });
-    expect(within(dialog).getByText("Runtime For This Turn")).toBeInTheDocument();
-    expect(within(dialog).getByText("Project Privacy")).toBeInTheDocument();
-    expect(within(dialog).getByText("Check: claude auth status")).toBeInTheDocument();
+    expect(dialog).toHaveClass("fixed");
+    expect(within(dialog).getByText("This turn")).toBeInTheDocument();
+    expect(within(dialog).getByText("Data boundary")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Check: claude auth status")).not.toBeInTheDocument();
     expect(within(dialog).getAllByText("Claude Code")[0]).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Task" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Task/ }));
     expect(onModeChange).toHaveBeenCalledWith("task");
   });
 
@@ -187,7 +188,7 @@ describe("ComposerRuntimeSwitcher", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Runtime switcher" });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Local only" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Local" }));
 
     expect(onProjectPolicyChange).toHaveBeenCalledWith("local-only");
     expect(onCompareHostIdsChange).toHaveBeenCalledWith(["openclaw"]);
