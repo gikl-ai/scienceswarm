@@ -305,11 +305,16 @@ async function buildRuntimeMcpContext(input: {
             "NODE_ENV",
             "PATH",
           ]),
+          SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN: token,
+          SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET: secret,
         },
       },
     },
   };
-  await writeFile(configPath, JSON.stringify(mcpConfig, null, 2), "utf8");
+  await writeFile(configPath, JSON.stringify(mcpConfig, null, 2), {
+    encoding: "utf8",
+    mode: 0o600,
+  });
 
   return {
     configPath,
@@ -317,7 +322,7 @@ async function buildRuntimeMcpContext(input: {
       "A runtime-scoped MCP server named `scienceswarm` is available for selective gbrain access.",
       "Use search before read. Prefer narrow queries tied to the user's project or named artifact.",
       "Do not enumerate the whole brain or read broad directories.",
-      "The runtime server injects its access token from process environment.",
+      "ScienceSwarm injects the runtime MCP access token through the MCP server environment.",
       "Do not ask the user for bearer tokens, and do not write token values into prompts, files, or captured notes.",
       "",
       "For each `scienceswarm` MCP call, include these non-secret auth fields exactly:",
