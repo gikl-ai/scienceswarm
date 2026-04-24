@@ -42,7 +42,7 @@
 .bg-surface                    { background-color: var(--surface-raised); }
 .bg-accent-hover               { background-color: var(--accent-dim); }
 .hover\:bg-background:hover    { background-color: var(--surface-ink); }
-.hover\:bg-surface:hover       { background-color: var(--surface-sunk); }
+.hover\:bg-surface:hover       { background-color: var(--surface-raised); }
 .hover\:bg-accent-hover:hover  { background-color: var(--accent-dim); }
 
 /* Rules */
