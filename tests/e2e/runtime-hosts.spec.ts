@@ -823,6 +823,22 @@ async function openProjectRuntimeSettings(page: Page, baseUrl: string): Promise<
   await expect(page.getByTestId("runtime-picker")).toBeVisible();
 }
 
+async function sendProjectPrompt(page: Page, prompt: string): Promise<void> {
+  const input = page.getByTestId("chat-input");
+  await expect(input).toBeVisible();
+  await expect(input).toBeEnabled();
+  await input.click();
+  await input.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await input.press("Backspace");
+  await input.pressSequentially(prompt);
+  await expect(input).toHaveValue(prompt);
+
+  const sendButton = page.getByRole("button", { name: "Send" });
+  await expect(sendButton).toBeVisible();
+  await expect(sendButton).toBeEnabled();
+  await sendButton.click();
+}
+
 async function clearBrowserStorage(page: Page, baseUrl: string): Promise<void> {
   await page.goto(baseUrl);
   await page.evaluate(() => {
@@ -863,8 +879,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await expect(page.locator('[data-testid="runtime-picker"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="runtime-task-board"]')).toHaveCount(0);
 
-    await page.getByTestId("chat-input").fill("Use the local OpenClaw path.");
-    await page.getByRole("button", { name: "Send" }).click();
+    await sendProjectPrompt(page, "Use the local OpenClaw path.");
 
     await expect(page.getByText("OpenClaw local response from gemma4:latest")).toBeVisible();
     expect(state.chatSends).toBe(1);
@@ -887,8 +902,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await page.getByTestId("runtime-mode-task").click();
 
     await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
-    await page.getByTestId("chat-input").fill("Run a hosted task and write the summary.");
-    await page.getByRole("button", { name: "Send" }).click();
+    await sendProjectPrompt(page, "Run a hosted task and write the summary.");
 
     const preview = page.getByTestId("turn-preview-sheet");
     await expect(preview).toBeVisible();
@@ -928,8 +942,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await page.getByTestId("runtime-compare-hosts").getByLabel("Codex").check();
 
     await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
-    await page.getByTestId("chat-input").fill("Compare the runtime host answers.");
-    await page.getByRole("button", { name: "Send" }).click();
+    await sendProjectPrompt(page, "Compare the runtime host answers.");
 
     await expect(page.getByTestId("turn-preview-sheet")).toContainText("Codex");
     await page.getByRole("button", { name: "Approve and send" }).click();

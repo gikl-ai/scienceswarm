@@ -1414,6 +1414,7 @@ function ProjectPageContent() {
 
   const [activeTab, setActiveTab] = useState<Tab>("chat");
   const [input, setInput] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [slashCommandsStatus, setSlashCommandsStatus] =
     useState<SlashCommandStatus>("idle");
   const [slashCommands, setSlashCommands] = useState<SlashCommandOption[]>(
@@ -1484,21 +1485,39 @@ function ProjectPageContent() {
   // to avoid SSR mismatch), debounced write on change, cleared on send.
   const chatDraftStorageKey = `scienceswarm.chat.draft.${activeProjectSlug ?? "__global__"}`;
   const chatDraftRestoredRef = useRef(false);
+  const previousChatDraftStorageKeyRef = useRef(chatDraftStorageKey);
   useEffect(() => {
+    let syncDraftFrame: number | null = null;
     // Reset restore flag when the active project changes, then re-hydrate.
+    const storageKeyChanged = previousChatDraftStorageKeyRef.current !== chatDraftStorageKey;
+    previousChatDraftStorageKeyRef.current = chatDraftStorageKey;
     chatDraftRestoredRef.current = false;
     if (typeof window === "undefined") return;
     try {
       const stored = window.localStorage.getItem(chatDraftStorageKey);
       const restoredDraft = stored && stored.length > 0 ? stored : "";
-      setInput(restoredDraft);
-      draftInputRef.current = restoredDraft;
+      setInput((currentDraft) => {
+        // A fast user or e2e run can type before this post-hydration restore
+        // lands. Keep that live text unless the project draft key changed.
+        return !storageKeyChanged && currentDraft.length > 0
+          ? currentDraft
+          : restoredDraft;
+      });
+      syncDraftFrame = window.requestAnimationFrame(() => {
+        draftInputRef.current = inputRef.current?.value ?? restoredDraft;
+      });
       promptHistoryIndexRef.current = null;
     } catch {
       // localStorage unavailable (private mode, disabled, etc.) — ignore.
     } finally {
       chatDraftRestoredRef.current = true;
     }
+
+    return () => {
+      if (syncDraftFrame !== null) {
+        window.cancelAnimationFrame(syncDraftFrame);
+      }
+    };
   }, [chatDraftStorageKey]);
 
   useEffect(() => {
@@ -1561,7 +1580,6 @@ function ProjectPageContent() {
     useState(!activeProjectSlug);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const slashCommandsRequestControllerRef = useRef<AbortController | null>(
     null,
