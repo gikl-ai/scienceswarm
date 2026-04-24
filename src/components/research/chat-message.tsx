@@ -188,6 +188,8 @@ const PROGRESS_SECTION_META: Record<
     rowClassName: "text-muted",
   },
 };
+
+const EXPLORED_INLINE_LINE_LIMIT = 3;
 const EXPLORE_COMMAND_PREFIXES = [
   "Read ",
   "Write ",
@@ -812,6 +814,62 @@ function summarizeCompactSteps(steps: Step[]): string[] {
   return [];
 }
 
+function ExploredTranscriptBlock({
+  blockIndex,
+  lines,
+  compact,
+}: {
+  blockIndex: number;
+  lines: string[];
+  compact: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hiddenCount = Math.max(0, lines.length - EXPLORED_INLINE_LINE_LIMIT);
+  const visibleLines =
+    expanded || hiddenCount === 0
+      ? lines
+      : lines.slice(0, EXPLORED_INLINE_LINE_LIMIT);
+
+  return (
+    <div className={compact ? "space-y-1.5" : "space-y-1"}>
+      <div className={`flex items-start gap-2 ${PROGRESS_SECTION_META.activity.rowClassName}`}>
+        <span aria-hidden="true" className="pt-0.5 text-quiet">• </span>
+        <span className="font-medium">Explored</span>
+      </div>
+      <div className={`${compact ? "space-y-1 pl-4" : "space-y-1 pl-5"} text-muted`}>
+        {visibleLines.map((line, lineIndex) => (
+          <div
+            key={`${blockIndex}-${lineIndex}-${line}`}
+            className="flex items-start gap-2 whitespace-pre-wrap"
+          >
+            <span aria-hidden="true" className="text-quiet">
+              {lineIndex === 0 ? "└ " : "· "}
+            </span>
+            <span className="min-w-0 flex-1">
+              {renderInlineMarkdownLite(
+                line,
+                `progress-explored-${blockIndex}-${lineIndex}`,
+              )}
+            </span>
+          </div>
+        ))}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            data-testid={`assistant-explored-toggle-${blockIndex}`}
+            className="inline-flex items-center gap-2 rounded-full border border-rule bg-raised px-2.5 py-1 text-[11px] font-medium text-body transition hover:bg-sunk"
+            onClick={() => setExpanded((current) => !current)}
+          >
+            {expanded
+              ? "Hide extra actions"
+              : `Show ${hiddenCount} more action${hiddenCount === 1 ? "" : "s"}`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function buildProgressSectionChanges(
   blocks: ProgressTranscriptBlock[],
   options: { compact?: boolean } = {},
@@ -849,33 +907,12 @@ function buildProgressSectionChanges(
 
     if (block.type === "explored") {
       elements.push(
-        <div
+        <ExploredTranscriptBlock
           key={`${index}-explored`}
-          className={compact ? "space-y-1.5" : "space-y-1"}
-        >
-          <div className={`flex items-start gap-2 ${PROGRESS_SECTION_META.activity.rowClassName}`}>
-            <span aria-hidden="true" className="pt-0.5 text-quiet">• </span>
-            <span className="font-medium">Explored</span>
-          </div>
-          <div className={`${compact ? "space-y-1 pl-4" : "space-y-1 pl-5"} text-muted`}>
-            {block.lines.map((line, lineIndex) => (
-              <div
-                key={`${index}-${lineIndex}-${line}`}
-                className="flex items-start gap-2 whitespace-pre-wrap"
-              >
-                <span aria-hidden="true" className="text-quiet">
-                  {lineIndex === 0 ? "└ " : "· "}
-                </span>
-                <span className="min-w-0 flex-1">
-                  {renderInlineMarkdownLite(
-                    line,
-                    `progress-explored-${index}-${lineIndex}`,
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>,
+          blockIndex={index}
+          lines={block.lines}
+          compact={compact}
+        />,
       );
       return;
     }
