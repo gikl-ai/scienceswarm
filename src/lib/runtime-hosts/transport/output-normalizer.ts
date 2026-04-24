@@ -111,7 +111,7 @@ export function buildRuntimeCliFailureUserMessage(
   const combined = input.output?.combined ?? input.output?.text ?? "";
 
   const looksLikeScienceSwarmMcp =
-    /scienceswarm|runtime mcp|mcp server|gbrain|brain/i.test(combined);
+    /scienceswarm|runtime mcp|mcp server|gbrain/i.test(combined);
   const looksLikeRuntimeMcpAuth =
     /Runtime MCP access token|SCIENCESWARM_RUNTIME_MCP|signature is invalid|not scoped to this/i
       .test(combined);

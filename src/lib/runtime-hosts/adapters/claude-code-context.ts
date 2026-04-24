@@ -306,7 +306,6 @@ async function buildRuntimeMcpContext(input: {
             "PATH",
           ]),
           SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN: token,
-          SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET: secret,
         },
       },
     },
@@ -335,10 +334,7 @@ async function buildRuntimeMcpContext(input: {
       `Allowed tools: ${allowedTools.join(", ")}.`,
       "For runtime-originated gbrain writes, include RuntimeGbrainProvenance matching this session.",
     ].join("\n"),
-    env: {
-      SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN: token,
-      SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET: secret,
-    },
+    env: {},
     cleanup: async () => {
       await unlink(configPath).catch(ignoreMissingFile);
     },

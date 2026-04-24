@@ -385,11 +385,11 @@ describe("runtime host adapters", () => {
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_DIR).toBe(dataRoot);
       expect(mcpConfig.mcpServers.scienceswarm.env.BRAIN_ROOT).toBe(brainRoot);
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET)
-        .toEqual(expect.any(String));
+        .toBeUndefined();
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN)
         .toEqual(expect.any(String));
-      expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET).toEqual(expect.any(String));
-      expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN).toEqual(expect.any(String));
+      expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET).toBeUndefined();
+      expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN).toBeUndefined();
       await expect(readFile(mcpConfigPath, "utf8")).rejects.toThrow();
 
       await expect(readFile(path.join(launch?.cwd ?? "", "CLAUDE.md"), "utf8"))
