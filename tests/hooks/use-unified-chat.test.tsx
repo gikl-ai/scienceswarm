@@ -4885,9 +4885,9 @@ describe("useUnifiedChat persistence", () => {
     });
 
     const progressMeta = screen.getByTestId("progress-log-meta").textContent ?? "";
-    expect(progressMeta).toContain("assistant:server/send/started/Send/");
-    expect(progressMeta).toContain("server/waiting/running/Wait/");
-    expect(progressMeta).toContain("agent/start/started/Read/");
+    expect(progressMeta).toMatch(/assistant:server\/send\/started\/Send\/\d+/);
+    expect(progressMeta).toMatch(/server\/waiting\/running\/Wait\/\d+/);
+    expect(progressMeta).toMatch(/agent\/start\/started\/Read\/\d+/);
   });
 
   it("does not duplicate new-format agent events that also carry legacy fields", async () => {
