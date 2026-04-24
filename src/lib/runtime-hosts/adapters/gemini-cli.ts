@@ -99,8 +99,10 @@ export class GeminiCliRuntimeHostAdapter implements ResearchRuntimeHost {
   async sendTurn(request: RuntimeTurnRequest): Promise<RuntimeTurnResult> {
     this.assertCanSend(request);
     const sessionId = request.conversationId ?? `gemini-cli-${this.sessionIdGenerator()}`;
+    const wrapperSessionId = request.runtimeSessionId ?? sessionId;
     const result = await this.transport.run({
       hostId: this.runtimeProfile.id,
+      sessionId: wrapperSessionId,
       command: this.command,
       args: ["--prompt", request.prompt],
       env: this.cliEnv(),
@@ -123,10 +125,12 @@ export class GeminiCliRuntimeHostAdapter implements ResearchRuntimeHost {
   async executeTask(request: RuntimeTurnRequest): Promise<RuntimeSessionRecord> {
     this.assertCanSend(request);
     const sessionId = `gemini-cli-task-${this.sessionIdGenerator()}`;
+    const wrapperSessionId = request.runtimeSessionId ?? sessionId;
     const now = new Date().toISOString();
 
     await this.transport.run({
       hostId: this.runtimeProfile.id,
+      sessionId: wrapperSessionId,
       command: this.command,
       args: ["--prompt", request.prompt],
       env: this.cliEnv(),

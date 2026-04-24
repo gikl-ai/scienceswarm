@@ -5,6 +5,7 @@ import {
   GET as sessionsGET,
   POST as sessionsPOST,
 } from "@/app/api/runtime/sessions/route";
+import { POST as streamPOST } from "@/app/api/runtime/sessions/stream/route";
 import { GET as sessionGET } from "@/app/api/runtime/sessions/[sessionId]/route";
 import { GET as eventsGET } from "@/app/api/runtime/sessions/[sessionId]/events/route";
 import { POST as cancelPOST } from "@/app/api/runtime/sessions/[sessionId]/cancel/route";
@@ -40,7 +41,21 @@ function params(sessionId: string) {
   return { params: Promise.resolve({ sessionId }) };
 }
 
-function adapter(profile: RuntimeHostProfile): ResearchRuntimeHost {
+async function readSsePayloads(response: Response): Promise<Record<string, unknown>[]> {
+  const text = await response.text();
+  return text
+    .split("\n\n")
+    .map((frame) => frame.trim())
+    .filter((frame) => frame.startsWith("data: "))
+    .map((frame) => frame.slice("data: ".length))
+    .filter((data) => data !== "[DONE]")
+    .map((data) => JSON.parse(data) as Record<string, unknown>);
+}
+
+function adapter(
+  profile: RuntimeHostProfile,
+  options: { onTurn?: (turn: RuntimeTurnRequest) => void } = {},
+): ResearchRuntimeHost {
   return {
     profile: () => profile,
     health: async () => ({ status: "ready", checkedAt: "2026-04-22T12:00:00Z" }),
@@ -50,11 +65,25 @@ function adapter(profile: RuntimeHostProfile): ResearchRuntimeHost {
       provider: profile.authProvider,
     }),
     privacyProfile: async () => profile.privacyClass,
-    sendTurn: async (turn: RuntimeTurnRequest) => ({
-      hostId: profile.id,
-      sessionId: `${profile.id}-native-session`,
-      message: `reply from ${profile.id}: ${turn.prompt}`,
-    }),
+    sendTurn: async (turn: RuntimeTurnRequest) => {
+      options.onTurn?.(turn);
+      turn.onEvent?.({
+        id: `${profile.id}:stream-message`,
+        sessionId: turn.conversationId ?? `${profile.id}-new-wrapper`,
+        hostId: profile.id,
+        type: "message",
+        createdAt: "2026-04-22T12:00:00Z",
+        payload: {
+          text: `stream from ${profile.id}: ${turn.prompt}`,
+          nativeSessionId: `${profile.id}-native-session`,
+        },
+      });
+      return {
+        hostId: profile.id,
+        sessionId: `${profile.id}-native-session`,
+        message: `reply from ${profile.id}: ${turn.prompt}`,
+      };
+    },
     executeTask: async (turn: RuntimeTurnRequest) => ({
       id: `${profile.id}-task-session`,
       hostId: profile.id,
@@ -228,6 +257,70 @@ describe("runtime session APIs", () => {
     );
   });
 
+  it("streams runtime chat events without passing wrapper session ids as native resume ids", async () => {
+    const turns: RuntimeTurnRequest[] = [];
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      adapters: [
+        adapter(requireRuntimeHostProfile("codex"), {
+          onTurn: (turn) => turns.push(turn),
+        }),
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+
+    const response = await streamPOST(jsonRequest(
+      "http://localhost/api/runtime/sessions/stream",
+      {
+        hostId: "codex",
+        projectId: "project-alpha",
+        projectPolicy: "cloud-ok",
+        mode: "chat",
+        prompt: "Hosted turn",
+        approvalState: "approved",
+      },
+    ));
+    const payloads = await readSsePayloads(response);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
+    expect(turns).toHaveLength(1);
+    expect(turns[0].conversationId).toBeNull();
+    const messageTexts = payloads.flatMap((payload) => {
+      const event = payload.event;
+      if (!event || typeof event !== "object") return [];
+      const runtimeEvent = event as { type?: unknown; payload?: unknown };
+      if (runtimeEvent.type !== "message") return [];
+      const eventPayload = runtimeEvent.payload;
+      if (!eventPayload || typeof eventPayload !== "object") return [];
+      const text = (eventPayload as { text?: unknown }).text;
+      return typeof text === "string" ? [text] : [];
+    });
+
+    expect(messageTexts).toEqual(["stream from codex: Hosted turn"]);
+    expect(payloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: expect.objectContaining({
+            type: "message",
+            payload: expect.objectContaining({
+              text: "stream from codex: Hosted turn",
+              nativeSessionId: "codex-native-session",
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          session: expect.objectContaining({
+            hostId: "codex",
+            status: "completed",
+            conversationId: "codex-native-session",
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("stores semantic RuntimeHostError codes on failed sessions", async () => {
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
@@ -366,5 +459,60 @@ describe("runtime session APIs", () => {
       cancelSemantics: "host-api-cancel",
       result: { cancelled: true },
     });
+  });
+
+  it("does not append a failure event when non-streaming CLI cancellation wins the race", async () => {
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      adapters: [
+        {
+          ...adapter(requireRuntimeHostProfile("codex")),
+          sendTurn: async (turn) => {
+            if (!turn.runtimeSessionId) {
+              throw new Error("expected runtimeSessionId");
+            }
+            await cancelPOST(
+              new Request(
+                `http://localhost/api/runtime/sessions/${turn.runtimeSessionId}/cancel`,
+                { method: "POST" },
+              ),
+              params(turn.runtimeSessionId),
+            );
+            throw new RuntimeHostError({
+              code: "RUNTIME_TRANSPORT_ERROR",
+              status: 502,
+              message: "Runtime CLI exited due to signal SIGTERM.",
+              userMessage: "Runtime host command was interrupted.",
+              recoverable: true,
+            });
+          },
+        },
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+
+    const response = await sessionsPOST(jsonRequest(
+      "http://localhost/api/runtime/sessions",
+      {
+        hostId: "codex",
+        projectId: "project-alpha",
+        projectPolicy: "cloud-ok",
+        mode: "chat",
+        prompt: "Hosted turn",
+        approvalState: "approved",
+      },
+    ));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.session).toMatchObject({
+      status: "cancelled",
+    });
+    expect(body.events).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({ type: "error" }),
+      ]),
+    );
   });
 });

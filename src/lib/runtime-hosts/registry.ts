@@ -58,9 +58,9 @@ const BUILT_IN_PROFILES: RuntimeHostProfile[] = [
     },
     controlSurface: {
       owner: "scienceSwarm-wrapper",
-      sessionIdSource: "scienceSwarm",
+      sessionIdSource: "native-host",
       supportsCancel: true,
-      supportsResume: false,
+      supportsResume: true,
       supportsNativeSessionList: false,
     },
     mcpToolProfile: {
@@ -73,6 +73,7 @@ const BUILT_IN_PROFILES: RuntimeHostProfile[] = [
       "task",
       "stream",
       "cancel",
+      "resume",
       "mcp-tools",
       "artifact-import",
     ],
@@ -83,10 +84,10 @@ const BUILT_IN_PROFILES: RuntimeHostProfile[] = [
       status: "requires-auth",
       canStream: true,
       canCancel: true,
-      canResumeNativeSession: false,
+      canResumeNativeSession: true,
       canListNativeSessions: false,
       cancelSemantics: "kill-wrapper-process",
-      resumeSemantics: "scienceSwarm-wrapper-session",
+      resumeSemantics: "open-native-session",
     },
   },
   {

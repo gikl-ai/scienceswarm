@@ -69,6 +69,47 @@ describe("runtime host CLI transport", () => {
     expect(result.output.text).toBe("hello");
   });
 
+  it("emits stdout lines before returning the buffered subprocess result", async () => {
+    const transport = new LocalCliTransport();
+    const lines: string[] = [];
+
+    const result = await transport.run({
+      command: process.execPath,
+      args: ["-e", "process.stdout.write('one\\n'); process.stdout.write('two')"],
+      timeoutMs: 2_000,
+      onStdoutLine: (line) => lines.push(line),
+    });
+
+    expect(lines).toEqual(["one", "two"]);
+    expect(result.output.text).toBe("one\ntwo");
+  });
+
+  it("preserves split multibyte UTF-8 characters while emitting stdout lines", async () => {
+    const transport = new LocalCliTransport();
+    const lines: string[] = [];
+    const expectedLine = JSON.stringify({ text: "hello 🧪" });
+
+    const result = await transport.run({
+      command: process.execPath,
+      args: [
+        "-e",
+        [
+          "const payload = Buffer.from(JSON.stringify({ text: 'hello 🧪' }) + '\\n');",
+          "const emoji = Buffer.from('🧪');",
+          "const split = payload.indexOf(emoji) + 2;",
+          "process.stdout.write(payload.subarray(0, split));",
+          "setTimeout(() => process.stdout.write(payload.subarray(split)), 5);",
+        ].join(" "),
+      ],
+      timeoutMs: 2_000,
+      onStdoutLine: (line) => lines.push(line),
+    });
+
+    expect(lines).toEqual([expectedLine]);
+    expect(JSON.parse(lines[0] ?? "{}")).toEqual({ text: "hello 🧪" });
+    expect(result.output.text).toBe("hello 🧪");
+  });
+
   it("maps a missing command to a typed missing-CLI error and unavailable health", async () => {
     const command = "scienceswarm-definitely-missing-cli-20260422";
     const transport = new LocalCliTransport();
@@ -136,6 +177,22 @@ describe("runtime host CLI transport", () => {
         timeoutMs: 2_000,
       }),
     ).rejects.toThrow("signal SIGTERM");
+  });
+
+  it("cancels a tracked local subprocess by runtime session id", async () => {
+    const transport = new LocalCliTransport();
+    const run = transport.run({
+      hostId: "claude-code",
+      sessionId: "rt-session-cancellable",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 5_000)"],
+      timeoutMs: 10_000,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await expect(transport.cancel("rt-session-cancellable")).resolves.toBe(true);
+    await expect(run).rejects.toThrow("signal SIGTERM");
+    await expect(transport.cancel("rt-session-cancellable")).resolves.toBe(false);
   });
 
   it("times out hung subprocesses with a typed timeout error", async () => {

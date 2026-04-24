@@ -21,12 +21,24 @@ import {
 } from "../policy";
 import { requireRuntimeHostProfile } from "../registry";
 import {
+  ClaudeCodeStreamAccumulator,
+  parseClaudeCodeStreamOutput,
+} from "../transport/claude-code-stream";
+import {
   LocalCliTransport,
   detectCliAuthStatus,
   detectCliHealth,
   type CliTransport,
 } from "../transport/cli";
 import { buildSubscriptionNativeCliEnv } from "../transport/subscription-env";
+
+function isNativeClaudeCodeSessionId(
+  conversationId: string | null,
+): conversationId is string {
+  return typeof conversationId === "string"
+    && conversationId.trim().length > 0
+    && conversationId.startsWith("claude-code-") === false;
+}
 
 export interface ClaudeCodeRuntimeHostAdapterOptions {
   profile?: RuntimeHostProfile;
@@ -98,37 +110,63 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
 
   async sendTurn(request: RuntimeTurnRequest): Promise<RuntimeTurnResult> {
     this.assertCanSend(request);
-    const sessionId = request.conversationId ?? `claude-code-${this.sessionIdGenerator()}`;
+    const wrapperSessionId =
+      request.runtimeSessionId
+      ?? request.conversationId
+      ?? `claude-code-${this.sessionIdGenerator()}`;
+    const stream = new ClaudeCodeStreamAccumulator({
+      hostId: this.runtimeProfile.id,
+      sessionId: wrapperSessionId,
+    });
     const result = await this.transport.run({
       hostId: this.runtimeProfile.id,
+      sessionId: wrapperSessionId,
       command: this.command,
-      args: ["-p", request.prompt, "--output-format", "stream-json"],
+      args: this.buildPromptArgs(request),
       env: this.cliEnv(),
       timeoutMs: this.timeoutMs,
+      onStdoutLine: (line) => {
+        const event = stream.acceptLine(line);
+        if (event) request.onEvent?.(event);
+      },
     });
+    const parsed = stream.hasLines
+      ? stream.result()
+      : parseClaudeCodeStreamOutput({
+          hostId: this.runtimeProfile.id,
+          sessionId: wrapperSessionId,
+          lines: result.output.lines,
+        });
+    const message = parsed.message || result.output.text;
+    const nativeSessionId = parsed.nativeSessionId ?? wrapperSessionId;
+    const events = parsed.events.some((event) =>
+      event.type === "message" && typeof event.payload.text === "string"
+    )
+      ? parsed.events
+      : [
+          ...parsed.events,
+          this.messageEvent({ sessionId: wrapperSessionId, text: message, nativeSessionId }),
+        ];
 
     return {
       hostId: this.runtimeProfile.id,
-      sessionId,
-      message: result.output.text,
-      events: [
-        this.messageEvent({
-          sessionId,
-          text: result.output.text,
-        }),
-      ],
+      sessionId: nativeSessionId,
+      message,
+      events,
     };
   }
 
   async executeTask(request: RuntimeTurnRequest): Promise<RuntimeSessionRecord> {
     this.assertCanSend(request);
     const sessionId = `claude-code-task-${this.sessionIdGenerator()}`;
+    const wrapperSessionId = request.runtimeSessionId ?? sessionId;
     const now = new Date().toISOString();
 
     await this.transport.run({
       hostId: this.runtimeProfile.id,
+      sessionId: wrapperSessionId,
       command: this.command,
-      args: ["-p", request.prompt, "--output-format", "stream-json"],
+      args: this.buildPromptArgs(request),
       env: this.cliEnv(),
       timeoutMs: this.timeoutMs,
     });
@@ -190,7 +228,26 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
     );
   }
 
-  private messageEvent(input: { sessionId: string; text: string }): RuntimeEvent {
+  private buildPromptArgs(request: RuntimeTurnRequest): string[] {
+    const args = [
+      "-p",
+      request.prompt,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--include-partial-messages",
+    ];
+    if (isNativeClaudeCodeSessionId(request.conversationId)) {
+      args.push("--resume", request.conversationId);
+    }
+    return args;
+  }
+
+  private messageEvent(input: {
+    sessionId: string;
+    text: string;
+    nativeSessionId?: string;
+  }): RuntimeEvent {
     this.messageEventSequence += 1;
     return {
       id: `${input.sessionId}:message-${this.messageEventSequence}`,
@@ -200,6 +257,7 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       createdAt: new Date().toISOString(),
       payload: {
         text: input.text,
+        nativeSessionId: input.nativeSessionId ?? input.sessionId,
       },
     };
   }

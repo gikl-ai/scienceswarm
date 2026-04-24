@@ -96,7 +96,7 @@ describe("POST /api/runtime/preview", () => {
       allowed: true,
       hostId: "codex",
       mode: "chat",
-      requiresUserApproval: false,
+      requiresUserApproval: true,
       accountDisclosure: {
         authMode: "subscription-native",
         accountSource: "host-cli-login",

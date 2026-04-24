@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatMessage } from "@/components/research/chat-message";
 
@@ -56,7 +56,161 @@ describe("ChatMessage", () => {
 
     expect(screen.getByTestId("chat-bubble").parentElement).toHaveClass("justify-center");
     expect(screen.getByTestId("chat-bubble")).toHaveClass("max-w-[min(90vw,56rem)]");
-    expect(screen.getByTestId("chat-bubble")).toHaveClass("leading-7");
+    expect(screen.getByTestId("assistant-reply-surface")).toHaveClass("max-w-[48rem]");
+  });
+
+  it("renders assistant copy on a document-width inner surface", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-reply-surface")).toHaveClass("mx-auto");
+    expect(screen.getByTestId("assistant-reply-content")).toHaveClass("text-slate-900");
+  });
+
+  it("renders assistant markdown headings and lists with the new typography scale", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"# Research update\n\n## Next steps\n\n- Validate the chart\n- Publish the summary"}
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Research update" })).toHaveClass("text-[2rem]");
+    expect(screen.getByRole("heading", { level: 2, name: "Next steps" })).toHaveClass("text-[1.4rem]");
+    expect(screen.getByRole("list")).toHaveClass("list-disc");
+    expect(screen.getByText("Validate the chart").closest("li")).toHaveClass("pl-1");
+  });
+
+  it("uses softer caption and metadata typography for assistant media and footer", () => {
+    const timestamp = new Date(2026, 3, 22, 16, 45, 0);
+    const expectedFooter = `${timestamp.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })} · ${timestamp.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:docs/results_chart.png"}
+        projectId="project-alpha"
+        timestamp={timestamp}
+      />,
+    );
+
+    expect(screen.getByText("docs/results_chart.png")).toHaveClass("text-[11px]");
+    expect(screen.getByText(expectedFooter)).toHaveClass("text-slate-400");
+  });
+
+  it("renders nested lists, block quotes, and code fences in assistant markdown", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "#### Detailed checklist\n\n" +
+          "1. Outline the experiment\n   - Collect the baseline samples\n\n" +
+          "> Keep the calibration notebook nearby.\n\n" +
+          "```ts\nconst total = 2;\n```"
+        }
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 4, name: "Detailed checklist" })).toHaveClass("text-[1.05rem]");
+    expect(screen.getAllByRole("list")).toHaveLength(2);
+    expect(screen.getAllByRole("list")[0]).toHaveClass("pl-4");
+    expect(screen.getByText("Keep the calibration notebook nearby.").closest("blockquote")).toHaveClass("border-l-2");
+    expect(screen.getByText("const total = 2;").closest("pre")).toHaveClass("bg-slate-950");
+  });
+
+  it("keeps language-less fenced code blocks on the block-code surface", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"```\nready()\n```"}
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByText("ready()").closest("pre")).toHaveClass("bg-slate-950");
+  });
+
+  it("renders safe markdown links and suppresses unsafe html and relative links", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "[Guide](https://example.com/guide)\n\n" +
+          "[Protocol Relative](//attacker.com)\n\n" +
+          "[Unsafe](../api/chat/unified)\n\n" +
+          "<button>Do not render</button>"
+        }
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute("href", "https://example.com/guide");
+    expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute("target", "_blank");
+    expect(screen.queryByRole("link", { name: "Protocol Relative" })).not.toBeInTheDocument();
+    expect(screen.getByText("Protocol Relative")).toHaveClass("text-slate-400");
+    expect(screen.queryByRole("link", { name: "Unsafe" })).not.toBeInTheDocument();
+    expect(screen.getByText("Unsafe")).toHaveClass("text-slate-400");
+    expect(screen.queryByRole("button", { name: "Do not render" })).not.toBeInTheDocument();
+  });
+
+  it("applies restrained semantic colors to headings, links, callouts, and code surfaces", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "## Findings\n\n" +
+          "### Risks\n\n" +
+          "> Watch the local gateway logs.\n\n" +
+          "[Docs](https://example.com/docs)\n\n" +
+          "```ts\nconst ready = true;\n```"
+        }
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 2, name: "Findings" })).toHaveClass("text-sky-950");
+    expect(screen.getByRole("heading", { level: 3, name: "Risks" })).toHaveClass("text-emerald-900");
+    expect(screen.getByRole("link", { name: "Docs" })).toHaveClass("text-blue-700");
+    expect(screen.getByText("Watch the local gateway logs.").closest("blockquote")).toHaveClass("bg-sky-50/75");
+    expect(screen.getByText("const ready = true;").closest("pre")).toHaveClass("border-slate-300");
+  });
+
+  it("adds calmer section rhythm between assistant headings, lists, and galleries", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "# Experiment summary\n\n" +
+          "Intro paragraph.\n\n" +
+          "## Follow-up\n\n" +
+          "- Review the run log\n\n" +
+          "MEDIA:docs/chart-a.png\n" +
+          "MEDIA:docs/chart-b.png"
+        }
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Experiment summary" })).toHaveClass("mb-5");
+    expect(screen.getByRole("heading", { level: 2, name: "Follow-up" })).toHaveClass("mt-8");
+    expect(screen.getByRole("heading", { level: 2, name: "Follow-up" })).toHaveClass("first:mt-0");
+    expect(screen.getByRole("list")).toHaveClass("mb-5");
+    expect(screen.getByTestId("assistant-media-gallery")).toHaveClass("my-6");
   });
 
   it("keeps user turns inside the accent bubble", () => {
@@ -574,6 +728,22 @@ describe("ChatMessage", () => {
     const image = screen.getByAltText("figures/diagram.avif");
     expect(image.tagName).toBe("IMG");
     expect(image.getAttribute("src")).toContain("file=figures%2Fdiagram.avif");
+  });
+
+  it("groups consecutive assistant images into one responsive gallery", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:docs/results_chart.png\nMEDIA:figures/diagram.avif"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-21T10:00:20.000Z")}
+      />,
+    );
+
+    const gallery = screen.getByTestId("assistant-media-gallery");
+    expect(gallery).toHaveClass("sm:grid-cols-2");
+    expect(within(gallery).getByAltText("docs/results_chart.png")).toBeInTheDocument();
+    expect(within(gallery).getByAltText("figures/diagram.avif")).toBeInTheDocument();
   });
 
   it("maps absolute OpenClaw media paths to managed raw previews", () => {

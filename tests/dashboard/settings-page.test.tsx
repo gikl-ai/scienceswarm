@@ -1159,6 +1159,7 @@ describe("SettingsPage runtime settings", () => {
     render(<SettingsPage />);
 
     expect(await screen.findByTestId("project-runtime-project-select")).toHaveValue("alpha-project");
+    expect(screen.getByText(/Use the project chat composer switcher/)).toBeInTheDocument();
     const hostSelect = await screen.findByTestId("runtime-host-select");
     const codexOption = within(hostSelect).getByRole("option", {
       name: "Codex - Requires cloud-ok",

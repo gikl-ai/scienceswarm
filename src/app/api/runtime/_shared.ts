@@ -2,6 +2,7 @@ import type {
   ResearchRuntimeHost,
   RuntimeApprovalState,
   RuntimeDataIncluded,
+  RuntimeEvent,
   RuntimeHostId,
   RuntimeHostProfile,
   RuntimeProjectPolicy,
@@ -444,6 +445,7 @@ export function assertPreviewAllowed(
 
 export function buildRuntimeTurnRequest(input: {
   hostId: RuntimeHostId | string;
+  runtimeSessionId?: string;
   projectId: string | null;
   conversationId: string | null;
   mode: RuntimeTurnMode;
@@ -452,9 +454,11 @@ export function buildRuntimeTurnRequest(input: {
   inputFileRefs?: string[];
   approvalState: RuntimeApprovalState;
   preview: TurnPreview;
+  onEvent?: (event: RuntimeEvent) => void;
 }): RuntimeTurnRequest {
   return {
     hostId: input.preview.hostId,
+    runtimeSessionId: input.runtimeSessionId,
     projectId: input.projectId,
     conversationId: input.conversationId,
     mode: input.mode,
@@ -464,5 +468,6 @@ export function buildRuntimeTurnRequest(input: {
     dataIncluded: input.preview.dataIncluded,
     approvalState: input.approvalState,
     preview: input.preview,
+    onEvent: input.onEvent,
   };
 }

@@ -158,15 +158,23 @@ Claude Code, Codex, and Gemini CLI sends before prompt construction. You can
 choose `cloud-ok` for turns where hosted subscription-native CLIs are
 acceptable, or `execution-ok` when OpenHands-style execution is acceptable.
 
-Project runtime policy, mode, host, compare targets, and session history are
-managed from Settings for the active project. The workspace chat page stays
-focused on the conversation itself. Any hosted, task, compare, or
-execution-capable turn is previewed before send: the preview lists
-destinations, account source, privacy class, and the prompt or project context
-that will leave the local workspace. ScienceSwarm does
-not store Claude Code, Codex, or Gemini subscription tokens; those hosts use
-your local CLI login. API-key runtime adapters read keys from `.env` only when
-configured and do not echo secret values back through the UI.
+The project chat composer includes a compact runtime switcher next to Send.
+Use it to pick Claude Code, OpenClaw, Codex, Gemini CLI, or compare mode
+without leaving the conversation. Settings remains the diagnostics and
+advanced-history surface for runtime hosts, policies, compare targets, and
+sessions.
+
+Direct Claude Code chat goes through the local `claude` CLI, not through
+OpenClaw. ScienceSwarm sends the visible prompt plus explicitly selected
+context or attachments, preserves Claude Code's native session id for resume,
+streams Claude Code output into the assistant bubble, and does not apply
+OpenClaw response cleanup to Claude Code text before you see it. Any hosted,
+task, compare, or execution-capable turn is previewed before send: the preview
+lists destinations, account source, privacy class, and the prompt or project
+context that will leave the local workspace. ScienceSwarm does not store
+Claude Code, Codex, or Gemini subscription tokens; those hosts use your local
+CLI login. API-key runtime adapters read keys from `.env` only when configured
+and do not echo secret values back through the UI.
 
 Runtime-host sessions stay visible from Settings after runtime sends. Session
 history keeps host, mode, status, events, and artifact/writeback state so
@@ -198,9 +206,11 @@ gemini
 # If Gemini opens without asking for an auth method, its native CLI session is usable.
 ```
 
-After the CLI is installed and signed in, open Settings > Project runtime,
-switch Project policy from `local-only` to `cloud-ok`, select Claude Code,
-Codex, or Gemini CLI, and approve the preview before sending hosted context.
+After the CLI is installed and signed in, open a project, use the composer
+runtime switcher to choose Claude Code, switch Project policy from `local-only`
+to `cloud-ok` when prompted, and approve the preview before sending hosted
+context. Settings > Project runtime remains available for session history,
+diagnostics, and advanced runtime modes.
 
 Rollback smoke after reverting or patching a runtime-host PR:
 

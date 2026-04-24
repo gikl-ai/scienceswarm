@@ -5,11 +5,13 @@ import {
 } from "@/lib/artifact-provenance";
 import { sanitizeOpenClawUserVisibleResponse } from "@/lib/openclaw/response-sanitizer";
 import {
+  normalizePersistedConversationBackend,
   readChatThread,
   writeChatThread,
   type PersistedCaptureClarification,
   type PersistedChatTaskPhase,
   type PersistedChatThreadMessage,
+  type PersistedConversationBackend,
 } from "@/lib/chat-thread-store";
 
 function emptyThread(project: string) {
@@ -96,15 +98,18 @@ function normalizeChatMode(value: unknown): PersistedChatThreadMessage["chatMode
   return value === "reasoning" || value === "openclaw-tools" ? value : undefined;
 }
 
-// The persisted schema is now openclaw-only (PR #13 follow-up). Legacy
-// "agent"/"direct" values from older API clients collapse to "openclaw" so
-// in-flight requests from cached UIs migrate cleanly; everything else
-// (unknown strings, null, missing) becomes null.
-function normalizeConversationBackend(value: unknown): "openclaw" | null {
-  if (value === "openclaw" || value === "agent" || value === "direct") {
-    return "openclaw";
-  }
-  return null;
+function normalizeConversationBackend(
+  value: unknown,
+  project: string,
+): PersistedConversationBackend | null {
+  return normalizePersistedConversationBackend(value, project);
+}
+
+function shouldSanitizeOpenClawMessage(
+  role: PersistedChatThreadMessage["role"],
+  conversationBackend: PersistedConversationBackend | null | undefined,
+): boolean {
+  return role !== "user" && conversationBackend === "openclaw";
 }
 
 function normalizeTaskPhases(value: unknown): PersistedChatTaskPhase[] | undefined {
@@ -154,13 +159,14 @@ export async function GET(request: Request) {
     messages: stored.messages.map((message) => ({
       ...message,
       content:
-        message.role === "user"
-          ? message.content
-          : sanitizeOpenClawUserVisibleResponse(message.content),
+        shouldSanitizeOpenClawMessage(message.role, stored.conversationBackend)
+          ? sanitizeOpenClawUserVisibleResponse(message.content)
+          : message.content,
       thinking:
         typeof message.thinking === "string"
+        && shouldSanitizeOpenClawMessage(message.role, stored.conversationBackend)
           ? sanitizeOpenClawUserVisibleResponse(message.thinking)
-          : undefined,
+          : message.thinking,
     })),
   });
 }
@@ -203,7 +209,7 @@ export async function POST(request: Request) {
     candidate.conversationId === null || typeof candidate.conversationId === "string"
       ? candidate.conversationId
       : null;
-  const conversationBackend = normalizeConversationBackend(candidate.conversationBackend);
+  const conversationBackend = normalizeConversationBackend(candidate.conversationBackend, project);
 
   const thread = {
     version: 1 as const,

@@ -120,8 +120,9 @@ export async function POST(request: Request): Promise<Response> {
 
     const turnRequest = buildRuntimeTurnRequest({
       hostId,
+      runtimeSessionId: session.id,
       projectId,
-      conversationId: conversationId ?? session.id,
+      conversationId,
       mode,
       prompt,
       promptHash: optionalStringField(body, "promptHash"),
@@ -203,6 +204,13 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     if (sessionId) {
       const services = getRuntimeApiServices();
+      const currentSession = services.sessionStore.getSession(sessionId);
+      if (currentSession?.status === "cancelled") {
+        return Response.json({
+          session: enrichedSession(currentSession),
+          events: services.eventStore.listEvents(sessionId),
+        });
+      }
       services.sessionStore.trySetSessionStatus({
         sessionId,
         status: "failed",

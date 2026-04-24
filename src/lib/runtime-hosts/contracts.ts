@@ -167,6 +167,7 @@ export type RuntimeApprovalState =
 
 export interface RuntimeTurnRequest {
   hostId: RuntimeHostId;
+  runtimeSessionId?: string;
   projectId: string | null;
   conversationId: string | null;
   mode: RuntimeTurnMode;
@@ -176,6 +177,7 @@ export interface RuntimeTurnRequest {
   dataIncluded: RuntimeDataIncluded[];
   approvalState: RuntimeApprovalState;
   preview: TurnPreview;
+  onEvent?: (event: RuntimeEvent) => void;
 }
 
 export interface RuntimeTurnResult {
@@ -264,4 +266,3 @@ export interface ResearchRuntimeHost {
   streamEvents(sessionId: string): AsyncIterable<RuntimeEvent>;
   artifactImportHints(sessionId: string): Promise<ArtifactImportRequest[]>;
 }
-

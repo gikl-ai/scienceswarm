@@ -40,6 +40,23 @@ vi.mock("next/link", () => ({
 import ProjectPage from "@/app/dashboard/project/page";
 import { FILE_PREVIEW_LOCATION_STORAGE_KEY } from "@/lib/file-preview-preferences";
 
+function createRuntimeStreamResponse(events: unknown[]): Response {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  }), {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+    },
+  });
+}
+
 async function expandAllFolders() {
   fireEvent.click(await screen.findByRole("button", { name: "Expand all folders" }));
 }
@@ -273,6 +290,21 @@ describe("Project dashboard smoke test", () => {
     expect(canvas).toHaveClass("px-6");
     expect(column).toHaveClass("max-w-[60rem]");
     expect(column).toHaveClass("gap-6");
+  });
+
+  it("renders the refreshed composer surface with guidance and runtime context", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    const composer = await screen.findByTestId("project-chat-composer");
+    expect(within(composer).getByText("Project Chat")).toBeInTheDocument();
+    expect(
+      within(composer).getByText("Enter to send. Shift+Enter for a new line."),
+    ).toBeInTheDocument();
+    expect(within(composer).getByText(/Drop files, type/i)).toBeInTheDocument();
+    expect(within(composer).getByText("Chat mode")).toBeInTheDocument();
   });
 
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
@@ -1301,22 +1333,24 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/runtime/sessions" && method === "POST") {
+      if (url === "/api/runtime/sessions/stream" && method === "POST") {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
         runtimeSessionBodies.push(body);
-        return Response.json({
-          session: {
-            id: "runtime-session-codex",
-            conversationId: "codex-native-session",
-            status: "completed",
-          },
-          events: [
-            {
+        return createRuntimeStreamResponse([
+          {
+            event: {
               type: "message",
               payload: { text: "Codex direct answer" },
             },
-          ],
-        });
+          },
+          {
+            session: {
+              id: "runtime-session-codex",
+              conversationId: "codex-native-session",
+              status: "completed",
+            },
+          },
+        ]);
       }
 
       if (url === "/api/projects") {
@@ -1350,6 +1384,7 @@ describe("Project dashboard smoke test", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("runtime-picker")).not.toBeInTheDocument();
     });
+    expect(await screen.findByTestId("composer-runtime-switcher")).toBeInTheDocument();
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "Talk to Codex directly" } });
@@ -1386,7 +1421,7 @@ describe("Project dashboard smoke test", () => {
     });
   });
 
-  it("auto-sends hosted chat when runtime preview does not require approval", async () => {
+  it("auto-sends chat when runtime preview does not require approval", async () => {
     const runtimePreviewBodies: Record<string, unknown>[] = [];
     const runtimeSessionBodies: Record<string, unknown>[] = [];
 
@@ -1588,22 +1623,24 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/runtime/sessions" && method === "POST") {
+      if (url === "/api/runtime/sessions/stream" && method === "POST") {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
         runtimeSessionBodies.push(body);
-        return Response.json({
-          session: {
-            id: "runtime-session-codex",
-            conversationId: "codex-native-session",
-            status: "completed",
-          },
-          events: [
-            {
+        return createRuntimeStreamResponse([
+          {
+            event: {
               type: "message",
               payload: { text: "Codex auto-approved answer" },
             },
-          ],
-        });
+          },
+          {
+            session: {
+              id: "runtime-session-codex",
+              conversationId: "codex-native-session",
+              status: "completed",
+            },
+          },
+        ]);
       }
 
       if (url === "/api/projects") {
@@ -1637,6 +1674,7 @@ describe("Project dashboard smoke test", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("runtime-picker")).not.toBeInTheDocument();
     });
+    expect(await screen.findByTestId("composer-runtime-switcher")).toBeInTheDocument();
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "Talk to Codex with auto approval" } });

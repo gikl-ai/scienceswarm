@@ -145,8 +145,8 @@ interface StoredChatState {
 
 /**
  * A file the user is currently viewing/previewing in the workspace.
- * Sent alongside the chat message so the LLM knows what "it" or "this file"
- * refers to, without polluting the displayed chat bubble.
+ * Included as explicitly selected context for runtime hosts so the LLM knows
+ * what "it" or "this file" refers to without changing the displayed bubble.
  */
 export interface ActiveFileContext {
   /** Display path shown to the user, e.g. "results.md" */
@@ -374,6 +374,16 @@ function mapResponseBackend(value: string | null): Backend | null {
     return "openclaw";
   }
   return null;
+}
+
+function assistantTextForBackend(
+  value: string,
+  conversationBackend: Backend | null,
+  options?: { trimEnd?: boolean },
+): string {
+  return conversationBackend === "openclaw"
+    ? sanitizeOpenClawUserVisibleResponse(value, options)
+    : value;
 }
 
 function inferPolledMessageRole(message: PolledOpenClawMessage): "user" | "assistant" | "system" {
@@ -950,8 +960,8 @@ function inferConversationBackend(
   if (!conversationId) {
     return null;
   }
-  // Any legacy/unknown conversationId that the hook has recorded comes from an
-  // OpenClaw-routed turn (since that is now the only chat path).
+  // Any legacy/unknown conversationId that lacks an explicit owner came from
+  // the historical OpenClaw-routed chat path.
   return "openclaw";
 }
 
@@ -1983,7 +1993,7 @@ function buildQueuedHistory(messages: Message[], assistantId: string): Message[]
   return assistantIndex >= 0 ? messages.slice(0, assistantIndex) : messages;
 }
 
-function restoreMessage(value: unknown): Message | null {
+function restoreMessage(value: unknown, conversationBackend: Backend | null): Message | null {
   if (!value || typeof value !== "object") return null;
 
   const candidate = value as Partial<StoredMessage>;
@@ -2015,10 +2025,10 @@ function restoreMessage(value: unknown): Message | null {
     content:
       candidate.role === "user"
         ? candidate.content
-        : sanitizeOpenClawUserVisibleResponse(candidate.content),
+        : assistantTextForBackend(candidate.content, conversationBackend),
     thinking:
       typeof candidate.thinking === "string"
-        ? sanitizeOpenClawUserVisibleResponse(candidate.thinking)
+        ? assistantTextForBackend(candidate.thinking, conversationBackend)
         : undefined,
     activityLog: restoreActivityLog(candidate.activityLog),
     progressLog: restoreProgressLog(candidate.progressLog),
@@ -2199,15 +2209,16 @@ function loadStoredChat(projectName: string): RestoredChatState {
       };
     }
 
+    const conversationId = typeof parsed.conversationId === "string" ? parsed.conversationId : null;
+    const conversationBackend = inferConversationBackend(conversationId, parsed.conversationBackend);
+    const messageBackend = conversationBackend ?? "openclaw";
     const restoredMessages = demoteRestoredPreviews(
       sanitizeMessagesForPersistence(
         parsed.messages
-        .map((entry) => restoreMessage(entry))
+        .map((entry) => restoreMessage(entry, messageBackend))
         .filter((entry): entry is Message => entry !== null),
       ),
     );
-    const conversationId = typeof parsed.conversationId === "string" ? parsed.conversationId : null;
-    const conversationBackend = inferConversationBackend(conversationId, parsed.conversationBackend);
     const artifactProvenance = normalizeArtifactProvenanceEntries(parsed.artifactProvenance);
 
     return {
@@ -2313,6 +2324,23 @@ function textBytes(value: string): number {
   return new TextEncoder().encode(value).length;
 }
 
+const RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS = 8_000;
+
+function runtimeActiveFileContextPayload(activeFile: ActiveFileContext) {
+  const rawContent = activeFile.content;
+  const content = rawContent.slice(0, RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS);
+  const truncated = content.length < rawContent.length;
+  return {
+    kind: "selected-workspace-file",
+    path: activeFile.path.trim() || "selected workspace file",
+    content,
+    truncated,
+    originalCharacters: rawContent.length,
+    includedCharacters: content.length,
+    omittedCharacters: truncated ? rawContent.length - content.length : 0,
+  };
+}
+
 function buildRuntimeApiDataIncluded(
   content: string,
   activeFile: ActiveFileContext | undefined,
@@ -2330,10 +2358,11 @@ function buildRuntimeApiDataIncluded(
   ];
 
   if (activeFile) {
+    const contextPayload = runtimeActiveFileContextPayload(activeFile);
     data.push({
       kind: "workspace-file",
-      label: activeFile.path,
-      bytes: textBytes(activeFile.content),
+      label: contextPayload.path,
+      bytes: textBytes(contextPayload.content),
     });
   }
 
@@ -2351,16 +2380,32 @@ function buildRuntimeApiDataIncluded(
 
 function buildRuntimeApiInputFileRefs(
   content: string,
+  activeFile: ActiveFileContext | undefined,
   files: UploadedFile[],
 ): string[] {
   return Array.from(
     new Set([
       ...extractPromptSourceFiles(content),
+      ...(activeFile ? [activeFile.path] : []),
       ...files
         .map(getUploadedFileReference)
         .filter((value) => value.length > 0),
     ]),
   );
+}
+
+function buildRuntimeApiPrompt(
+  content: string,
+  activeFile: ActiveFileContext | undefined,
+): string {
+  if (!activeFile) return content;
+  const contextPayload = runtimeActiveFileContextPayload(activeFile);
+  return [
+    content.trimEnd(),
+    "",
+    "Explicitly selected workspace context (JSON):",
+    JSON.stringify(contextPayload, null, 2),
+  ].join("\n");
 }
 
 function isRuntimeSendOptions(
@@ -2632,17 +2677,18 @@ async function loadStoredChatFromServer(projectName: string): Promise<RestoredCh
     if (raw.version !== CHAT_STORAGE_VERSION || !Array.isArray(raw.messages)) {
       return null;
     }
-    const restoredMessages = demoteRestoredPreviews(
-      sanitizeMessagesForPersistence(
-        raw.messages
-        .map((entry) => restoreMessage(entry))
-        .filter((entry): entry is Message => entry !== null),
-      ),
-    );
     const conversationId = typeof raw.conversationId === "string" ? raw.conversationId : null;
     const conversationBackend = inferConversationBackend(
       conversationId,
       (raw as Partial<StoredChatState>).conversationBackend,
+    );
+    const messageBackend = conversationBackend ?? "openclaw";
+    const restoredMessages = demoteRestoredPreviews(
+      sanitizeMessagesForPersistence(
+        raw.messages
+        .map((entry) => restoreMessage(entry, messageBackend))
+        .filter((entry): entry is Message => entry !== null),
+      ),
     );
     const artifactProvenance = normalizeArtifactProvenanceEntries(raw.artifactProvenance);
 
@@ -2753,6 +2799,7 @@ export function useUnifiedChat(
   const projectVersionRef = useRef(0);
   const initialBackendSetRef = useRef(false);
   const localProviderActiveRef = useRef(false);
+  const openClawHealthRefreshRef = useRef<Promise<boolean> | null>(null);
   const userBackendOverrideVersionRef = useRef(0);
   const sendQueueRef = useRef<QueuedSend[]>([]);
   const sendQueueProcessingRef = useRef(false);
@@ -3444,6 +3491,109 @@ export function useUnifiedChat(
     }
   }, [applyMessagesUpdate, isSendContextCurrent, recordGeneratedArtifacts, setArtifactProvenance]);
 
+  const consumeRuntimeSessionStream = useCallback(async (
+    res: Response,
+    assistantId: string,
+    context: SendContext,
+  ) => {
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No response stream");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let streamDone = false;
+    let nextConversationId: string | null = null;
+
+    while (!streamDone) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6);
+        if (data === "[DONE]") {
+          streamDone = true;
+          break;
+        }
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data) as unknown;
+        } catch {
+          continue;
+        }
+        if (parsed === "[DONE]") {
+          streamDone = true;
+          break;
+        }
+
+        const envelope = asRecord(parsed);
+        if (!envelope) continue;
+        if (typeof envelope.error === "string" && envelope.error.trim().length > 0) {
+          await reader.cancel().catch(() => undefined);
+          throw new Error(envelope.error);
+        }
+
+        const event = asRecord(envelope.event);
+        if (event) {
+          const payload = asRecord(event.payload) ?? {};
+          const eventText = firstNonEmptyString(payload.text, payload.message);
+          if (
+            event.type === "message"
+            && eventText
+            && isSendContextCurrent(context)
+          ) {
+            applyMessagesUpdate((prev) =>
+              prev.map((message) =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      content: assistantTextForBackend(eventText, context.backend, {
+                        trimEnd: false,
+                      }),
+                      chatMode: context.chatMode,
+                    }
+                  : message,
+              ),
+            );
+          }
+
+          const nativeSessionId = firstNonEmptyString(payload.nativeSessionId);
+          if (nativeSessionId) {
+            nextConversationId = nativeSessionId;
+          }
+        }
+
+        const session = asRecord(envelope.session);
+        if (session) {
+          nextConversationId = firstNonEmptyString(
+            session.conversationId,
+            session.id,
+          ) ?? nextConversationId;
+        }
+      }
+    }
+
+    if (nextConversationId && isSendProjectCurrent(context)) {
+      liveConversationIdRef.current = nextConversationId;
+      liveConversationBackendRef.current = context.backend;
+      setConversationId(nextConversationId);
+      setConversationBackend(context.backend);
+    }
+    liveBackendRef.current = context.backend;
+    setBackend(context.backend);
+  }, [
+    applyMessagesUpdate,
+    isSendContextCurrent,
+    isSendProjectCurrent,
+    setBackend,
+    setConversationBackend,
+    setConversationId,
+  ]);
+
   const sendViaRuntimeApi = useCallback(
     async (
       content: string,
@@ -3463,11 +3613,12 @@ export function useUnifiedChat(
         requestFiles,
         context.dataIncluded,
       );
-      const inputFileRefs = buildRuntimeApiInputFileRefs(content, requestFiles);
+      const inputFileRefs = buildRuntimeApiInputFileRefs(content, activeFile, requestFiles);
+      const prompt = buildRuntimeApiPrompt(content, activeFile);
       const baseBody = {
         projectId: context.projectName,
         projectPolicy: context.projectPolicy,
-        prompt: content,
+        prompt,
         conversationId: activeConversationId,
         approvalState: context.approvalState,
         dataIncluded,
@@ -3533,7 +3684,10 @@ export function useUnifiedChat(
         return;
       }
 
-      const response = await fetch("/api/runtime/sessions", {
+      const useStreamingSession = context.runtimeMode === "chat";
+      const response = await fetch(useStreamingSession
+        ? "/api/runtime/sessions/stream"
+        : "/api/runtime/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3542,6 +3696,17 @@ export function useUnifiedChat(
           mode: context.runtimeMode,
         }),
       });
+
+      if (useStreamingSession) {
+        if (!response.ok) {
+          const errorPayload = await response.json().catch(() => null) as { error?: string } | null;
+          throw new Error(errorPayload?.error || `Runtime session failed: ${response.status}`);
+        }
+        await consumeRuntimeSessionStream(response, assistantId, context);
+        await syncWorkspaceTreeAfterChat();
+        return;
+      }
+
       const payload = await response.json().catch(() => null) as
         | {
             session?: {
@@ -3574,7 +3739,7 @@ export function useUnifiedChat(
           message.id === assistantId
             ? {
                 ...message,
-                content: sanitizeOpenClawUserVisibleResponse(assistantText),
+                content: assistantTextForBackend(assistantText, context.backend),
                 chatMode: context.chatMode,
               }
             : message,
@@ -3597,6 +3762,7 @@ export function useUnifiedChat(
     },
     [
       applyMessagesUpdate,
+      consumeRuntimeSessionStream,
       setBackend,
       setConversationBackend,
       setConversationId,
@@ -3820,65 +3986,82 @@ export function useUnifiedChat(
   );
 
   const refreshOpenClawHealth = useCallback(async (): Promise<boolean> => {
-    try {
-      const res = await fetch("/api/chat/unified?action=health");
-      if (!res.ok) {
+    if (openClawHealthRefreshRef.current) {
+      return openClawHealthRefreshRef.current;
+    }
+
+    const refreshPromise = (async (): Promise<boolean> => {
+      try {
+        const res = await fetch("/api/chat/unified?action=health");
+        if (!res.ok) {
+          localProviderActiveRef.current = false;
+          setOpenClawConnected(false);
+          return false;
+        }
+
+        const data = await res.json() as Record<string, unknown>;
+        const agentRecord =
+          data.agent && typeof data.agent === "object"
+            ? data.agent as { type?: unknown; status?: unknown }
+            : null;
+        const agentType = typeof agentRecord?.type === "string" ? agentRecord.type : null;
+        const agentOk = agentRecord?.status === "connected";
+        // Legacy-field fallback for older servers that don't return the
+        // `agent` object yet.
+        const legacyOpenClawOk = data.openclaw === "connected";
+        const openClawReady = (agentType === "openclaw" && agentOk) || legacyOpenClawOk;
+        localProviderActiveRef.current = false;
+
+        // Chat always routes through OpenClaw. OpenClaw itself may delegate
+        // to OpenHands or a local model internally, but that is not the
+        // hook's concern — the hook only cares whether OpenClaw is reachable.
+        const initialBackend: Backend = "openclaw";
+
+        // Only seed the active backend on the very first probe. After
+        // that we preserve whichever path the current thread last used.
+        if (!initialBackendSetRef.current) {
+          setBackend(initialBackend);
+          liveBackendRef.current = initialBackend;
+          initialBackendSetRef.current = true;
+        }
+
+        setOpenClawConnected(openClawReady);
+        if (openClawReady) {
+          setError((current) =>
+            current === OPENCLAW_UNREACHABLE_ERROR ? null : current,
+          );
+        }
+        return openClawReady;
+      } catch {
         localProviderActiveRef.current = false;
         setOpenClawConnected(false);
         return false;
       }
+    })();
 
-      const data = await res.json() as Record<string, unknown>;
-      const agentRecord =
-        data.agent && typeof data.agent === "object"
-          ? data.agent as { type?: unknown; status?: unknown }
-          : null;
-      const agentType = typeof agentRecord?.type === "string" ? agentRecord.type : null;
-      const agentOk = agentRecord?.status === "connected";
-      // Legacy-field fallback for older servers that don't return the
-      // `agent` object yet.
-      const legacyOpenClawOk = data.openclaw === "connected";
-      const openClawReady = (agentType === "openclaw" && agentOk) || legacyOpenClawOk;
-      localProviderActiveRef.current = false;
-
-      // Chat always routes through OpenClaw. OpenClaw itself may delegate
-      // to OpenHands or a local model internally, but that is not the
-      // hook's concern — the hook only cares whether OpenClaw is reachable.
-      const initialBackend: Backend = "openclaw";
-
-      // Only seed the active backend on the very first probe. After
-      // that we preserve whichever path the current thread last used.
-      if (!initialBackendSetRef.current) {
-        setBackend(initialBackend);
-        liveBackendRef.current = initialBackend;
-        initialBackendSetRef.current = true;
+    openClawHealthRefreshRef.current = refreshPromise;
+    try {
+      return await refreshPromise;
+    } finally {
+      if (openClawHealthRefreshRef.current === refreshPromise) {
+        openClawHealthRefreshRef.current = null;
       }
-
-      setOpenClawConnected(openClawReady);
-      if (openClawReady) {
-        setError((current) =>
-          current === OPENCLAW_UNREACHABLE_ERROR ? null : current,
-        );
-      }
-      return openClawReady;
-    } catch {
-      localProviderActiveRef.current = false;
-      setOpenClawConnected(false);
-      return false;
     }
   }, [setBackend]);
 
-  // Single mount-effect that handles runtime detection off the same
+  // Single load-effect that handles runtime detection off the same
   // /api/chat/unified?action=health response. Previously we ran two
   // parallel effects, each firing its own ~3s WebSocket handshake probe
-  // on mount — halving the cold-start cost.
+  // on mount — halving the cold-start cost. Keep this keyed to the active
+  // project so every project-load path starts or reuses the gateway warmup
+  // before the first send.
   useEffect(() => {
     void refreshOpenClawHealth();
     const interval = setInterval(() => {
       void refreshOpenClawHealth();
     }, 15_000);
     return () => clearInterval(interval);
-  }, [refreshOpenClawHealth]);
+  }, [projectName, refreshOpenClawHealth]);
 
   const drainSendQueue = useCallback(async () => {
     if (sendQueueProcessingRef.current) {
@@ -4032,6 +4215,7 @@ export function useUnifiedChat(
       liveBackendRef.current = requestedBackend;
       liveChatModeRef.current = chatMode;
       setBackend(requestedBackend);
+      initialBackendSetRef.current = true;
       if (runtimeMode !== "compare") {
         setRuntimeCompareResult(null);
       }

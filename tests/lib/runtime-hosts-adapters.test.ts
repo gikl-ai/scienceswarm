@@ -25,6 +25,10 @@ import {
   RuntimeCliMalformedOutputError,
   normalizeCliOutput,
 } from "@/lib/runtime-hosts/transport/output-normalizer";
+import {
+  ClaudeCodeStreamAccumulator,
+  parseClaudeCodeStreamOutput,
+} from "@/lib/runtime-hosts/transport/claude-code-stream";
 import type { SavedLlmRuntimeEnv } from "@/lib/runtime-saved-env";
 
 class FakeCliTransport implements CliTransport {
@@ -112,7 +116,14 @@ describe("runtime host adapters", () => {
       if (request.args?.includes("whoami")) {
         return fakeResult(request, "user@example.test");
       }
-      return fakeResult(request, "\u001b[32m{\"message\":\"Claude answer\"}\u001b[0m");
+      return fakeResult(
+        request,
+        [
+          "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"claude-native-session\"}",
+          "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Claude draft\"}]}}",
+          "{\"type\":\"result\",\"result\":\"Claude answer\",\"session_id\":\"claude-native-session\"}",
+        ].join("\n"),
+      );
     });
     const adapter = createClaudeCodeRuntimeHostAdapter({
       transport,
@@ -130,13 +141,204 @@ describe("runtime host adapters", () => {
       adapter.sendTurn(requestFor(requireRuntimeHostProfile("claude-code"), "chat")),
     ).resolves.toMatchObject({
       hostId: "claude-code",
-      sessionId: "conversation-alpha",
+      sessionId: "claude-native-session",
       message: "Claude answer",
     });
     expect(transport.requests.at(-1)).toMatchObject({
       command: "claude",
-      args: expect.arrayContaining(["-p", "Summarize project-alpha."]),
+      args: expect.arrayContaining([
+        "-p",
+        "Summarize project-alpha.",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--include-partial-messages",
+        "--resume",
+        "conversation-alpha",
+      ]),
     });
+  });
+
+  it("starts fresh Claude Code sessions without resume args when no native session exists", async () => {
+    const transport = new FakeCliTransport((request) =>
+      fakeResult(request, "{\"type\":\"result\",\"result\":\"Fresh answer\",\"session_id\":\"fresh-claude-session\"}")
+    );
+    const adapter = createClaudeCodeRuntimeHostAdapter({
+      transport,
+      sessionIdGenerator: () => "wrapper-session",
+    });
+    const request = {
+      ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+      conversationId: null,
+    };
+
+    await expect(adapter.sendTurn(request)).resolves.toMatchObject({
+      sessionId: "fresh-claude-session",
+      message: "Fresh answer",
+    });
+    expect(transport.requests.at(-1)?.args).not.toContain("--resume");
+  });
+
+  it("does not resume Claude Code with synthetic wrapper session ids", async () => {
+    const transport = new FakeCliTransport((request) =>
+      fakeResult(request, "{\"type\":\"result\",\"result\":\"Wrapper answer\",\"session_id\":\"native-after-wrapper\"}")
+    );
+    const adapter = createClaudeCodeRuntimeHostAdapter({
+      transport,
+      sessionIdGenerator: () => "wrapper-session",
+    });
+    const request = {
+      ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+      conversationId: "claude-code-wrapper-session",
+    };
+
+    await expect(adapter.sendTurn(request)).resolves.toMatchObject({
+      sessionId: "native-after-wrapper",
+      message: "Wrapper answer",
+    });
+    expect(transport.requests.at(-1)?.args).not.toContain("--resume");
+  });
+
+  it("tracks the ScienceSwarm runtime session id while resuming Claude Code native sessions", async () => {
+    const transport = new FakeCliTransport((request) =>
+      fakeResult(request, "{\"type\":\"result\",\"result\":\"Resumed answer\",\"session_id\":\"claude-native-existing\"}")
+    );
+    const adapter = createClaudeCodeRuntimeHostAdapter({
+      transport,
+      sessionIdGenerator: () => "wrapper-session",
+    });
+
+    await expect(
+      adapter.sendTurn({
+        ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+        runtimeSessionId: "rt-session-cancel-target",
+        conversationId: "claude-native-existing",
+      }),
+    ).resolves.toMatchObject({
+      sessionId: "claude-native-existing",
+      message: "Resumed answer",
+    });
+    expect(transport.requests.at(-1)).toMatchObject({
+      sessionId: "rt-session-cancel-target",
+      args: expect.arrayContaining(["--resume", "claude-native-existing"]),
+    });
+  });
+
+  it("captures only top-level Claude Code session ids for native resume", () => {
+    const nestedOnly = parseClaudeCodeStreamOutput({
+      hostId: "claude-code",
+      sessionId: "wrapper-session",
+      lines: [
+        JSON.stringify({
+          type: "assistant",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                session_id: "nested-tool-session",
+                content: "tool output",
+              },
+            ],
+          },
+        }),
+      ],
+    });
+    const topLevel = parseClaudeCodeStreamOutput({
+      hostId: "claude-code",
+      sessionId: "wrapper-session",
+      lines: [
+        JSON.stringify({
+          type: "system",
+          session_id: "claude-native-session",
+          tool_result: {
+            session_id: "nested-tool-session",
+          },
+        }),
+        JSON.stringify({
+          type: "result",
+          result: "done",
+          session_id: "claude-native-session",
+        }),
+      ],
+    });
+
+    expect(nestedOnly.nativeSessionId).toBeNull();
+    expect(
+      nestedOnly.events.some((event) => event.payload.nativeSessionId),
+    ).toBe(false);
+    expect(topLevel.nativeSessionId).toBe("claude-native-session");
+    expect(topLevel.events.at(0)?.payload.nativeSessionId).toBe(
+      "claude-native-session",
+    );
+  });
+
+  it("accumulates Claude Code assistant partials before final result events", () => {
+    const accumulator = new ClaudeCodeStreamAccumulator({
+      hostId: "claude-code",
+      sessionId: "wrapper-session",
+    });
+
+    const first = accumulator.acceptLine(JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "First" }],
+      },
+    }));
+    const second = accumulator.acceptLine(JSON.stringify({
+      type: "content_block_delta",
+      delta: { text: " chunk" },
+    }));
+    const third = accumulator.acceptLine(JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: " and second" }],
+      },
+    }));
+    const fourth = accumulator.acceptLine(JSON.stringify({
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        delta: { text: " streamed" },
+      },
+    }));
+
+    expect(first?.payload.text).toBe("First");
+    expect(second?.payload.text).toBe("First chunk");
+    expect(third?.payload.text).toBe("First chunk and second");
+    expect(fourth?.payload.text).toBe("First chunk and second streamed");
+    expect(accumulator.result().message).toBe("First chunk and second streamed");
+  });
+
+  it("separates unrelated Claude Code assistant chunks while streaming", () => {
+    const accumulator = new ClaudeCodeStreamAccumulator({
+      hostId: "claude-code",
+      sessionId: "wrapper-session",
+    });
+
+    const first = accumulator.acceptLine(JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "I'll search for X" }],
+      },
+    }));
+    const second = accumulator.acceptLine(JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "Here's what I found: Y" }],
+      },
+    }));
+    const final = accumulator.acceptLine(JSON.stringify({
+      type: "result",
+      result: "I'll search for X. Here's what I found: Y",
+      session_id: "claude-native-session",
+    }));
+
+    expect(first?.payload.text).toBe("I'll search for X");
+    expect(second?.payload.text).toBe("I'll search for X\nHere's what I found: Y");
+    expect(final?.payload.text).toBe("I'll search for X. Here's what I found: Y");
+    expect(accumulator.result().message).toBe(
+      "I'll search for X. Here's what I found: Y",
+    );
   });
 
   it("emits unique message event ids for repeated wrapper turns in one session", async () => {
@@ -303,7 +505,7 @@ describe("runtime host adapters", () => {
     });
 
     expect(preview).toMatchObject({
-      requiresUserApproval: false,
+      requiresUserApproval: true,
       accountDisclosure: {
         authMode: "api-key",
         provider: "openai",

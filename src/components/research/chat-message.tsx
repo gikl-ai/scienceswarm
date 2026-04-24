@@ -1,5 +1,8 @@
 import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 import { Check, CopySimple, WarningCircle } from "@phosphor-icons/react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 import type {
   ChatTaskPhase,
   MessageProgressEntry,
@@ -207,6 +210,154 @@ const COMPACT_STEP_VERB_LABELS: Record<Step["verb"], string> = {
 const LEGACY_HTML_EMBED_ALIASES: Record<string, string> = {
   "snake-game": "snake/index.html",
 };
+const ASSISTANT_BODY_TEXT_CLASS =
+  "text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
+const ASSISTANT_TITLE_CLASS =
+  "mb-5 text-[2rem] leading-[1.04] font-semibold tracking-[-0.045em] text-slate-950";
+const ASSISTANT_SUBTITLE_CLASS =
+  "mt-8 first:mt-0 mb-3 text-[1.4rem] leading-[1.15] font-semibold tracking-[-0.03em] text-sky-950";
+const ASSISTANT_SECTION_CLASS =
+  "mt-6 first:mt-0 mb-2 text-[1.05rem] leading-6 font-semibold tracking-[-0.015em] text-emerald-900";
+const ASSISTANT_LIST_CLASS =
+  "mb-5 pl-4 text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
+const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-slate-500";
+const ASSISTANT_METADATA_CLASS =
+  "text-[10px] font-medium tracking-[0.02em] text-slate-400";
+const ASSISTANT_BLOCKQUOTE_CLASS =
+  "mb-5 rounded-r-2xl border-l-2 border-sky-300 bg-sky-50/75 px-4 py-3 italic text-sky-900";
+const ASSISTANT_LINK_CLASS =
+  "font-medium text-blue-700 underline decoration-blue-200 underline-offset-4 transition-colors hover:text-blue-800 hover:decoration-blue-400";
+const ASSISTANT_CODE_BLOCK_CLASS =
+  "mb-5 overflow-x-auto rounded-2xl border border-slate-300 bg-slate-950 px-4 py-3 text-[13px] leading-6 text-slate-100 shadow-[0_1px_0_rgba(15,23,42,0.08)]";
+const ASSISTANT_MEDIA_CARD_CLASS =
+  "overflow-hidden rounded-[1.35rem] border border-slate-200/90 bg-white shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]";
+const ASSISTANT_MEDIA_FRAME_CLASS =
+  "block w-full max-h-[26rem] bg-slate-50 object-contain";
+
+function sanitizeMarkdownHref(href: string | undefined): string | null {
+  if (!href) {
+    return null;
+  }
+  if (href.startsWith("#") || (href.startsWith("/") && !href.startsWith("//")) || href.startsWith("./")) {
+    return href;
+  }
+  if (href.startsWith("../") || href.startsWith("//")) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(href);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:") {
+      return href;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
+  h1: ({ children }) => <h1 className={ASSISTANT_TITLE_CLASS}>{children}</h1>,
+  h2: ({ children }) => <h2 className={ASSISTANT_SUBTITLE_CLASS}>{children}</h2>,
+  h3: ({ children }) => <h3 className={ASSISTANT_SECTION_CLASS}>{children}</h3>,
+  h4: ({ children }) => <h4 className={ASSISTANT_SECTION_CLASS}>{children}</h4>,
+  h5: ({ children }) => <h5 className={ASSISTANT_SECTION_CLASS}>{children}</h5>,
+  h6: ({ children }) => <h6 className={ASSISTANT_SECTION_CLASS}>{children}</h6>,
+  p: ({ children }) => <p className={`mb-4 ${ASSISTANT_BODY_TEXT_CLASS}`}>{children}</p>,
+  ul: ({ children }) => (
+    <ul className={`${ASSISTANT_LIST_CLASS} list-disc space-y-2 marker:text-slate-400`}>{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className={`${ASSISTANT_LIST_CLASS} list-decimal space-y-2 marker:font-medium marker:text-slate-500`}>{children}</ol>
+  ),
+  li: ({ children }) => <li className="pl-1">{children}</li>,
+  blockquote: ({ children }) => <blockquote className={ASSISTANT_BLOCKQUOTE_CLASS}>{children}</blockquote>,
+  pre: ({ children }) => <pre className={ASSISTANT_CODE_BLOCK_CLASS}>{children}</pre>,
+  code: ({ className, children }) => {
+    const languageClass = typeof className === "string" ? className : "";
+    const isBlock =
+      languageClass.length > 0
+      || (typeof children === "string" && children.includes("\n"));
+    if (isBlock) {
+      return <code className="font-mono">{children}</code>;
+    }
+    return (
+      <code className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-slate-800">
+        {children}
+      </code>
+    );
+  },
+  a: ({ href, children }) => {
+    const safeHref = sanitizeMarkdownHref(href);
+    if (!safeHref) {
+      return <span className="text-slate-400">{children}</span>;
+    }
+    const external = safeHref.startsWith("http://") || safeHref.startsWith("https://");
+    return (
+      <a
+        href={safeHref}
+        className={ASSISTANT_LINK_CLASS}
+        target={external ? "_blank" : undefined}
+        rel={external ? "noreferrer noopener" : undefined}
+      >
+        {children}
+      </a>
+    );
+  },
+  strong: ({ children }) => <strong className="font-semibold text-slate-900">{children}</strong>,
+  em: ({ children }) => <em className="italic text-slate-700">{children}</em>,
+};
+
+type RenderedContentPart = {
+  key: string;
+  kind: "flow" | "gallery-item";
+  node: ReactNode;
+};
+
+function collapseAssistantMediaGalleries(parts: RenderedContentPart[]): ReactNode[] {
+  const collapsed: ReactNode[] = [];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    if (!part || part.kind !== "gallery-item") {
+      if (part) {
+        collapsed.push(part.node);
+      }
+      continue;
+    }
+
+    const galleryItems: RenderedContentPart[] = [part];
+    let cursor = index + 1;
+    while (cursor < parts.length && parts[cursor]?.kind === "gallery-item") {
+      galleryItems.push(parts[cursor]!);
+      cursor += 1;
+    }
+
+    if (galleryItems.length === 1) {
+      collapsed.push(part.node);
+      continue;
+    }
+
+    collapsed.push(
+      <div
+        key={`assistant-gallery-${part.key}`}
+        data-testid="assistant-media-gallery"
+        className="my-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+      >
+        {galleryItems.map((galleryItem) => (
+          <div key={galleryItem.key} className="min-w-0">
+            {galleryItem.node}
+          </div>
+        ))}
+      </div>,
+    );
+
+    index = cursor - 1;
+  }
+
+  return collapsed;
+}
 
 function isExploredCommand(text: string): boolean {
   return EXPLORE_COMMAND_PREFIXES.some((prefix) => text.startsWith(prefix));
@@ -952,7 +1103,7 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
       elements.push(
         <code
           key={tokenKey}
-          className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.92em] text-slate-800"
+          className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-slate-800"
         >
           {token.value}
         </code>,
@@ -986,6 +1137,25 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
   return elements;
 }
 
+function renderAssistantMarkdownSegment(value: string, keyPrefix: string) {
+  if (value.trim().length === 0) {
+    return [];
+  }
+  const markdownKey = keyPrefix;
+
+  return [
+    <ReactMarkdown
+      key={markdownKey}
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeSanitize]}
+      skipHtml
+      components={ASSISTANT_MARKDOWN_COMPONENTS}
+    >
+      {value}
+    </ReactMarkdown>,
+  ];
+}
+
 function getCopyableMessageText(root: HTMLDivElement | null, fallback: string): string {
   const renderedText =
     typeof root?.innerText === "string" && root.innerText.trim().length > 0
@@ -1011,17 +1181,17 @@ function getCopyableMessageText(root: HTMLDivElement | null, fallback: string): 
     .trim();
 }
 
-function renderContent(content: string, projectId: string) {
-  // Split on bold markers, MEDIA references, embed tags, and markdown images
-  const parts = content.split(/(\*\*[^*]+\*\*|MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gi);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={i} className="font-semibold">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
+function renderContent(
+  content: string,
+  projectId: string,
+  { assistantTypography = false }: { assistantTypography?: boolean } = {},
+) {
+  // Split on MEDIA references, embed tags, and markdown images.
+  const parts = content.split(/(MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gi);
+  const renderedParts = parts.flatMap<RenderedContentPart>((part, i) => {
+    const captionClass = assistantTypography
+      ? ASSISTANT_CAPTION_CLASS
+      : "mt-1 block font-mono text-[10px] text-muted";
     if (part.startsWith("MEDIA:")) {
       const filePath = part.slice(6).trim();
       const workspaceFilePath = normalizeMediaWorkspacePath(filePath);
@@ -1030,23 +1200,34 @@ function renderContent(content: string, projectId: string) {
         preferPathRoute: ext === "html" || ext === "htm",
       });
       if (!src) {
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <span className="font-mono text-xs text-muted">[media blocked: invalid path]</span>
           </div>
-        );
+          ),
+        }];
       }
       if (["png", "jpg", "jpeg", "gif", "webp", "avif"].includes(ext)) {
-        return (
-          <div key={i} className="my-2">
+        return [{
+          key: `content-${i}`,
+          kind: "gallery-item",
+          node: (
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt={filePath} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
-          </div>
-        );
+            <img src={src} alt={filePath} className={`${ASSISTANT_MEDIA_FRAME_CLASS} rounded-[1rem]`} />
+            <span className={captionClass}>{filePath}</span>
+          </figure>
+          ),
+        }];
       }
       if (ext === "html" || ext === "htm") {
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <iframe
               src={src}
@@ -1054,12 +1235,16 @@ function renderContent(content: string, projectId: string) {
               className="w-full min-w-0 h-[80vh] min-h-[700px] rounded-lg border border-border bg-white"
               sandbox="allow-scripts"
             />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+            <span className={captionClass}>{filePath}</span>
           </div>
-        );
+          ),
+        }];
       }
       if (ext === "pdf") {
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <iframe
               src={src}
@@ -1067,41 +1252,58 @@ function renderContent(content: string, projectId: string) {
               className="w-full min-w-0 h-[80vh] min-h-[600px] rounded-lg border border-border bg-white"
               sandbox="allow-same-origin allow-downloads"
             />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+            <span className={captionClass}>{filePath}</span>
           </div>
-        );
+          ),
+        }];
       }
       if (ext === "svg") {
         // SVG rendered as <img> to prevent script execution
-        return (
-          <div key={i} className="my-2">
+        return [{
+          key: `content-${i}`,
+          kind: "gallery-item",
+          node: (
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt={filePath} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
-          </div>
-        );
+            <img src={src} alt={filePath} className={`${ASSISTANT_MEDIA_FRAME_CLASS} rounded-[1rem]`} />
+            <span className={captionClass}>{filePath}</span>
+          </figure>
+          ),
+        }];
       }
       if (["mp4", "webm", "mov", "m4v"].includes(ext)) {
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <video controls className="max-w-full max-h-[50vh] rounded-lg border border-border bg-black">
               <source src={src} type={getVideoMimeType(ext)} />
             </video>
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+            <span className={captionClass}>{filePath}</span>
           </div>
-        );
+          ),
+        }];
       }
       if (["mp3", "wav", "ogg", "m4a", "flac", "opus", "aac"].includes(ext)) {
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <audio controls className="w-full">
               <source src={src} type={getAudioMimeType(ext)} />
             </audio>
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+            <span className={captionClass}>{filePath}</span>
           </div>
-        );
+          ),
+        }];
       }
-      return <span key={i} className="font-mono text-xs text-accent underline">{filePath}</span>;
+      return [{
+        key: `content-${i}`,
+        kind: "flow",
+        node: <span key={i} className="font-mono text-xs text-accent underline">{filePath}</span>,
+      }];
     }
     const embedDirective = parseEmbedDirective(part);
     if (embedDirective) {
@@ -1119,19 +1321,27 @@ function renderContent(content: string, projectId: string) {
           const savedFileName = findLastSavedHtmlFilename(parts.slice(0, i).join(""));
           const fileName = resolveEmbeddedRawPath(embedUrl, savedFileName);
           if (!fileName) {
-            return (
+            return [{
+              key: `content-${i}`,
+              kind: "flow",
+              node: (
               <div key={i} className="my-2">
                 <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
               </div>
-            );
+              ),
+            }];
           }
           const rawPreviewUrl = buildWorkspaceRawPreviewUrl(fileName, projectId, { preferPathRoute: true });
           if (!rawPreviewUrl) {
-            return (
+            return [{
+              key: `content-${i}`,
+              kind: "flow",
+              node: (
               <div key={i} className="my-2">
                 <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
               </div>
-            );
+              ),
+            }];
           }
           embedUrl = rawPreviewUrl;
         } else {
@@ -1141,19 +1351,27 @@ function renderContent(content: string, projectId: string) {
               preferPathRoute: true,
             });
             if (!rawPreviewUrl) {
-              return (
+              return [{
+                key: `content-${i}`,
+                kind: "flow",
+                node: (
                 <div key={i} className="my-2">
                   <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
                 </div>
-              );
+                ),
+              }];
             }
             embedUrl = rawPreviewUrl;
           } else if (/\.html?$/i.test(embedUrl)) {
-            return (
+            return [{
+              key: `content-${i}`,
+              kind: "flow",
+              node: (
               <div key={i} className="my-2">
                 <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
               </div>
-            );
+              ),
+            }];
           } else {
             // Strip every leading slash and re-add a single one so protocol-
             // relative URLs ("//external.host/...") collapse to a same-origin
@@ -1163,7 +1381,10 @@ function renderContent(content: string, projectId: string) {
         }
         const embedTitle = embedDirective.title ?? "Embedded content";
         const embedHeight = sanitizeEmbedHeight(embedDirective.height, "60vh");
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <iframe
               src={embedUrl}
@@ -1172,33 +1393,60 @@ function renderContent(content: string, projectId: string) {
               style={{ height: embedHeight }}
               sandbox="allow-scripts"
             />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{embedTitle}</span>
+            <span className={captionClass}>{embedTitle}</span>
           </div>
-        );
+          ),
+        }];
       }
-      return null;
+      return [];
     }
     if (part.startsWith("![")) {
       const match = part.match(/!\[([^\]]*)\]\(([^)]+)\)/);
       if (match && isSafeImageUrl(match[2])) {
-        return (
-          <div key={i} className="my-2">
+        return [{
+          key: `content-${i}`,
+          kind: "gallery-item",
+          node: (
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={match[2]} alt={match[1]} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
-          </div>
-        );
+            <img src={match[2]} alt={match[1]} className={`${ASSISTANT_MEDIA_FRAME_CLASS} rounded-[1rem]`} />
+            {match[1] ? <span className={captionClass}>{match[1]}</span> : null}
+          </figure>
+          ),
+        }];
       }
       if (match) {
         // Unsafe external URL — render as text link instead
-        return (
+        return [{
+          key: `content-${i}`,
+          kind: "flow",
+          node: (
           <div key={i} className="my-2">
             <span className="font-mono text-xs text-muted">[image: {match[1] || match[2]}]</span>
           </div>
-        );
+          ),
+        }];
       }
     }
-    return <span key={i}>{renderInlineMarkdownLite(part, `content-${i}`)}</span>;
+    if (assistantTypography) {
+      return renderAssistantMarkdownSegment(part, `content-${i}`).map((node, index) => ({
+        key: `content-${i}-${index}`,
+        kind: "flow" as const,
+        node,
+      }));
+    }
+    return [{
+      key: `content-${i}`,
+      kind: "flow",
+      node: <span key={i}>{renderInlineMarkdownLite(part, `content-${i}`)}</span>,
+    }];
   });
+
+  if (!assistantTypography) {
+    return renderedParts.map((part) => part.node);
+  }
+
+  return collapseAssistantMediaGalleries(renderedParts);
 }
 
 // ── Component ──────────────────────────────────────────────────
@@ -1294,7 +1542,8 @@ export function ChatMessage({
     hour: "2-digit",
     minute: "2-digit",
   })}`;
-  const footerTextClass = role === "user" ? "text-white/75" : "text-muted/55";
+  const footerTextClass =
+    role === "user" ? "text-white/75" : isAssistantTurn ? ASSISTANT_METADATA_CLASS : "text-muted/55";
   const selectionClass = role === "user"
     ? "selection:bg-white/45 selection:text-slate-900"
     : "selection:bg-accent/25 selection:text-slate-900";
@@ -1331,7 +1580,16 @@ export function ChatMessage({
         }`
       : role === "system"
         ? "w-full max-w-[min(92vw,72rem)] rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text bg-white border-2 border-border text-muted text-xs font-mono"
-        : "w-full max-w-[min(90vw,56rem)] px-1 py-2 text-[15px] leading-7 select-text cursor-text text-slate-900 sm:px-2";
+        : "w-full max-w-[min(90vw,56rem)] px-1 py-3 select-text cursor-text text-slate-900 sm:px-2";
+  const assistantSurfaceClass = isAssistantTurn
+    ? "mx-auto flex w-full max-w-[48rem] flex-col"
+    : "";
+  const contentClass = isAssistantTurn
+    ? `select-text text-slate-900 ${selectionClass}`
+    : `whitespace-pre-wrap select-text ${selectionClass}`;
+  const footerRowClass = isAssistantTurn
+    ? "mt-4 flex items-center justify-end gap-3"
+    : "mt-3 flex items-center justify-end gap-3";
 
   useEffect(() => () => {
     if (copyFeedbackTimerRef.current !== null) {
@@ -1367,6 +1625,125 @@ export function ChatMessage({
     scheduleCopyFeedbackReset();
   };
 
+  const messageBody = (
+    <>
+      {isOpenClawToolsTurn && (
+        <div className={`mb-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+          role === "user"
+            ? "border-white/30 bg-white/10 text-white"
+            : "border-green-200 bg-white text-green-800"
+        }`}>
+          Run with OpenClaw tools
+        </div>
+      )}
+
+      {/* Channel badge + user name for cross-channel messages */}
+      {isCrossChannel && badge && (
+        <div className="flex items-center gap-2 mb-2">
+          <span
+            className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border ${badge.color}`}
+          >
+            <span>{badge.icon}</span>
+            {badge.label}
+          </span>
+          {userName && (
+            <span className="text-[10px] text-muted font-medium">
+              {userName}
+            </span>
+          )}
+          <span className="text-[10px] text-muted/50">via OpenClaw</span>
+        </div>
+      )}
+
+      {!useCompactAssistantTranscript && !showCompactLiveTranscript && (
+        <TaskPhaseRail phases={visibleTaskPhases} className="mb-3" />
+      )}
+
+      {/* Agent step cards (above content; no-op when absent) */}
+      {!useCompactAssistantTranscript && !showCompactLiveTranscript && role === "assistant" && (
+        <StepCards steps={visibleSteps} />
+      )}
+
+      {/* Streaming indicator */}
+      {role === "assistant" && content === "" && isStreaming && !showCompactLiveTranscript && visibleProgressLog.length === 0 && (
+        <div className="flex items-center gap-2 text-accent/60">
+          <Spinner size="h-4 w-4" testId="chat-streaming-spinner" />
+          <span className="text-xs">Thinking…</span>
+        </div>
+      )}
+
+      {showCompactLiveTranscript && (
+        <div
+          aria-live="polite"
+          className="mb-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
+          role="log"
+        >
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+            <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+              <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
+              <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
+            </span>
+            {compactLiveRunSummary.map((summary, index) => (
+              <span
+                key={`${summary}-${index}`}
+                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600"
+              >
+                {summary}
+              </span>
+            ))}
+          </div>
+
+          {progressTranscript.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {buildProgressSectionChanges(progressTranscript, { compact: true })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!showCompactLiveTranscript && visibleProgressLog.length > 0 && (
+        <div
+          aria-live="polite"
+          className="mb-3 space-y-3 text-[13px] leading-6 text-foreground/95"
+          role="log"
+        >
+          {buildProgressSectionChanges(progressTranscript)}
+
+          {workingElapsed && (
+            <div className="flex items-start gap-2 whitespace-pre-wrap text-slate-500">
+              <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
+              <span>{`Working (${workingElapsed} • esc to interrupt)`}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Message content */}
+      <div
+        ref={contentRef}
+        data-testid={isAssistantTurn ? "assistant-reply-content" : undefined}
+        className={contentClass}
+      >
+        {renderContent(content, projectId, { assistantTypography: isAssistantTurn })}
+      </div>
+
+      <div className={footerRowClass}>
+        {hasCopyableText && (
+          <button
+            type="button"
+            onClick={copyToClipboard}
+            className={copyButtonClass}
+            aria-label={copyButtonLabel}
+            title={copyButtonLabel}
+          >
+            <CopyStatusIcon size={18} weight="regular" aria-hidden="true" />
+          </button>
+        )}
+        <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
+      </div>
+    </>
+  );
+
   return (
     <div
       className={`flex ${role === "user" ? "justify-end" : "justify-center"}`}
@@ -1376,119 +1753,13 @@ export function ChatMessage({
         data-chat-selectable={role === "user" ? "true" : undefined}
         className={bubbleClass}
       >
-        {isOpenClawToolsTurn && (
-          <div className={`mb-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-            role === "user"
-              ? "border-white/30 bg-white/10 text-white"
-              : "border-green-200 bg-white text-green-800"
-          }`}>
-            Run with OpenClaw tools
+        {isAssistantTurn ? (
+          <div data-testid="assistant-reply-surface" className={assistantSurfaceClass}>
+            {messageBody}
           </div>
+        ) : (
+          messageBody
         )}
-
-        {/* Channel badge + user name for cross-channel messages */}
-        {isCrossChannel && badge && (
-          <div className="flex items-center gap-2 mb-2">
-            <span
-              className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border ${badge.color}`}
-            >
-              <span>{badge.icon}</span>
-              {badge.label}
-            </span>
-            {userName && (
-              <span className="text-[10px] text-muted font-medium">
-                {userName}
-              </span>
-            )}
-            <span className="text-[10px] text-muted/50">via OpenClaw</span>
-          </div>
-        )}
-
-        {!useCompactAssistantTranscript && !showCompactLiveTranscript && (
-          <TaskPhaseRail phases={visibleTaskPhases} className="mb-3" />
-        )}
-
-        {/* Agent step cards (above content; no-op when absent) */}
-        {!useCompactAssistantTranscript && !showCompactLiveTranscript && role === "assistant" && (
-          <StepCards steps={visibleSteps} />
-        )}
-
-        {/* Streaming indicator */}
-        {role === "assistant" && content === "" && isStreaming && !showCompactLiveTranscript && visibleProgressLog.length === 0 && (
-          <div className="flex items-center gap-2 text-accent/60">
-            <Spinner size="h-4 w-4" testId="chat-streaming-spinner" />
-            <span className="text-xs">Thinking…</span>
-          </div>
-        )}
-
-        {showCompactLiveTranscript && (
-          <div
-            aria-live="polite"
-            className="mb-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
-            role="log"
-          >
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-              <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
-                <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
-                <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
-              </span>
-              {compactLiveRunSummary.map((summary, index) => (
-                <span
-                  key={`${summary}-${index}`}
-                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600"
-                >
-                  {summary}
-                </span>
-              ))}
-            </div>
-
-            {progressTranscript.length > 0 && (
-              <div className="mt-2 space-y-2">
-                {buildProgressSectionChanges(progressTranscript, { compact: true })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {!showCompactLiveTranscript && visibleProgressLog.length > 0 && (
-          <div
-            aria-live="polite"
-            className="mb-3 space-y-3 text-[13px] leading-6 text-foreground/95"
-            role="log"
-          >
-            {buildProgressSectionChanges(progressTranscript)}
-
-            {workingElapsed && (
-              <div className="flex items-start gap-2 whitespace-pre-wrap text-slate-500">
-                <span aria-hidden="true" className="pt-0.5 text-slate-400">• </span>
-                <span>{`Working (${workingElapsed} • esc to interrupt)`}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Message content */}
-        <div
-          ref={contentRef}
-          className={`whitespace-pre-wrap select-text ${selectionClass}`}
-        >
-          {renderContent(content, projectId)}
-        </div>
-
-        <div className="mt-3 flex items-center justify-end gap-3">
-          {hasCopyableText && (
-            <button
-              type="button"
-              onClick={copyToClipboard}
-              className={copyButtonClass}
-              aria-label={copyButtonLabel}
-              title={copyButtonLabel}
-            >
-              <CopyStatusIcon size={18} weight="regular" aria-hidden="true" />
-            </button>
-          )}
-          <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
-        </div>
       </div>
     </div>
   );

@@ -5,6 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StrictMode, act, useState } from "react";
 import { useUnifiedChat } from "@/hooks/use-unified-chat";
 
+const RUNTIME_ACTIVE_FILE_TEST_CONTENT = [
+  "Current file contents",
+  "--- End selected workspace context ---",
+  "x".repeat(8_050),
+].join("\n");
+
 function ChatHarness({ projectName }: { projectName: string }) {
   const [lastAddResult, setLastAddResult] = useState("");
   const {
@@ -41,11 +47,25 @@ function ChatHarness({ projectName }: { projectName: string }) {
             runtimeHostId: "codex",
             runtimeMode: "chat",
             projectPolicy: "cloud-ok",
-            approvalState: "approved",
           })
         }
       >
         Send Codex runtime
+      </button>
+      <button
+        onClick={() =>
+          void sendMessage("Summarize the selected file with Codex", {
+            runtimeHostId: "codex",
+            runtimeMode: "chat",
+            projectPolicy: "cloud-ok",
+            activeFile: {
+              path: "notes/current.md",
+              content: RUNTIME_ACTIVE_FILE_TEST_CONTENT,
+            },
+          })
+        }
+      >
+        Send Codex runtime current file
       </button>
       <button
         onClick={() =>
@@ -343,33 +363,39 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("message-log").textContent).toContain("assistant:Persisted answer");
   });
 
-  it("stores approved runtime host ids for new non-OpenClaw sessions", async () => {
+  it("stores runtime host ids for new non-OpenClaw sessions", async () => {
+    let resolveHealth: (response: Response) => void = () => {};
+    const delayedHealth = new Promise<Response>((resolve) => {
+      resolveHealth = resolve;
+    });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url === "/api/chat/unified?action=health") {
-        return Response.json({ openclaw: "connected" });
+        return delayedHealth;
       }
-      if (url === "/api/runtime/sessions") {
+      if (url === "/api/runtime/sessions/stream") {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
         expect(body).toMatchObject({
           hostId: "codex",
           projectId: "alpha-project",
           projectPolicy: "cloud-ok",
-          approvalState: "approved",
+          approvalState: "not-required",
         });
-        return Response.json({
-          session: {
-            id: "rt-session-codex",
-            conversationId: "native-codex-session",
-            status: "completed",
-          },
-          events: [
-            {
+        return createSseResponse([
+          {
+            event: {
               type: "message",
-              payload: { text: "Codex runtime response" },
+              payload: { text: "Codex runtime response\n[session] keep this native line" },
             },
-          ],
-        });
+          },
+          {
+            session: {
+              id: "rt-session-codex",
+              conversationId: "native-codex-session",
+              status: "completed",
+            },
+          },
+        ]);
       }
       if (url.startsWith("/api/workspace")) {
         return Response.json({ files: [] });
@@ -383,8 +409,15 @@ describe("useUnifiedChat persistence", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime" }));
 
     await screen.findByText(/Codex runtime response/);
-    expect(screen.getByTestId("backend").textContent).toBe("codex");
-    expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
+    await act(async () => {
+      resolveHealth(Response.json({ openclaw: "connected" }));
+      await delayedHealth;
+    });
+    expect(screen.getByTestId("message-log").textContent).toContain("[session] keep this native line");
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("codex");
+      expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
+    });
 
     await waitFor(() => {
       const stored = JSON.parse(
@@ -392,6 +425,149 @@ describe("useUnifiedChat persistence", () => {
       ) as { conversationBackend?: string };
       expect(stored.conversationBackend).toBe("codex");
     });
+  });
+
+  it("streams direct runtime events into the active assistant message", async () => {
+    const runtimeStream = createDeferredSseResponse();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url === "/api/runtime/sessions/stream") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        expect(body).toMatchObject({
+          hostId: "codex",
+          projectId: "alpha-project",
+          projectPolicy: "cloud-ok",
+          approvalState: "not-required",
+        });
+        return runtimeStream.response;
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ files: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime" }));
+
+    await act(async () => {
+      runtimeStream.send({
+        event: {
+          type: "message",
+          payload: { text: "Streaming Codex" },
+        },
+      });
+    });
+
+    await screen.findByText(/Streaming Codex/);
+
+    await act(async () => {
+      runtimeStream.send({
+        event: {
+          type: "message",
+          payload: {
+            text: "Streaming Codex final answer",
+            nativeSessionId: "native-codex-session",
+          },
+        },
+      });
+      runtimeStream.send({
+        session: {
+          id: "rt-session-codex",
+          conversationId: "native-codex-session",
+          status: "completed",
+        },
+      });
+      runtimeStream.close();
+    });
+
+    await screen.findByText(/Streaming Codex final answer/);
+    expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
+    expect(screen.getByTestId("backend").textContent).toBe("codex");
+  });
+
+  it("includes explicitly selected active file context in direct runtime prompts", async () => {
+    const runtimeBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url === "/api/runtime/sessions/stream") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        runtimeBodies.push(body);
+        return createSseResponse([
+          {
+            event: {
+              type: "message",
+              payload: { text: "Codex saw the selected file" },
+            },
+          },
+          {
+            session: {
+              id: "rt-session-codex",
+              conversationId: "native-codex-session",
+              status: "completed",
+            },
+          },
+        ]);
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ files: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime current file" }));
+
+    await screen.findByText(/Codex saw the selected file/);
+    expect(runtimeBodies).toHaveLength(1);
+    expect(runtimeBodies[0]).toMatchObject({
+      hostId: "codex",
+      projectId: "alpha-project",
+      projectPolicy: "cloud-ok",
+      approvalState: "not-required",
+      inputFileRefs: ["notes/current.md"],
+      dataIncluded: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "workspace-file",
+          label: "notes/current.md",
+          bytes: 8_000,
+        }),
+      ]),
+    });
+    const runtimePrompt = String(runtimeBodies[0].prompt);
+    expect(runtimePrompt).toContain("Explicitly selected workspace context (JSON):");
+    expect(runtimePrompt).not.toContain("--- Explicitly selected workspace context ---");
+    const contextPayload = JSON.parse(runtimePrompt.slice(runtimePrompt.indexOf("{"))) as {
+      kind: string;
+      path: string;
+      content: string;
+      truncated: boolean;
+      originalCharacters: number;
+      includedCharacters: number;
+      omittedCharacters: number;
+    };
+    expect(contextPayload).toMatchObject({
+      kind: "selected-workspace-file",
+      path: "notes/current.md",
+      content: RUNTIME_ACTIVE_FILE_TEST_CONTENT.slice(0, 8_000),
+      truncated: true,
+      originalCharacters: RUNTIME_ACTIVE_FILE_TEST_CONTENT.length,
+      includedCharacters: 8_000,
+      omittedCharacters: RUNTIME_ACTIVE_FILE_TEST_CONTENT.length - 8_000,
+    });
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "user:Summarize the selected file with Codex",
+    );
   });
 
   it("drops persisted assistant replay duplicates when restoring a project thread", async () => {
@@ -441,7 +617,7 @@ describe("useUnifiedChat persistence", () => {
       }),
     );
 
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
       if (url === "/api/chat/thread?project=alpha-project") {
@@ -5329,6 +5505,160 @@ describe("useUnifiedChat persistence", () => {
     await waitFor(() => {
       expect(screen.getByTestId("error").textContent).toContain("OpenClaw is not reachable");
     });
+  });
+
+  it("reuses the in-flight OpenClaw load probe when the project changes", async () => {
+    const healthDeferred: { resolve: ((response: Response) => void) | null } = {
+      resolve: null,
+    };
+    let healthProbeCount = 0;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        healthProbeCount += 1;
+        return await new Promise<Response>((resolve) => {
+          healthDeferred.resolve = resolve;
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project" || url === "/api/chat/thread?project=beta-project") {
+        return Response.json({
+          version: 1,
+          project: url.endsWith("beta-project") ? "beta-project" : "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (
+        url === "/api/workspace?action=tree&projectId=alpha-project"
+        || url === "/api/workspace?action=tree&projectId=beta-project"
+      ) {
+        return Response.json({ tree: [] });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(healthProbeCount).toBe(1);
+    });
+
+    view.rerender(<ChatHarness projectName="beta-project" />);
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map((call) => String(call[0]))).toContain(
+        "/api/chat/thread?project=beta-project",
+      );
+    });
+    expect(healthProbeCount).toBe(1);
+
+    if (!healthDeferred.resolve) {
+      throw new Error("Expected an in-flight health probe to expose a resolver");
+    }
+
+    healthDeferred.resolve(Response.json({
+      agent: { type: "openclaw", status: "connected" },
+      openclaw: "connected",
+      nanoclaw: "disconnected",
+      openhands: "connected",
+      ollama: "connected",
+      ollamaModels: ["gemma4:latest"],
+      configuredLocalModel: "gemma4",
+      llmProvider: "local",
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+  });
+
+  it("starts a fresh OpenClaw load probe for the next project after a failed preconnect", async () => {
+    let healthProbeCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        healthProbeCount += 1;
+        if (healthProbeCount === 1) {
+          throw new Error("OpenClaw gateway booting");
+        }
+
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:latest"],
+          configuredLocalModel: "gemma4",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project" || url === "/api/chat/thread?project=beta-project") {
+        return Response.json({
+          version: 1,
+          project: url.endsWith("beta-project") ? "beta-project" : "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (
+        url === "/api/workspace?action=tree&projectId=alpha-project"
+        || url === "/api/workspace?action=tree&projectId=beta-project"
+      ) {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return Response.json({
+          response: "Recovered after project-load preconnect failure",
+          conversationId: "web:beta-project:session-1",
+          messages: [],
+        });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(healthProbeCount).toBe(1);
+    });
+
+    view.rerender(<ChatHarness projectName="beta-project" />);
+
+    await waitFor(() => {
+      expect(healthProbeCount).toBe(2);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain(
+        "assistant:Recovered after project-load preconnect failure",
+      );
+    });
+    expect(screen.getByTestId("error").textContent).toBe("");
   });
 
   it("rechecks OpenClaw health on send before surfacing a disconnected error", async () => {
