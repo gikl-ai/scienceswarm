@@ -75,7 +75,7 @@ describe("RuntimeMcpAccessToken", () => {
     expect(
       verifyRuntimeMcpAccessToken({
         token: trustedToken,
-        trustedToken,
+        trustedToken: `${trustedToken}\n`,
         projectId: "project-alpha",
         runtimeSessionId: "session-1",
         hostId: "codex",
@@ -83,6 +83,18 @@ describe("RuntimeMcpAccessToken", () => {
         now: () => NOW,
       }),
     ).toMatchObject({ ok: true });
+
+    expect(
+      verifyRuntimeMcpAccessToken({
+        token: trustedToken,
+        trustedToken,
+        projectId: "project-beta",
+        runtimeSessionId: "session-1",
+        hostId: "codex",
+        toolName: "gbrain_read",
+        now: () => NOW,
+      }),
+    ).toMatchObject({ ok: false, reason: "wrong-project" });
 
     expect(
       verifyRuntimeMcpAccessToken({
