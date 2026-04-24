@@ -47,7 +47,6 @@ const SHADCN_IMPORT = /from\s+["']@\/components\/ui\/([a-z0-9-]+)["']/;
 const findings: Finding[] = [];
 
 for (const f of gitLsFiles()) {
-  if (f === "scripts/check-design-drift.ts") continue; // self-exclude
   if (f.startsWith("src/styles/tokens/")) continue;
   if (f === "scripts/check-design-drift.ts") continue;  // self-match on regex literals
   if (!/\.(ts|tsx|css|mjs)$/.test(f)) continue;
