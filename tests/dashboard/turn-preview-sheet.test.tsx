@@ -40,7 +40,7 @@ function preview(overrides: Partial<TurnPreview> = {}): TurnPreview {
 }
 
 describe("TurnPreviewSheet", () => {
-  it("shows destination, account source, included data, and approve/cancel controls", () => {
+  it("shows the hosted reminder, destination, account source, included data, and controls", () => {
     const onApprove = vi.fn();
     const onCancel = vi.fn();
 
@@ -55,12 +55,13 @@ describe("TurnPreviewSheet", () => {
       />,
     );
 
-    expect(screen.getByRole("dialog", { name: "Runtime preview" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Hosted runtime reminder" })).toBeInTheDocument();
+    expect(screen.getByText(/future chat turns to the same host can send without interrupting/)).toBeInTheDocument();
     expect(screen.getByText("Codex")).toBeInTheDocument();
     expect(screen.getByText("Native CLI login")).toBeInTheDocument();
     expect(screen.getByText("notes/current.md")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve and send" }));
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge and send" }));
     expect(onApprove).toHaveBeenCalled();
 
     fireEvent.keyDown(window, { key: "Escape" });
@@ -84,6 +85,24 @@ describe("TurnPreviewSheet", () => {
 
     const sheet = screen.getByTestId("turn-preview-sheet");
     expect(within(sheet).getByText(/local-only blocks/)).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Runtime preview" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve and send" })).toBeDisabled();
+  });
+
+  it("keeps task previews as explicit approvals instead of chat reminders", () => {
+    render(
+      <TurnPreviewSheet
+        open
+        preview={preview({ mode: "task" })}
+        pendingLabel="task via Codex"
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+        onChangeHost={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "Runtime preview" })).toBeInTheDocument();
+    expect(screen.queryByText(/future chat turns to the same host/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve and send" })).toBeEnabled();
   });
 });

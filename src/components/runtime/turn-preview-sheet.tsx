@@ -15,6 +15,19 @@ function accountSourceLabel(source: TurnPreview["accountDisclosure"]["accountSou
   }
 }
 
+function privacyReminderCopy(preview: TurnPreview): string | null {
+  const isLocal = preview.effectivePrivacyClass === "local-only"
+    || preview.effectivePrivacyClass === "local-network";
+  if (!preview.allowed || !preview.requiresUserApproval || isLocal || preview.mode !== "chat") {
+    return null;
+  }
+
+  return [
+    "This chat will leave the local-only OpenClaw path and go to the selected runtime host.",
+    "Review this once so future chat turns to the same host can send without interrupting you.",
+  ].join(" ");
+}
+
 export function TurnPreviewSheet({
   preview,
   open,
@@ -44,6 +57,8 @@ export function TurnPreviewSheet({
   }, [onCancel, open]);
 
   if (!open || !preview) return null;
+  const reminderCopy = privacyReminderCopy(preview);
+  const title = reminderCopy ? "Hosted runtime reminder" : "Runtime preview";
 
   return (
     <div
@@ -61,7 +76,7 @@ export function TurnPreviewSheet({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 id="turn-preview-title" className="text-lg font-semibold text-foreground">
-                Runtime preview
+                {title}
               </h2>
               <p className="mt-1 text-sm text-muted">{pendingLabel}</p>
             </div>
@@ -77,6 +92,12 @@ export function TurnPreviewSheet({
         </div>
 
         <div className="space-y-5 overflow-y-auto px-5 py-4">
+          {reminderCopy && (
+            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              {reminderCopy}
+            </p>
+          )}
+
           <div className="flex flex-wrap gap-2">
             <RuntimeStatusChip
               label={preview.allowed ? "Policy passed" : "Policy blocked"}
@@ -163,7 +184,7 @@ export function TurnPreviewSheet({
             disabled={!preview.allowed || busy}
             className="min-h-11 rounded bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? "Starting..." : "Approve and send"}
+            {busy ? "Starting..." : reminderCopy ? "Acknowledge and send" : "Approve and send"}
           </button>
         </div>
       </section>

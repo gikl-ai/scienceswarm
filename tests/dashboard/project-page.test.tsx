@@ -1419,8 +1419,10 @@ describe("Project dashboard smoke test", () => {
     fireEvent.change(input, { target: { value: "Talk to Codex directly" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    const previewDialog = await screen.findByRole("dialog", { name: "Runtime preview" });
+    const previewDialog = await screen.findByRole("dialog", { name: "Hosted runtime reminder" });
     expect(previewDialog).toBeInTheDocument();
+    expect(previewDialog)
+      .toHaveTextContent("future chat turns to the same host can send without interrupting you");
     expect(input).toHaveValue("");
     expect(runtimePreviewBodies).toEqual([
       expect.objectContaining({
@@ -1433,7 +1435,7 @@ describe("Project dashboard smoke test", () => {
     ]);
     expect(runtimeSessionBodies).toEqual([]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve and send" }));
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge and send" }));
 
     expect(await screen.findByText("Codex direct answer")).toBeInTheDocument();
     expect(input).toHaveValue("");
@@ -1448,8 +1450,21 @@ describe("Project dashboard smoke test", () => {
       }),
     ]);
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Runtime preview" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Hosted runtime reminder" })).not.toBeInTheDocument();
     });
+
+    fireEvent.change(input, { target: { value: "Follow up without interruption" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(runtimePreviewBodies).toHaveLength(2);
+      expect(runtimeSessionBodies).toHaveLength(2);
+    });
+    expect(screen.queryByRole("dialog", { name: "Hosted runtime reminder" })).not.toBeInTheDocument();
+    expect(runtimeSessionBodies[1]).toEqual(expect.objectContaining({
+      approvalState: "approved",
+      prompt: "Follow up without interruption",
+    }));
   });
 
   it("auto-sends chat when runtime preview does not require approval", async () => {

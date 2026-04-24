@@ -48,6 +48,11 @@ import type {
   RuntimeDataIncluded,
   TurnPreview,
 } from "@/lib/runtime-hosts/contracts";
+import {
+  hasRuntimePreviewAcknowledgement,
+  rememberRuntimePreviewAcknowledgement,
+  shouldRememberRuntimePreview,
+} from "@/lib/runtime-hosts/preview-acknowledgement";
 import { TurnPreviewSheet } from "@/components/runtime/turn-preview-sheet";
 import { CompareResults } from "@/components/runtime/compare-results";
 import { ComposerRuntimeSwitcher } from "@/components/runtime/composer-runtime-switcher";
@@ -3866,7 +3871,17 @@ function ProjectPageContent() {
           ...options,
           approvalState: payload.preview.requiresUserApproval ? "approved" : "not-required",
         };
-        if (mode === "chat" && payload.preview.allowed && !payload.preview.requiresUserApproval) {
+        if (
+          mode === "chat"
+          && payload.preview.allowed
+          && (
+            !payload.preview.requiresUserApproval
+            || hasRuntimePreviewAcknowledgement({
+              projectId: activeProjectSlug,
+              preview: payload.preview,
+            })
+          )
+        ) {
           await sendRuntimePrompt(prompt, previewOptions);
           return;
         }
@@ -3906,13 +3921,19 @@ function ProjectPageContent() {
     setRuntimePreviewError(null);
     try {
       await sendRuntimePrompt(pendingRuntimeSend.prompt, pendingRuntimeSend.options);
+      if (shouldRememberRuntimePreview(pendingRuntimeSend.preview)) {
+        rememberRuntimePreviewAcknowledgement({
+          projectId: activeProjectSlug,
+          preview: pendingRuntimeSend.preview,
+        });
+      }
       setPendingRuntimeSend(null);
     } catch (err) {
       setRuntimePreviewError(err instanceof Error ? err.message : "Runtime send failed.");
     } finally {
       setRuntimePreviewBusy(false);
     }
-  }, [pendingRuntimeSend, sendRuntimePrompt]);
+  }, [activeProjectSlug, pendingRuntimeSend, sendRuntimePrompt]);
 
   const restorePendingRuntimeDraft = useCallback((value: string) => {
     setInput((current) => (current.length === 0 ? value : current));
