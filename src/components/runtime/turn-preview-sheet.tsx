@@ -18,7 +18,7 @@ function accountSourceLabel(source: TurnPreview["accountDisclosure"]["accountSou
 function privacyReminderCopy(preview: TurnPreview): string | null {
   const isLocal = preview.effectivePrivacyClass === "local-only"
     || preview.effectivePrivacyClass === "local-network";
-  if (!preview.allowed || !preview.requiresUserApproval || isLocal) {
+  if (!preview.allowed || !preview.requiresUserApproval || isLocal || preview.mode !== "chat") {
     return null;
   }
 

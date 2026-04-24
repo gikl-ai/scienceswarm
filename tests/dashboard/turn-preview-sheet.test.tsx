@@ -88,4 +88,21 @@ describe("TurnPreviewSheet", () => {
     expect(screen.getByRole("dialog", { name: "Runtime preview" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve and send" })).toBeDisabled();
   });
+
+  it("keeps task previews as explicit approvals instead of chat reminders", () => {
+    render(
+      <TurnPreviewSheet
+        open
+        preview={preview({ mode: "task" })}
+        pendingLabel="task via Codex"
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+        onChangeHost={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "Runtime preview" })).toBeInTheDocument();
+    expect(screen.queryByText(/future chat turns to the same host/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve and send" })).toBeEnabled();
+  });
 });
