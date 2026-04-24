@@ -726,11 +726,29 @@ export function windowPaperLibraryGraph(
     ? graph.nodes.filter((node) => focusNeighbors.has(node.id))
     : graph.nodes;
   const page = readCursorWindow(filteredNodes, { cursor: options.cursor, limit: options.limit });
-  const included = new Set(page.items.map((node) => node.id));
+  const filteredNodeIds = new Set(filteredNodes.map((node) => node.id));
+  const primaryIds = new Set(page.items.map((node) => node.id));
+  const included = new Set(primaryIds);
+  const visibleEdges = graph.edges.filter((edge) => {
+    if (!filteredNodeIds.has(edge.sourceNodeId) || !filteredNodeIds.has(edge.targetNodeId)) return false;
+    return primaryIds.has(edge.sourceNodeId) || primaryIds.has(edge.targetNodeId);
+  });
+  for (const edge of visibleEdges) {
+    included.add(edge.sourceNodeId);
+    included.add(edge.targetNodeId);
+  }
+  const nodesById = new Map(filteredNodes.map((node) => [node.id, node]));
+  const nodes = page.items.slice();
+  for (const nodeId of included) {
+    if (primaryIds.has(nodeId)) continue;
+    const node = nodesById.get(nodeId);
+    if (node) nodes.push(node);
+  }
   const includeMetadata = !options.cursor;
   return {
-    nodes: page.items,
-    edges: graph.edges.filter((edge) => included.has(edge.sourceNodeId) && included.has(edge.targetNodeId)),
+    nodes,
+    edges: visibleEdges.filter((edge) => included.has(edge.sourceNodeId) && included.has(edge.targetNodeId)),
+    totalEdgeCount: graph.edges.length,
     sourceRuns: includeMetadata ? graph.sourceRuns : [],
     warnings: includeMetadata ? graph.warnings : [],
     nextCursor: page.nextCursor,

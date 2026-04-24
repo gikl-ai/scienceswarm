@@ -244,7 +244,13 @@ describe("paper-library graph", () => {
 
     expect(deterministicPaperNodeId({ doi: "https://doi.org/10.1000/source" }, "fallback")).toBe("paper:doi:10.1000/source");
     const firstPage = windowPaperLibraryGraph(graph!, { limit: 2 });
-    expect(firstPage.nodes).toHaveLength(2);
+    expect(firstPage.nodes.map((node) => node.id).sort()).toEqual([
+      "paper:doi:10.1000/source",
+      "paper:doi:10.2000/other",
+      "paper:doi:10.2000/target",
+    ]);
+    expect(firstPage.edges).toHaveLength(1);
+    expect(firstPage.totalEdgeCount).toBe(1);
     expect(firstPage.nextCursor).toBeDefined();
     expect(firstPage.sourceRuns.length).toBeGreaterThan(0);
 

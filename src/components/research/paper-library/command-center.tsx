@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowSquareOut,
+  FolderOpen,
   Graph,
   SpinnerGap,
 } from "@phosphor-icons/react";
@@ -89,6 +90,42 @@ class PaperLibraryApiError extends Error {
 }
 
 const DEFAULT_TEMPLATE = "{year} - {title}.pdf";
+const GRAPH_MAP_NODE_LIMIT = 24;
+
+const RENAME_TEMPLATE_OPTIONS = [
+  {
+    id: "year-title",
+    label: "Year - Title",
+    format: "{year} - {title}.pdf",
+    example: "2024 - Scaling Laws.pdf",
+    detail: "A clean flat folder for small libraries.",
+  },
+  {
+    id: "author-year-title",
+    label: "Author Year - Title",
+    format: "{first_author} {year} - {title}.pdf",
+    example: "Kaplan 2024 - Scaling Laws.pdf",
+    detail: "Best when you recognize papers by first author.",
+  },
+  {
+    id: "year-folder",
+    label: "Year folders",
+    format: "papers/{year}/{first_author} - {title}.pdf",
+    example: "papers/2024/Kaplan - Scaling Laws.pdf",
+    detail: "Keeps large archives easier to scan.",
+  },
+  {
+    id: "venue-folder",
+    label: "Venue folders",
+    format: "papers/{venue}/{year} - {title}.pdf",
+    example: "papers/NeurIPS/2024 - Scaling Laws.pdf",
+    detail: "Useful for conference-heavy collections.",
+  },
+] as const;
+
+function templateOptionForFormat(format: string) {
+  return RENAME_TEMPLATE_OPTIONS.find((option) => option.format === format);
+}
 
 function defaultSession(): PaperLibrarySession {
   return {
@@ -197,8 +234,55 @@ function reviewDraftForItem(item: PaperReviewItem, draft?: PaperLibrarySessionDr
   };
 }
 
+function selectedCandidateForItem(item: PaperReviewItem, selectedCandidateId?: string) {
+  return item.candidates.find((candidate) => candidate.id === selectedCandidateId)
+    ?? item.candidates.find((candidate) => candidate.id === item.selectedCandidateId)
+    ?? item.candidates[0];
+}
+
 function formatStatus(status: string): string {
   return status.replaceAll("_", " ");
+}
+
+function formatReasonLabel(reason: string): string {
+  if (reason.startsWith("missing:")) return `Missing ${reason.slice("missing:".length)}`;
+  return reason.replaceAll("_", " ");
+}
+
+function reviewReasonCopy(reason: string): { label: string; body: string } {
+  if (reason === "low_confidence") {
+    return {
+      label: "Low confidence",
+      body: "The best match is plausible, but not strong enough to rename automatically.",
+    };
+  }
+  if (reason === "text_layer_too_thin") {
+    return {
+      label: "Thin PDF text",
+      body: "ScienceSwarm had too little readable PDF text, so the filename carried more weight.",
+    };
+  }
+  if (reason === "metadata_conflict") {
+    return {
+      label: "Metadata conflict",
+      body: "Two sources disagree. Pick the right identity or save corrected fields.",
+    };
+  }
+  if (reason.startsWith("missing:")) {
+    return {
+      label: `Missing ${reason.slice("missing:".length)}`,
+      body: "A rename template needs this field before the file can be planned safely.",
+    };
+  }
+  return {
+    label: formatReasonLabel(reason),
+    body: "This item needs a human decision before it can be included in the rename plan.",
+  };
+}
+
+function truncateGraphLabel(value: string | undefined, fallback: string, maxLength = 34): string {
+  const label = (value?.trim() || fallback).replace(/\s+/g, " ");
+  return label.length > maxLength ? `${label.slice(0, maxLength - 1)}...` : label;
 }
 
 function makeIdempotencyKey(prefix: string): string {
@@ -277,6 +361,164 @@ function EmptyState({
   );
 }
 
+function ReviewActionButton({
+  body,
+  disabled,
+  label,
+  onClick,
+  primary = false,
+}: {
+  body: string;
+  disabled: boolean;
+  label: string;
+  onClick: () => void;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`min-h-16 rounded-lg border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+        primary
+          ? "border-accent bg-accent text-white hover:bg-accent-hover"
+          : "border-border bg-white text-foreground hover:border-accent hover:text-accent"
+      }`}
+    >
+      <span className="block text-xs font-semibold">{label}</span>
+      <span className={`mt-1 block text-[11px] leading-snug ${primary ? "text-white/85" : "text-muted"}`}>
+        {body}
+      </span>
+    </button>
+  );
+}
+
+function CitationGraphMap({
+  graphPage,
+}: {
+  graphPage: PaperLibraryGraphResponse | null;
+}) {
+  const layout = useMemo(() => {
+    const nodes = graphPage?.nodes ?? [];
+    const edges = graphPage?.edges ?? [];
+    const connectedIds = new Set(edges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]));
+    const connected = nodes.filter((node) => connectedIds.has(node.id));
+    const disconnected = nodes.filter((node) => !connectedIds.has(node.id));
+    const visibleNodes = (connected.length > 0 ? [...connected, ...disconnected] : nodes)
+      .slice(0, GRAPH_MAP_NODE_LIMIT);
+    const visibleIds = new Set(visibleNodes.map((node) => node.id));
+    const visibleEdges = edges.filter((edge) => visibleIds.has(edge.sourceNodeId) && visibleIds.has(edge.targetNodeId));
+    const positions = new Map<string, { x: number; y: number }>();
+
+    if (visibleEdges.length === 0) {
+      const columns = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(visibleNodes.length || 1))));
+      const rows = Math.max(1, Math.ceil((visibleNodes.length || 1) / columns));
+      visibleNodes.forEach((node, index) => {
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        positions.set(node.id, {
+          x: 90 + (column * (540 / Math.max(1, columns - 1 || 1))),
+          y: 72 + (row * (210 / Math.max(1, rows - 1 || 1))),
+        });
+      });
+    } else {
+      let left = visibleNodes.filter((node) => node.local);
+      let right = visibleNodes.filter((node) => !node.local);
+      if (right.length === 0) {
+        const midpoint = Math.ceil(visibleNodes.length / 2);
+        left = visibleNodes.slice(0, midpoint);
+        right = visibleNodes.slice(midpoint);
+      }
+      const placeColumn = (columnNodes: typeof visibleNodes, x: number) => {
+        const span = 230;
+        columnNodes.forEach((node, index) => {
+          positions.set(node.id, {
+            x,
+            y: 58 + (index * (span / Math.max(1, columnNodes.length - 1))),
+          });
+        });
+      };
+      placeColumn(left, 170);
+      placeColumn(right.length ? right : left, right.length ? 550 : 390);
+    }
+
+    return { nodes: visibleNodes, edges: visibleEdges, positions };
+  }, [graphPage]);
+
+  if (layout.nodes.length === 0) {
+    return (
+      <div className="flex h-72 items-center justify-center rounded-lg border border-dashed border-border bg-surface text-sm text-muted">
+        The citation map appears after graph data is available.
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+      <svg
+        aria-label="Citation graph map"
+        className="h-72 w-full"
+        role="img"
+        viewBox="0 0 720 340"
+      >
+        <rect width="720" height="340" fill="var(--surface-sunk)" />
+        {layout.edges.map((edge) => {
+          const source = layout.positions.get(edge.sourceNodeId);
+          const target = layout.positions.get(edge.targetNodeId);
+          if (!source || !target) return null;
+          return (
+            <line
+              key={edge.id}
+              stroke={edge.kind === "same_identity" ? "var(--warn)" : "var(--accent)"}
+              strokeDasharray={edge.kind === "bridge_suggestion" ? "4 5" : undefined}
+              strokeOpacity={0.46}
+              strokeWidth={1.8}
+              x1={source.x}
+              x2={target.x}
+              y1={source.y}
+              y2={target.y}
+            />
+          );
+        })}
+        {layout.nodes.map((node) => {
+          const point = layout.positions.get(node.id) ?? { x: 360, y: 170 };
+          const fill = node.local
+            ? "var(--accent)"
+            : node.suggestion
+              ? "var(--warn)"
+              : "var(--surface-raised)";
+          const textAnchor = point.x > 420 ? "end" : "start";
+          const textX = point.x > 420 ? point.x - 14 : point.x + 14;
+          return (
+            <g key={node.id}>
+              <title>{node.title ?? node.id}</title>
+              <circle
+                cx={point.x}
+                cy={point.y}
+                fill={fill}
+                opacity={node.local ? 0.95 : 0.82}
+                r={node.local ? 7 : 6}
+                stroke="var(--surface-raised)"
+                strokeWidth={2}
+              />
+              <text
+                dominantBaseline="middle"
+                fill="var(--text-body)"
+                fontSize="11"
+                textAnchor={textAnchor}
+                x={textX}
+                y={point.y}
+              >
+                {truncateGraphLabel(node.title, node.id, 30)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 export function PaperLibraryCommandCenter({
   projectSlug,
 }: {
@@ -291,6 +533,7 @@ export function PaperLibraryCommandCenter({
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [folderPickerLoading, setFolderPickerLoading] = useState(false);
 
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>(DEFAULT_REVIEW_FILTER);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -745,13 +988,14 @@ export function PaperLibraryCommandCenter({
     }
   }, [applyPlanPage?.plan.manifestId, patchSession, session.manifestId, sessionRestored]);
 
-  const handleStartScan = useCallback(async () => {
+  const startScanForRoot = useCallback(async (rootPath: string) => {
     setCommandError(null);
     setScanError(null);
     resetDownstreamState();
     setScan(null);
     setSession((current) => ({
       ...current,
+      rootPath,
       scanId: undefined,
       applyPlanId: undefined,
       manifestId: undefined,
@@ -766,7 +1010,7 @@ export function PaperLibraryCommandCenter({
           body: JSON.stringify({
             action: "start",
             project: projectSlug,
-            rootPath: session.rootPath,
+            rootPath,
             mode: "dry-run",
             idempotencyKey: makeIdempotencyKey("paper-library-scan"),
           }),
@@ -781,7 +1025,28 @@ export function PaperLibraryCommandCenter({
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : "Could not start the paper-library scan.");
     }
-  }, [patchSession, projectSlug, resetDownstreamState, session.rootPath]);
+  }, [patchSession, projectSlug, resetDownstreamState]);
+
+  const handleImportPdfFolder = useCallback(async () => {
+    setFolderPickerLoading(true);
+    setCommandError(null);
+    setScanError(null);
+    skipLatestRestoreRef.current = true;
+    try {
+      const payload = await paperLibraryFetchJson<{ path?: string; cancelled?: boolean }>(
+        "/api/local-folder-picker",
+        { method: "POST" },
+      );
+      if (payload.cancelled) return;
+      const rootPath = payload.path?.trim();
+      if (!rootPath) throw new Error("Folder picker returned no path.");
+      await startScanForRoot(rootPath);
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : "Could not choose a PDF folder.");
+    } finally {
+      setFolderPickerLoading(false);
+    }
+  }, [startScanForRoot]);
 
   const handleCancelScan = useCallback(async () => {
     if (!session.scanId) return;
@@ -1042,6 +1307,12 @@ export function PaperLibraryCommandCenter({
   const applyReadyCount = activePlan?.operationCount ?? scan?.counters.readyForApply ?? 0;
   const graphCount = graphPage?.filteredCount ?? graphPage?.totalCount ?? 0;
   const historyCount = activeManifest?.appliedCount ?? 0;
+  const totalGraphEdgeCount = graphPage?.totalEdgeCount ?? graphPage?.edges.length ?? 0;
+  const graphSourceRunCount = graphPage?.sourceRuns.length ?? 0;
+  const graphSuccessfulRuns = graphPage?.sourceRuns.filter((run) => run.status === "success").length ?? 0;
+  const graphNoIdentifierRuns = graphPage?.sourceRuns.filter((run) => (
+    run.status === "negative" && run.message?.toLowerCase().includes("no supported identifier")
+  )).length ?? 0;
   const approvalTokenExpired = approvalToken
     ? Date.parse(approvalToken.expiresAt) <= Date.now()
     : false;
@@ -1101,9 +1372,9 @@ export function PaperLibraryCommandCenter({
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Review</p>
-              <h3 className="mt-1 text-lg font-semibold text-foreground">Resolve low-confidence papers</h3>
+              <h3 className="mt-1 text-lg font-semibold text-foreground">Review papers that need a human call</h3>
               <p className="mt-1 max-w-2xl text-sm text-muted">
-                Accept a detected identity, correct the filename-derived metadata, or ignore items you do not want in the plan.
+                Confirm the detected identity, edit bad metadata, skip a file, or keep it in review so it cannot enter the rename plan yet.
               </p>
             </div>
             <div className="inline-flex items-center gap-2">
@@ -1142,31 +1413,48 @@ export function PaperLibraryCommandCenter({
                 const selectedCandidateId = selectedCandidatesByItemId[item.id]
                   ?? item.selectedCandidateId
                   ?? item.candidates[0]?.id;
+                const selectedCandidate = selectedCandidateForItem(item, selectedCandidateId);
                 return (
                   <article key={item.id} className="py-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h4 className="text-sm font-semibold text-foreground">{summarizePrimaryCandidate(item)}</h4>
-                        <p className="mt-1 text-xs text-muted">{item.source?.relativePath ?? item.paperId}</p>
-                        {item.reasonCodes.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {item.reasonCodes.map((reason) => (
-                              <span key={reason} className="rounded-full border border-warn/30 bg-warn/10 px-2 py-1 text-[11px] font-semibold text-warn">
-                                {reason.replaceAll("_", " ")}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                    <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-[minmax(0,1fr)_auto]">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Reviewing PDF</p>
+                        <h4 className="mt-1 text-base font-semibold text-foreground">{summarizePrimaryCandidate(item)}</h4>
+                        <p className="mt-1 break-words text-xs text-muted">{item.source?.relativePath ?? item.paperId}</p>
                       </div>
                       <StatusBadge
                         tone={item.state === "accepted" || item.state === "corrected" ? "success" : item.state === "ignored" ? "neutral" : "warning"}
                         value={item.state}
                       />
+                      <div className="md:col-span-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Flagged because</p>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {(item.reasonCodes.length ? item.reasonCodes : ["needs_review"]).map((reason) => {
+                            const copy = reviewReasonCopy(reason);
+                            return (
+                              <div key={reason} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2">
+                                <p className="text-xs font-semibold text-warn">{copy.label}</p>
+                                <p className="mt-1 text-[11px] leading-snug text-muted">{copy.body}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Candidates</p>
+                        <div className="flex flex-wrap items-end justify-between gap-2">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Detected identity</p>
+                            <p className="mt-1 text-xs text-muted">Accepting uses this paper identity for the rename plan and paper record.</p>
+                          </div>
+                          {selectedCandidate && (
+                            <span className="text-[11px] font-semibold text-muted">
+                              {Math.round(selectedCandidate.confidence * 100)}% confidence
+                            </span>
+                          )}
+                        </div>
                         <div className="mt-2 space-y-2">
                           {item.candidates.map((candidate) => (
                             <label key={candidate.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2 text-sm">
@@ -1198,92 +1486,101 @@ export function PaperLibraryCommandCenter({
 
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Correction</p>
+                        <p className="mt-1 text-xs text-muted">Edit only what looks wrong before saving corrected metadata.</p>
                         <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <input
-                            value={draft.title}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              setDraftsByItemId((current) => ({
-                                ...current,
-                                [item.id]: { ...draft, title: value },
-                              }));
-                            }}
-                            className="rounded-lg border border-border px-3 py-2 text-sm"
-                            placeholder="Corrected title"
-                          />
-                          <input
-                            value={draft.year}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              setDraftsByItemId((current) => ({
-                                ...current,
-                                [item.id]: { ...draft, year: value },
-                              }));
-                            }}
-                            className="rounded-lg border border-border px-3 py-2 text-sm"
-                            placeholder="Year"
-                          />
-                          <input
-                            value={draft.authors}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              setDraftsByItemId((current) => ({
-                                ...current,
-                                [item.id]: { ...draft, authors: value },
-                              }));
-                            }}
-                            className="rounded-lg border border-border px-3 py-2 text-sm sm:col-span-2"
-                            placeholder="Authors"
-                          />
-                          <input
-                            value={draft.venue}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              setDraftsByItemId((current) => ({
-                                ...current,
-                                [item.id]: { ...draft, venue: value },
-                              }));
-                            }}
-                            className="rounded-lg border border-border px-3 py-2 text-sm sm:col-span-2"
-                            placeholder="Venue"
-                          />
+                          <label className="min-w-0 text-[11px] font-semibold text-muted">
+                            Title
+                            <input
+                              value={draft.title}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setDraftsByItemId((current) => ({
+                                  ...current,
+                                  [item.id]: { ...draft, title: value },
+                                }));
+                              }}
+                              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground"
+                              placeholder="Corrected title"
+                            />
+                          </label>
+                          <label className="min-w-0 text-[11px] font-semibold text-muted">
+                            Year
+                            <input
+                              value={draft.year}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setDraftsByItemId((current) => ({
+                                  ...current,
+                                  [item.id]: { ...draft, year: value },
+                                }));
+                              }}
+                              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground"
+                              placeholder="Year"
+                            />
+                          </label>
+                          <label className="min-w-0 text-[11px] font-semibold text-muted sm:col-span-2">
+                            Authors
+                            <input
+                              value={draft.authors}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setDraftsByItemId((current) => ({
+                                  ...current,
+                                  [item.id]: { ...draft, authors: value },
+                                }));
+                              }}
+                              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground"
+                              placeholder="Authors"
+                            />
+                          </label>
+                          <label className="min-w-0 text-[11px] font-semibold text-muted sm:col-span-2">
+                            Venue
+                            <input
+                              value={draft.venue}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setDraftsByItemId((current) => ({
+                                  ...current,
+                                  [item.id]: { ...draft, venue: value },
+                                }));
+                              }}
+                              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground"
+                              placeholder="Venue"
+                            />
+                          </label>
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleReviewAction(item, "accept")}
-                        disabled={reviewActionItemId === item.id}
-                        className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
-                      >
-                        Accept selected
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleReviewAction(item, "correct")}
-                        disabled={reviewActionItemId === item.id}
-                        className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-                      >
-                        Save correction
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleReviewAction(item, "ignore")}
-                        disabled={reviewActionItemId === item.id}
-                        className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-                      >
-                        Ignore
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleReviewAction(item, "unresolve")}
-                        disabled={reviewActionItemId === item.id}
-                        className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-                      >
-                        Leave unresolved
-                      </button>
+                    <div className="mt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Decision</p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        <ReviewActionButton
+                          body="Use the selected identity in the rename plan."
+                          disabled={reviewActionItemId === item.id}
+                          label="Accept identity"
+                          onClick={() => void handleReviewAction(item, "accept")}
+                          primary
+                        />
+                        <ReviewActionButton
+                          body="Use the edited title, year, authors, or venue."
+                          disabled={reviewActionItemId === item.id}
+                          label="Save edits"
+                          onClick={() => void handleReviewAction(item, "correct")}
+                        />
+                        <ReviewActionButton
+                          body="Skip this PDF; it will not be renamed or graphed."
+                          disabled={reviewActionItemId === item.id}
+                          label="Ignore file"
+                          onClick={() => void handleReviewAction(item, "ignore")}
+                        />
+                        <ReviewActionButton
+                          body="Keep it blocking apply until you decide later."
+                          disabled={reviewActionItemId === item.id}
+                          label="Keep in review"
+                          onClick={() => void handleReviewAction(item, "unresolve")}
+                        />
+                      </div>
                     </div>
                   </article>
                 );
@@ -1321,27 +1618,47 @@ export function PaperLibraryCommandCenter({
         <div className="px-4 py-4">
           <div className="border-b border-border pb-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Apply</p>
-            <h3 className="mt-1 text-lg font-semibold text-foreground">Preview and approve filesystem changes</h3>
+            <h3 className="mt-1 text-lg font-semibold text-foreground">Choose how to rename all your PDFs</h3>
             <p className="mt-1 max-w-2xl text-sm text-muted">
-              Generate a dry-run rename and folder plan, review conflicts, then approve the immutable plan before anything touches disk.
+              Pick a title format, preview every proposed move, then approve the exact reversible plan before anything touches disk.
             </p>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-              <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-semibold text-muted">
-                Template
-                <input
-                  value={session.templateFormat}
-                  onChange={(event) => patchSession({ templateFormat: event.target.value })}
-                  className="rounded-lg border border-border px-3 py-2 text-sm text-foreground"
-                  placeholder="{year} - {title}.pdf"
-                />
-              </label>
+            <div className="mt-4 grid gap-2 lg:grid-cols-4">
+              {RENAME_TEMPLATE_OPTIONS.map((option) => {
+                const active = session.templateFormat === option.format;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => patchSession({ templateFormat: option.format })}
+                    className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                      active
+                        ? "border-accent bg-accent-faint text-foreground"
+                        : "border-border bg-white text-foreground hover:border-accent"
+                    }`}
+                  >
+                    <span className="block text-xs font-semibold">{option.label}</span>
+                    <span className="mt-1 block truncate font-mono text-[11px] text-muted">{option.example}</span>
+                    <span className="mt-2 block text-[11px] leading-snug text-muted">{option.detail}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {!templateOptionForFormat(session.templateFormat) && (
+              <div className="mt-3 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
+                This scan restored a custom format: {session.templateFormat}
+              </div>
+            )}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-border bg-surface px-3 py-1 font-mono text-[11px] text-muted">
+                {session.templateFormat}
+              </span>
               <button
                 type="button"
                 onClick={() => void handleCreateApplyPlan()}
                 disabled={scan.status !== "ready_for_apply" && scan.status !== "ready_for_review"}
                 className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
               >
-                {session.applyPlanId ? "Regenerate preview" : "Preview apply plan"}
+                {session.applyPlanId ? "Regenerate rename preview" : "Preview renames"}
               </button>
             </div>
           </div>
@@ -1543,10 +1860,20 @@ export function PaperLibraryCommandCenter({
               <section className="space-y-4">
                 <div className="rounded-xl border border-border bg-white p-4">
                   <div className="flex flex-wrap items-center gap-3">
-                    <StatusBadge tone="neutral" value={`${graphPage?.nodes.length ?? 0}_nodes`} />
-                    <StatusBadge tone="neutral" value={`${graphPage?.edges.length ?? 0}_edges`} />
-                    <span className="text-sm text-muted">{graphPage?.sourceRuns.length ?? 0} source runs</span>
+                    <StatusBadge tone="neutral" value={`${graphPage?.nodes.length ?? 0}_visible_nodes`} />
+                    <StatusBadge tone={totalGraphEdgeCount > 0 ? "success" : "warning"} value={`${totalGraphEdgeCount}_citation_edges`} />
+                    <span className="text-sm text-muted">
+                      {graphSourceRunCount} source checks
+                      {graphSuccessfulRuns > 0 ? ` • ${graphSuccessfulRuns} with relations` : ""}
+                    </span>
                   </div>
+                  {graphPage && totalGraphEdgeCount === 0 && (
+                    <div className="mt-3 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
+                      No citation edges yet. {graphNoIdentifierRuns > 0
+                        ? `${graphNoIdentifierRuns} papers need DOI, arXiv, PMID, or OpenAlex identifiers before external citation lookup can connect them.`
+                        : "Refresh graph after identifier enrichment, or review missing metadata so external citation lookup has stable IDs."}
+                    </div>
+                  )}
                   {graphPage?.warnings.length ? (
                     <div className="mt-3 space-y-2">
                       {graphPage.warnings.map((warning) => (
@@ -1560,7 +1887,28 @@ export function PaperLibraryCommandCenter({
 
                 <div className="rounded-xl border border-border bg-white">
                   <div className="border-b border-border px-4 py-3">
-                    <p className="text-sm font-semibold text-foreground">Graph nodes</p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Citation map</p>
+                        <p className="mt-1 text-xs text-muted">
+                          Showing connected neighbors with each loaded node so citation edges are visible in context.
+                        </p>
+                      </div>
+                      {graphPage && (
+                        <span className="text-xs text-muted">
+                          {graphPage.nodes.length} of {graphPage.filteredCount} papers loaded
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <CitationGraphMap graphPage={graphPage} />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-white">
+                  <div className="border-b border-border px-4 py-3">
+                    <p className="text-sm font-semibold text-foreground">Papers in this graph window</p>
                   </div>
                   <div className="divide-y divide-border">
                     {graphPage?.nodes.map((node) => (
@@ -1987,30 +2335,19 @@ export function PaperLibraryCommandCenter({
       <div className="px-4 py-4">
         <div className="border-b border-border pb-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Scan</p>
-          <h3 className="mt-1 text-lg font-semibold text-foreground">Scan a local paper library without mutating disk</h3>
+          <h3 className="mt-1 text-lg font-semibold text-foreground">Import a local PDF folder without mutating disk</h3>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            Point ScienceSwarm at a local PDF directory, keep the run dry, and watch progress persist until the archive is ready for review or apply planning.
+            Choose a folder of PDFs. ScienceSwarm will run a dry scan, build a review queue, and wait for approval before any file move.
           </p>
-          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-            <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted">
-              Library root
-              <input
-                value={session.rootPath}
-                onChange={(event) => {
-                  skipLatestRestoreRef.current = true;
-                  patchSession({ rootPath: event.target.value });
-                }}
-                placeholder="/Users/you/Research Papers"
-                className="rounded-lg border border-border px-3 py-2 text-sm text-foreground"
-              />
-            </label>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => void handleStartScan()}
-              disabled={!session.rootPath.trim() || scanLoading}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+              onClick={() => void handleImportPdfFolder()}
+              disabled={folderPickerLoading}
+              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
             >
-              Start dry-run scan
+              {folderPickerLoading ? <SpinnerGap className="animate-spin" size={16} /> : <FolderOpen size={16} />}
+              Import PDF Folder
             </button>
             <button
               type="button"
@@ -2020,6 +2357,11 @@ export function PaperLibraryCommandCenter({
             >
               Cancel scan
             </button>
+            {session.rootPath && (
+              <span className="min-w-0 rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[11px] text-muted">
+                {session.rootPath}
+              </span>
+            )}
           </div>
         </div>
 
@@ -2125,7 +2467,7 @@ export function PaperLibraryCommandCenter({
         ) : (
           <EmptyState
             title="No paper-library scan yet"
-            body="Enter a local root path, start a dry-run scan, and ScienceSwarm will build a review queue, apply preview, graph, and undo-ready history from there."
+            body="Use Import PDF Folder to choose a local archive. The first pass is dry-run only and creates review, rename, graph, and history previews."
           />
         )}
       </div>
@@ -2157,16 +2499,20 @@ export function PaperLibraryCommandCenter({
     graphError,
     graphLoading,
     graphLoadingMore,
+    graphNoIdentifierRuns,
     graphPage,
+    graphSourceRunCount,
+    graphSuccessfulRuns,
     handleApplyPlan,
     handleApprovePlan,
     handleCancelScan,
     handleCreateApplyPlan,
     handleGapAction,
+    handleImportPdfFolder,
     handleRepairManifest,
     handleReviewAction,
-    handleStartScan,
     handleUndo,
+    folderPickerLoading,
     loadApplyPlan,
     loadClusters,
     loadGaps,
@@ -2190,6 +2536,7 @@ export function PaperLibraryCommandCenter({
     scanLoading,
     selectedCandidatesByItemId,
     session,
+    totalGraphEdgeCount,
     undoing,
   ]);
 
