@@ -998,6 +998,14 @@ const SLASH_COMMAND_START_TIMEOUT_MS = 15_000;
 const SLASH_COMMAND_TIMEOUT_MESSAGE =
   "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.";
 const SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE = `Chat failed: ${SLASH_COMMAND_TIMEOUT_MESSAGE}`;
+
+class SlashCommandTimeoutError extends Error {
+  constructor() {
+    super(SLASH_COMMAND_TIMEOUT_MESSAGE);
+    this.name = "SlashCommandTimeoutError";
+  }
+}
+
 const QUEUED_ASSISTANT_CONTENT = "Queued...";
 const INTERNAL_SYSTEM_NOISE_PREFIXES = [
   "[User opened file:",
@@ -1936,7 +1944,7 @@ async function fetchWithTimeout(
       if (settled) return;
       settled = true;
       controller.abort();
-      reject(new Error(SLASH_COMMAND_TIMEOUT_MESSAGE));
+      reject(new SlashCommandTimeoutError());
     }, timeoutMs);
 
     fetch(input, { ...init, signal: controller.signal })
@@ -4272,8 +4280,7 @@ export function useUnifiedChat(
             // A newer project/backend context superseded this request.
           } else if (isSendContextCurrent(queued.context)) {
             if (
-              err instanceof Error
-              && err.message === SLASH_COMMAND_TIMEOUT_MESSAGE
+              err instanceof SlashCommandTimeoutError
               && looksLikeSlashCommandInput(queued.content)
             ) {
               applyMessagesUpdate((prev) =>
