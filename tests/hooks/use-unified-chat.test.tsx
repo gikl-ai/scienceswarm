@@ -3909,7 +3909,7 @@ describe("useUnifiedChat persistence", () => {
       );
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:thinking:Scanning the import manifest... | thinking:Counting PDF entries by committed file ref.",
+      "thinking:Scanning the import manifest... | thinking:Counting PDF entries by committed file ref.",
     );
     expect(screen.getByTestId("message-log").textContent).toContain(
       "assistant:I found 12 imported PDFs.",
@@ -4063,7 +4063,7 @@ describe("useUnifiedChat persistence", () => {
       "Tool read_file result: Loaded 42 rows.",
     );
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:thinking:Planning how to inspect the chart files. | activity:Read docs/results_table.csv",
+      "thinking:Planning how to inspect the chart files. | activity:Read docs/results_table.csv",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
       "Read file result: Loaded 42 rows.",
@@ -4142,7 +4142,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Preview opened");
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Read figures/cat-svg-preview/index.html",
+      "activity:Read figures/cat-svg-preview/index.html",
     );
     expect(screen.getByTestId("activity-log").textContent).toContain(
       "Tool read: figures/cat-svg-preview/index.html",
@@ -4221,7 +4221,7 @@ describe("useUnifiedChat persistence", () => {
 
     const progressLog = screen.getByTestId("progress-log").textContent ?? "";
     expect(progressLog).toContain(
-      "assistant:activity:Search **needle** in docs/results_table.csv | activity:Read docs/summary.md",
+      "activity:Search **needle** in docs/results_table.csv | activity:Read docs/summary.md",
     );
     expect(progressLog).not.toContain("Use search:");
     expect(progressLog).not.toContain("/Users/example/.scienceswarm/projects/alpha-project/docs/results_table.csv");
@@ -4305,7 +4305,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Generate image cat-image.png (1024x1024)",
+      "activity:Generate image cat-image.png (1024x1024)",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
       "{\"prompt\":\"A charming cat sitting and looking at the viewer, warm soft lighting.",
@@ -4388,7 +4388,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Write scripts/generate_mouse_chasing_cat_gif.py",
+      "activity:Write scripts/generate_mouse_chasing_cat_gif.py",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
       "\"content\":\"#!/usr/bin/env python3",
@@ -4469,7 +4469,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Run python3 scripts/generate_mouse_chasing_cat_gif.py",
+      "activity:Run python3 scripts/generate_mouse_chasing_cat_gif.py",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
       "/usr/bin/python3",
@@ -4551,7 +4551,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Plan: Inspect the imported markdown table -> Generate the output chart",
+      "activity:Plan: Inspect the imported markdown table -> Generate the output chart",
     );
   });
 
@@ -4622,7 +4622,7 @@ describe("useUnifiedChat persistence", () => {
       "assistant:Inspecting the imported project manifest.",
     );
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:thinking:Inspecting the imported project manifest.",
+      "thinking:Inspecting the imported project manifest.",
     );
   });
 
@@ -5061,13 +5061,13 @@ describe("useUnifiedChat persistence", () => {
     });
 
     const progressLog = screen.getByTestId("progress-log").textContent ?? "";
-    expect(progressLog).toContain("assistant:activity:Read docs/results_table.csv");
+    expect(progressLog).toContain("activity:Read docs/results_table.csv");
     expect(progressLog).not.toContain("Status: running");
     expect(progressLog).not.toContain("Status: idle");
 
     const activityLog = screen.getByTestId("activity-log").textContent ?? "";
     expect(activityLog).toContain(
-      "assistant:Tool read_file: docs/results_table.csv | Tool read_file result: Loaded 42 rows.",
+      "Tool read_file: docs/results_table.csv | Tool read_file result: Loaded 42 rows.",
     );
     expect(activityLog).not.toContain("Turn started");
     expect(activityLog).not.toContain("Turn finished");
@@ -5245,11 +5245,11 @@ describe("useUnifiedChat persistence", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("progress-log").textContent).toContain(
-        "assistant:activity:Chat failed: OpenClaw transport failed | activity:Chat aborted: User interrupted the run",
+        "activity:Chat failed: OpenClaw transport failed | activity:Chat aborted: User interrupted the run",
       );
     });
     expect(screen.getByTestId("activity-log").textContent).toContain(
-      "Chat failed: OpenClaw transport failed | Chat aborted: User interrupted the run",
+      "Waiting for OpenClaw to respond | Chat failed: OpenClaw transport failed | Chat aborted: User interrupted the run",
     );
   });
 
@@ -5423,7 +5423,7 @@ describe("useUnifiedChat persistence", () => {
   // direction to switch to; the tests lose their meaning along with the
   // "Switch Direct" harness button.
 
-  it("times out a slash command that never starts and removes the empty placeholder", async () => {
+  it("keeps the progress placeholder when a slash command times out before starting", async () => {
     vi.useFakeTimers();
 
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -5487,9 +5487,12 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("error").textContent).toBe(
       "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
     );
-    expect(screen.getByTestId("message-count").textContent).toBe("3");
+    expect(screen.getByTestId("message-count").textContent).toBe("4");
     const restoredMessages = (screen.getByTestId("message-log").textContent || "").split("\n");
-    expect(restoredMessages.filter((message) => message.startsWith("assistant:"))).toHaveLength(1);
+    expect(restoredMessages.filter((message) => message.startsWith("assistant:"))).toHaveLength(2);
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "assistant:activity:Sending request to OpenClaw",
+    );
   });
 
   it("blocks send when local provider is selected but the configured model is missing", async () => {

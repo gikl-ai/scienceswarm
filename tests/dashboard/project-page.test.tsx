@@ -3187,7 +3187,7 @@ describe("Project dashboard smoke test", () => {
     expect(screen.queryByTestId("chat-activity-spinner")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
     expect(screen.getByRole("button", { name: "Show chat" })).toBeInTheDocument();
-    expect(screen.getByTestId("project-chat-run-state-row")).toHaveTextContent("Working");
+    expect(screen.getByTestId("project-chat-run-state-row")).toHaveTextContent("Waiting for OpenClaw to respond");
     expect(screen.queryByTestId("chat-activity-spinner")).not.toBeInTheDocument();
 
     stream.send({
