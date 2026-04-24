@@ -2815,6 +2815,105 @@ describe("POST /api/chat/unified", () => {
     ).toBe(false);
   });
 
+  it("marks project materialization as skipped when a turn needs no project prep", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw says hi");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Hi",
+        projectId: "alpha-project",
+        mode: "reasoning",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      phases: Array<{ name: string; skipped?: boolean; detail?: Record<string, unknown> }>;
+    };
+    expect(
+      payload.phases.find((phase) => phase.name === "project_materialization"),
+    ).toMatchObject({
+      skipped: true,
+      detail: {
+        reason: "no_project_context_needed",
+        materialized: false,
+      },
+    });
+    infoSpy.mockRestore();
+  });
+
+  it("keeps project materialization active for openclaw-tools turns", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const projectRoot = createProjectRoot("tools-project");
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("Ran the tests");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "run the tests",
+        projectId: "tools-project",
+        mode: "openclaw-tools",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(sendOpenClawMessage.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        cwd: projectRoot,
+      }),
+    );
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      phases: Array<{ name: string; skipped?: boolean; detail?: Record<string, unknown> }>;
+    };
+    const phase = payload.phases.find(
+      (entry) => entry.name === "project_materialization",
+    );
+    expect(phase).toBeTruthy();
+    expect(phase?.skipped).not.toBe(true);
+    expect(phase?.detail?.materialized).toBe(true);
+    infoSpy.mockRestore();
+  });
+
   it("returns 503 when OpenClaw is not the configured agent", async () => {
     // Previously this returned 503 only after walking three fallback paths
     // (local direct, OpenHands, final streamDirectResponse). The new
