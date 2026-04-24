@@ -4167,12 +4167,12 @@ export function useUnifiedChat(
         if (waitingEntries.length > 0) {
           applyMessagesUpdate((prev) =>
             prev.map((message) =>
-	              message.id === assistantId
-	                ? {
-	                    ...message,
-	                    progressLog: appendProgressLog(message.progressLog, waitingEntries),
-	                  }
-	                : message,
+              message.id === assistantId
+                ? {
+                    ...message,
+                    progressLog: appendProgressLog(message.progressLog, waitingEntries),
+                  }
+                : message,
             ),
           );
         }
@@ -4422,13 +4422,13 @@ export function useUnifiedChat(
         const dispatchEntries = buildOpenClawSendPhaseEntries(queued.context, "dispatch");
         applyMessagesUpdate((prev) =>
           prev.map((message) =>
-	            message.id === queued.assistantId
-	              ? {
-	                  ...message,
-	                  content: "",
-	                  progressLog: appendProgressLog(
-	                    message.progressLog,
-	                    dispatchEntries,
+            message.id === queued.assistantId
+              ? {
+                  ...message,
+                  content: "",
+                  progressLog: appendProgressLog(
+                    message.progressLog,
+                    dispatchEntries,
                   ),
                 }
               : message,
@@ -4482,12 +4482,12 @@ export function useUnifiedChat(
             ) {
               applyMessagesUpdate((prev) =>
                 prev.map((message) =>
-	                  message.id === queued.assistantId
-	                    ? {
-	                        ...message,
-	                        progressLog: appendProgressLog(
-	                          message.progressLog,
-	                          buildActivityProgressEntries([SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE]),
+                  message.id === queued.assistantId
+                    ? {
+                        ...message,
+                        progressLog: appendProgressLog(
+                          message.progressLog,
+                          buildActivityProgressEntries([SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE]),
                         ),
                       }
                     : message,
