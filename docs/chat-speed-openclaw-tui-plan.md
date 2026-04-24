@@ -780,3 +780,4 @@ Append these PRs after the current sequence:
      multimodal gaps that still make ScienceSwarm feel less polished.
    - Validation: updated screenshot set, a short gap table, and explicit next
      candidates tied to code areas.
+   - Reference snapshot: `docs/chat-visual-reference-review-2026-04-24.md`.
