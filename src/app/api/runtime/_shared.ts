@@ -2,6 +2,7 @@ import type {
   ResearchRuntimeHost,
   RuntimeApprovalState,
   RuntimeDataIncluded,
+  RuntimeEvent,
   RuntimeHostId,
   RuntimeHostProfile,
   RuntimeProjectPolicy,
@@ -452,6 +453,7 @@ export function buildRuntimeTurnRequest(input: {
   inputFileRefs?: string[];
   approvalState: RuntimeApprovalState;
   preview: TurnPreview;
+  onEvent?: (event: RuntimeEvent) => void;
 }): RuntimeTurnRequest {
   return {
     hostId: input.preview.hostId,
@@ -464,5 +466,6 @@ export function buildRuntimeTurnRequest(input: {
     dataIncluded: input.preview.dataIncluded,
     approvalState: input.approvalState,
     preview: input.preview,
+    onEvent: input.onEvent,
   };
 }

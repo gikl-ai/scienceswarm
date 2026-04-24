@@ -1,0 +1,264 @@
+import {
+  approvalStateFromBody,
+  assertPreviewAllowed,
+  assertRuntimeApiLocalRequest,
+  buildRuntimeTurnRequest,
+  computeRuntimeApiPreview,
+  dataIncludedFromBody,
+  getRuntimeApiServices,
+  optionalStringArrayField,
+  optionalStringField,
+  parseJsonObject,
+  projectPolicyFromBody,
+  requireSafeProjectId,
+  requireStringField,
+  runtimeAdapterForApi,
+  runtimeErrorResponse,
+  runtimeHostHistoryForSession,
+  runtimeInvalidRequest,
+  turnModeFromBody,
+} from "../../_shared";
+import { RuntimeHostError } from "@/lib/runtime-hosts/errors";
+import type { RuntimeEvent } from "@/lib/runtime-hosts/contracts";
+
+function enrichedSession(session: ReturnType<
+  ReturnType<typeof getRuntimeApiServices>["sessionStore"]["getSession"]
+>) {
+  if (!session) return null;
+  return {
+    ...session,
+    host: runtimeHostHistoryForSession(session.hostId),
+  };
+}
+
+function runtimeEventInput(event: RuntimeEvent, sessionId: string): RuntimeEvent {
+  return {
+    ...event,
+    sessionId,
+  };
+}
+
+function sseFrame(data: unknown): string {
+  return `data: ${JSON.stringify(data)}\n\n`;
+}
+
+export async function POST(request: Request): Promise<Response> {
+  let sessionId: string | null = null;
+  try {
+    await assertRuntimeApiLocalRequest(request);
+    const body = await parseJsonObject(request);
+    const services = getRuntimeApiServices();
+    const mode = turnModeFromBody(body, "chat");
+    if (mode === "compare" || mode === "mcp-tool" || mode === "artifact-import") {
+      throw runtimeInvalidRequest(
+        "Use the dedicated runtime endpoint for this mode.",
+        { mode },
+      );
+    }
+
+    const hostId = requireStringField(body, "hostId");
+    const prompt = requireStringField(body, "prompt");
+    const projectId = requireSafeProjectId(body.projectId);
+    const conversationId = optionalStringField(body, "conversationId") ?? null;
+    const approvalState = approvalStateFromBody(body);
+    const inputFileRefs = optionalStringArrayField(body, "inputFileRefs") ?? [];
+    const preview = computeRuntimeApiPreview({
+      services,
+      hostId,
+      projectPolicy: projectPolicyFromBody(body),
+      mode,
+      dataIncluded: dataIncludedFromBody(body),
+    });
+    assertPreviewAllowed(preview, approvalState);
+
+    const session = services.sessionStore.createSession({
+      hostId,
+      projectId,
+      conversationId,
+      mode,
+      status: "running",
+      preview,
+    });
+    sessionId = session.id;
+
+    const stream = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = stream.writable.getWriter();
+    const encoder = new TextEncoder();
+    let writeChain = Promise.resolve();
+    const enqueue = (payload: unknown) => {
+      writeChain = writeChain
+        .then(() => writer.write(encoder.encode(sseFrame(payload))))
+        .catch(() => undefined);
+    };
+    const enqueueDone = () => {
+      writeChain = writeChain
+        .then(() => writer.write(encoder.encode("data: [DONE]\n\n")))
+        .catch(() => undefined);
+    };
+    const appendEvent = (event: RuntimeEvent) => {
+      const result = services.eventStore.appendEvent(runtimeEventInput(event, session.id));
+      if (result.appended) enqueue({ event: result.event });
+      return result.event;
+    };
+    const appendInputEvent = (
+      input: Parameters<typeof services.eventStore.appendEvent>[0],
+    ) => {
+      const result = services.eventStore.appendEvent(input);
+      if (result.appended) enqueue({ event: result.event });
+      return result.event;
+    };
+
+    appendInputEvent({
+      id: `${session.id}:runtime-started`,
+      sessionId: session.id,
+      hostId,
+      type: "status",
+      payload: {
+        status: "running",
+        mode,
+        conversationId,
+      },
+    });
+
+    void (async () => {
+      try {
+        const adapter = runtimeAdapterForApi(hostId, services);
+        if (!adapter) {
+          throw runtimeInvalidRequest("No runtime adapter is registered for host.", {
+            hostId,
+          });
+        }
+
+        const turnRequest = buildRuntimeTurnRequest({
+          hostId,
+          projectId,
+          conversationId,
+          mode,
+          prompt,
+          promptHash: optionalStringField(body, "promptHash"),
+          inputFileRefs,
+          approvalState,
+          preview,
+          onEvent: appendEvent,
+        });
+        const result = mode === "task"
+          ? await adapter.executeTask(turnRequest)
+          : await adapter.sendTurn(turnRequest);
+
+        if ("message" in result) {
+          for (const event of result.events ?? []) {
+            appendEvent(event);
+          }
+          appendInputEvent({
+            id: `${session.id}:runtime-message`,
+            sessionId: session.id,
+            hostId,
+            type: "message",
+            payload: {
+              text: result.message,
+              nativeSessionId: result.sessionId,
+            },
+          });
+          for (const [index, artifact] of (result.artifacts ?? []).entries()) {
+            appendInputEvent({
+              id: `${session.id}:artifact:${index}:${artifact.sourcePath}`,
+              sessionId: session.id,
+              hostId,
+              type: "artifact",
+              payload: artifact as unknown as Record<string, unknown>,
+            });
+          }
+          services.sessionStore.updateSession(session.id, {
+            status: "completed",
+            conversationId: result.sessionId,
+          });
+          appendInputEvent({
+            id: `${session.id}:runtime-completed`,
+            sessionId: session.id,
+            hostId,
+            type: "done",
+            payload: {
+              status: "completed",
+            },
+          });
+        } else {
+          services.sessionStore.updateSession(session.id, {
+            status: result.status,
+            conversationId: result.conversationId,
+          });
+          appendInputEvent({
+            id: `${session.id}:runtime-${result.status}`,
+            sessionId: session.id,
+            hostId,
+            type: result.status === "completed"
+              ? "done"
+              : result.status === "failed"
+                ? "error"
+                : "status",
+            payload: {
+              status: result.status,
+              nativeSessionId: result.id,
+            },
+          });
+        }
+
+        enqueue({
+          session: enrichedSession(services.sessionStore.getSession(session.id)),
+        });
+      } catch (error) {
+        services.sessionStore.trySetSessionStatus({
+          sessionId: session.id,
+          status: "failed",
+          errorCode: error instanceof RuntimeHostError
+            ? error.code
+            : "RUNTIME_TRANSPORT_ERROR",
+        });
+        appendInputEvent({
+          id: `${session.id}:runtime-failed`,
+          sessionId: session.id,
+          hostId: services.sessionStore.getSession(session.id)?.hostId ?? "unknown",
+          type: "error",
+          payload: {
+            code: error instanceof RuntimeHostError
+              ? error.code
+              : "RUNTIME_TRANSPORT_ERROR",
+            error: error instanceof Error
+              ? error.message
+              : "Runtime session failed.",
+          },
+        });
+        enqueue({
+          error: error instanceof RuntimeHostError
+            ? error.userMessage
+            : error instanceof Error
+              ? error.message
+              : "Runtime session failed.",
+        });
+      } finally {
+        enqueueDone();
+        await writeChain;
+        await writer.close().catch(() => undefined);
+      }
+    })();
+
+    return new Response(stream.readable, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  } catch (error) {
+    if (sessionId) {
+      const services = getRuntimeApiServices();
+      services.sessionStore.trySetSessionStatus({
+        sessionId,
+        status: "failed",
+        errorCode: error instanceof RuntimeHostError
+          ? error.code
+          : "RUNTIME_TRANSPORT_ERROR",
+      });
+    }
+    return runtimeErrorResponse(error);
+  }
+}

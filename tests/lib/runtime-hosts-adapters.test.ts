@@ -112,7 +112,14 @@ describe("runtime host adapters", () => {
       if (request.args?.includes("whoami")) {
         return fakeResult(request, "user@example.test");
       }
-      return fakeResult(request, "\u001b[32m{\"message\":\"Claude answer\"}\u001b[0m");
+      return fakeResult(
+        request,
+        [
+          "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"claude-native-session\"}",
+          "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Claude draft\"}]}}",
+          "{\"type\":\"result\",\"result\":\"Claude answer\",\"session_id\":\"claude-native-session\"}",
+        ].join("\n"),
+      );
     });
     const adapter = createClaudeCodeRuntimeHostAdapter({
       transport,
@@ -130,13 +137,42 @@ describe("runtime host adapters", () => {
       adapter.sendTurn(requestFor(requireRuntimeHostProfile("claude-code"), "chat")),
     ).resolves.toMatchObject({
       hostId: "claude-code",
-      sessionId: "conversation-alpha",
+      sessionId: "claude-native-session",
       message: "Claude answer",
     });
     expect(transport.requests.at(-1)).toMatchObject({
       command: "claude",
-      args: expect.arrayContaining(["-p", "Summarize project-alpha."]),
+      args: expect.arrayContaining([
+        "-p",
+        "Summarize project-alpha.",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--include-partial-messages",
+        "--resume",
+        "conversation-alpha",
+      ]),
     });
+  });
+
+  it("starts fresh Claude Code sessions without resume args when no native session exists", async () => {
+    const transport = new FakeCliTransport((request) =>
+      fakeResult(request, "{\"type\":\"result\",\"result\":\"Fresh answer\",\"session_id\":\"fresh-claude-session\"}")
+    );
+    const adapter = createClaudeCodeRuntimeHostAdapter({
+      transport,
+      sessionIdGenerator: () => "wrapper-session",
+    });
+    const request = {
+      ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+      conversationId: null,
+    };
+
+    await expect(adapter.sendTurn(request)).resolves.toMatchObject({
+      sessionId: "fresh-claude-session",
+      message: "Fresh answer",
+    });
+    expect(transport.requests.at(-1)?.args).not.toContain("--resume");
   });
 
   it("emits unique message event ids for repeated wrapper turns in one session", async () => {

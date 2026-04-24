@@ -60,8 +60,9 @@ export function ProjectRuntimeSection({
       <div>
         <h2 className="text-lg font-semibold">Project runtime</h2>
         <p className="mt-1 max-w-3xl text-sm text-muted">
-          Runtime host, policy, mode, and session history now live here instead of on the
-          workspace chat page.
+          Use the project chat composer switcher for everyday Claude Code and OpenClaw
+          sends. Settings keeps runtime diagnostics, advanced modes, compare targets,
+          and session history in one place.
         </p>
       </div>
 

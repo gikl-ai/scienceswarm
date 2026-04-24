@@ -69,6 +69,21 @@ describe("runtime host CLI transport", () => {
     expect(result.output.text).toBe("hello");
   });
 
+  it("emits stdout lines before returning the buffered subprocess result", async () => {
+    const transport = new LocalCliTransport();
+    const lines: string[] = [];
+
+    const result = await transport.run({
+      command: process.execPath,
+      args: ["-e", "process.stdout.write('one\\n'); process.stdout.write('two')"],
+      timeoutMs: 2_000,
+      onStdoutLine: (line) => lines.push(line),
+    });
+
+    expect(lines).toEqual(["one", "two"]);
+    expect(result.output.text).toBe("one\ntwo");
+  });
+
   it("maps a missing command to a typed missing-CLI error and unavailable health", async () => {
     const command = "scienceswarm-definitely-missing-cli-20260422";
     const transport = new LocalCliTransport();
