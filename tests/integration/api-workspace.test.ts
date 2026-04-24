@@ -8,6 +8,7 @@ import fs, {
   rmSync,
   statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
   writeSync,
 } from "node:fs";
@@ -788,7 +789,10 @@ describe("GET /api/workspace?action=tree", () => {
     const projectId = "test-project";
     const projectDir = path.join(ROOT, "projects", projectId);
     mkdirSync(path.join(projectDir, "data"), { recursive: true });
-    writeFileSync(path.join(projectDir, "data", "observations.csv"), "condition,accuracy\nbaseline,0.77\n");
+    const diskPath = path.join(projectDir, "data", "observations.csv");
+    writeFileSync(diskPath, "condition,accuracy\nbaseline,0.77\n");
+    const olderDiskMtime = new Date("2026-04-24T09:00:00.000Z");
+    utimesSync(diskPath, olderDiskMtime, olderDiskMtime);
     const sha = "1".repeat(64);
     const uploadedAt = "2026-04-24T10:00:00.000Z";
     const listPages = vi.fn(async (filters?: { type?: string; limit?: number }) => {

@@ -1657,6 +1657,8 @@ function ProjectPageContent() {
     recordGeneratedArtifacts,
     setError,
     clearError,
+    canCancelActiveTurn,
+    cancelActiveTurn,
     conversationId,
     artifactProvenance,
     runtimeCompareResult,
@@ -2991,6 +2993,7 @@ function ProjectPageContent() {
         source: "gbrain",
         brainSlug: selectedFileNode.slug,
         displayPath: `gbrain:${selectedFileNode.slug}`,
+        content: activePreviewFile?.content,
       });
       return;
     }
@@ -2999,8 +3002,9 @@ function ProjectPageContent() {
       name: selectedFile.split("/").pop() || selectedFile,
       source: "workspace",
       displayPath: selectedFile,
+      content: activePreviewFile?.content,
     });
-  }, [addWorkspaceFileToChatContext, selectedFile, selectedFileNode]);
+  }, [activePreviewFile, addWorkspaceFileToChatContext, selectedFile, selectedFileNode]);
 
   const handleRetrySelectedFilePreview = useCallback(() => {
     if (!selectedFile) return;
@@ -4990,11 +4994,19 @@ function ProjectPageContent() {
                           </div>
                         </div>
                         <button
-                          onClick={handleSend}
-                          disabled={isChatBusy || !input.trim()}
+                          onClick={isStreaming && canCancelActiveTurn
+                            ? () => {
+                                void cancelActiveTurn();
+                              }
+                            : handleSend}
+                          disabled={
+                            isStreaming
+                              ? !canCancelActiveTurn
+                              : isChatBusy || !input.trim()
+                          }
                           className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-accent-hover disabled:opacity-40"
                         >
-                          Send
+                          {isStreaming ? "Stop" : "Send"}
                         </button>
                       </div>
                     </div>

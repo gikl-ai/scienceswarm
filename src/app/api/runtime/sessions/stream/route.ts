@@ -127,10 +127,23 @@ export async function POST(request: Request): Promise<Response> {
       },
     });
 
+    const activeAdapter = runtimeAdapterForApi(hostId, services);
+    let abortHandled = false;
+    const cancelActiveRuntime = () => {
+      if (abortHandled) return;
+      abortHandled = true;
+      try {
+        services.sessionStore.updateSession(session.id, { status: "cancelled" });
+      } catch {
+        // A terminal completion/failure won the race; keep that final state.
+      }
+      void activeAdapter?.cancel(session.id).catch(() => undefined);
+    };
+    request.signal.addEventListener("abort", cancelActiveRuntime, { once: true });
+
     void (async () => {
       try {
-        const adapter = runtimeAdapterForApi(hostId, services);
-        if (!adapter) {
+        if (!activeAdapter) {
           throw runtimeInvalidRequest("No runtime adapter is registered for host.", {
             hostId,
           });
@@ -150,8 +163,8 @@ export async function POST(request: Request): Promise<Response> {
           onEvent: appendEvent,
         });
         const result = mode === "task"
-          ? await adapter.executeTask(turnRequest)
-          : await adapter.sendTurn(turnRequest);
+          ? await activeAdapter.executeTask(turnRequest)
+          : await activeAdapter.sendTurn(turnRequest);
 
         if ("message" in result) {
           for (const event of result.events ?? []) {
@@ -216,7 +229,10 @@ export async function POST(request: Request): Promise<Response> {
           session: enrichedSession(services.sessionStore.getSession(session.id)),
         });
       } catch (error) {
-        if (services.sessionStore.getSession(session.id)?.status === "cancelled") {
+        if (
+          abortHandled
+          || services.sessionStore.getSession(session.id)?.status === "cancelled"
+        ) {
           enqueue({
             session: enrichedSession(services.sessionStore.getSession(session.id)),
           });
@@ -251,6 +267,7 @@ export async function POST(request: Request): Promise<Response> {
               : "Runtime session failed.",
         });
       } finally {
+        request.signal.removeEventListener("abort", cancelActiveRuntime);
         enqueueDone();
         await writeChain;
         await writer.close().catch(() => undefined);
