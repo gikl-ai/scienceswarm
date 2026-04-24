@@ -4,6 +4,7 @@ import { createApiKeyRuntimeHostAdapter, createApiKeyRuntimeHostProfile } from "
 import { createClaudeCodeRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/claude-code";
 import { createCodexRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/codex";
 import { createGeminiCliRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/gemini-cli";
+import { createOpenClawRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/openclaw";
 import {
   RuntimeHostCapabilityUnsupported,
   RuntimePreviewApprovalRequired,
@@ -522,6 +523,154 @@ describe("runtime host adapters", () => {
     await expect(adapter.listSessions("project-alpha")).rejects.toThrow(
       RuntimeHostCapabilityUnsupported,
     );
+  });
+
+  it("routes OpenClaw runtime cancellation to the active gateway chat session", async () => {
+    const abortedSessions: string[] = [];
+    let releaseTurn!: () => void;
+    let markTurnStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markTurnStarted = resolve;
+    });
+    const adapter = createOpenClawRuntimeHostAdapter({
+      sendAgentMessage: async () => {
+        markTurnStarted();
+        await new Promise<void>((release) => {
+          releaseTurn = release;
+        });
+        return "OpenClaw response";
+      },
+      abortChat: async (sessionKey) => {
+        abortedSessions.push(sessionKey);
+        releaseTurn();
+        return { aborted: true, runIds: ["run-alpha"] };
+      },
+    });
+    const request = {
+      ...requestFor(requireRuntimeHostProfile("openclaw"), "chat"),
+      runtimeSessionId: "rt-session-openclaw",
+      conversationId: "openclaw-native-session",
+    };
+
+    const turn = adapter.sendTurn(request);
+
+    await started;
+    await expect(adapter.cancel("rt-session-openclaw")).resolves.toMatchObject({
+      cancelled: true,
+    });
+    await expect(turn).resolves.toMatchObject({
+      sessionId: "openclaw-native-session",
+      message: "OpenClaw response",
+    });
+
+    expect(abortedSessions).toEqual(["openclaw-native-session"]);
+  });
+
+  it("resolves OpenClaw cancellation failures without throwing", async () => {
+    let releaseTurn!: () => void;
+    let markTurnStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markTurnStarted = resolve;
+    });
+    const adapter = createOpenClawRuntimeHostAdapter({
+      sendAgentMessage: async () => {
+        await new Promise<void>((release) => {
+          releaseTurn = release;
+          markTurnStarted();
+        });
+        return "OpenClaw response";
+      },
+      abortChat: async () => {
+        throw new Error("gateway down");
+      },
+    });
+    const request = {
+      ...requestFor(requireRuntimeHostProfile("openclaw"), "chat"),
+      runtimeSessionId: "rt-session-openclaw",
+      conversationId: "openclaw-native-session",
+    };
+
+    const turn = adapter.sendTurn(request);
+
+    await started;
+    await expect(adapter.cancel("rt-session-openclaw")).resolves.toMatchObject({
+      sessionId: "rt-session-openclaw",
+      cancelled: false,
+      detail: expect.stringContaining("gateway down"),
+    });
+
+    releaseTurn();
+    await expect(turn).resolves.toMatchObject({
+      sessionId: "openclaw-native-session",
+      message: "OpenClaw response",
+    });
+  });
+
+  it("keeps newer OpenClaw runtime mappings when an older turn completes", async () => {
+    const abortedSessions: string[] = [];
+    let sendCount = 0;
+    let releaseFirstTurn!: () => void;
+    let releaseSecondTurn!: () => void;
+    let markFirstStarted!: () => void;
+    let markSecondStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const secondStarted = new Promise<void>((resolve) => {
+      markSecondStarted = resolve;
+    });
+    const adapter = createOpenClawRuntimeHostAdapter({
+      sendAgentMessage: async () => {
+        sendCount += 1;
+        if (sendCount === 1) {
+          await new Promise<void>((release) => {
+            releaseFirstTurn = release;
+            markFirstStarted();
+          });
+          return "First OpenClaw response";
+        }
+        await new Promise<void>((release) => {
+          releaseSecondTurn = release;
+          markSecondStarted();
+        });
+        return "Second OpenClaw response";
+      },
+      abortChat: async (sessionKey) => {
+        abortedSessions.push(sessionKey);
+        releaseSecondTurn();
+        return { aborted: true };
+      },
+    });
+    const baseRequest = {
+      ...requestFor(requireRuntimeHostProfile("openclaw"), "chat"),
+      runtimeSessionId: "rt-session-openclaw",
+    };
+
+    const firstTurn = adapter.sendTurn({
+      ...baseRequest,
+      conversationId: "openclaw-first-session",
+    });
+    await firstStarted;
+    const secondTurn = adapter.sendTurn({
+      ...baseRequest,
+      conversationId: "openclaw-second-session",
+    });
+    await secondStarted;
+
+    releaseFirstTurn();
+    await expect(firstTurn).resolves.toMatchObject({
+      sessionId: "openclaw-first-session",
+      message: "First OpenClaw response",
+    });
+    await expect(adapter.cancel("rt-session-openclaw")).resolves.toMatchObject({
+      cancelled: true,
+    });
+    await expect(secondTurn).resolves.toMatchObject({
+      sessionId: "openclaw-second-session",
+      message: "Second OpenClaw response",
+    });
+
+    expect(abortedSessions).toEqual(["openclaw-second-session"]);
   });
 
   it("keeps API-key auth status masked and exposes .env cost disclosure through preview metadata", async () => {

@@ -66,7 +66,11 @@ const { mockPaths, mockWebSockets } = vi.hoisted(() => {
             type: "res",
             id: frame.id,
             ok: true,
-            payload: frame.method === "connect" ? { auth: { deviceToken: "device-token" } } : {},
+            payload: frame.method === "connect"
+              ? { auth: { deviceToken: "device-token" } }
+              : frame.method === "chat.abort"
+                ? { ok: true, aborted: true, runIds: ["run-alpha"] }
+                : {},
           }),
         );
       });
@@ -216,6 +220,32 @@ describe("gateway-ws-client", () => {
       runId: "run-alpha",
       text: "visible reply",
       events: [expect.objectContaining({ method: "chat" })],
+    });
+  });
+
+  it("aborts active web chat turns through chat.abort", async () => {
+    const { abortChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const result = abortChatViaGateway("session-alpha", { timeoutMs: 5000 });
+
+    await waitUntil(() => {
+      const socket = mockWebSockets.instances.at(-1);
+      return Boolean(socket?.sentFrames.some((frame) => frame.method === "chat.abort"));
+    });
+
+    const socket = mockWebSockets.instances.at(-1);
+    const abortFrame = socket?.sentFrames.find((frame) => frame.method === "chat.abort");
+    expect(abortFrame).toMatchObject({
+      method: "chat.abort",
+      params: {
+        sessionKey: "session-alpha",
+      },
+    });
+
+    await expect(result).resolves.toMatchObject({
+      ok: true,
+      aborted: true,
+      runIds: ["run-alpha"],
     });
   });
 
