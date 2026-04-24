@@ -4167,16 +4167,12 @@ export function useUnifiedChat(
         if (waitingEntries.length > 0) {
           applyMessagesUpdate((prev) =>
             prev.map((message) =>
-              message.id === assistantId
-                ? {
-                    ...message,
-                    activityLog: appendActivityLog(
-                      message.activityLog,
-                      waitingEntries.map((entry) => entry.text),
-                    ),
-                    progressLog: appendProgressLog(message.progressLog, waitingEntries),
-                  }
-                : message,
+	              message.id === assistantId
+	                ? {
+	                    ...message,
+	                    progressLog: appendProgressLog(message.progressLog, waitingEntries),
+	                  }
+	                : message,
             ),
           );
         }
@@ -4426,17 +4422,13 @@ export function useUnifiedChat(
         const dispatchEntries = buildOpenClawSendPhaseEntries(queued.context, "dispatch");
         applyMessagesUpdate((prev) =>
           prev.map((message) =>
-            message.id === queued.assistantId
-              ? {
-                  ...message,
-                  content: "",
-                  activityLog: appendActivityLog(
-                    message.activityLog,
-                    dispatchEntries.map((entry) => entry.text),
-                  ),
-                  progressLog: appendProgressLog(
-                    message.progressLog,
-                    dispatchEntries,
+	            message.id === queued.assistantId
+	              ? {
+	                  ...message,
+	                  content: "",
+	                  progressLog: appendProgressLog(
+	                    message.progressLog,
+	                    dispatchEntries,
                   ),
                 }
               : message,
@@ -4490,16 +4482,12 @@ export function useUnifiedChat(
             ) {
               applyMessagesUpdate((prev) =>
                 prev.map((message) =>
-                  message.id === queued.assistantId
-                    ? {
-                        ...message,
-                        activityLog: appendActivityLog(
-                          message.activityLog,
-                          [SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE],
-                        ),
-                        progressLog: appendProgressLog(
-                          message.progressLog,
-                          buildActivityProgressEntries([SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE]),
+	                  message.id === queued.assistantId
+	                    ? {
+	                        ...message,
+	                        progressLog: appendProgressLog(
+	                          message.progressLog,
+	                          buildActivityProgressEntries([SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE]),
                         ),
                       }
                     : message,
