@@ -535,7 +535,6 @@ describe("ChatMessage", () => {
     expect(progressLog).toHaveTextContent("Write docs/summary.md · docs/chart.md");
     expect(progressLog).toHaveTextContent("Search gateway in src/hooks/use-unified-chat.ts");
   });
-
   it("renders thinking and activity sections in chronological order", () => {
     render(
       <ChatMessage
@@ -552,8 +551,8 @@ describe("ChatMessage", () => {
       />,
     );
 
-    const progressLog = screen.getByTestId("assistant-progress-transcript");
-    const text = progressLog.textContent ?? "";
+    const progressTranscript = screen.getByTestId("assistant-progress-transcript");
+    const text = progressTranscript.textContent ?? "";
     const firstPlan = text.indexOf("Plan: inspect files");
     const firstRead = text.indexOf("Read docs/results_table.csv");
     const secondThought = text.indexOf("Now summarize findings");
