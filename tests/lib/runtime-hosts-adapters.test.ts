@@ -4,6 +4,7 @@ import { createApiKeyRuntimeHostAdapter, createApiKeyRuntimeHostProfile } from "
 import { createClaudeCodeRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/claude-code";
 import { createCodexRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/codex";
 import { createGeminiCliRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/gemini-cli";
+import { createOpenClawRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/openclaw";
 import {
   RuntimeHostCapabilityUnsupported,
   RuntimePreviewApprovalRequired,
@@ -522,6 +523,47 @@ describe("runtime host adapters", () => {
     await expect(adapter.listSessions("project-alpha")).rejects.toThrow(
       RuntimeHostCapabilityUnsupported,
     );
+  });
+
+  it("routes OpenClaw runtime cancellation to the active gateway chat session", async () => {
+    const abortedSessions: string[] = [];
+    let releaseTurn!: () => void;
+    let markTurnStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markTurnStarted = resolve;
+    });
+    const adapter = createOpenClawRuntimeHostAdapter({
+      sendAgentMessage: async () => {
+        markTurnStarted();
+        await new Promise<void>((release) => {
+          releaseTurn = release;
+        });
+        return "OpenClaw response";
+      },
+      abortChat: async (sessionKey) => {
+        abortedSessions.push(sessionKey);
+        releaseTurn();
+        return { aborted: true, runIds: ["run-alpha"] };
+      },
+    });
+    const request = {
+      ...requestFor(requireRuntimeHostProfile("openclaw"), "chat"),
+      runtimeSessionId: "rt-session-openclaw",
+      conversationId: "openclaw-native-session",
+    };
+
+    const turn = adapter.sendTurn(request);
+
+    await started;
+    await expect(adapter.cancel("rt-session-openclaw")).resolves.toMatchObject({
+      cancelled: true,
+    });
+    await expect(turn).resolves.toMatchObject({
+      sessionId: "openclaw-native-session",
+      message: "OpenClaw response",
+    });
+
+    expect(abortedSessions).toEqual(["openclaw-native-session"]);
   });
 
   it("keeps API-key auth status masked and exposes .env cost disclosure through preview metadata", async () => {

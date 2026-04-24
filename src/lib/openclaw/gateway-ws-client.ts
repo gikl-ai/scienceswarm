@@ -99,6 +99,19 @@ export interface SendChatResult extends SendMessageResult {
   runId: string;
 }
 
+export interface AbortChatOptions {
+  /** Optional OpenClaw chat run id. Omit to abort active runs for the session. */
+  runId?: string;
+  /** Timeout in ms for the abort RPC. Default: 10 seconds. */
+  timeoutMs?: number;
+}
+
+export interface AbortChatResult {
+  ok: boolean;
+  aborted: boolean;
+  runIds: string[];
+}
+
 export interface GatewayEvent {
   type: string;
   method?: string;
@@ -858,6 +871,35 @@ export async function sendChatViaGateway(
   }
 
   return { text: responseText, events, runId };
+}
+
+/**
+ * Abort an active OpenClaw WebChat run via the gateway.
+ *
+ * When `runId` is omitted, OpenClaw aborts any active run for the session key,
+ * matching the TUI/control-UI stop button behavior.
+ */
+export async function abortChatViaGateway(
+  sessionKey: string,
+  options?: AbortChatOptions,
+): Promise<AbortChatResult> {
+  const params: Record<string, unknown> = { sessionKey };
+  if (options?.runId) params.runId = options.runId;
+
+  const response = await sendRequest(
+    "chat.abort",
+    params,
+    options?.timeoutMs ?? 10_000,
+  );
+  const payload = asRecord(response.payload) ?? {};
+
+  return {
+    ok: payload.ok === true || response.ok === true,
+    aborted: payload.aborted === true,
+    runIds: Array.isArray(payload.runIds)
+      ? payload.runIds.filter((value): value is string => typeof value === "string")
+      : [],
+  };
 }
 
 /**

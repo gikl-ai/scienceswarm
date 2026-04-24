@@ -37,17 +37,24 @@ export interface OpenClawRuntimeHostAdapterOptions {
       onEvent?: (event: unknown) => void;
     },
   ) => Promise<string>;
+  abortChat?: (
+    sessionKey: string,
+    options?: { timeoutMs?: number },
+  ) => Promise<{ aborted: boolean; runIds?: string[] }>;
 }
 
 export class OpenClawRuntimeHostAdapter implements ResearchRuntimeHost {
   private readonly runtimeProfile: RuntimeHostProfile;
   private readonly healthCheckOverride?: OpenClawRuntimeHostAdapterOptions["healthCheck"];
   private readonly sendAgentMessageOverride?: OpenClawRuntimeHostAdapterOptions["sendAgentMessage"];
+  private readonly abortChatOverride?: OpenClawRuntimeHostAdapterOptions["abortChat"];
+  private readonly activeRuntimeSessions = new Map<string, string>();
 
   constructor(options: OpenClawRuntimeHostAdapterOptions = {}) {
     this.runtimeProfile = options.profile ?? requireRuntimeHostProfile("openclaw");
     this.healthCheckOverride = options.healthCheck;
     this.sendAgentMessageOverride = options.sendAgentMessage;
+    this.abortChatOverride = options.abortChat;
   }
 
   profile(): RuntimeHostProfile {
@@ -101,9 +108,20 @@ export class OpenClawRuntimeHostAdapter implements ResearchRuntimeHost {
     const sendAgentMessage = this.sendAgentMessageOverride
       ?? (await import("@/lib/openclaw")).sendAgentMessage;
     const sessionId = request.conversationId ?? `openclaw-${randomUUID()}`;
-    const message = await sendAgentMessage(request.prompt, {
-      session: sessionId,
-    });
+    if (request.runtimeSessionId) {
+      this.activeRuntimeSessions.set(request.runtimeSessionId, sessionId);
+    }
+
+    let message: string;
+    try {
+      message = await sendAgentMessage(request.prompt, {
+        session: sessionId,
+      });
+    } finally {
+      if (request.runtimeSessionId) {
+        this.activeRuntimeSessions.delete(request.runtimeSessionId);
+      }
+    }
 
     return {
       hostId: this.runtimeProfile.id,
@@ -121,10 +139,25 @@ export class OpenClawRuntimeHostAdapter implements ResearchRuntimeHost {
   }
 
   async cancel(sessionId: string): Promise<RuntimeCancelResult> {
+    const openClawSessionKey = this.activeRuntimeSessions.get(sessionId);
+    if (!openClawSessionKey) {
+      return {
+        sessionId,
+        cancelled: false,
+        detail: "No active OpenClaw run was found for this ScienceSwarm session.",
+      };
+    }
+
+    const abortChat = this.abortChatOverride
+      ?? (await import("@/lib/openclaw/gateway-ws-client")).abortChatViaGateway;
+    const result = await abortChat(openClawSessionKey, { timeoutMs: 10_000 });
+
     return {
       sessionId,
-      cancelled: false,
-      detail: "OpenClaw cancellation remains owned by the existing chat facade.",
+      cancelled: result.aborted,
+      detail: result.aborted
+        ? `Stopped OpenClaw run for session ${openClawSessionKey}.`
+        : `No active OpenClaw run was found for session ${openClawSessionKey}.`,
     };
   }
 

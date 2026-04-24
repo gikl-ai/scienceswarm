@@ -40,7 +40,7 @@ const BUILT_IN_PROFILES: RuntimeHostProfile[] = [
       canCancel: true,
       canResumeNativeSession: false,
       canListNativeSessions: false,
-      cancelSemantics: "kill-wrapper-process",
+      cancelSemantics: "host-api-cancel",
       resumeSemantics: "scienceSwarm-wrapper-session",
     },
   },
