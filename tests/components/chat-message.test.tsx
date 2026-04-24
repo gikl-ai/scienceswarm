@@ -729,6 +729,39 @@ describe("ChatMessage", () => {
     expect(progressLog.querySelector("strong")).toHaveTextContent("summarizing");
   });
 
+  it("collapses long explored blocks behind a toggle until expanded", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/a.md" },
+          { kind: "activity", text: "Write docs/b.md" },
+          { kind: "activity", text: "Edit docs/c.md" },
+          { kind: "activity", text: "Search docs/ for metrics" },
+          { kind: "activity", text: "Run python3 scripts/report.py" },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const transcript = screen.getByTestId("assistant-progress-transcript");
+    expect(transcript).toHaveTextContent("Read docs/a.md");
+    expect(transcript).toHaveTextContent("Write docs/b.md");
+    expect(transcript).toHaveTextContent("Edit docs/c.md");
+    expect(within(transcript).queryByText("Search docs/ for metrics")).not.toBeInTheDocument();
+    expect(within(transcript).queryByText("Run python3 scripts/report.py")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("assistant-explored-toggle-0"));
+
+    expect(within(transcript).getByText("Search docs/ for metrics")).toBeInTheDocument();
+    expect(within(transcript).getByText("Run python3 scripts/report.py")).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-explored-toggle-0")).toHaveTextContent(
+      "Hide extra actions",
+    );
+  });
+
   it("normalizes legacy raw tool JSON lines in the visible transcript", () => {
     render(
       <ChatMessage
