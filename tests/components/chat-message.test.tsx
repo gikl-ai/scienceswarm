@@ -717,6 +717,22 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("keeps non-legacy game folder names intact for extensionless embeds", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"[embed ref=\"project-game\" title=\"Project Game\" height=\"420\" /]"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:12:44.000Z")}
+      />,
+    );
+
+    expect(screen.getByTitle("Project Game")).toHaveAttribute(
+      "src",
+      "/api/workspace/raw/project-alpha/project-game/index.html",
+    );
+  });
+
   it("blocks MEDIA html paths that attempt traversal before building raw preview URLs", () => {
     render(
       <ChatMessage
