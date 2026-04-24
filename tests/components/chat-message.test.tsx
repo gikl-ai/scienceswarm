@@ -617,6 +617,20 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("blocks MEDIA html paths that attempt traversal before building raw preview URLs", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:../figures/snake-game/index.html"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:12:35.000Z")}
+      />,
+    );
+
+    expect(screen.queryByTitle("../figures/snake-game/index.html")).not.toBeInTheDocument();
+    expect(screen.getByText("[media blocked: invalid path]")).toBeInTheDocument();
+  });
+
   it("blocks markdown image urls that walk upward from the page path", () => {
     render(
       <ChatMessage

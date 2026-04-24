@@ -656,8 +656,11 @@ function buildWorkspaceRawPreviewUrl(
   filePath: string,
   projectId: string,
   { preferPathRoute = false }: { preferPathRoute?: boolean } = {},
-): string {
-  const normalizedPath = normalizeWorkspaceRelativePath(filePath) ?? filePath;
+) : string | null {
+  const normalizedPath = normalizeWorkspaceRelativePath(filePath);
+  if (!normalizedPath) {
+    return null;
+  }
   if (preferPathRoute && projectId) {
     const encodedSegments = normalizedPath
       .split("/")
@@ -902,6 +905,13 @@ function renderContent(content: string, projectId: string) {
       const src = buildWorkspaceRawPreviewUrl(workspaceFilePath, projectId, {
         preferPathRoute: ext === "html" || ext === "htm",
       });
+      if (!src) {
+        return (
+          <div key={i} className="my-2">
+            <span className="font-mono text-xs text-muted">[media blocked: invalid path]</span>
+          </div>
+        );
+      }
       if (["png", "jpg", "jpeg", "gif", "webp", "avif"].includes(ext)) {
         return (
           <div key={i} className="my-2">
@@ -986,13 +996,29 @@ function renderContent(content: string, projectId: string) {
               </div>
             );
           }
-          embedUrl = buildWorkspaceRawPreviewUrl(fileName, projectId, { preferPathRoute: true });
+          const rawPreviewUrl = buildWorkspaceRawPreviewUrl(fileName, projectId, { preferPathRoute: true });
+          if (!rawPreviewUrl) {
+            return (
+              <div key={i} className="my-2">
+                <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
+              </div>
+            );
+          }
+          embedUrl = rawPreviewUrl;
         } else {
           const workspaceHtmlPath = normalizeWorkspaceRelativePath(embedUrl);
           if (workspaceHtmlPath && /\.html?$/i.test(workspaceHtmlPath)) {
-            embedUrl = buildWorkspaceRawPreviewUrl(workspaceHtmlPath, projectId, {
+            const rawPreviewUrl = buildWorkspaceRawPreviewUrl(workspaceHtmlPath, projectId, {
               preferPathRoute: true,
             });
+            if (!rawPreviewUrl) {
+              return (
+                <div key={i} className="my-2">
+                  <span className="font-mono text-xs text-muted">[embed blocked: invalid path]</span>
+                </div>
+              );
+            }
+            embedUrl = rawPreviewUrl;
           } else if (/\.html?$/i.test(embedUrl)) {
             return (
               <div key={i} className="my-2">
