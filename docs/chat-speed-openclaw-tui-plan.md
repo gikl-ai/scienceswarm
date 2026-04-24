@@ -569,10 +569,12 @@ these groups are safe to overlap after their shared contracts merge:
   #53 should layer on top of the same compact assistant-lane geometry.
 - Codex comparison post-rollup: PR #54 after PRs 45 to 53 land and fresh
   benchmark plus transcript evidence exists.
-- Web chat presentation follow-up: PRs 55 to 64. PRs 55 and 56 should follow
-  the earlier assistant-lane geometry work, PR #57 depends on the lighter
-  assistant surface from PR #55, PR #58 should follow the full markdown work
-  from PR #51, PR #59 can start after PRs 55 and 57, PR #60 can run after the
+- Web chat presentation follow-up: PRs 55 to 64. PR #55 should follow the
+  earlier assistant-lane geometry work, PR #56 should follow PR #55 so the
+  assistant reply surface lands on the lighter chat canvas first, PR #57
+  depends on the lighter assistant surface from PR #55, PR #58 should follow
+  both the full markdown work from PR #51 and the typography tokens from
+  PR #57, PR #59 can start after PRs 55 and 57, PR #60 can run after the
   media-width and refresh work from PRs 21 and 22, PR #61 depends on PRs 57
   and 58, PR #62 can start after PR #55, PR #63 should follow PR #55 so the
   composer relates to the lighter lane styling, and PR #64 should wait until
