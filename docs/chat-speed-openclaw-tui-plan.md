@@ -569,6 +569,14 @@ these groups are safe to overlap after their shared contracts merge:
   #53 should layer on top of the same compact assistant-lane geometry.
 - Codex comparison post-rollup: PR #54 after PRs 45 to 53 land and fresh
   benchmark plus transcript evidence exists.
+- Web chat presentation follow-up: PRs 55 to 64. PRs 55 and 56 should follow
+  the earlier assistant-lane geometry work, PR #57 depends on the lighter
+  assistant surface from PR #55, PR #58 should follow the full markdown work
+  from PR #51, PR #59 can start after PRs 55 and 57, PR #60 can run after the
+  media-width and refresh work from PRs 21 and 22, PR #61 depends on PRs 57
+  and 58, PR #62 can start after PR #55, PR #63 should follow PR #55 so the
+  composer relates to the lighter lane styling, and PR #64 should wait until
+  PRs 55 to 63 land with fresh screenshots.
 
 ## Validation Standard
 
@@ -677,3 +685,96 @@ Append these PRs after the current sequence:
      TUI in a follow-up plan update.
    - Validation: updated timing report, transcript screenshots, and a short gap
      table tied to specific code areas.
+
+## Web Chat Presentation Follow-Up
+
+The next presentation wave should also adapt the strongest browser-chat
+patterns visible in the local Codex app and the ChatGPT web UI:
+
+- The main conversation canvas is visually light, close to white, and the
+  answer content is the primary surface. Status chrome and metadata are
+  visibly secondary.
+- Assistant output reads like structured rich text rather than a dashboard
+  card: headings, subheadings, numbered sections, bullet lists, bold,
+  italics, code spans, and links all create hierarchy inside one answer.
+- User turns stay clearly distinct, but assistant turns rely more on spacing,
+  typography, and section rhythm than on heavy bubble framing.
+- Images and embeds are grouped into deliberate multimodal layouts with
+  consistent radii, captions, and spacing instead of feeling like raw inline
+  attachments.
+- Timestamp, tool, and status metadata are muted and edge-aligned so the eye
+  lands on the answer body first.
+
+Append these PRs after the current sequence:
+
+55. **White Canvas Surface PR**
+   - Rework the main assistant conversation lane toward a lighter white-canvas
+     surface with less heavy card chrome, while preserving clear user-turn
+     separation and responsive layout.
+   - Validation: browser or component test proves the assistant lane remains
+     readable on desktop and mobile and that existing media still stays within
+     the chat column.
+
+56. **Assistant Reply Surface PR**
+   - Reduce assistant bubble framing so final answers read more like a document
+     on the chat canvas and less like a wide bordered card, while user prompts
+     remain compact visual bubbles.
+   - Validation: component test proves assistant and user turns remain visually
+     distinct and the assistant lane no longer carries redundant outer chrome.
+
+57. **Typography Scale PR**
+   - Introduce explicit typography tokens for assistant answer title, subtitle,
+     body, list, caption, code, and metadata layers so rich markdown reads more
+     like ChatGPT web output than plain uniform body text.
+   - Validation: component snapshots prove heading, body, list, caption, and
+     code typography render with consistent size, weight, and spacing.
+
+58. **Rich Markdown Blocks PR**
+   - Upgrade final-answer markdown rendering so headings, numbered sections,
+     nested lists, block quotes, code fences, emphasis, and inline links create
+     visible hierarchy in the assistant message body.
+   - Validation: component tests cover heading levels, numbered lists, nested
+     lists, code fences, emphasis, links, and safe HTML handling.
+
+59. **Semantic Color And Emphasis PR**
+   - Add restrained semantic color tokens for answer headings, muted metadata,
+     code surfaces, links, and callout text so hierarchy is clearer without
+     turning the chat into a dashboard palette.
+   - Validation: component snapshots prove semantic colors apply consistently
+     and maintain readable contrast on the light chat canvas.
+
+60. **Multimodal Gallery Layout PR**
+   - Group sequential images, charts, and related embeds into a deliberate
+     gallery or stacked media block with consistent captions, spacing, and
+     sizing instead of isolated raw attachment rows.
+   - Validation: component or browser test proves two or more related images
+     render as one coherent media group and remain responsive in narrow widths.
+
+61. **Answer Section Rhythm PR**
+   - Add spacing rules, section dividers, and paragraph rhythm so long answers
+     with titles, subsections, lists, and media read like structured notes
+     instead of one continuous dense block.
+   - Validation: component snapshots prove multi-section answers preserve
+     vertical rhythm and do not collapse headings or media into surrounding
+     text.
+
+62. **Metadata De-Emphasis PR**
+   - Move timestamps, action buttons, and low-priority run metadata into a more
+     subdued visual layer so the answer body carries the strongest emphasis.
+   - Validation: browser or component test proves metadata remains accessible
+     but no longer competes visually with the main assistant content.
+
+63. **Composer Surface PR**
+   - Simplify the composer area to better match the lighter chat surface:
+     cleaner input chrome, clearer send affordance, and tighter relationship
+     between the active transcript and the input boundary.
+   - Validation: browser test proves the composer remains usable during
+     streaming, wraps gracefully on smaller widths, and preserves current send
+     behavior.
+
+64. **Visual Reference Review PR**
+   - Re-run the Codex and ChatGPT-web comparison with fresh screenshots after
+     the above slices merge and document the remaining layout, typography, and
+     multimodal gaps that still make ScienceSwarm feel less polished.
+   - Validation: updated screenshot set, a short gap table, and explicit next
+     candidates tied to code areas.
