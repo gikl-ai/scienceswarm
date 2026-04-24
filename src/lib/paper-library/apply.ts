@@ -110,8 +110,20 @@ function relativePathKey(relativePath: string): string {
   return relativePath.replace(/\\/g, "/").toLowerCase();
 }
 
+function sameRelativePathKey(left: string, right: string): boolean {
+  return relativePathKey(left) === relativePathKey(right);
+}
+
 function operationMovesSource(operation: ApplyOperation): operation is ApplyOperation & { source: PaperLibraryFileSnapshot } {
-  return Boolean(operation.source && relativePathKey(operation.source.relativePath) !== relativePathKey(operation.destinationRelativePath));
+  return Boolean(operation.source && !sameRelativePathKey(operation.source.relativePath, operation.destinationRelativePath));
+}
+
+function operationHasSamePathKey(operation: ApplyOperation & { source: PaperLibraryFileSnapshot }): boolean {
+  return sameRelativePathKey(operation.source.relativePath, operation.destinationRelativePath);
+}
+
+function operationIsExactNoop(operation: ApplyOperation & { source: PaperLibraryFileSnapshot }): boolean {
+  return operation.source.relativePath === operation.destinationRelativePath;
 }
 
 function buildOperation(
@@ -213,7 +225,7 @@ async function addDestinationExistenceConflicts(
       .map((operation) => relativePathKey(operation.source.relativePath)),
   );
   return Promise.all(operations.map(async (operation) => {
-    if (operation.source?.relativePath === operation.destinationRelativePath) return operation;
+    if (operation.source && operationHasSamePathKey({ ...operation, source: operation.source })) return operation;
     if (!validateRelativeDestination(operation.destinationRelativePath).ok) return operation;
     if (plannedMovingSources.has(relativePathKey(operation.destinationRelativePath))) return operation;
     const destinationAbsolutePath = path.join(rootRealpath, operation.destinationRelativePath);
@@ -528,6 +540,37 @@ async function assertDestinationParentInsideRoot(rootRealpath: string, destinati
   }
 }
 
+async function renameRelativePathInsideRoot(
+  rootRealpath: string,
+  sourceRelativePath: string,
+  destinationRelativePath: string,
+): Promise<void> {
+  const sourceAbsolutePath = path.join(rootRealpath, sourceRelativePath);
+  const destinationAbsolutePath = path.join(rootRealpath, destinationRelativePath);
+  if (sourceAbsolutePath === destinationAbsolutePath) return;
+
+  if (!sameRelativePathKey(sourceRelativePath, destinationRelativePath)) {
+    await rename(sourceAbsolutePath, destinationAbsolutePath);
+    return;
+  }
+
+  const temporaryAbsolutePath = path.join(
+    path.dirname(destinationAbsolutePath),
+    `.scienceswarm-case-rename-${randomUUID()}.tmp`,
+  );
+  if (!(await destinationIsAvailable(temporaryAbsolutePath))) {
+    throw new Error("Temporary case-only rename path already exists.");
+  }
+
+  await rename(sourceAbsolutePath, temporaryAbsolutePath);
+  try {
+    await rename(temporaryAbsolutePath, destinationAbsolutePath);
+  } catch (error) {
+    await rename(temporaryAbsolutePath, sourceAbsolutePath).catch(() => undefined);
+    throw error;
+  }
+}
+
 async function preflightApplyOperation(
   rootRealpath: string,
   operation: ApplyOperation,
@@ -551,7 +594,7 @@ async function preflightApplyOperation(
   if (!destinationValidation.ok) throw new Error(destinationValidation.problems[0]?.message ?? "Destination is unsafe.");
   const allowedPlannedDestination = options.allowExistingDestinationKeys?.has(relativePathKey(operation.destinationRelativePath)) ?? false;
   if (
-    source.relativePath !== operation.destinationRelativePath
+    !operationHasSamePathKey({ ...operation, source })
     && !allowedPlannedDestination
     && !(await destinationIsAvailable(destinationAbsolutePath))
   ) {
@@ -566,6 +609,8 @@ async function preflightApplyOperation(
 }
 
 async function applyOneOperation(rootRealpath: string, operation: ApplyOperation): Promise<ApplyManifestOperation> {
+  // Batch preflight may allow destinations that earlier ordered operations will vacate.
+  // This per-operation preflight intentionally stays strict so a failed prior move cannot overwrite a still-occupied path.
   const { source, currentSnapshot, destinationAbsolutePath } = await preflightApplyOperation(rootRealpath, operation);
   await assertDestinationParentInsideRoot(rootRealpath, destinationAbsolutePath);
   const baseOperation = {
@@ -578,7 +623,7 @@ async function applyOneOperation(rootRealpath: string, operation: ApplyOperation
     ApplyManifestOperation,
     "operationId" | "paperId" | "sourceRelativePath" | "destinationRelativePath" | "source"
   >;
-  if (source.relativePath === operation.destinationRelativePath) {
+  if (operationIsExactNoop({ ...operation, source })) {
     return {
       ...baseOperation,
       status: "verified",
@@ -587,10 +632,10 @@ async function applyOneOperation(rootRealpath: string, operation: ApplyOperation
     };
   }
 
-  if (!(await destinationIsAvailable(destinationAbsolutePath))) {
+  if (!operationHasSamePathKey({ ...operation, source }) && !(await destinationIsAvailable(destinationAbsolutePath))) {
     throw new Error("Destination already exists.");
   }
-  await rename(path.join(rootRealpath, source.relativePath), destinationAbsolutePath);
+  await renameRelativePathInsideRoot(rootRealpath, source.relativePath, operation.destinationRelativePath);
   const destinationSnapshot = await snapshotFile(rootRealpath, destinationAbsolutePath);
   if (!destinationSnapshot.ok) throw new Error(destinationSnapshot.problems[0]?.message ?? "Moved file cannot be verified.");
   return {
@@ -893,11 +938,11 @@ export async function undoApplyManifest(input: {
         const comparison = compareSnapshot(operation.destinationSnapshot, currentDestination.snapshot);
         if (!comparison.ok) throw new Error("Destination changed since apply.");
       }
-      if (!(await destinationIsAvailable(sourceAbsolutePath))) {
+      if (!sameRelativePathKey(operation.sourceRelativePath, operation.destinationRelativePath) && !(await destinationIsAvailable(sourceAbsolutePath))) {
         throw new Error("Original source path already exists.");
       }
       await assertDestinationParentInsideRoot(manifest.rootRealpath, sourceAbsolutePath);
-      await rename(destinationAbsolutePath, sourceAbsolutePath);
+      await renameRelativePathInsideRoot(manifest.rootRealpath, operation.destinationRelativePath, operation.sourceRelativePath);
       operations[index] = {
         ...operation,
         status: "undone",
