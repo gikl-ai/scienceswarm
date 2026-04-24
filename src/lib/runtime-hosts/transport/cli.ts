@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -13,6 +13,7 @@ import {
 
 export interface CliTransportRunRequest {
   hostId?: string;
+  sessionId?: string;
   command: string;
   args?: string[];
   input?: string;
@@ -136,6 +137,8 @@ export class RuntimeCliTimeoutError extends RuntimeHostError {
 }
 
 export class LocalCliTransport implements CliTransport {
+  private readonly activeProcesses = new Map<string, ChildProcessWithoutNullStreams>();
+
   async run(request: CliTransportRunRequest): Promise<CliTransportRunResult> {
     const args = request.args ?? [];
     const timeoutMs = request.timeoutMs ?? 30_000;
@@ -146,6 +149,9 @@ export class LocalCliTransport implements CliTransport {
         env: appendPathEntries(request.env),
         stdio: ["pipe", "pipe", "pipe"],
       });
+      if (request.sessionId) {
+        this.activeProcesses.set(request.sessionId, child);
+      }
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       const stdoutLines = new LineEmitter(request.onStdoutLine);
@@ -164,11 +170,20 @@ export class LocalCliTransport implements CliTransport {
           forceKillTimer = null;
         }
       };
+      const clearActiveProcess = () => {
+        if (
+          request.sessionId
+          && this.activeProcesses.get(request.sessionId) === child
+        ) {
+          this.activeProcesses.delete(request.sessionId);
+        }
+      };
 
       const finishReject = (error: Error) => {
         if (settled) return;
         settled = true;
         clearTimers();
+        clearActiveProcess();
         reject(error);
       };
       const finishTimeout = () => {
@@ -178,6 +193,7 @@ export class LocalCliTransport implements CliTransport {
           clearTimeout(timer);
           timer = null;
         }
+        clearActiveProcess();
         reject(
           new RuntimeCliTimeoutError({
             hostId: request.hostId,
@@ -203,6 +219,7 @@ export class LocalCliTransport implements CliTransport {
       });
       child.on("error", (error) => {
         clearTimers();
+        clearActiveProcess();
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
           finishReject(
             new RuntimeCliMissingError({
@@ -216,6 +233,7 @@ export class LocalCliTransport implements CliTransport {
       });
       child.on("close", (exitCode, signal) => {
         clearTimers();
+        clearActiveProcess();
         if (settled) return;
         settled = true;
         stdoutLines.flush();
@@ -291,6 +309,22 @@ export class LocalCliTransport implements CliTransport {
       }
       child.stdin?.end();
     });
+  }
+
+  async cancel(sessionId: string): Promise<boolean> {
+    const child = this.activeProcesses.get(sessionId);
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      return false;
+    }
+
+    child.kill("SIGTERM");
+    const forceKillTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+      }
+    }, 250);
+    forceKillTimer.unref?.();
+    return true;
   }
 }
 

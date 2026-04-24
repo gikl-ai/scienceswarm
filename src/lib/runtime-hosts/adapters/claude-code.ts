@@ -110,13 +110,17 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
 
   async sendTurn(request: RuntimeTurnRequest): Promise<RuntimeTurnResult> {
     this.assertCanSend(request);
-    const sessionId = request.conversationId ?? `claude-code-${this.sessionIdGenerator()}`;
+    const wrapperSessionId =
+      request.runtimeSessionId
+      ?? request.conversationId
+      ?? `claude-code-${this.sessionIdGenerator()}`;
     const stream = new ClaudeCodeStreamAccumulator({
       hostId: this.runtimeProfile.id,
-      sessionId,
+      sessionId: wrapperSessionId,
     });
     const result = await this.transport.run({
       hostId: this.runtimeProfile.id,
+      sessionId: wrapperSessionId,
       command: this.command,
       args: this.buildPromptArgs(request),
       env: this.cliEnv(),
@@ -130,18 +134,18 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       ? stream.result()
       : parseClaudeCodeStreamOutput({
           hostId: this.runtimeProfile.id,
-          sessionId,
+          sessionId: wrapperSessionId,
           lines: result.output.lines,
         });
     const message = parsed.message || result.output.text;
-    const nativeSessionId = parsed.nativeSessionId ?? sessionId;
+    const nativeSessionId = parsed.nativeSessionId ?? wrapperSessionId;
     const events = parsed.events.some((event) =>
       event.type === "message" && typeof event.payload.text === "string"
     )
       ? parsed.events
       : [
           ...parsed.events,
-          this.messageEvent({ sessionId, text: message, nativeSessionId }),
+          this.messageEvent({ sessionId: wrapperSessionId, text: message, nativeSessionId }),
         ];
 
     return {
@@ -155,10 +159,12 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
   async executeTask(request: RuntimeTurnRequest): Promise<RuntimeSessionRecord> {
     this.assertCanSend(request);
     const sessionId = `claude-code-task-${this.sessionIdGenerator()}`;
+    const wrapperSessionId = request.runtimeSessionId ?? sessionId;
     const now = new Date().toISOString();
 
     await this.transport.run({
       hostId: this.runtimeProfile.id,
+      sessionId: wrapperSessionId,
       command: this.command,
       args: this.buildPromptArgs(request),
       env: this.cliEnv(),

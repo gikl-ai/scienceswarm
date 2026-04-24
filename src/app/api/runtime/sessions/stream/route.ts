@@ -138,6 +138,7 @@ export async function POST(request: Request): Promise<Response> {
 
         const turnRequest = buildRuntimeTurnRequest({
           hostId,
+          runtimeSessionId: session.id,
           projectId,
           conversationId,
           mode,
@@ -215,6 +216,12 @@ export async function POST(request: Request): Promise<Response> {
           session: enrichedSession(services.sessionStore.getSession(session.id)),
         });
       } catch (error) {
+        if (services.sessionStore.getSession(session.id)?.status === "cancelled") {
+          enqueue({
+            session: enrichedSession(services.sessionStore.getSession(session.id)),
+          });
+          return;
+        }
         services.sessionStore.trySetSessionStatus({
           sessionId: session.id,
           status: "failed",

@@ -445,6 +445,7 @@ export function assertPreviewAllowed(
 
 export function buildRuntimeTurnRequest(input: {
   hostId: RuntimeHostId | string;
+  runtimeSessionId?: string;
   projectId: string | null;
   conversationId: string | null;
   mode: RuntimeTurnMode;
@@ -457,6 +458,7 @@ export function buildRuntimeTurnRequest(input: {
 }): RuntimeTurnRequest {
   return {
     hostId: input.preview.hostId,
+    runtimeSessionId: input.runtimeSessionId,
     projectId: input.projectId,
     conversationId: input.conversationId,
     mode: input.mode,

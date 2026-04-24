@@ -189,6 +189,7 @@ export async function POST(request: Request): Promise<Response> {
           const result = await adapter.sendTurn(
             buildRuntimeTurnRequest({
               hostId: child.hostId,
+              runtimeSessionId: child.id,
               projectId,
               conversationId: null,
               mode: "chat",
