@@ -238,6 +238,7 @@ const ASSISTANT_INLINE_CODE_CLASS =
   "rounded-md border border-rule bg-sunk/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-strong";
 const ASSISTANT_CODE_BLOCK_CLASS =
   "my-6 overflow-x-auto rounded-3xl border border-rule bg-ink px-5 py-4 text-[13px] leading-6 text-quiet shadow-[0_12px_30px_rgba(15,23,42,0.12)]";
+const ASSISTANT_RULE_CLASS = "my-8 border-0 border-t border-rule";
 const ASSISTANT_MEDIA_CARD_CLASS =
   "overflow-hidden rounded-[1.35rem] border border-rule/90 bg-raised shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]";
 const ASSISTANT_MEDIA_FRAME_CLASS =
@@ -282,6 +283,7 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   ),
   li: ({ children }) => <li className={ASSISTANT_LIST_ITEM_CLASS}>{children}</li>,
   blockquote: ({ children }) => <blockquote className={ASSISTANT_BLOCKQUOTE_CLASS}>{children}</blockquote>,
+  hr: () => <hr className={ASSISTANT_RULE_CLASS} />,
   pre: ({ children }) => <pre className={ASSISTANT_CODE_BLOCK_CLASS}>{children}</pre>,
   code: ({ className, children }) => {
     const languageClass = typeof className === "string" ? className : "";
