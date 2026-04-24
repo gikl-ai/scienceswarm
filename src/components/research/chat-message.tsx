@@ -1132,7 +1132,7 @@ export function ChatMessage({
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
   const useCompactAssistantTranscript =
-    role === "assistant" && visibleProgressLog.length > 0;
+    role === "assistant" && progressTranscript.length > 0;
   const isOpenClawToolsTurn = chatMode === "openclaw-tools" && role !== "system";
   const contentRef = useRef<HTMLDivElement | null>(null);
   const copyFeedbackTimerRef = useRef<number | null>(null);

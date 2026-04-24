@@ -158,6 +158,31 @@ describe("ChatMessage", () => {
     expect(screen.queryByTestId("step-cards")).not.toBeInTheDocument();
   });
 
+  it("keeps phase and step chrome when progress entries normalize away", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Turn started" },
+          { kind: "activity", text: "Run command complete" },
+        ]}
+        taskPhases={[
+          { id: "read", label: "Reading file", status: "completed" },
+          { id: "write", label: "Writing patch", status: "active" },
+        ]}
+        steps={[
+          { id: "step-read", verb: "reading", target: "chat-message.tsx", status: "done" },
+        ]}
+        timestamp={new Date("2026-04-15T07:00:05.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByLabelText("Task phases")).toBeInTheDocument();
+    expect(screen.getByTestId("step-cards")).toBeInTheDocument();
+  });
+
   it("renders assistant progress as a single inline transcript", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
