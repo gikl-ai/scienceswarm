@@ -37,6 +37,7 @@ All notable changes to this project will be documented in this file.
 - OpenClaw thinking traces no longer replay stale assistant content into the next user turn on reused web conversations.
 - gbrain's runtime import now uses the exported engine factory and a single PGlite version, avoiding bundled extension lookups under `/_next/static/media/*.tar.gz` during Next.js development.
 - Claude Code and Codex runtime health now run native CLI auth checks, while ready subscription CLIs with host-owned auth can be selected with clear first-send login copy instead of staying blocked as unknown.
+- Subscription-native runtime sends no longer inherit provider API-key env vars from the ScienceSwarm server process, so Codex, Claude Code, and Gemini CLI stay on their native CLI login paths.
 
 ### Removed
 

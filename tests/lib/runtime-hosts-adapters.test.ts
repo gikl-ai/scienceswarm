@@ -196,6 +196,41 @@ describe("runtime host adapters", () => {
     ).rejects.toThrow(RuntimeCliMalformedOutputError);
   });
 
+  it("strips provider API-key env vars before launching subscription-native CLIs", async () => {
+    const transport = new FakeCliTransport((request) => fakeResult(request, "ok"));
+    const env = {
+      ...process.env,
+      ANTHROPIC_API_KEY: "placeholder-anthropic-api-key",
+      OPENAI_API_KEY: "placeholder-openai-api-key",
+      OPENAI_BASE_URL: "https://api.openai.test/v1",
+      GEMINI_API_KEY: "placeholder-gemini-api-key",
+      GOOGLE_API_KEY: "placeholder-google-api-key",
+      SCIENCESWARM_DIR: "/tmp/scienceswarm",
+    };
+
+    await createClaudeCodeRuntimeHostAdapter({ transport, env }).health();
+    await createCodexRuntimeHostAdapter({ transport, env }).sendTurn(
+      requestFor(requireRuntimeHostProfile("codex"), "chat"),
+    );
+    await createGeminiCliRuntimeHostAdapter({ transport, env }).sendTurn(
+      requestFor(requireRuntimeHostProfile("gemini-cli"), "chat"),
+    );
+
+    const claudeEnv = transport.requests[0]?.env as NodeJS.ProcessEnv;
+    expect(claudeEnv.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(claudeEnv.SCIENCESWARM_DIR).toBe("/tmp/scienceswarm");
+
+    const codexEnv = transport.requests[1]?.env as NodeJS.ProcessEnv;
+    expect(codexEnv.OPENAI_API_KEY).toBeUndefined();
+    expect(codexEnv.OPENAI_BASE_URL).toBeUndefined();
+    expect(codexEnv.SCIENCESWARM_DIR).toBe("/tmp/scienceswarm");
+
+    const geminiEnv = transport.requests[2]?.env as NodeJS.ProcessEnv;
+    expect(geminiEnv.GEMINI_API_KEY).toBeUndefined();
+    expect(geminiEnv.GOOGLE_API_KEY).toBeUndefined();
+    expect(geminiEnv.SCIENCESWARM_DIR).toBe("/tmp/scienceswarm");
+  });
+
   it("rejects blocked or unapproved previews before transport receives prompt text", async () => {
     const transport = new FakeCliTransport((request) => fakeResult(request, "ok"));
     const adapter = createCodexRuntimeHostAdapter({ transport });
