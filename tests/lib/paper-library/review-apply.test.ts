@@ -283,6 +283,79 @@ describe("paper-library review and apply", () => {
     })).rejects.toThrow(/validated/i);
   });
 
+  it("allows valid rename chains by applying blocking source moves first", async () => {
+    const firstPath = path.join(paperRoot, "a.pdf");
+    const secondPath = path.join(paperRoot, "b.pdf");
+    await writeFile(firstPath, "first pdf", "utf-8");
+    await writeFile(secondPath, "second pdf", "utf-8");
+
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const reviewPage = await listPaperReviewItems({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      limit: 10,
+    });
+    const firstItem = reviewPage?.items.find((item) => item.source?.relativePath === "a.pdf");
+    const secondItem = reviewPage?.items.find((item) => item.source?.relativePath === "b.pdf");
+    if (!firstItem || !secondItem) throw new Error("expected review items for rename chain");
+
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: firstItem.id,
+      action: "correct",
+      selectedCandidateId: firstItem.candidates[0]?.id,
+      correction: { title: "b" },
+      brainRoot,
+    });
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: secondItem.id,
+      action: "correct",
+      selectedCandidateId: secondItem.candidates[0]?.id,
+      correction: { title: "c" },
+      brainRoot,
+    });
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{title}.pdf",
+    });
+    expect(created?.plan).toMatchObject({
+      status: "validated",
+      conflictCount: 0,
+    });
+    expect(created?.operations.map((operation) => operation.source?.relativePath)).toEqual(["b.pdf", "a.pdf"]);
+
+    const approval = await approveApplyPlan({
+      project: "project-alpha",
+      applyPlanId: created?.plan.id ?? "",
+      brainRoot,
+    });
+    const applied = await applyApprovedPlan({
+      project: "project-alpha",
+      applyPlanId: approval?.plan.id ?? "",
+      approvalToken: approval?.approvalToken ?? "",
+      brainRoot,
+    });
+
+    expect(applied?.manifest.status).toBe("applied");
+    expect(await readFile(path.join(paperRoot, "b.pdf"), "utf-8")).toBe("first pdf");
+    expect(await readFile(path.join(paperRoot, "c.pdf"), "utf-8")).toBe("second pdf");
+    expect(await exists(firstPath)).toBe(false);
+  });
+
   it("does not create directories through symlinked destination parents during apply", async () => {
     const originalPath = path.join(paperRoot, "source.pdf");
     await writeFile(originalPath, "fake pdf", "utf-8");

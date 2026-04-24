@@ -106,6 +106,14 @@ function operationKind(sourceRelativePath: string, destinationRelativePath: stri
   return path.dirname(sourceRelativePath) === path.dirname(destinationRelativePath) ? "rename" : "move";
 }
 
+function relativePathKey(relativePath: string): string {
+  return relativePath.replace(/\\/g, "/").toLowerCase();
+}
+
+function operationMovesSource(operation: ApplyOperation): operation is ApplyOperation & { source: PaperLibraryFileSnapshot } {
+  return Boolean(operation.source && relativePathKey(operation.source.relativePath) !== relativePathKey(operation.destinationRelativePath));
+}
+
 function buildOperation(
   item: PaperReviewItem,
   templateFormat: string,
@@ -146,13 +154,68 @@ function buildOperation(
   };
 }
 
+function orderOperationsForApply(operations: ApplyOperation[]): ApplyOperation[] {
+  const operationsById = new Map(operations.map((operation) => [operation.id, operation]));
+  const sourceOperationIds = new Map<string, string>();
+  for (const operation of operations) {
+    if (operationMovesSource(operation)) sourceOperationIds.set(relativePathKey(operation.source.relativePath), operation.id);
+  }
+
+  const dependencies = new Map<string, Set<string>>();
+  const dependents = new Map<string, Set<string>>();
+  for (const operation of operations) {
+    dependencies.set(operation.id, new Set());
+    dependents.set(operation.id, new Set());
+  }
+
+  for (const operation of operations) {
+    if (!operationMovesSource(operation)) continue;
+    const blockingOperationId = sourceOperationIds.get(relativePathKey(operation.destinationRelativePath));
+    if (!blockingOperationId || blockingOperationId === operation.id) continue;
+    dependencies.get(operation.id)?.add(blockingOperationId);
+    dependents.get(blockingOperationId)?.add(operation.id);
+  }
+
+  const ready = operations.filter((operation) => (dependencies.get(operation.id)?.size ?? 0) === 0);
+  const ordered: ApplyOperation[] = [];
+  for (let index = 0; index < ready.length; index += 1) {
+    const operation = ready[index];
+    ordered.push(operation);
+    for (const dependentId of dependents.get(operation.id) ?? []) {
+      const remainingDependencies = dependencies.get(dependentId);
+      remainingDependencies?.delete(operation.id);
+      if (remainingDependencies?.size === 0) {
+        const dependent = operationsById.get(dependentId);
+        if (dependent) ready.push(dependent);
+      }
+    }
+  }
+
+  if (ordered.length === operations.length) return ordered;
+
+  const orderedIds = new Set(ordered.map((operation) => operation.id));
+  const cyclic = operations
+    .filter((operation) => !orderedIds.has(operation.id))
+    .map((operation) => ({
+      ...operation,
+      conflictCodes: Array.from(new Set([...operation.conflictCodes, "rename_cycle"])),
+    }));
+  return [...ordered, ...cyclic];
+}
+
 async function addDestinationExistenceConflicts(
   rootRealpath: string,
   operations: ApplyOperation[],
 ): Promise<ApplyOperation[]> {
+  const plannedMovingSources = new Set(
+    operations
+      .filter(operationMovesSource)
+      .map((operation) => relativePathKey(operation.source.relativePath)),
+  );
   return Promise.all(operations.map(async (operation) => {
     if (operation.source?.relativePath === operation.destinationRelativePath) return operation;
     if (!validateRelativeDestination(operation.destinationRelativePath).ok) return operation;
+    if (plannedMovingSources.has(relativePathKey(operation.destinationRelativePath))) return operation;
     const destinationAbsolutePath = path.join(rootRealpath, operation.destinationRelativePath);
     if (await destinationIsAvailable(destinationAbsolutePath)) return operation;
     return {
@@ -247,7 +310,8 @@ export async function createApplyPlan(input: {
       conflictCodes: Array.from(new Set([...operation.conflictCodes, "duplicate_destination"])),
     };
   });
-  const checkedOperations = await addDestinationExistenceConflicts(scanRoot, dedupedOperations);
+  const orderedOperations = orderOperationsForApply(dedupedOperations);
+  const checkedOperations = await addDestinationExistenceConflicts(scanRoot, orderedOperations);
 
   const createdAt = nowIso();
   const id = randomUUID();
@@ -467,6 +531,7 @@ async function assertDestinationParentInsideRoot(rootRealpath: string, destinati
 async function preflightApplyOperation(
   rootRealpath: string,
   operation: ApplyOperation,
+  options: { allowExistingDestinationKeys?: Set<string> } = {},
 ): Promise<{
   source: PaperLibraryFileSnapshot;
   currentSnapshot: PaperLibraryFileSnapshot;
@@ -484,7 +549,12 @@ async function preflightApplyOperation(
   if (!comparison.ok) throw new Error(comparison.problems[0]?.message ?? "Source changed since approval.");
   const destinationValidation = validateRelativeDestination(operation.destinationRelativePath);
   if (!destinationValidation.ok) throw new Error(destinationValidation.problems[0]?.message ?? "Destination is unsafe.");
-  if (source.relativePath !== operation.destinationRelativePath && !(await destinationIsAvailable(destinationAbsolutePath))) {
+  const allowedPlannedDestination = options.allowExistingDestinationKeys?.has(relativePathKey(operation.destinationRelativePath)) ?? false;
+  if (
+    source.relativePath !== operation.destinationRelativePath
+    && !allowedPlannedDestination
+    && !(await destinationIsAvailable(destinationAbsolutePath))
+  ) {
     throw new Error("Destination already exists.");
   }
 
@@ -607,7 +677,14 @@ export async function applyApprovedPlan(input: {
   const review = await readAllPaperReviewItems(input.project, plan.scanId, input.brainRoot);
   const reviewItems = review?.items ?? [];
   const reviewItemsByPaperId = new Map(reviewItems.map((item) => [item.paperId, item]));
-  await Promise.all(operations.map((operation) => preflightApplyOperation(plan.rootRealpath, operation)));
+  const plannedMovingSources = new Set(
+    operations
+      .filter(operationMovesSource)
+      .map((operation) => relativePathKey(operation.source.relativePath)),
+  );
+  await Promise.all(operations.map((operation) => preflightApplyOperation(plan.rootRealpath, operation, {
+    allowExistingDestinationKeys: plannedMovingSources,
+  })));
   const manifestId = plan.manifestId ?? randomUUID();
   const manifestOperations = manifestOperationsFromPlan(operations, reviewItemsByPaperId);
   const createdAt = nowIso();
