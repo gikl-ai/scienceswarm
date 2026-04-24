@@ -214,7 +214,7 @@ const ASSISTANT_BODY_TEXT_CLASS =
   "text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
 const ASSISTANT_PARAGRAPH_CLASS = `mb-5 ${ASSISTANT_BODY_TEXT_CLASS}`;
 const ASSISTANT_TITLE_CLASS =
-  "mb-6 text-[2.25rem] leading-[0.98] font-semibold tracking-[-0.05em] text-slate-950 first:mt-0 sm:text-[2.6rem]";
+  "mb-6 text-[2.25rem] leading-[0.98] font-semibold tracking-[-0.05em] text-slate-950 sm:text-[2.6rem]";
 const ASSISTANT_SUBTITLE_CLASS =
   "mt-10 mb-4 text-[1.7rem] leading-[1.08] font-semibold tracking-[-0.04em] text-sky-950 first:mt-0 sm:text-[1.95rem]";
 const ASSISTANT_SECTION_CLASS =
