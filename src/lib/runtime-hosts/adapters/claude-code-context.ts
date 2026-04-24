@@ -34,6 +34,7 @@ export interface ClaudeCodeInvocationContext {
 export interface ClaudeCodeRuntimeContextBuilderInput {
   request: RuntimeTurnRequest;
   wrapperSessionId: string;
+  capsuleSessionId?: string;
   env: NodeJS.ProcessEnv;
   repoRoot?: string;
   sessionRoot?: string;
@@ -82,10 +83,11 @@ export async function buildClaudeCodeRuntimeContext(
     input.sessionRoot
       ?? path.join(getScienceSwarmDataRoot(), "runtime", "claude-code"),
   );
+  const capsuleSessionId = input.capsuleSessionId ?? input.wrapperSessionId;
   const sessionDir = path.join(
     sessionRoot,
     projectSlug,
-    safePathSegment(input.wrapperSessionId),
+    safePathSegment(capsuleSessionId),
   );
   await mkdir(sessionDir, { recursive: true });
 
