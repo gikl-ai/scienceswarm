@@ -40,6 +40,18 @@ describe("paper-library templates", () => {
     });
   });
 
+  it("rejects fallback syntax until template fallbacks are intentionally introduced", () => {
+    expect(parseRenameTemplate("{year}/{venue|unknown}/{title}.pdf")).toMatchObject({
+      ok: false,
+      problems: [expect.objectContaining({ code: "fallback_not_supported", variable: "venue" })],
+    });
+
+    expect(renderRenameTemplate("{year}/{venue|unknown}/{title}.pdf", { year: 2024, title: "Paper" })).toMatchObject({
+      ok: false,
+      problems: [expect.objectContaining({ code: "fallback_not_supported", variable: "venue" })],
+    });
+  });
+
   it("blocks long paths and case-folded collisions", () => {
     const longTitle = "x".repeat(130);
     expect(renderRenameTemplate("{title}.pdf", { title: longTitle })).toMatchObject({
@@ -60,4 +72,3 @@ describe("paper-library templates", () => {
     expect(sanitizePathSegment("../")).toBe("untitled");
   });
 });
-

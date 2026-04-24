@@ -94,6 +94,15 @@ describe("paper-library review and apply routes", () => {
     };
     expect(reviewPage.items).toHaveLength(1);
 
+    const invalidCursorResponse = await reviewRoute.GET(new Request(
+      `http://localhost/api/brain/paper-library/review?project=project-alpha&scanId=${scanStarted.scanId}&cursor=bm90LWEtbnVtYmVy`,
+    ));
+    expect(invalidCursorResponse.status).toBe(400);
+    await expect(invalidCursorResponse.json()).resolves.toMatchObject({
+      ok: false,
+      error: { code: "invalid_cursor" },
+    });
+
     const acceptedResponse = await reviewRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/review", {
       project: "project-alpha",
       scanId: scanStarted.scanId,

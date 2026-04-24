@@ -146,6 +146,22 @@ function buildOperation(
   };
 }
 
+async function addDestinationExistenceConflicts(
+  rootRealpath: string,
+  operations: ApplyOperation[],
+): Promise<ApplyOperation[]> {
+  return Promise.all(operations.map(async (operation) => {
+    if (operation.source?.relativePath === operation.destinationRelativePath) return operation;
+    if (!validateRelativeDestination(operation.destinationRelativePath).ok) return operation;
+    const destinationAbsolutePath = path.join(rootRealpath, operation.destinationRelativePath);
+    if (await destinationIsAvailable(destinationAbsolutePath)) return operation;
+    return {
+      ...operation,
+      conflictCodes: Array.from(new Set([...operation.conflictCodes, "destination_exists"])),
+    };
+  }));
+}
+
 async function writeOperationShards(
   project: string,
   applyPlanId: string,
@@ -231,16 +247,17 @@ export async function createApplyPlan(input: {
       conflictCodes: Array.from(new Set([...operation.conflictCodes, "duplicate_destination"])),
     };
   });
+  const checkedOperations = await addDestinationExistenceConflicts(scanRoot, dedupedOperations);
 
   const createdAt = nowIso();
   const id = randomUUID();
-  const operationShardIds = await writeOperationShards(input.project, id, dedupedOperations, review.stateRoot);
-  const conflictCount = dedupedOperations.filter((operation) => operation.conflictCodes.length > 0).length;
+  const operationShardIds = await writeOperationShards(input.project, id, checkedOperations, review.stateRoot);
+  const conflictCount = checkedOperations.filter((operation) => operation.conflictCodes.length > 0).length;
   const planDigest = hashJson({
     scanId: input.scanId,
     rootRealpath: scanRoot,
     templateFormat: input.templateFormat,
-    operations: dedupedOperations,
+    operations: checkedOperations,
   });
   const plan = ApplyPlanSchema.parse({
     version: PAPER_LIBRARY_STATE_VERSION,
@@ -251,7 +268,7 @@ export async function createApplyPlan(input: {
     rootPath: input.rootPath ?? review.scan.rootPath,
     rootRealpath: scanRoot,
     templateFormat: input.templateFormat,
-    operationCount: dedupedOperations.length,
+    operationCount: checkedOperations.length,
     conflictCount,
     operationShardIds,
     planDigest,
@@ -264,7 +281,7 @@ export async function createApplyPlan(input: {
     applyPlanId: id,
     updatedAt: nowIso(),
   }));
-  return { plan, operations: dedupedOperations };
+  return { plan, operations: checkedOperations };
 }
 
 export async function approveApplyPlan(input: {
@@ -418,10 +435,32 @@ async function destinationIsAvailable(destinationAbsolutePath: string): Promise<
 
 async function assertDestinationParentInsideRoot(rootRealpath: string, destinationAbsolutePath: string): Promise<void> {
   const parent = path.dirname(destinationAbsolutePath);
-  await mkdir(parent, { recursive: true });
-  const parentRealpath = await realpath(parent);
-  if (!isPathInsideRoot(rootRealpath, parentRealpath)) {
+  const relativeParent = path.relative(rootRealpath, parent);
+  if (relativeParent.startsWith("..") || path.isAbsolute(relativeParent)) {
     throw new Error("Destination parent escapes the approved root.");
+  }
+  if (!relativeParent) return;
+
+  let current = rootRealpath;
+  for (const segment of relativeParent.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    try {
+      const existing = await lstat(current);
+      if (existing.isSymbolicLink()) {
+        throw new Error("Destination parent contains a symlink boundary.");
+      }
+      if (!existing.isDirectory()) {
+        throw new Error("Destination parent is not a directory.");
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      await mkdir(current);
+    }
+
+    const currentRealpath = await realpath(current);
+    if (!isPathInsideRoot(rootRealpath, currentRealpath)) {
+      throw new Error("Destination parent escapes the approved root.");
+    }
   }
 }
 
@@ -445,6 +484,9 @@ async function preflightApplyOperation(
   if (!comparison.ok) throw new Error(comparison.problems[0]?.message ?? "Source changed since approval.");
   const destinationValidation = validateRelativeDestination(operation.destinationRelativePath);
   if (!destinationValidation.ok) throw new Error(destinationValidation.problems[0]?.message ?? "Destination is unsafe.");
+  if (source.relativePath !== operation.destinationRelativePath && !(await destinationIsAvailable(destinationAbsolutePath))) {
+    throw new Error("Destination already exists.");
+  }
 
   return {
     source,

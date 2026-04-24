@@ -269,7 +269,7 @@ describe("paper-library gaps route", () => {
     ));
     expect(response.status).toBe(400);
     const body = await response.json() as { ok: boolean; error: { code: string } };
-    expect(body).toMatchObject({ ok: false, error: { code: "invalid_state" } });
+    expect(body).toMatchObject({ ok: false, error: { code: "invalid_cursor" } });
   });
 
   it("rejects non-local gap requests", async () => {

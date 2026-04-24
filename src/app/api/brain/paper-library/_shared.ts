@@ -27,6 +27,9 @@ export function paperLibraryBadRequest(error: unknown): Response {
     );
   }
   const message = error instanceof Error ? error.message : "Invalid paper-library request.";
+  if (message === "invalid_cursor") {
+    return Response.json(paperLibraryError("invalid_cursor", "Invalid pagination cursor."), { status: 400 });
+  }
   return Response.json(paperLibraryError("invalid_state", message), { status: 400 });
 }
 
