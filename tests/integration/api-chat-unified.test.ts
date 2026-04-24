@@ -1860,8 +1860,9 @@ describe("POST /api/chat/unified", () => {
     expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
 
     const events = await readSseEvents(response);
-    expect(events).toHaveLength(3);
-    expect(events[0]).toMatchObject({
+    const phaseEvents = events.filter((event) => event.progress === undefined);
+    expect(phaseEvents).toHaveLength(3);
+    expect(phaseEvents[0]).toMatchObject({
       taskPhases: [
         { id: "running-skill", label: "Running skill", status: "active" },
         {
@@ -1872,7 +1873,7 @@ describe("POST /api/chat/unified", () => {
         { id: "done", label: "Done", status: "pending" },
       ],
     });
-    expect(events[1]).toMatchObject({
+    expect(phaseEvents[1]).toMatchObject({
       taskPhases: [
         { id: "running-skill", label: "Running skill", status: "completed" },
         {
@@ -1883,7 +1884,7 @@ describe("POST /api/chat/unified", () => {
         { id: "done", label: "Done", status: "pending" },
       ],
     });
-    expect(events[2]).toMatchObject({
+    expect(phaseEvents[2]).toMatchObject({
       text: expect.stringContaining("docs/revision-plan.md"),
       generatedFiles: ["docs/revision-plan.md"],
       taskPhases: [
@@ -3778,8 +3779,9 @@ describe("POST /api/chat/unified", () => {
     expect(response.headers.get("X-Chat-Backend")).toBe("openclaw");
 
     const events = await readSseEvents(response);
-    expect(events).toHaveLength(4);
-    expect(events[0]).toMatchObject({
+    const phaseEvents = events.filter((event) => event.progress === undefined);
+    expect(phaseEvents).toHaveLength(4);
+    expect(phaseEvents[0]).toMatchObject({
       taskPhases: [
         { id: "reading-file", label: "Reading file", status: "active" },
         {
@@ -3800,7 +3802,7 @@ describe("POST /api/chat/unified", () => {
         { id: "done", label: "Done", status: "pending" },
       ],
     });
-    expect(events[1]).toMatchObject({
+    expect(phaseEvents[1]).toMatchObject({
       taskPhases: [
         { id: "reading-file", label: "Reading file", status: "completed" },
         { id: "extracting-table", label: "Extracting table", status: "active" },
@@ -3817,7 +3819,7 @@ describe("POST /api/chat/unified", () => {
         { id: "done", label: "Done", status: "pending" },
       ],
     });
-    expect(events[2]).toMatchObject({
+    expect(phaseEvents[2]).toMatchObject({
       taskPhases: [
         { id: "reading-file", label: "Reading file", status: "completed" },
         {
@@ -3834,7 +3836,7 @@ describe("POST /api/chat/unified", () => {
         { id: "done", label: "Done", status: "pending" },
       ],
     });
-    expect(events[3]).toMatchObject({
+    expect(phaseEvents[3]).toMatchObject({
       text: "Saved chart to results/summary-chart.svg",
       conversationId: expect.stringMatching(/^web-alpha-project-/),
       generatedFiles: ["results/summary-chart.svg"],
@@ -3914,8 +3916,9 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toContain("text/event-stream");
     const events = await readSseEvents(response);
-    expect(events).toHaveLength(4);
-    expect(events[0]).toMatchObject({
+    const phaseEvents = events.filter((event) => event.progress === undefined);
+    expect(phaseEvents).toHaveLength(4);
+    expect(phaseEvents[0]).toMatchObject({
       taskPhases: [
         { id: "reading-file", label: "Reading file", status: "active" },
         {
@@ -3932,7 +3935,7 @@ describe("POST /api/chat/unified", () => {
         { id: "done", label: "Done", status: "pending" },
       ],
     });
-    expect(events[1]).toMatchObject({
+    expect(phaseEvents[1]).toMatchObject({
       taskPhases: [
         { id: "reading-file", label: "Reading file", status: "completed" },
         {
@@ -3949,7 +3952,7 @@ describe("POST /api/chat/unified", () => {
         { id: "done", label: "Done", status: "pending" },
       ],
     });
-    expect(events[2]).toMatchObject({
+    expect(phaseEvents[2]).toMatchObject({
       taskPhases: [
         { id: "reading-file", label: "Reading file", status: "completed" },
         {
@@ -3962,7 +3965,7 @@ describe("POST /api/chat/unified", () => {
         { id: "done", label: "Done", status: "pending" },
       ],
     });
-    expect(events[3]).toMatchObject({
+    expect(phaseEvents[3]).toMatchObject({
       text: "Saved critique to docs/hubble-1929-critique.md and plan to docs/hubble-1929-revision-plan.md",
       generatedFiles: [
         "docs/hubble-1929-critique.md",
@@ -4000,7 +4003,7 @@ describe("POST /api/chat/unified", () => {
         }),
       }),
     );
-    expect(JSON.stringify(events[3])).not.toContain(projectRoot);
+    expect(JSON.stringify(phaseEvents[3])).not.toContain(projectRoot);
   });
 
   it("repairs missing full-scope audit artifacts without surfacing a premature cover letter", async () => {
