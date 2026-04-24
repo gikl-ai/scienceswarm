@@ -223,6 +223,8 @@ const ASSISTANT_LIST_CLASS =
 const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-slate-500";
 const ASSISTANT_METADATA_CLASS =
   "text-[10px] font-medium tracking-[0.02em] text-slate-400";
+const ASSISTANT_METADATA_CHIP_CLASS =
+  "inline-flex items-center rounded-full bg-slate-100/85 px-2.5 py-1 text-[10px] font-medium tracking-[0.015em] text-slate-400";
 const ASSISTANT_BLOCKQUOTE_CLASS =
   "mb-5 rounded-r-2xl border-l-2 border-sky-300 bg-sky-50/75 px-4 py-3 italic text-sky-900";
 const ASSISTANT_LINK_CLASS =
@@ -1567,10 +1569,10 @@ export function ChatMessage({
           ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/15 text-rose-100 transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
           : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-white/70 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
       : copyState === "copied"
-        ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
+        ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition-all hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
         : copyState === "error"
-        ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rose-200 bg-rose-50 text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
-        : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-slate-50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
+        ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700 transition-all hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
+        : "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-slate-400 opacity-0 transition-all group-hover/assistant:opacity-100 group-focus-within/assistant:opacity-100 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
   const bubbleClass =
     role === "user"
       ? `max-w-2xl rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text ${
@@ -1582,13 +1584,13 @@ export function ChatMessage({
         ? "w-full max-w-[min(92vw,72rem)] rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text bg-white border-2 border-border text-muted text-xs font-mono"
         : "w-full max-w-[min(90vw,56rem)] px-1 py-3 select-text cursor-text text-slate-900 sm:px-2";
   const assistantSurfaceClass = isAssistantTurn
-    ? "mx-auto flex w-full max-w-[48rem] flex-col"
+    ? "group/assistant mx-auto flex w-full max-w-[48rem] flex-col"
     : "";
   const contentClass = isAssistantTurn
     ? `select-text text-slate-900 ${selectionClass}`
     : `whitespace-pre-wrap select-text ${selectionClass}`;
   const footerRowClass = isAssistantTurn
-    ? "mt-4 flex items-center justify-end gap-3"
+    ? "mt-5 flex items-center justify-end gap-2"
     : "mt-3 flex items-center justify-end gap-3";
 
   useEffect(() => () => {
@@ -1739,7 +1741,9 @@ export function ChatMessage({
             <CopyStatusIcon size={18} weight="regular" aria-hidden="true" />
           </button>
         )}
-        <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
+        <div className={isAssistantTurn ? ASSISTANT_METADATA_CHIP_CLASS : `text-[9px] ${footerTextClass}`}>
+          {timestampText}
+        </div>
       </div>
     </>
   );
