@@ -1503,8 +1503,14 @@ function ProjectPageContent() {
           ? currentDraft
           : restoredDraft;
       });
+      // Keep prompt-history restore aligned with the destination project draft
+      // even before React commits the new textarea value.
+      draftInputRef.current = restoredDraft;
       syncDraftFrame = window.requestAnimationFrame(() => {
-        draftInputRef.current = inputRef.current?.value || restoredDraft;
+        const domValue = inputRef.current?.value;
+        if (domValue !== undefined && domValue.length > 0) {
+          draftInputRef.current = domValue;
+        }
       });
       promptHistoryIndexRef.current = null;
     } catch {
