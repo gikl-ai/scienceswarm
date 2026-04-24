@@ -1504,7 +1504,7 @@ function ProjectPageContent() {
           : restoredDraft;
       });
       syncDraftFrame = window.requestAnimationFrame(() => {
-        draftInputRef.current = inputRef.current?.value ?? restoredDraft;
+        draftInputRef.current = inputRef.current?.value || restoredDraft;
       });
       promptHistoryIndexRef.current = null;
     } catch {
