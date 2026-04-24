@@ -711,7 +711,7 @@ function coalesceExploredLines(lines: string[]): string[] {
     }
     grouped.push(
       pending.targets.length > 1
-        ? `${pending.verb} ${pending.targets.join(", ")}`
+        ? `${pending.verb} ${pending.targets.join(" · ")}`
         : `${pending.verb} ${pending.targets[0]}`,
     );
     pending = null;
