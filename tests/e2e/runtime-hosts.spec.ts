@@ -827,10 +827,14 @@ async function sendProjectPrompt(page: Page, prompt: string): Promise<void> {
   const input = page.getByTestId("chat-input");
   await expect(input).toBeVisible();
   await expect(input).toBeEnabled();
-  await input.fill(prompt);
+  await input.click();
+  await input.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await input.press("Backspace");
+  await input.pressSequentially(prompt);
   await expect(input).toHaveValue(prompt);
 
   const sendButton = page.getByRole("button", { name: "Send" });
+  await expect(sendButton).toBeVisible();
   await expect(sendButton).toBeEnabled();
   await sendButton.click();
 }
