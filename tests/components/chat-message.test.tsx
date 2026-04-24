@@ -762,6 +762,51 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("keeps an expanded explored block open when earlier transcript rows are inserted", () => {
+    const timestamp = new Date("2026-04-21T10:00:00.000Z");
+    const initialProgressLog = [
+      { kind: "activity", text: "Read docs/a.md" },
+      { kind: "activity", text: "Write docs/b.md" },
+      { kind: "activity", text: "Edit docs/c.md" },
+      { kind: "activity", text: "Search docs/ for metrics" },
+      { kind: "activity", text: "Run python3 scripts/report.py" },
+    ] as const;
+    const { rerender } = render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[...initialProgressLog]}
+        timestamp={timestamp}
+        isStreaming
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("assistant-explored-toggle-0"));
+
+    const transcript = screen.getByTestId("assistant-progress-transcript");
+    expect(within(transcript).getByText("Search docs/ for metrics")).toBeInTheDocument();
+
+    rerender(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "thinking", text: "Checking the workspace first." },
+          ...initialProgressLog,
+        ]}
+        timestamp={timestamp}
+        isStreaming
+      />,
+    );
+
+    expect(within(screen.getByTestId("assistant-progress-transcript")).getByText(
+      "Search docs/ for metrics",
+    )).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-explored-toggle-1")).toHaveTextContent(
+      "Hide extra actions",
+    );
+  });
+
   it("normalizes legacy raw tool JSON lines in the visible transcript", () => {
     render(
       <ChatMessage
