@@ -204,6 +204,9 @@ const COMPACT_STEP_VERB_LABELS: Record<Step["verb"], string> = {
   drafting: "Drafting",
   running: "Running",
 };
+const LEGACY_HTML_EMBED_ALIASES: Record<string, string> = {
+  "snake-game": "snake/index.html",
+};
 
 function isExploredCommand(text: string): boolean {
   return EXPLORE_COMMAND_PREFIXES.some((prefix) => text.startsWith(prefix));
@@ -441,13 +444,12 @@ function resolveLegacyHtmlAliasPath(value: string): string | null {
     return null;
   }
 
-  const segments = normalized.split("/");
-  const lastSegment = segments[segments.length - 1];
-  if (/-game$/i.test(lastSegment)) {
-    segments[segments.length - 1] = lastSegment.replace(/-game$/i, "");
+  const aliasedPath = LEGACY_HTML_EMBED_ALIASES[normalized];
+  if (aliasedPath) {
+    return aliasedPath;
   }
 
-  return normalizeWorkspaceRelativePath(`${segments.join("/")}/index.html`);
+  return normalizeWorkspaceRelativePath(`${normalized}/index.html`);
 }
 
 function normalizeProgressTextForDisplay(text: string): string | null {
