@@ -25,6 +25,10 @@ import {
   RuntimeCliMalformedOutputError,
   normalizeCliOutput,
 } from "@/lib/runtime-hosts/transport/output-normalizer";
+import {
+  ClaudeCodeStreamAccumulator,
+  parseClaudeCodeStreamOutput,
+} from "@/lib/runtime-hosts/transport/claude-code-stream";
 import type { SavedLlmRuntimeEnv } from "@/lib/runtime-saved-env";
 
 class FakeCliTransport implements CliTransport {
@@ -173,6 +177,83 @@ describe("runtime host adapters", () => {
       message: "Fresh answer",
     });
     expect(transport.requests.at(-1)?.args).not.toContain("--resume");
+  });
+
+  it("captures only top-level Claude Code session ids for native resume", () => {
+    const nestedOnly = parseClaudeCodeStreamOutput({
+      hostId: "claude-code",
+      sessionId: "wrapper-session",
+      lines: [
+        JSON.stringify({
+          type: "assistant",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                session_id: "nested-tool-session",
+                content: "tool output",
+              },
+            ],
+          },
+        }),
+      ],
+    });
+    const topLevel = parseClaudeCodeStreamOutput({
+      hostId: "claude-code",
+      sessionId: "wrapper-session",
+      lines: [
+        JSON.stringify({
+          type: "system",
+          session_id: "claude-native-session",
+          tool_result: {
+            session_id: "nested-tool-session",
+          },
+        }),
+        JSON.stringify({
+          type: "result",
+          result: "done",
+          session_id: "claude-native-session",
+        }),
+      ],
+    });
+
+    expect(nestedOnly.nativeSessionId).toBeNull();
+    expect(
+      nestedOnly.events.some((event) => event.payload.nativeSessionId),
+    ).toBe(false);
+    expect(topLevel.nativeSessionId).toBe("claude-native-session");
+    expect(topLevel.events.at(0)?.payload.nativeSessionId).toBe(
+      "claude-native-session",
+    );
+  });
+
+  it("accumulates Claude Code assistant partials before final result events", () => {
+    const accumulator = new ClaudeCodeStreamAccumulator({
+      hostId: "claude-code",
+      sessionId: "wrapper-session",
+    });
+
+    const first = accumulator.acceptLine(JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "First" }],
+      },
+    }));
+    const second = accumulator.acceptLine(JSON.stringify({
+      type: "content_block_delta",
+      delta: { text: " chunk" },
+    }));
+    const third = accumulator.acceptLine(JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: " and second" }],
+      },
+    }));
+
+    expect(first?.payload.text).toBe("First");
+    expect(second?.payload.text).toBe("First chunk");
+    expect(third?.payload.text).toBe("First chunk and second");
+    expect(accumulator.result().message).toBe("First chunk and second");
   });
 
   it("emits unique message event ids for repeated wrapper turns in one session", async () => {

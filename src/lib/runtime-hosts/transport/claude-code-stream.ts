@@ -40,15 +40,20 @@ function firstString(...values: unknown[]): string | null {
 
 function findSessionId(value: unknown): string | null {
   if (!isRecord(value)) return null;
-  const direct = firstString(value.session_id, value.sessionId);
-  if (direct) return direct;
-  for (const nested of Object.values(value)) {
-    if (isRecord(nested)) {
-      const found = findSessionId(nested);
-      if (found) return found;
-    }
-  }
-  return null;
+  return firstString(value.session_id, value.sessionId);
+}
+
+function mergeAssistantMessage(
+  current: string,
+  next: string,
+  recordType: unknown,
+): string {
+  if (recordType === "result") return next;
+  if (recordType === "content_block_delta") return current + next;
+  if (!current) return next;
+  if (next.startsWith(current)) return next;
+  if (current.endsWith(next) || current.includes(next)) return current;
+  return `${current}${next}`;
 }
 
 function textFromContentItem(item: unknown): string | null {
@@ -144,9 +149,11 @@ export class ClaudeCodeStreamAccumulator {
     const text = extractAssistantText(record);
     const eventType = text ? "message" : eventTypeFor(record);
     if (text) {
-      this.assistantMessage = record.type === "content_block_delta"
-        ? this.assistantMessage + text
-        : text;
+      this.assistantMessage = mergeAssistantMessage(
+        this.assistantMessage,
+        text,
+        record.type,
+      );
     }
 
     return this.appendEvent(eventType, {

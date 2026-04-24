@@ -38,6 +38,10 @@ function runtimeEventInput(event: RuntimeEvent, sessionId: string): RuntimeEvent
   };
 }
 
+function isMessageTextEvent(event: RuntimeEvent): boolean {
+  return event.type === "message" && typeof event.payload.text === "string";
+}
+
 function sseFrame(data: unknown): string {
   return `data: ${JSON.stringify(data)}\n\n`;
 }
@@ -95,8 +99,10 @@ export async function POST(request: Request): Promise<Response> {
         .then(() => writer.write(encoder.encode("data: [DONE]\n\n")))
         .catch(() => undefined);
     };
+    let streamedMessageEvent = false;
     const appendEvent = (event: RuntimeEvent) => {
       const result = services.eventStore.appendEvent(runtimeEventInput(event, session.id));
+      if (isMessageTextEvent(result.event)) streamedMessageEvent = true;
       if (result.appended) enqueue({ event: result.event });
       return result.event;
     };
@@ -104,6 +110,7 @@ export async function POST(request: Request): Promise<Response> {
       input: Parameters<typeof services.eventStore.appendEvent>[0],
     ) => {
       const result = services.eventStore.appendEvent(input);
+      if (isMessageTextEvent(result.event)) streamedMessageEvent = true;
       if (result.appended) enqueue({ event: result.event });
       return result.event;
     };
@@ -149,16 +156,18 @@ export async function POST(request: Request): Promise<Response> {
           for (const event of result.events ?? []) {
             appendEvent(event);
           }
-          appendInputEvent({
-            id: `${session.id}:runtime-message`,
-            sessionId: session.id,
-            hostId,
-            type: "message",
-            payload: {
-              text: result.message,
-              nativeSessionId: result.sessionId,
-            },
-          });
+          if (!streamedMessageEvent) {
+            appendInputEvent({
+              id: `${session.id}:runtime-message`,
+              sessionId: session.id,
+              hostId,
+              type: "message",
+              payload: {
+                text: result.message,
+                nativeSessionId: result.sessionId,
+              },
+            });
+          }
           for (const [index, artifact] of (result.artifacts ?? []).entries()) {
             appendInputEvent({
               id: `${session.id}:artifact:${index}:${artifact.sourcePath}`,

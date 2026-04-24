@@ -287,6 +287,18 @@ describe("runtime session APIs", () => {
     expect(response.headers.get("Content-Type")).toContain("text/event-stream");
     expect(turns).toHaveLength(1);
     expect(turns[0].conversationId).toBeNull();
+    const messageTexts = payloads.flatMap((payload) => {
+      const event = payload.event;
+      if (!event || typeof event !== "object") return [];
+      const runtimeEvent = event as { type?: unknown; payload?: unknown };
+      if (runtimeEvent.type !== "message") return [];
+      const eventPayload = runtimeEvent.payload;
+      if (!eventPayload || typeof eventPayload !== "object") return [];
+      const text = (eventPayload as { text?: unknown }).text;
+      return typeof text === "string" ? [text] : [];
+    });
+
+    expect(messageTexts).toEqual(["stream from codex: Hosted turn"]);
     expect(payloads).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
