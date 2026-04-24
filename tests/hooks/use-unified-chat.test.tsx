@@ -386,8 +386,10 @@ describe("useUnifiedChat persistence", () => {
 
     await screen.findByText(/Codex runtime response/);
     expect(screen.getByTestId("message-log").textContent).toContain("[session] keep this native line");
-    expect(screen.getByTestId("backend").textContent).toBe("codex");
-    expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("codex");
+      expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
+    });
 
     await waitFor(() => {
       const stored = JSON.parse(
