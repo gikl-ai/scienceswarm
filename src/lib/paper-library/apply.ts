@@ -114,6 +114,10 @@ function operationMovesSource(operation: ApplyOperation): operation is ApplyOper
   return Boolean(operation.source && relativePathKey(operation.source.relativePath) !== relativePathKey(operation.destinationRelativePath));
 }
 
+function operationIsNoop(operation: ApplyOperation & { source: PaperLibraryFileSnapshot }): boolean {
+  return relativePathKey(operation.source.relativePath) === relativePathKey(operation.destinationRelativePath);
+}
+
 function buildOperation(
   item: PaperReviewItem,
   templateFormat: string,
@@ -213,7 +217,7 @@ async function addDestinationExistenceConflicts(
       .map((operation) => relativePathKey(operation.source.relativePath)),
   );
   return Promise.all(operations.map(async (operation) => {
-    if (operation.source?.relativePath === operation.destinationRelativePath) return operation;
+    if (operation.source && operationIsNoop({ ...operation, source: operation.source })) return operation;
     if (!validateRelativeDestination(operation.destinationRelativePath).ok) return operation;
     if (plannedMovingSources.has(relativePathKey(operation.destinationRelativePath))) return operation;
     const destinationAbsolutePath = path.join(rootRealpath, operation.destinationRelativePath);
@@ -551,7 +555,7 @@ async function preflightApplyOperation(
   if (!destinationValidation.ok) throw new Error(destinationValidation.problems[0]?.message ?? "Destination is unsafe.");
   const allowedPlannedDestination = options.allowExistingDestinationKeys?.has(relativePathKey(operation.destinationRelativePath)) ?? false;
   if (
-    source.relativePath !== operation.destinationRelativePath
+    !operationIsNoop({ ...operation, source })
     && !allowedPlannedDestination
     && !(await destinationIsAvailable(destinationAbsolutePath))
   ) {
@@ -566,6 +570,8 @@ async function preflightApplyOperation(
 }
 
 async function applyOneOperation(rootRealpath: string, operation: ApplyOperation): Promise<ApplyManifestOperation> {
+  // Batch preflight may allow destinations that earlier ordered operations will vacate.
+  // This per-operation preflight intentionally stays strict so a failed prior move cannot overwrite a still-occupied path.
   const { source, currentSnapshot, destinationAbsolutePath } = await preflightApplyOperation(rootRealpath, operation);
   await assertDestinationParentInsideRoot(rootRealpath, destinationAbsolutePath);
   const baseOperation = {
@@ -578,7 +584,7 @@ async function applyOneOperation(rootRealpath: string, operation: ApplyOperation
     ApplyManifestOperation,
     "operationId" | "paperId" | "sourceRelativePath" | "destinationRelativePath" | "source"
   >;
-  if (source.relativePath === operation.destinationRelativePath) {
+  if (operationIsNoop({ ...operation, source })) {
     return {
       ...baseOperation,
       status: "verified",

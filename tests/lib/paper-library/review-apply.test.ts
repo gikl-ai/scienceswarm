@@ -351,7 +351,7 @@ describe("paper-library review and apply", () => {
     });
 
     expect(applied?.manifest.status).toBe("applied");
-    expect(await readFile(path.join(paperRoot, "b.pdf"), "utf-8")).toBe("first pdf");
+    expect(await readFile(secondPath, "utf-8")).toBe("first pdf");
     expect(await readFile(path.join(paperRoot, "c.pdf"), "utf-8")).toBe("second pdf");
     expect(await exists(firstPath)).toBe(false);
   });
