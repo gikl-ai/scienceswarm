@@ -24,6 +24,7 @@
   --surface-rail:    var(--ss-slate-900);
   --surface-sunk:    var(--ss-slate-850);
   --surface-card2:   var(--ss-slate-750);
+  --surface-hover:   var(--surface-sunk);
   --surface-user:    var(--ss-user-dark);
   --surface-overlay: rgba(0, 0, 0, 0.55);
 
@@ -59,6 +60,7 @@
   --surface-rail:    var(--ss-mist-150);
   --surface-sunk:    var(--ss-mist-100);
   --surface-card2:   var(--ss-mist-200);
+  --surface-hover:   var(--surface-sunk);
   --surface-user:    var(--ss-user-light);
   --surface-overlay: rgba(20, 23, 28, 0.35);
 
@@ -151,6 +153,7 @@
   --color-sunk:         var(--surface-sunk);
   --color-rail:         var(--surface-rail);
   --color-card2:        var(--surface-card2);
+  --color-surface-hover: var(--surface-hover);
   --color-user:         var(--surface-user);
 
   --color-strong:       var(--text-strong);
