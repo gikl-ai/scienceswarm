@@ -80,12 +80,17 @@ const hosts = [
     authProvider: "openai",
     privacyClass: "hosted",
   }),
+  host({
+    id: "gemini-cli",
+    label: "Gemini CLI",
+    authProvider: "google-ai",
+    privacyClass: "hosted",
+  }),
 ];
 
 describe("ComposerRuntimeSwitcher", () => {
-  it("renders a compact route trigger and opens a viewport-safe runtime sheet", () => {
+  it("renders an assistant picker without exposing runtime jargon", () => {
     const onOpenChange = vi.fn();
-    const onModeChange = vi.fn();
 
     render(
       <ComposerRuntimeSwitcher
@@ -98,14 +103,14 @@ describe("ComposerRuntimeSwitcher", () => {
         onOpenChange={onOpenChange}
         onSelectedHostIdChange={vi.fn()}
         onProjectPolicyChange={vi.fn()}
-        onModeChange={onModeChange}
+        onModeChange={vi.fn()}
         onCompareHostIdsChange={vi.fn()}
       />,
     );
 
-    const trigger = screen.getByRole("button", { name: "Change runtime" });
+    const trigger = screen.getByRole("button", { name: "Change assistant" });
     expect(trigger).toHaveTextContent("Claude Code");
-    expect(trigger).not.toHaveTextContent("Chat");
+    expect(trigger).not.toHaveTextContent("Run with");
     expect(trigger).not.toHaveTextContent("Cloud ok");
 
     fireEvent.click(trigger);
@@ -122,25 +127,31 @@ describe("ComposerRuntimeSwitcher", () => {
         onOpenChange={vi.fn()}
         onSelectedHostIdChange={vi.fn()}
         onProjectPolicyChange={vi.fn()}
-        onModeChange={onModeChange}
+        onModeChange={vi.fn()}
         onCompareHostIdsChange={vi.fn()}
       />,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Runtime switcher" });
+    const dialog = screen.getByRole("dialog", { name: "Choose assistant" });
     expect(dialog).toHaveClass("fixed");
-    expect(within(dialog).getByText("This turn")).toBeInTheDocument();
-    expect(within(dialog).getByText("Data boundary")).toBeInTheDocument();
-    expect(within(dialog).queryByText("Check: claude auth status")).not.toBeInTheDocument();
-    expect(within(dialog).getAllByText("Claude Code")[0]).toBeInTheDocument();
+    expect(within(dialog).getByText("Choose assistant")).toBeInTheDocument();
+    expect(within(dialog).getByText("OpenClaw")).toBeInTheDocument();
+    expect(within(dialog).getByText("Claude Code")).toBeInTheDocument();
+    expect(within(dialog).getByText("Codex")).toBeInTheDocument();
+    expect(within(dialog).getByText("Gemini CLI")).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /Task/ }));
-    expect(onModeChange).toHaveBeenCalledWith("task");
+    expect(within(dialog).queryByText("Task")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Compare")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Data boundary")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Hosted")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Execution ok")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Cloud ok")).not.toBeInTheDocument();
   });
 
-  it("auto-raises policy when selecting a ready hosted CLI from local-only mode", () => {
+  it("selects Claude Code as a plain assistant choice and hides policy details", () => {
     const onProjectPolicyChange = vi.fn();
     const onSelectedHostIdChange = vi.fn();
+    const onModeChange = vi.fn();
     const onOpenChange = vi.fn();
 
     render(
@@ -148,49 +159,54 @@ describe("ComposerRuntimeSwitcher", () => {
         hosts={hosts}
         selectedHostId="openclaw"
         projectPolicy="local-only"
-        mode="chat"
+        mode="task"
         compareHostIds={["openclaw"]}
         open
         onOpenChange={onOpenChange}
         onSelectedHostIdChange={onSelectedHostIdChange}
         onProjectPolicyChange={onProjectPolicyChange}
-        onModeChange={vi.fn()}
+        onModeChange={onModeChange}
         onCompareHostIdsChange={vi.fn()}
       />,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Runtime switcher" });
+    const dialog = screen.getByRole("dialog", { name: "Choose assistant" });
     fireEvent.click(within(dialog).getByRole("button", { name: /Claude Code/ }));
 
     expect(onProjectPolicyChange).toHaveBeenCalledWith("cloud-ok");
+    expect(onModeChange).toHaveBeenCalledWith("chat");
     expect(onSelectedHostIdChange).toHaveBeenCalledWith("claude-code");
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("prunes compare hosts when the policy changes", () => {
+  it("returns to the private local assistant without asking for a mode", () => {
     const onProjectPolicyChange = vi.fn();
-    const onCompareHostIdsChange = vi.fn();
+    const onSelectedHostIdChange = vi.fn();
+    const onModeChange = vi.fn();
+    const onOpenChange = vi.fn();
 
     render(
       <ComposerRuntimeSwitcher
         hosts={hosts}
-        selectedHostId="claude-code"
+        selectedHostId="codex"
         projectPolicy="cloud-ok"
         mode="compare"
-        compareHostIds={["openclaw", "claude-code"]}
+        compareHostIds={["codex", "claude-code"]}
         open
-        onOpenChange={vi.fn()}
-        onSelectedHostIdChange={vi.fn()}
+        onOpenChange={onOpenChange}
+        onSelectedHostIdChange={onSelectedHostIdChange}
         onProjectPolicyChange={onProjectPolicyChange}
-        onModeChange={vi.fn()}
-        onCompareHostIdsChange={onCompareHostIdsChange}
+        onModeChange={onModeChange}
+        onCompareHostIdsChange={vi.fn()}
       />,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Runtime switcher" });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Local" }));
+    const dialog = screen.getByRole("dialog", { name: "Choose assistant" });
+    fireEvent.click(within(dialog).getByRole("button", { name: /OpenClaw/ }));
 
     expect(onProjectPolicyChange).toHaveBeenCalledWith("local-only");
-    expect(onCompareHostIdsChange).toHaveBeenCalledWith(["openclaw"]);
+    expect(onModeChange).toHaveBeenCalledWith("chat");
+    expect(onSelectedHostIdChange).toHaveBeenCalledWith("openclaw");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });
