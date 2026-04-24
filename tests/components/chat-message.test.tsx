@@ -566,6 +566,34 @@ describe("ChatMessage", () => {
     expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
   });
 
+  it("renders headings, lists, and fenced code when a progress row carries block markdown", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "thinking",
+            text:
+              "## Current plan\n\n" +
+              "- Inspect the saved chart\n" +
+              "- Compare the timing artifact\n\n" +
+              "```ts\nconst ready = true;\n```",
+          },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    expect(screen.getByRole("heading", { level: 2, name: "Current plan" })).toBeInTheDocument();
+    expect(progressLog).toHaveTextContent("Inspect the saved chart");
+    expect(progressLog).toHaveTextContent("Compare the timing artifact");
+    expect(screen.getByText("const ready = true;").closest("pre")).toHaveClass("bg-slate-950");
+    expect(progressLog).not.toHaveTextContent("## Current plan");
+  });
+
   it("renders mixed inline formatting inside visible explored transcript rows", () => {
     render(
       <ChatMessage
