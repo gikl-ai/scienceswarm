@@ -5479,7 +5479,7 @@ describe("useUnifiedChat persistence", () => {
   // direction to switch to; the tests lose their meaning along with the
   // "Switch Direct" harness button.
 
-  it("keeps the progress placeholder when a slash command times out before starting", async () => {
+  it("times out a slash command that never starts and keeps the placeholder with a failure progress row", async () => {
     vi.useFakeTimers();
 
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -5547,7 +5547,10 @@ describe("useUnifiedChat persistence", () => {
     const restoredMessages = (screen.getByTestId("message-log").textContent || "").split("\n");
     expect(restoredMessages.filter((message) => message.startsWith("assistant:"))).toHaveLength(2);
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Sending request to OpenClaw",
+      "activity:Chat failed: ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
+    );
+    expect(screen.getByTestId("activity-log").textContent).toContain(
+      "Chat failed: ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
     );
   });
 

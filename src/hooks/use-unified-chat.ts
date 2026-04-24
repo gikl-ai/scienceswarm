@@ -997,6 +997,7 @@ const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 8_000;
 const SLASH_COMMAND_START_TIMEOUT_MS = 15_000;
 const SLASH_COMMAND_TIMEOUT_MESSAGE =
   "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.";
+const SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE = `Chat failed: ${SLASH_COMMAND_TIMEOUT_MESSAGE}`;
 const QUEUED_ASSISTANT_CONTENT = "Queued...";
 const INTERNAL_SYSTEM_NOISE_PREFIXES = [
   "[User opened file:",
@@ -4270,6 +4271,29 @@ export function useUnifiedChat(
           if (err instanceof Error && err.name === "AbortError") {
             // A newer project/backend context superseded this request.
           } else if (isSendContextCurrent(queued.context)) {
+            if (
+              err instanceof Error
+              && err.message === SLASH_COMMAND_TIMEOUT_MESSAGE
+              && looksLikeSlashCommandInput(queued.content)
+            ) {
+              applyMessagesUpdate((prev) =>
+                prev.map((message) =>
+                  message.id === queued.assistantId
+                    ? {
+                        ...message,
+                        activityLog: appendActivityLog(
+                          message.activityLog,
+                          [SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE],
+                        ),
+                        progressLog: appendProgressLog(
+                          message.progressLog,
+                          buildActivityProgressEntries([SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE]),
+                        ),
+                      }
+                    : message,
+                ),
+              );
+            }
             setError(
               err instanceof Error
                 ? err.message
