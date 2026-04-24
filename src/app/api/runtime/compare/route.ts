@@ -190,7 +190,7 @@ export async function POST(request: Request): Promise<Response> {
             buildRuntimeTurnRequest({
               hostId: child.hostId,
               projectId,
-              conversationId: child.id,
+              conversationId: null,
               mode: "chat",
               prompt,
               promptHash: optionalStringField(body, "promptHash"),

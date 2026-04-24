@@ -223,4 +223,27 @@ describe("POST /api/runtime/compare", () => {
     expect(response.status).toBe(200);
     expect(turnPreviewHosts.sort()).toEqual(["codex", "openclaw"]);
   });
+
+  it("does not pass compare wrapper session ids as native resume ids", async () => {
+    const childConversationIds: Array<string | null> = [];
+    installAdapters([
+      adapter(requireRuntimeHostProfile("openclaw"), {
+        onTurn: (turn) => childConversationIds.push(turn.conversationId),
+      }),
+      adapter(requireRuntimeHostProfile("claude-code"), {
+        onTurn: (turn) => childConversationIds.push(turn.conversationId),
+      }),
+    ]);
+
+    const response = await POST(request({
+      projectId: "project-alpha",
+      projectPolicy: "cloud-ok",
+      selectedHostIds: ["openclaw", "claude-code"],
+      prompt: "Compare models.",
+      approvalState: "approved",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(childConversationIds).toEqual([null, null]);
+  });
 });

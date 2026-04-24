@@ -145,8 +145,8 @@ interface StoredChatState {
 
 /**
  * A file the user is currently viewing/previewing in the workspace.
- * Sent alongside the chat message so the LLM knows what "it" or "this file"
- * refers to, without polluting the displayed chat bubble.
+ * Included as explicitly selected context for runtime hosts so the LLM knows
+ * what "it" or "this file" refers to without changing the displayed bubble.
  */
 export interface ActiveFileContext {
   /** Display path shown to the user, e.g. "results.md" */
@@ -2362,16 +2362,35 @@ function buildRuntimeApiDataIncluded(
 
 function buildRuntimeApiInputFileRefs(
   content: string,
+  activeFile: ActiveFileContext | undefined,
   files: UploadedFile[],
 ): string[] {
   return Array.from(
     new Set([
       ...extractPromptSourceFiles(content),
+      ...(activeFile ? [activeFile.path] : []),
       ...files
         .map(getUploadedFileReference)
         .filter((value) => value.length > 0),
     ]),
   );
+}
+
+function buildRuntimeApiPrompt(
+  content: string,
+  activeFile: ActiveFileContext | undefined,
+): string {
+  if (!activeFile) return content;
+  const path = activeFile.path.trim() || "selected workspace file";
+  return [
+    content.trimEnd(),
+    "",
+    "--- Explicitly selected workspace context ---",
+    `Path: ${path}`,
+    "Content:",
+    activeFile.content,
+    "--- End selected workspace context ---",
+  ].join("\n");
 }
 
 function isRuntimeSendOptions(
@@ -3578,11 +3597,12 @@ export function useUnifiedChat(
         requestFiles,
         context.dataIncluded,
       );
-      const inputFileRefs = buildRuntimeApiInputFileRefs(content, requestFiles);
+      const inputFileRefs = buildRuntimeApiInputFileRefs(content, activeFile, requestFiles);
+      const prompt = buildRuntimeApiPrompt(content, activeFile);
       const baseBody = {
         projectId: context.projectName,
         projectPolicy: context.projectPolicy,
-        prompt: content,
+        prompt,
         conversationId: activeConversationId,
         approvalState: context.approvalState,
         dataIncluded,

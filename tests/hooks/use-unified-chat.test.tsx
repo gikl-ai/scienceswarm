@@ -48,6 +48,21 @@ function ChatHarness({ projectName }: { projectName: string }) {
       </button>
       <button
         onClick={() =>
+          void sendMessage("Summarize the selected file with Codex", {
+            runtimeHostId: "codex",
+            runtimeMode: "chat",
+            projectPolicy: "cloud-ok",
+            activeFile: {
+              path: "notes/current.md",
+              content: "Current file contents",
+            },
+          })
+        }
+      >
+        Send Codex runtime current file
+      </button>
+      <button
+        onClick={() =>
           void sendMessage("Summarize this file", {
             path: "notes/current.md",
             content: "Current file contents",
@@ -470,6 +485,72 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("backend").textContent).toBe("codex");
   });
 
+  it("includes explicitly selected active file context in direct runtime prompts", async () => {
+    const runtimeBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url === "/api/runtime/sessions/stream") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        runtimeBodies.push(body);
+        return createSseResponse([
+          {
+            event: {
+              type: "message",
+              payload: { text: "Codex saw the selected file" },
+            },
+          },
+          {
+            session: {
+              id: "rt-session-codex",
+              conversationId: "native-codex-session",
+              status: "completed",
+            },
+          },
+        ]);
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ files: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime current file" }));
+
+    await screen.findByText(/Codex saw the selected file/);
+    expect(runtimeBodies).toHaveLength(1);
+    expect(runtimeBodies[0]).toMatchObject({
+      hostId: "codex",
+      projectId: "alpha-project",
+      projectPolicy: "cloud-ok",
+      approvalState: "not-required",
+      inputFileRefs: ["notes/current.md"],
+      dataIncluded: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "workspace-file",
+          label: "notes/current.md",
+        }),
+      ]),
+    });
+    expect(runtimeBodies[0].prompt).toBe([
+      "Summarize the selected file with Codex",
+      "",
+      "--- Explicitly selected workspace context ---",
+      "Path: notes/current.md",
+      "Content:",
+      "Current file contents",
+      "--- End selected workspace context ---",
+    ].join("\n"));
+    expect(screen.getByTestId("message-log").textContent).toContain(
+      "user:Summarize the selected file with Codex",
+    );
+  });
+
   it("drops persisted assistant replay duplicates when restoring a project thread", async () => {
     const duplicatedMessages = [
       {
@@ -517,7 +598,7 @@ describe("useUnifiedChat persistence", () => {
       }),
     );
 
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
       if (url === "/api/chat/thread?project=alpha-project") {

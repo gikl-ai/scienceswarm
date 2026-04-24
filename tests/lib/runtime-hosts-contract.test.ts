@@ -86,8 +86,25 @@ describe("runtime host contracts and registry", () => {
     expect(openhands.controlSurface.supportsNativeSessionList).toBe(true);
   });
 
-  it("describes local CLI adapters as ScienceSwarm wrapper sessions", () => {
-    for (const hostId of ["claude-code", "codex", "gemini-cli"] as const) {
+  it("describes Claude Code as a native-session runtime host", () => {
+    const profile = requireRuntimeHostProfile("claude-code");
+
+    expect(profile.capabilities).toContain("resume");
+    expect(profile.controlSurface).toMatchObject({
+      owner: "scienceSwarm-wrapper",
+      sessionIdSource: "native-host",
+      supportsResume: true,
+      supportsNativeSessionList: false,
+    });
+    expect(profile.lifecycle).toMatchObject({
+      canResumeNativeSession: true,
+      canListNativeSessions: false,
+      resumeSemantics: "open-native-session",
+    });
+  });
+
+  it("describes non-resumable local CLI adapters as ScienceSwarm wrapper sessions", () => {
+    for (const hostId of ["codex", "gemini-cli"] as const) {
       const profile = requireRuntimeHostProfile(hostId);
 
       expect(profile.controlSurface).toMatchObject({
