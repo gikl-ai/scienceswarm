@@ -83,6 +83,38 @@ describe("scienceswarm CLI", () => {
     expect(output).toContain("OpenHands: stopped");
   });
 
+  it("reports a suspended launcher instead of a healthy running frontend", () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-suspended-"));
+    const runRoot = path.join(tmpRoot, "run");
+    fs.mkdirSync(runRoot, { recursive: true });
+
+    const helper = spawn("bash", ["-lc", "exec -a start.sh sleep 300"], {
+      cwd: repoRoot,
+      detached: true,
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        HOME: tmpRoot,
+      },
+    });
+    helper.unref();
+    if (typeof helper.pid !== "number") {
+      throw new Error("expected detached helper pid");
+    }
+    cleanupPids.add(helper.pid);
+    process.kill(-helper.pid, "SIGSTOP");
+    fs.writeFileSync(path.join(runRoot, "launcher.pid"), `${helper.pid}\n`, "utf8");
+
+    const output = runCli(["status"], {
+      SCIENCESWARM_DIR: tmpRoot,
+      FRONTEND_PORT: "43996",
+      HOME: tmpRoot,
+    });
+
+    expect(output).toContain(`Frontend: suspended (launcher pid ${helper.pid})`);
+    process.kill(-helper.pid, "SIGCONT");
+  });
+
   it("probes frontend health over https when local https is enabled", () => {
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-https-"));
     const binRoot = path.join(tmpRoot, "bin");

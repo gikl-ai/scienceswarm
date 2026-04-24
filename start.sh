@@ -188,6 +188,56 @@ fi
 : "${OPENHANDS_IMAGE:=docker.openhands.dev/openhands/openhands@sha256:5c0dc26f467bf8e47a6e76308edb7a30af4084b17e23a3460b5467008b12111b}"
 export FRONTEND_HOST FRONTEND_PUBLIC_HOST OPENHANDS_IMAGE
 
+DATA_ROOT="${SCIENCESWARM_DIR:-$HOME/.scienceswarm}"
+RUN_ROOT="$DATA_ROOT/run"
+LAUNCHER_PID_FILE="$RUN_ROOT/launcher.pid"
+OPENHANDS_CONTAINER_FILE="$RUN_ROOT/openhands.cid"
+OPENCLAW_GATEWAY_PID_FILE="$(openclaw_gateway_pid_file)"
+
+ensure_frontend_https_cert() {
+  local key_path="$1"
+  local cert_path="$2"
+  local openssl_config=""
+
+  if [ -f "$key_path" ] && [ -f "$cert_path" ]; then
+    return 0
+  fi
+
+  if ! command -v openssl >/dev/null 2>&1; then
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$key_path")" "$(dirname "$cert_path")"
+  openssl_config="$(mktemp)"
+  cat > "$openssl_config" <<'EOF'
+[req]
+distinguished_name = dn
+x509_extensions = v3_req
+prompt = no
+
+[dn]
+CN = localhost
+
+[v3_req]
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = localhost
+IP.1 = 127.0.0.1
+EOF
+
+  if openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 825 \
+    -keyout "$key_path" \
+    -out "$cert_path" \
+    -config "$openssl_config" >/dev/null 2>&1; then
+    rm -f "$openssl_config"
+    return 0
+  fi
+
+  rm -f "$openssl_config"
+  return 1
+}
+
 FRONTEND_SCHEME="http"
 NEXT_FRONTEND_ARGS=()
 
@@ -195,17 +245,25 @@ if is_truthy "${FRONTEND_USE_HTTPS}"; then
   FRONTEND_SCHEME="https"
   NEXT_FRONTEND_ARGS+=(--experimental-https)
 
-  if [ -n "${FRONTEND_HTTPS_KEY:-}" ] || [ -n "${FRONTEND_HTTPS_CERT:-}" ]; then
-    if [ -n "${FRONTEND_HTTPS_KEY:-}" ] && [ -n "${FRONTEND_HTTPS_CERT:-}" ]; then
-      NEXT_FRONTEND_ARGS+=(--experimental-https-key "${FRONTEND_HTTPS_KEY}" --experimental-https-cert "${FRONTEND_HTTPS_CERT}")
-      if [ ! -f "${FRONTEND_HTTPS_KEY}" ] || [ ! -f "${FRONTEND_HTTPS_CERT}" ]; then
-        echo "  ⚠ FRONTEND_HTTPS_KEY/CERT were provided but one path does not exist. Falling back to Next.js self-signed cert."
-        NEXT_FRONTEND_ARGS=(--experimental-https)
-      fi
-    else
-      echo "  ⚠ FRONTEND_USE_HTTPS is enabled but only one of FRONTEND_HTTPS_KEY/FRONTEND_HTTPS_CERT is set."
-      echo "    Next.js will fall back to its built-in self-signed certificate."
+  if [ -z "${FRONTEND_HTTPS_KEY:-}" ] && [ -z "${FRONTEND_HTTPS_CERT:-}" ]; then
+    FRONTEND_HTTPS_KEY="$DATA_ROOT/certificates/localhost-key.pem"
+    FRONTEND_HTTPS_CERT="$DATA_ROOT/certificates/localhost.pem"
+  fi
+
+  if [ -n "${FRONTEND_HTTPS_KEY:-}" ] && [ -n "${FRONTEND_HTTPS_CERT:-}" ]; then
+    if ! ensure_frontend_https_cert "$FRONTEND_HTTPS_KEY" "$FRONTEND_HTTPS_CERT"; then
+      echo "error: FRONTEND_USE_HTTPS is enabled, but no certificate/key pair is available." >&2
+      echo "  Expected key:  $FRONTEND_HTTPS_KEY" >&2
+      echo "  Expected cert: $FRONTEND_HTTPS_CERT" >&2
+      echo "  Install openssl, provide FRONTEND_HTTPS_KEY and FRONTEND_HTTPS_CERT, or set FRONTEND_USE_HTTPS=false." >&2
+      exit 1
     fi
+    NEXT_FRONTEND_ARGS+=(--experimental-https-key "${FRONTEND_HTTPS_KEY}" --experimental-https-cert "${FRONTEND_HTTPS_CERT}")
+    export FRONTEND_HTTPS_KEY FRONTEND_HTTPS_CERT
+  else
+    echo "error: FRONTEND_USE_HTTPS is enabled but only one of FRONTEND_HTTPS_KEY/FRONTEND_HTTPS_CERT is set." >&2
+    echo "  Provide both values or unset both so ScienceSwarm can use $DATA_ROOT/certificates." >&2
+    exit 1
   fi
 fi
 
@@ -233,12 +291,6 @@ resolve_openhands_local_model() {
   model="${model#ollama/}"
   printf 'openai/%s' "$model"
 }
-
-DATA_ROOT="${SCIENCESWARM_DIR:-$HOME/.scienceswarm}"
-RUN_ROOT="$DATA_ROOT/run"
-LAUNCHER_PID_FILE="$RUN_ROOT/launcher.pid"
-OPENHANDS_CONTAINER_FILE="$RUN_ROOT/openhands.cid"
-OPENCLAW_GATEWAY_PID_FILE="$(openclaw_gateway_pid_file)"
 
 warn_wsl_path "repo root" "$PWD"
 warn_wsl_path "SCIENCESWARM_DIR" "$DATA_ROOT"

@@ -156,6 +156,22 @@ pid_command_contains() {
   esac
 }
 
+pid_stat_contains() {
+  local pid="$1"
+  local needle="$2"
+  local stat=""
+
+  stat=$(ps -o stat= -p "$pid" 2>/dev/null | tr -d '[:space:]' || true)
+  case "$stat" in
+    *"$needle"*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 read_launcher_pid_file() {
   local pid=""
 
@@ -328,7 +344,11 @@ cmd_status() {
 
   launcher_pid=$(read_launcher_pid_file || true)
   if [ -n "$launcher_pid" ]; then
-    frontend_status="running (launcher pid $launcher_pid)"
+    if pid_stat_contains "$launcher_pid" "T"; then
+      frontend_status="suspended (launcher pid $launcher_pid)"
+    else
+      frontend_status="running (launcher pid $launcher_pid)"
+    fi
   else
     listener_pid=$(listener_pid_for_port "$FRONTEND_PORT" || true)
     if [ -n "$listener_pid" ]; then
