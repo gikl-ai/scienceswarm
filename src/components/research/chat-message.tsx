@@ -215,9 +215,9 @@ const ASSISTANT_BODY_TEXT_CLASS =
 const ASSISTANT_TITLE_CLASS =
   "mb-5 text-[2rem] leading-[1.04] font-semibold tracking-[-0.045em] text-slate-950";
 const ASSISTANT_SUBTITLE_CLASS =
-  "mt-8 mb-3 text-[1.4rem] leading-[1.15] font-semibold tracking-[-0.03em] text-sky-950";
+  "mt-8 first:mt-0 mb-3 text-[1.4rem] leading-[1.15] font-semibold tracking-[-0.03em] text-sky-950";
 const ASSISTANT_SECTION_CLASS =
-  "mt-6 mb-2 text-[1.05rem] leading-6 font-semibold tracking-[-0.015em] text-emerald-900";
+  "mt-6 first:mt-0 mb-2 text-[1.05rem] leading-6 font-semibold tracking-[-0.015em] text-emerald-900";
 const ASSISTANT_LIST_CLASS =
   "mb-5 pl-4 text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
 const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-slate-500";

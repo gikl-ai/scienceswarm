@@ -208,6 +208,7 @@ describe("ChatMessage", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Experiment summary" })).toHaveClass("mb-5");
     expect(screen.getByRole("heading", { level: 2, name: "Follow-up" })).toHaveClass("mt-8");
+    expect(screen.getByRole("heading", { level: 2, name: "Follow-up" })).toHaveClass("first:mt-0");
     expect(screen.getByRole("list")).toHaveClass("mb-5");
     expect(screen.getByTestId("assistant-media-gallery")).toHaveClass("my-6");
   });
