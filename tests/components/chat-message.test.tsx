@@ -109,6 +109,9 @@ describe("ChatMessage", () => {
 
     expect(screen.getByText("docs/results_chart.png")).toHaveClass("text-[11px]");
     expect(screen.getByText(expectedFooter)).toHaveClass("text-slate-400");
+    expect(screen.getByText(expectedFooter)).toHaveClass("bg-slate-100/85");
+    expect(screen.getByTestId("assistant-reply-surface")).toHaveClass("group/assistant");
+    expect(screen.getByRole("button", { name: "Copy message" })).toHaveClass("opacity-0");
   });
 
   it("renders nested lists, block quotes, and code fences in assistant markdown", () => {
