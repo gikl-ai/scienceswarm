@@ -494,6 +494,25 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("falls back to the previous non-empty compact detail when the latest narrative is blank", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "thinking", text: "   " },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Read docs/results_table.csv",
+    );
+  });
+
   it("renders thinking and activity sections in chronological order", () => {
     render(
       <ChatMessage
@@ -510,8 +529,8 @@ describe("ChatMessage", () => {
       />,
     );
 
-    const progressLog = screen.getByRole("log");
-    const text = progressLog.textContent ?? "";
+    const progressTranscript = screen.getByTestId("assistant-progress-transcript");
+    const text = progressTranscript.textContent ?? "";
     const firstPlan = text.indexOf("Plan: inspect files");
     const firstRead = text.indexOf("Read docs/results_table.csv");
     const secondThought = text.indexOf("Now summarize findings");
@@ -640,12 +659,13 @@ describe("ChatMessage", () => {
       />,
     );
 
-    const progressLog = screen.getByRole("log");
+    const progressLog = screen.getByTestId("assistant-progress-transcript");
     expect(screen.getByRole("heading", { level: 2, name: "Current plan" })).toBeInTheDocument();
     expect(progressLog).toHaveTextContent("Inspect the saved chart");
     expect(progressLog).toHaveTextContent("Compare the timing artifact");
     expect(screen.getByText("const ready = true;").closest("pre")).toHaveClass("bg-ink");
     expect(progressLog).not.toHaveTextContent("## Current plan");
+    expect(screen.getByTestId("assistant-run-state")).not.toHaveTextContent("## Current plan");
   });
 
   it("renders mixed inline formatting inside visible explored transcript rows", () => {

@@ -849,13 +849,31 @@ function buildProgressSectionChanges(
 }
 
 function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): string | null {
+  const compactDetail = (value: string): string | null => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (shouldRenderProgressMarkdownBlock(trimmed) || trimmed.includes("\n")) {
+      return null;
+    }
+    return trimmed;
+  };
+
   for (let index = blocks.length - 1; index >= 0; index -= 1) {
     const block = blocks[index];
     if (block.type === "narrative") {
-      return block.entry.text.trim() || null;
+      const detail = compactDetail(block.entry.text);
+      if (detail) {
+        return detail;
+      }
+      continue;
     }
     if (block.lines.length > 0) {
-      return block.lines[block.lines.length - 1].trim() || null;
+      const detail = compactDetail(block.lines[block.lines.length - 1]);
+      if (detail) {
+        return detail;
+      }
     }
   }
 
@@ -1795,7 +1813,7 @@ export function ChatMessage({
           />
 
           {progressTranscript.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-2" data-testid="assistant-progress-transcript">
               {buildProgressSectionChanges(progressTranscript, { compact: true })}
             </div>
           )}
@@ -1806,6 +1824,7 @@ export function ChatMessage({
         <div
           aria-live="polite"
           className="mb-3 space-y-3 text-[13px] leading-6 text-foreground/95"
+          data-testid="assistant-progress-transcript"
           role="log"
         >
           {buildProgressSectionChanges(progressTranscript)}
