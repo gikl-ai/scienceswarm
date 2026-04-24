@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "../styles/tokens/semantic.css";
 @import "../styles/tokens/shadcn-bridge.css";
+@import "../styles/tokens/legacy-bridge.css";
 
 /*
  * globals.css — ScienceSwarm design system v1

@@ -1,0 +1,55 @@
+/*
+ * legacy-bridge.css — class-name compatibility for pre-v1 code.
+ * ────────────────────────────────────────────────────────────────
+ * Code authored before the design-system overhaul used a compact
+ * pseudo-semantic vocabulary:
+ *
+ *   text-muted, text-foreground, text-accent-hover
+ *   bg-background, bg-surface, bg-accent-hover
+ *   border-border
+ *
+ * Most of these aren't in Tailwind's built-in palette, and a few
+ * collide with shadcn's conventions — notably text-muted, which via
+ * the shadcn bridge resolves to the muted *background* color (leaving
+ * large stretches of UI with invisible labels in light mode).
+ *
+ * This file provides explicit mappings for every legacy class name
+ * in the codebase so UIs render correctly while a follow-up migrates
+ * the names to the v1 vocabulary (text-dim, bg-raised, border-rule,
+ * etc.). After migration this file is removed.
+ *
+ * Variants (hover:, focus:, data-[state=open]:, …) are hand-authored
+ * below since Tailwind's variant generator doesn't extend to
+ * hand-written utility rules. Keep this file short; if a new legacy
+ * class name surfaces, add it here and to the migration plan.
+ *
+ * Source order: imported LAST by globals.css, so these mappings
+ * outrank Tailwind's @theme-inline-generated utilities for any class
+ * whose name appears in both places.
+ * ────────────────────────────────────────────────────────────────
+ */
+
+/* Text tones */
+.text-muted                    { color: var(--text-dim); }
+.text-foreground               { color: var(--text-strong); }
+.text-accent-hover             { color: var(--accent-dim); }
+.hover\:text-muted:hover       { color: var(--text-dim); }
+.hover\:text-foreground:hover  { color: var(--text-strong); }
+.hover\:text-accent-hover:hover { color: var(--accent-dim); }
+
+/* Surfaces */
+.bg-background                 { background-color: var(--surface-ink); }
+.bg-surface                    { background-color: var(--surface-raised); }
+.bg-accent-hover               { background-color: var(--accent-dim); }
+.hover\:bg-background:hover    { background-color: var(--surface-ink); }
+.hover\:bg-surface:hover       { background-color: var(--surface-sunk); }
+.hover\:bg-accent-hover:hover  { background-color: var(--accent-dim); }
+
+/* Rules */
+.border-border                 { border-color: var(--rule); }
+.hover\:border-border:hover    { border-color: var(--rule); }
+
+/* Ring variants — `ring-accent-hover` shows up occasionally. */
+.ring-accent-hover             { --tw-ring-color: var(--accent-dim); }
+.focus\:ring-accent-hover:focus             { --tw-ring-color: var(--accent-dim); }
+.focus-visible\:ring-accent-hover:focus-visible { --tw-ring-color: var(--accent-dim); }
