@@ -44,6 +44,7 @@
 .hover\:bg-background:hover    { background-color: var(--surface-ink); }
 .hover\:bg-surface:hover       { background-color: var(--surface-raised); }
 .hover\:bg-accent-hover:hover  { background-color: var(--accent-dim); }
+.focus\:bg-surface:focus       { background-color: var(--surface-raised); }
 
 /* Rules */
 .border-border                 { border-color: var(--rule); }
