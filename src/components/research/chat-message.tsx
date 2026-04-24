@@ -209,6 +209,7 @@ const COMPACT_STEP_VERB_LABELS: Record<Step["verb"], string> = {
 };
 const LEGACY_HTML_EMBED_ALIASES: Record<string, string> = {
   "snake-game": "snake/index.html",
+  "snake-webpage": "snake_game.html",
 };
 const ASSISTANT_BODY_TEXT_CLASS =
   "text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
