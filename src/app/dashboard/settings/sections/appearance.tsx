@@ -25,8 +25,14 @@ export function AppearanceSection() {
         Switch between the light and dark themes. Your choice persists across
         sessions and tabs.
       </div>
+      {/*
+       * Toolbar of toggle buttons — not a radiogroup. Native <button> Tab
+       * navigation is sufficient and expected here; using role="radiogroup"
+       * would imply the ARIA roving-tabindex + arrow-key contract, which we
+       * don't want to take on for a two-option theme picker.
+       */}
       <div
-        role="radiogroup"
+        role="toolbar"
         aria-label="Theme"
         className="inline-flex rounded-md border border-rule bg-sunk p-1 text-sm"
       >
@@ -36,8 +42,8 @@ export function AppearanceSection() {
             <button
               key={value}
               type="button"
-              role="radio"
-              aria-checked={active}
+              aria-pressed={active}
+              aria-label={`Use ${label.toLowerCase()} theme`}
               onClick={() => setTheme(value)}
               className={[
                 "inline-flex items-center gap-2 rounded px-3 py-1.5 transition-colors",

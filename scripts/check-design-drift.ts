@@ -40,6 +40,7 @@ const BANNED_TAILWIND_COLORS = new Set([
 
 const RAW_HEX = /#[0-9a-fA-F]{3,8}(?![0-9a-fA-F])/;
 const TAILWIND_COLOR = /\b(bg|text|border|ring|divide|fill|stroke|placeholder|outline|decoration|shadow|from|via|to)-([a-z]+)-(50|[1-9]00)\b/;
+const TAILWIND_COLOR_G = new RegExp(TAILWIND_COLOR.source, "g");
 const BANNED_FONTS = /\b(Geist|Inter|Roboto|Arial|--font-geist)\b/;
 const SHADCN_IMPORT = /from\s+["']@\/components\/ui\/([a-z0-9-]+)["']/;
 
@@ -48,11 +49,16 @@ const findings: Finding[] = [];
 for (const f of gitLsFiles()) {
   if (f.startsWith("src/styles/tokens/")) continue;
   if (f === "scripts/check-design-drift.ts") continue;  // self-match on regex literals
-  if (f.startsWith("src/components/ui/") && !f.includes("/ss-")) {
-    // raw shadcn wrappers are allowed to reference tailwind/hex colors
-    // internally; only check for banned fonts there.
-  }
   if (!/\.(ts|tsx|css|mjs)$/.test(f)) continue;
+
+  // Raw shadcn wrappers are allowed to reference tailwind/hex colors
+  // internally; only check them for banned fonts and raw-shadcn-import.
+  const skipColorChecks =
+    f.startsWith("src/components/ui/") && !f.includes("/ss-");
+  // The banned-font check is a critical rule and would self-flag on this
+  // script's own regex definition. Restrict it to shipping app code under
+  // src/ — scripts/, tests/, docs are out of scope.
+  const checkFonts = f.startsWith("src/");
 
   let body: string;
   try {
@@ -66,7 +72,7 @@ for (const f of gitLsFiles()) {
     // skip comment-only violation mentions
     if (line.trimStart().startsWith("//") || line.trimStart().startsWith("*")) continue;
 
-    if (!f.startsWith("src/styles/tokens/") && RAW_HEX.test(line)) {
+    if (!skipColorChecks && RAW_HEX.test(line)) {
       findings.push({
         file: f,
         line: i + 1,
@@ -75,17 +81,23 @@ for (const f of gitLsFiles()) {
         hint: "use a token from src/styles/tokens/semantic.css (var(--*))",
       });
     }
-    const tw = line.match(TAILWIND_COLOR);
-    if (tw && BANNED_TAILWIND_COLORS.has(tw[2])) {
-      findings.push({
-        file: f,
-        line: i + 1,
-        rule: "raw-tailwind-color",
-        text: tw[0],
-        hint: `replace with a semantic utility (bg-raised, text-dim, border-rule, etc.)`,
-      });
+    if (!skipColorChecks) {
+      // Scan every tailwind utility on the line, not just the first —
+      // `className="bg-white text-zinc-500"` would otherwise miss the
+      // second match.
+      for (const tw of line.matchAll(TAILWIND_COLOR_G)) {
+        if (BANNED_TAILWIND_COLORS.has(tw[2])) {
+          findings.push({
+            file: f,
+            line: i + 1,
+            rule: "raw-tailwind-color",
+            text: tw[0],
+            hint: `replace with a semantic utility (bg-raised, text-dim, border-rule, etc.)`,
+          });
+        }
+      }
     }
-    if (BANNED_FONTS.test(line)) {
+    if (checkFonts && BANNED_FONTS.test(line)) {
       findings.push({
         file: f,
         line: i + 1,

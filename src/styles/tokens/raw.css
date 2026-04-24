@@ -55,4 +55,7 @@
   /* ── Neutral user-message tint ────────────────────────────── */
   --ss-user-dark:  #14181e;
   --ss-user-light: #eff1f5;
+
+  /* ── Absolutes ────────────────────────────────────────────── */
+  --ss-white: #ffffff;
 }

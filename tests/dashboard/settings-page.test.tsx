@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import SettingsPage from "@/app/dashboard/settings/page";
+import { ThemeProvider } from "@/components/theme-provider";
 import { DEFAULT_OPENAI_MODEL } from "@/lib/openai-models";
 import { hasRecommendedOllamaModel } from "@/lib/ollama-models";
 import type { RuntimeHealthResponse } from "@/components/runtime/RuntimeHostMatrix";
@@ -608,7 +609,11 @@ describe("SettingsPage runtime settings", () => {
   it("renders the runtime settings shell and onboarding bridge", async () => {
     vi.stubGlobal("fetch", buildFetchStub());
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     const link = await screen.findByRole("link", { name: "Open onboarding" });
     expect(link).toHaveAttribute("href", "/setup");
@@ -634,7 +639,11 @@ describe("SettingsPage runtime settings", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     await screen.findByText("API Keys & Model");
     await waitFor(() => {
@@ -710,7 +719,11 @@ describe("SettingsPage runtime settings", () => {
       }),
     );
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByTestId("openai-model-input")).toHaveValue(DEFAULT_OPENAI_MODEL);
     expect(screen.getByTestId("runtime-apply-button")).toBeEnabled();
@@ -732,7 +745,11 @@ describe("SettingsPage runtime settings", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     await screen.findByText("API Keys & Model");
     fireEvent.click(screen.getByTestId("runtime-apply-button"));
@@ -781,7 +798,11 @@ describe("SettingsPage runtime settings", () => {
     const fetchMock = buildFetchStub();
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     await screen.findByText("Telegram & OpenClaw");
 
@@ -835,7 +856,11 @@ describe("SettingsPage runtime settings", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByTestId("settings-telegram-pairing-status")).toBeInTheDocument();
     expect(screen.getByTestId("settings-telegram-pending-pairing")).toBeInTheDocument();
@@ -884,7 +909,11 @@ describe("SettingsPage runtime settings", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByTestId("settings-telegram-pairing-status")).toBeInTheDocument();
     expect(screen.getByTestId("settings-telegram-refresh-pending-button")).toBeInTheDocument();
@@ -939,7 +968,11 @@ describe("SettingsPage runtime settings", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByTestId("settings-telegram-pairing-status")).toBeInTheDocument();
 
@@ -963,7 +996,11 @@ describe("SettingsPage runtime settings", () => {
       }),
     );
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     // With autoStart enabled on Settings, the component auto-starts
     // OpenClaw. Wait for the auto-start effect to fire and resolve
@@ -984,7 +1021,11 @@ describe("SettingsPage runtime settings", () => {
       }),
     );
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByText("running")).toBeInTheDocument();
     expect(screen.getByTestId("openclaw-status-pill")).toHaveTextContent("Running");
@@ -1006,7 +1047,11 @@ describe("SettingsPage runtime settings", () => {
       }),
     );
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByText("Local model")).toBeInTheDocument();
     expect(
@@ -1033,7 +1078,11 @@ describe("SettingsPage runtime settings", () => {
       }),
     );
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByText("gemma4:26b selected, pull pending")).toBeInTheDocument();
     expect(
@@ -1057,7 +1106,11 @@ describe("SettingsPage runtime settings", () => {
       }),
     );
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByRole("button", { name: "Install Ollama" })).toBeInTheDocument();
   });
@@ -1065,7 +1118,11 @@ describe("SettingsPage runtime settings", () => {
   it("toggles strict local-only mode from Settings", async () => {
     vi.stubGlobal("fetch", buildFetchStub());
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     const toggle = await screen.findByRole("button", { name: "Turn on strict local-only" });
     fireEvent.click(toggle);
@@ -1078,7 +1135,11 @@ describe("SettingsPage runtime settings", () => {
   it("persists the workspace file preview location", async () => {
     vi.stubGlobal("fetch", buildFetchStub());
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     const upperPane = await screen.findByRole("radio", { name: /Upper pane/ });
     const chatPane = screen.getByRole("radio", { name: /Chat pane/ });
@@ -1093,7 +1154,11 @@ describe("SettingsPage runtime settings", () => {
   it("supports arrow-key navigation for the workspace file preview radios", async () => {
     vi.stubGlobal("fetch", buildFetchStub());
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     const upperPane = await screen.findByRole("radio", { name: /Upper pane/ });
     const chatPane = screen.getByRole("radio", { name: /Chat pane/ });
@@ -1118,7 +1183,11 @@ describe("SettingsPage runtime settings", () => {
       throw new Error("storage unavailable");
     });
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     const chatPane = await screen.findByRole("radio", { name: /Chat pane/ });
     fireEvent.click(chatPane);
@@ -1142,7 +1211,11 @@ describe("SettingsPage runtime settings", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByTestId("runtime-host-matrix")).toBeInTheDocument();
     expect(screen.getAllByText("Lab Runtime").length).toBeGreaterThan(0);
@@ -1156,7 +1229,11 @@ describe("SettingsPage runtime settings", () => {
   it("renders project runtime controls and keeps hosted hosts disabled under local-only policy", async () => {
     vi.stubGlobal("fetch", buildFetchStub());
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByTestId("project-runtime-project-select")).toHaveValue("alpha-project");
     expect(screen.getByText(/Use the project chat composer switcher/)).toBeInTheDocument();
@@ -1171,7 +1248,11 @@ describe("SettingsPage runtime settings", () => {
   it("still renders the frontier watch composer below the runtime settings", async () => {
     vi.stubGlobal("fetch", buildFetchStub());
 
-    render(<SettingsPage />);
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
 
     expect(await screen.findByText("What should ScienceSwarm watch for this project?")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generate Specific Search Prompt" })).toBeInTheDocument();

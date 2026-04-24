@@ -44,7 +44,7 @@
   --accent-dim:    var(--ss-accent-dark-dim);
   --accent-faint:  color-mix(in srgb, var(--ss-accent-dark) 12%, transparent);
   --accent-ring:   color-mix(in srgb, var(--ss-accent-dark) 40%, transparent);
-  --accent-fg:     #fff;
+  --accent-fg:     var(--ss-white);
 
   /* Status trio */
   --ok:     var(--ss-ok-dark);
@@ -55,7 +55,7 @@
 /* ── LIGHT (co-designed) ────────────────────────────────────── */
 :root[data-theme="light"] {
   --surface-ink:     var(--ss-mist-50);
-  --surface-raised:  #ffffff;
+  --surface-raised:  var(--ss-white);
   --surface-rail:    var(--ss-mist-150);
   --surface-sunk:    var(--ss-mist-100);
   --surface-card2:   var(--ss-mist-200);
@@ -76,7 +76,7 @@
   --accent-dim:   var(--ss-accent-light-dim);
   --accent-faint: color-mix(in srgb, var(--ss-accent-light) 8%, transparent);
   --accent-ring:  color-mix(in srgb, var(--ss-accent-light) 35%, transparent);
-  --accent-fg:    #fff;
+  --accent-fg:    var(--ss-white);
 
   --ok:     var(--ss-ok-light);
   --warn:   var(--ss-warn-light);
@@ -167,7 +167,4 @@
   --color-ok:           var(--ok);
   --color-warn:         var(--warn);
   --color-danger:       var(--danger);
-
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
 }

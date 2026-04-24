@@ -32,13 +32,17 @@ export const metadata: Metadata = {
  * script minimal; it ships into every HTML document.
  */
 const themeInitScript = `
-(function(){try{
-  var stored = localStorage.getItem('scienceswarm.theme');
-  var theme = stored === 'light' || stored === 'dark'
-    ? stored
-    : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-  document.documentElement.setAttribute('data-theme', theme);
-}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+(function(){
+  try {
+    var stored = localStorage.getItem('scienceswarm.theme');
+    var theme = stored === 'light' || stored === 'dark'
+      ? stored
+      : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
 `;
 
 export default function RootLayout({
