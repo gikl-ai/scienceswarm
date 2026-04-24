@@ -666,6 +666,7 @@ function shouldRunOpenClawArtifactImportRepair(params: {
   userMessage: string;
   projectId: string | null;
   files: UploadedFileDescriptor[];
+  forceToolExecution?: boolean;
 }): boolean {
   if (!params.projectId) {
     return false;
@@ -680,6 +681,7 @@ function shouldRunOpenClawArtifactImportRepair(params: {
   }
 
   return (
+    params.forceToolExecution === true ||
     shouldForceOpenClawToolExecution(params.userMessage) ||
     shouldUseCompactOpenClawArtifactContext(params.userMessage, params.files)
   );
@@ -7948,6 +7950,7 @@ function streamOpenClawResponse(params: {
                 userMessage: params.userMessage,
                 projectId: params.projectId,
                 files: params.files,
+                forceToolExecution: params.forceToolExecution,
               })
             ) {
               params.timing?.recordSkippedPhase("artifact_import_repair", {
@@ -9281,6 +9284,7 @@ export async function handleUnifiedChatPost(
           userMessage: userIntentMessage,
           projectId: validatedProjectId,
           files: mergedFiles,
+          forceToolExecution,
         })
       ) {
         const sanitizedResponse = sanitizeOpenClawUserVisibleResponse(response);
@@ -9293,6 +9297,8 @@ export async function handleUnifiedChatPost(
           completeRuntimeTurn(Response.json(
             {
               response: sanitizedResponse,
+              thinking:
+                (await readOpenClawThinkingTrace(openClawConversationId)) ?? undefined,
               conversationId: openClawConversationId,
               backend: "openclaw",
               mode: chatMode,

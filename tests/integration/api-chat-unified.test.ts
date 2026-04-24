@@ -2544,6 +2544,51 @@ describe("POST /api/chat/unified", () => {
     infoSpy.mockRestore();
   });
 
+  it("keeps artifact import repair active for explicit openclaw-tools turns without response markers", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    createProjectRoot("alpha-project");
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("Done.");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Create the requested project artifact and save it in the workspace.",
+        projectId: "alpha-project",
+        mode: "openclaw-tools",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      phases: Array<{ name: string; skipped?: boolean }>;
+    };
+    const artifactPhase = payload.phases.find(
+      (phase) => phase.name === "artifact_import_repair",
+    );
+    expect(artifactPhase).toBeTruthy();
+    expect(artifactPhase?.skipped).not.toBe(true);
+    infoSpy.mockRestore();
+  });
+
   it("emits opt-in chat timing logs without prompt contents", async () => {
     vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
