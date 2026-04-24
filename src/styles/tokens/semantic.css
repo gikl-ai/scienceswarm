@@ -1,0 +1,170 @@
+/*
+ * design-tokens.css — ScienceSwarm semantic token layer (Layer 1)
+ * ────────────────────────────────────────────────────────────────
+ * Maps Layer 0 scales (raw.css) to semantic roles. Application code
+ * references THESE tokens, never the raw scale directly.
+ *
+ * Theme: DARK is the default. Light is co-designed, not inverted.
+ *        Toggle via [data-theme="light"|"dark"] on <html>.
+ *
+ * Color discipline (see DESIGN.md §6.2):
+ *   accent tokens are for ACTION MOMENTS only — status LEDs, links,
+ *   send button, caret. Budget ≤ 5 uses per visible surface.
+ * ────────────────────────────────────────────────────────────────
+ */
+
+@import "./raw.css";
+
+/* ── DARK (default) ─────────────────────────────────────────── */
+:root,
+:root[data-theme="dark"] {
+  /* Surfaces */
+  --surface-ink:     var(--ss-slate-950);
+  --surface-raised:  var(--ss-slate-800);
+  --surface-rail:    var(--ss-slate-900);
+  --surface-sunk:    var(--ss-slate-850);
+  --surface-card2:   var(--ss-slate-750);
+  --surface-user:    var(--ss-user-dark);
+  --surface-overlay: rgba(0, 0, 0, 0.55);
+
+  /* Text */
+  --text-strong: var(--ss-slate-50);
+  --text-body:   var(--ss-slate-200);
+  --text-dim:    var(--ss-slate-400);
+  --text-quiet:  var(--ss-slate-500);
+  --text-faint:  var(--ss-slate-650);
+
+  /* Rules */
+  --rule:      var(--ss-slate-700);
+  --rule-soft: var(--ss-slate-750);
+  --rule-hair: color-mix(in srgb, var(--ss-slate-700) 50%, transparent);
+
+  /* Accent (single chromatic voice, ACTION MOMENTS only) */
+  --accent:        var(--ss-accent-dark);
+  --accent-dim:    var(--ss-accent-dark-dim);
+  --accent-faint:  color-mix(in srgb, var(--ss-accent-dark) 12%, transparent);
+  --accent-ring:   color-mix(in srgb, var(--ss-accent-dark) 40%, transparent);
+  --accent-fg:     var(--ss-white);
+
+  /* Status trio */
+  --ok:     var(--ss-ok-dark);
+  --warn:   var(--ss-warn-dark);
+  --danger: var(--ss-danger-dark);
+}
+
+/* ── LIGHT (co-designed) ────────────────────────────────────── */
+:root[data-theme="light"] {
+  --surface-ink:     var(--ss-mist-50);
+  --surface-raised:  var(--ss-white);
+  --surface-rail:    var(--ss-mist-150);
+  --surface-sunk:    var(--ss-mist-100);
+  --surface-card2:   var(--ss-mist-200);
+  --surface-user:    var(--ss-user-light);
+  --surface-overlay: rgba(20, 23, 28, 0.35);
+
+  --text-strong: var(--ss-mist-900);
+  --text-body:   var(--ss-mist-700);
+  --text-dim:    var(--ss-mist-600);
+  --text-quiet:  var(--ss-mist-500);
+  --text-faint:  var(--ss-mist-400);
+
+  --rule:      var(--ss-mist-300);
+  --rule-soft: var(--ss-mist-200);
+  --rule-hair: color-mix(in srgb, var(--ss-mist-300) 60%, transparent);
+
+  --accent:       var(--ss-accent-light);
+  --accent-dim:   var(--ss-accent-light-dim);
+  --accent-faint: color-mix(in srgb, var(--ss-accent-light) 8%, transparent);
+  --accent-ring:  color-mix(in srgb, var(--ss-accent-light) 35%, transparent);
+  --accent-fg:    var(--ss-white);
+
+  --ok:     var(--ss-ok-light);
+  --warn:   var(--ss-warn-light);
+  --danger: var(--ss-danger-light);
+}
+
+:root {
+  /* Typography — --font-sans and --font-mono are injected on <html> by
+     next/font in src/app/layout.tsx. Static fallbacks below so semantic
+     tokens resolve even before the JS font loader kicks in. */
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-feature-body: "ss01";
+  --font-feature-data: "tnum", "cv02";
+
+  /* Type scale */
+  --text-2xs: 10.5px;
+  --text-xs:  11.5px;
+  --text-sm:  13px;
+  --text-md:  14.5px;
+  --text-lg:  17px;
+  --text-xl:  22px;
+  --text-2xl: 26px;
+  --text-3xl: 36px;
+  --text-4xl: 52px;
+
+  /* Leading */
+  --leading-display: 1.1;
+  --leading-heading: 1.25;
+  --leading-body:    1.6;
+  --leading-ui:      1.5;
+
+  /* Spacing (8pt base, 2pt micro) */
+  --space-0:  0;
+  --space-1:  2px;
+  --space-2:  4px;
+  --space-3:  8px;
+  --space-4:  12px;
+  --space-5:  16px;
+  --space-6:  20px;
+  --space-7:  24px;
+  --space-8:  32px;
+  --space-9:  48px;
+  --space-10: 64px;
+
+  /* Radius — tighter tier than round 1, matches v2 mockup */
+  --radius-hairline: 0;    /* data rules, tables */
+  --radius-1:        3px;  /* inputs, chips */
+  --radius-2:        6px;  /* cards */
+  --radius-3:        10px; /* sheets, panels */
+
+  /* Motion */
+  --motion-fast:     140ms;
+  --motion-default:  200ms;
+  --motion-slow:     320ms;
+  --motion-ease:     cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Focus ring (WCAG 2.2 §2.4.11) */
+  --focus-ring: 0 0 0 2px var(--surface-ink),
+                0 0 0 4px var(--accent-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 0ms; --motion-default: 0ms; --motion-slow: 0ms; }
+}
+
+/* ── Tailwind v4 @theme bridge ──────────────────────────────── */
+@theme inline {
+  --color-ink:          var(--surface-ink);
+  --color-raised:       var(--surface-raised);
+  --color-sunk:         var(--surface-sunk);
+  --color-rail:         var(--surface-rail);
+  --color-card2:        var(--surface-card2);
+  --color-user:         var(--surface-user);
+
+  --color-strong:       var(--text-strong);
+  --color-body:         var(--text-body);
+  --color-dim:          var(--text-dim);
+  --color-quiet:        var(--text-quiet);
+  --color-faint:        var(--text-faint);
+
+  --color-rule:         var(--rule);
+  --color-rule-soft:    var(--rule-soft);
+  --color-accent:       var(--accent);
+  --color-accent-dim:   var(--accent-dim);
+  --color-accent-faint: var(--accent-faint);
+  --color-ok:           var(--ok);
+  --color-warn:         var(--warn);
+  --color-danger:       var(--danger);
+}

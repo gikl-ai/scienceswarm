@@ -11,6 +11,7 @@ import {
   ollamaModelsMatch,
 } from "@/lib/ollama-models";
 import { StatusDot } from "./sections/_primitives";
+import { AppearanceSection } from "./sections/appearance";
 import { IdentitySection } from "./sections/identity";
 import { SetupAndConfigurationSection } from "./sections/setup-and-configuration";
 import { ApiKeysAndModelSection } from "./sections/api-keys-and-model";
@@ -939,6 +940,7 @@ export default function SettingsPage() {
         inputClassName={inputCls}
         onSaved={fetchSettings}
       />
+      <AppearanceSection />
 
       <WorkspaceDisplaySection
         filePreviewLocation={filePreviewLocation}

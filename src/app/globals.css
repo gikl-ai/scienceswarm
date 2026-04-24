@@ -1,79 +1,62 @@
 @import "tailwindcss";
+@import "../styles/tokens/semantic.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #0a0a0a;
-  --accent: #0891b2;
-  --accent-hover: #0e7490;
-  --surface: #f4f4f5;
-  --surface-hover: #e4e4e7;
-  --border: #d4d4d8;
-  --muted: #71717a;
-}
+/*
+ * globals.css — ScienceSwarm design system v1
+ * ────────────────────────────────────────────────────────────────
+ * Design tokens are defined in src/styles/tokens/{raw,semantic}.css.
+ * App code should use Tailwind utilities (bg-ink, text-body, border-rule,
+ * etc.) or CSS custom properties (var(--accent), var(--rule), …).
+ *
+ * DO NOT add hex literals here or in component code. If you need a new
+ * value, promote it into a token in semantic.css.
+ * ────────────────────────────────────────────────────────────────
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
-  --color-surface: var(--surface);
-  --color-surface-hover: var(--surface-hover);
-  --color-border: var(--border);
-  --color-muted: var(--muted);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --spacing-safe-top: env(safe-area-inset-top);
-  --spacing-safe-bottom: env(safe-area-inset-bottom);
+html, body {
+  background: var(--surface-ink);
+  color: var(--text-body);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  font-feature-settings: var(--font-feature-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: rgba(8, 145, 178, 0.2);
+  background: var(--accent-faint);
+  color: var(--text-strong);
 }
 
-/* Drag-resize cursor override — applied to <body> via classList toggle
+/* Drag-resize cursor overrides — applied to <body> via classList toggle
    in src/components/resizable-layout.tsx so we avoid inline style mutations. */
-body.scienceswarm-resizing {
-  cursor: col-resize;
-  user-select: none;
-}
+body.scienceswarm-resizing   { cursor: col-resize; user-select: none; }
+body.scienceswarm-resizing-y { cursor: row-resize; user-select: none; }
 
-body.scienceswarm-resizing-y {
-  cursor: row-resize;
-  user-select: none;
-}
+/* Data-dense surfaces use tabular numerals */
+[data-tabular] { font-variant-numeric: tabular-nums; }
 
-/* Make text selection visible on colored chat bubbles (white-on-blue).
-   Applied only to dark bubbles via data-chat-selectable on user messages;
-   assistant/system bubbles fall back to the default accent selection. */
+/* Make text selection visible on colored chat bubbles (legacy path;
+   retained until chat-message migrates to the token-driven wrappers). */
 [data-chat-selectable="true"] ::selection {
   background: rgba(255, 255, 255, 0.35);
   color: inherit;
 }
 
+/* File-markdown prose styles — spacing + hierarchy only, colors via tokens */
 .file-markdown h1,
 .file-markdown h2,
 .file-markdown h3 {
   font-weight: 700;
-  line-height: 1.2;
+  line-height: var(--leading-heading);
   margin: 1.1rem 0 0.55rem;
+  color: var(--text-strong);
 }
 
-.file-markdown h1 {
-  font-size: 1.35rem;
-}
-
-.file-markdown h2 {
-  font-size: 1.15rem;
-}
-
-.file-markdown h3 {
-  font-size: 1rem;
-}
+.file-markdown h1 { font-size: 1.35rem; }
+.file-markdown h2 { font-size: 1.15rem; }
+.file-markdown h3 { font-size: 1rem; }
 
 .file-markdown p,
 .file-markdown ul,
@@ -89,18 +72,18 @@ body.scienceswarm-resizing-y {
 }
 
 .file-markdown code {
-  border-radius: 0.25rem;
-  background: var(--surface);
+  border-radius: var(--radius-1);
+  background: var(--surface-sunk);
   padding: 0.1rem 0.25rem;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 
 .file-markdown pre {
   overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-2);
+  background: var(--surface-sunk);
   padding: 0.75rem;
 }
 
@@ -117,7 +100,7 @@ body.scienceswarm-resizing-y {
 
 .file-markdown th,
 .file-markdown td {
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule);
   padding: 0.35rem 0.5rem;
   text-align: left;
 }

@@ -1,0 +1,61 @@
+/*
+ * design-tokens.raw.css — ScienceSwarm Layer 0 tokens
+ * ────────────────────────────────────────────────────────────────
+ * Named color scales ONLY. Application code never references these
+ * directly; semantic.css (Layer 1) maps them to roles.
+ *
+ * ScienceSwarm design system v1.
+ * ────────────────────────────────────────────────────────────────
+ */
+
+:root {
+  /* ── Slate — the neutral spine ────────────────────────────── */
+  /* Dark variant (primary, used as default) */
+  --ss-slate-950: #0c0e10;  /* page bg (dark) */
+  --ss-slate-900: #090b0d;  /* rail bg (dark) */
+  --ss-slate-850: #111418;  /* sunk surfaces */
+  --ss-slate-800: #14171c;  /* card */
+  --ss-slate-750: #181c21;  /* card2 */
+  --ss-slate-700: #1c1f24;  /* rule */
+  --ss-slate-650: #272a2f;  /* faint border */
+  --ss-slate-500: #4c5058;  /* quiet */
+  --ss-slate-400: #72767d;  /* dim */
+  --ss-slate-300: #9aa0a8;
+  --ss-slate-200: #b4b8bf;  /* body text */
+  --ss-slate-100: #d1d4d9;
+  --ss-slate-50:  #edeff2;  /* strong ink */
+
+  /* Light variant — cooler neutrals, co-designed */
+  --ss-mist-50:   #fafbfc;  /* page bg (light) */
+  --ss-mist-100: #f5f6f8;   /* sunk */
+  --ss-mist-150: #f2f4f7;   /* rail */
+  --ss-mist-200: #edeff2;   /* hair */
+  --ss-mist-300: #e4e6eb;   /* rule */
+  --ss-mist-400: #d8dbe0;   /* faint */
+  --ss-mist-500: #a0a5ad;   /* quiet */
+  --ss-mist-600: #70757d;   /* dim */
+  --ss-mist-700: #454951;   /* body */
+  --ss-mist-900: #14171c;   /* ink */
+
+  /* ── Accent — used ONLY at action moments ─────────────────── */
+  /* (see DESIGN.md §6.2 — count uses per screen, budget ≤ 5) */
+  --ss-accent-dark:     #7cb0ff;  /* dark mode */
+  --ss-accent-dark-dim: #4a7ccf;
+  --ss-accent-light:     #2d5aa8;  /* light mode */
+  --ss-accent-light-dim: #6a89c3;
+
+  /* ── Status trio — functional indicators only ─────────────── */
+  --ss-ok-dark:     #7ab77f;
+  --ss-ok-light:    #3a7a4d;
+  --ss-warn-dark:   #d9a05b;
+  --ss-warn-light:  #a86a12;
+  --ss-danger-dark:  #d87878;
+  --ss-danger-light: #a04343;
+
+  /* ── Neutral user-message tint ────────────────────────────── */
+  --ss-user-dark:  #14181e;
+  --ss-user-light: #eff1f5;
+
+  /* ── Absolutes ────────────────────────────────────────────── */
+  --ss-white: #ffffff;
+}

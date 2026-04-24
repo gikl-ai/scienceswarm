@@ -4,6 +4,7 @@ import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage from "@/app/dashboard/settings/page";
+import { ThemeProvider } from "@/components/theme-provider";
 
 function stubSettingsFetch() {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -190,7 +191,12 @@ describe("SettingsPage hydration", () => {
     // server so password-manager extensions can't inject attributes that
     // would cause hydration mismatches). React must then hydrate the
     // client tree without a "Hydration failed" error.
-    const serverMarkup = renderToString(<SettingsPage />);
+    const tree = (
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>
+    );
+    const serverMarkup = renderToString(tree);
     expect(serverMarkup).not.toContain('type="password"');
 
     const container = document.createElement("div");
@@ -198,7 +204,7 @@ describe("SettingsPage hydration", () => {
     document.body.appendChild(container);
 
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    const root = hydrateRoot(container, <SettingsPage />);
+    const root = hydrateRoot(container, tree);
 
     // Give React a microtask tick to flush initial hydration. We don't
     // wait for a specific field because the settings layout varies with
