@@ -207,6 +207,19 @@ const COMPACT_STEP_VERB_LABELS: Record<Step["verb"], string> = {
 const LEGACY_HTML_EMBED_ALIASES: Record<string, string> = {
   "snake-game": "snake/index.html",
 };
+const ASSISTANT_BODY_TEXT_CLASS =
+  "text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
+const ASSISTANT_TITLE_CLASS =
+  "mb-4 text-[2rem] leading-[1.04] font-semibold tracking-[-0.045em] text-slate-950";
+const ASSISTANT_SUBTITLE_CLASS =
+  "mb-3 text-[1.4rem] leading-[1.15] font-semibold tracking-[-0.03em] text-slate-900";
+const ASSISTANT_SECTION_CLASS =
+  "mb-3 text-[1.05rem] leading-6 font-semibold tracking-[-0.015em] text-slate-900";
+const ASSISTANT_LIST_CLASS =
+  "mb-4 pl-6 text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
+const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-slate-500";
+const ASSISTANT_METADATA_CLASS =
+  "text-[10px] font-medium tracking-[0.02em] text-slate-400";
 
 function isExploredCommand(text: string): boolean {
   return EXPLORE_COMMAND_PREFIXES.some((prefix) => text.startsWith(prefix));
@@ -952,7 +965,7 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
       elements.push(
         <code
           key={tokenKey}
-          className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.92em] text-slate-800"
+          className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-slate-800"
         >
           {token.value}
         </code>,
@@ -986,6 +999,94 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
   return elements;
 }
 
+function renderInlineMarkdownWithBreaks(value: string, keyPrefix: string) {
+  return value.split("\n").flatMap((line, index) => {
+    const nodes: ReactNode[] = [];
+    if (index > 0) {
+      nodes.push(<br key={`${keyPrefix}-br-${index}`} />);
+    }
+    nodes.push(
+      <span key={`${keyPrefix}-line-${index}`}>
+        {renderInlineMarkdownLite(line, `${keyPrefix}-line-${index}`)}
+      </span>,
+    );
+    return nodes;
+  });
+}
+
+function renderAssistantTextSegment(value: string, keyPrefix: string) {
+  const blocks = value
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map((block) => block.replace(/^\n+|\n+$/g, ""))
+    .filter((block) => block.trim().length > 0);
+
+  return blocks.map((block, blockIndex) => {
+    const blockKey = `${keyPrefix}-block-${blockIndex}`;
+    const lines = block.split("\n");
+    const headingMatch = block.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch && lines.length === 1) {
+      const headingText = headingMatch[2];
+      const headingClass =
+        headingMatch[1].length === 1
+          ? ASSISTANT_TITLE_CLASS
+          : headingMatch[1].length === 2
+            ? ASSISTANT_SUBTITLE_CLASS
+            : ASSISTANT_SECTION_CLASS;
+      const HeadingTag =
+        headingMatch[1].length === 1
+          ? "h1"
+          : headingMatch[1].length === 2
+            ? "h2"
+            : "h3";
+
+      return (
+        <HeadingTag key={blockKey} className={headingClass}>
+          {renderInlineMarkdownLite(headingText, `${blockKey}-heading`)}
+        </HeadingTag>
+      );
+    }
+
+    const unorderedItems = lines.map((line) => line.match(/^\s*[-*]\s+(.+)$/)?.[1] ?? null);
+    if (unorderedItems.every((item) => typeof item === "string")) {
+      return (
+        <ul
+          key={blockKey}
+          className={`${ASSISTANT_LIST_CLASS} list-disc space-y-2 marker:text-slate-400`}
+        >
+          {unorderedItems.map((item, itemIndex) => (
+            <li key={`${blockKey}-ul-${itemIndex}`} className="pl-1">
+              {renderInlineMarkdownLite(item ?? "", `${blockKey}-ul-${itemIndex}`)}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    const orderedItems = lines.map((line) => line.match(/^\s*\d+\.\s+(.+)$/)?.[1] ?? null);
+    if (orderedItems.every((item) => typeof item === "string")) {
+      return (
+        <ol
+          key={blockKey}
+          className={`${ASSISTANT_LIST_CLASS} list-decimal space-y-2 marker:font-medium marker:text-slate-500`}
+        >
+          {orderedItems.map((item, itemIndex) => (
+            <li key={`${blockKey}-ol-${itemIndex}`} className="pl-1">
+              {renderInlineMarkdownLite(item ?? "", `${blockKey}-ol-${itemIndex}`)}
+            </li>
+          ))}
+        </ol>
+      );
+    }
+
+    return (
+      <p key={blockKey} className={`mb-4 ${ASSISTANT_BODY_TEXT_CLASS}`}>
+        {renderInlineMarkdownWithBreaks(block, `${blockKey}-paragraph`)}
+      </p>
+    );
+  });
+}
+
 function getCopyableMessageText(root: HTMLDivElement | null, fallback: string): string {
   const renderedText =
     typeof root?.innerText === "string" && root.innerText.trim().length > 0
@@ -1011,17 +1112,17 @@ function getCopyableMessageText(root: HTMLDivElement | null, fallback: string): 
     .trim();
 }
 
-function renderContent(content: string, projectId: string) {
-  // Split on bold markers, MEDIA references, embed tags, and markdown images
-  const parts = content.split(/(\*\*[^*]+\*\*|MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gi);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={i} className="font-semibold">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
+function renderContent(
+  content: string,
+  projectId: string,
+  { assistantTypography = false }: { assistantTypography?: boolean } = {},
+) {
+  // Split on MEDIA references, embed tags, and markdown images.
+  const parts = content.split(/(MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gi);
+  return parts.flatMap((part, i) => {
+    const captionClass = assistantTypography
+      ? ASSISTANT_CAPTION_CLASS
+      : "mt-1 block font-mono text-[10px] text-muted";
     if (part.startsWith("MEDIA:")) {
       const filePath = part.slice(6).trim();
       const workspaceFilePath = normalizeMediaWorkspacePath(filePath);
@@ -1041,7 +1142,7 @@ function renderContent(content: string, projectId: string) {
           <div key={i} className="my-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={src} alt={filePath} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+            <span className={captionClass}>{filePath}</span>
           </div>
         );
       }
@@ -1054,7 +1155,7 @@ function renderContent(content: string, projectId: string) {
               className="w-full min-w-0 h-[80vh] min-h-[700px] rounded-lg border border-border bg-white"
               sandbox="allow-scripts"
             />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+            <span className={captionClass}>{filePath}</span>
           </div>
         );
       }
@@ -1067,7 +1168,7 @@ function renderContent(content: string, projectId: string) {
               className="w-full min-w-0 h-[80vh] min-h-[600px] rounded-lg border border-border bg-white"
               sandbox="allow-same-origin allow-downloads"
             />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+            <span className={captionClass}>{filePath}</span>
           </div>
         );
       }
@@ -1077,7 +1178,7 @@ function renderContent(content: string, projectId: string) {
           <div key={i} className="my-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={src} alt={filePath} className="max-w-full max-h-[50vh] rounded-lg border border-border" />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+            <span className={captionClass}>{filePath}</span>
           </div>
         );
       }
@@ -1087,7 +1188,7 @@ function renderContent(content: string, projectId: string) {
             <video controls className="max-w-full max-h-[50vh] rounded-lg border border-border bg-black">
               <source src={src} type={getVideoMimeType(ext)} />
             </video>
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+            <span className={captionClass}>{filePath}</span>
           </div>
         );
       }
@@ -1097,7 +1198,7 @@ function renderContent(content: string, projectId: string) {
             <audio controls className="w-full">
               <source src={src} type={getAudioMimeType(ext)} />
             </audio>
-            <span className="block text-[10px] text-muted mt-1 font-mono">{filePath}</span>
+            <span className={captionClass}>{filePath}</span>
           </div>
         );
       }
@@ -1172,7 +1273,7 @@ function renderContent(content: string, projectId: string) {
               style={{ height: embedHeight }}
               sandbox="allow-scripts"
             />
-            <span className="block text-[10px] text-muted mt-1 font-mono">{embedTitle}</span>
+            <span className={captionClass}>{embedTitle}</span>
           </div>
         );
       }
@@ -1197,7 +1298,12 @@ function renderContent(content: string, projectId: string) {
         );
       }
     }
-    return <span key={i}>{renderInlineMarkdownLite(part, `content-${i}`)}</span>;
+    if (assistantTypography) {
+      return renderAssistantTextSegment(part, `content-${i}`);
+    }
+    return [
+      <span key={i}>{renderInlineMarkdownLite(part, `content-${i}`)}</span>,
+    ];
   });
 }
 
@@ -1294,7 +1400,8 @@ export function ChatMessage({
     hour: "2-digit",
     minute: "2-digit",
   })}`;
-  const footerTextClass = role === "user" ? "text-white/75" : "text-muted/55";
+  const footerTextClass =
+    role === "user" ? "text-white/75" : isAssistantTurn ? ASSISTANT_METADATA_CLASS : "text-muted/55";
   const selectionClass = role === "user"
     ? "selection:bg-white/45 selection:text-slate-900"
     : "selection:bg-accent/25 selection:text-slate-900";
@@ -1336,7 +1443,7 @@ export function ChatMessage({
     ? "mx-auto flex w-full max-w-[48rem] flex-col"
     : "";
   const contentClass = isAssistantTurn
-    ? `whitespace-pre-wrap select-text text-[15px] leading-7 tracking-[0.005em] text-slate-900 sm:text-base sm:leading-8 ${selectionClass}`
+    ? `select-text text-slate-900 ${selectionClass}`
     : `whitespace-pre-wrap select-text ${selectionClass}`;
   const footerRowClass = isAssistantTurn
     ? "mt-4 flex items-center justify-end gap-3"
@@ -1475,7 +1582,7 @@ export function ChatMessage({
         data-testid={isAssistantTurn ? "assistant-reply-content" : undefined}
         className={contentClass}
       >
-        {renderContent(content, projectId)}
+        {renderContent(content, projectId, { assistantTypography: isAssistantTurn })}
       </div>
 
       <div className={footerRowClass}>

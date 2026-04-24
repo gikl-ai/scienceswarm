@@ -69,8 +69,46 @@ describe("ChatMessage", () => {
     );
 
     expect(screen.getByTestId("assistant-reply-surface")).toHaveClass("mx-auto");
-    expect(screen.getByTestId("assistant-reply-content")).toHaveClass("sm:text-base");
-    expect(screen.getByTestId("assistant-reply-content")).toHaveClass("sm:leading-8");
+    expect(screen.getByTestId("assistant-reply-content")).toHaveClass("text-slate-900");
+  });
+
+  it("renders assistant markdown headings and lists with the new typography scale", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"# Research update\n\n## Next steps\n\n- Validate the chart\n- Publish the summary"}
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Research update" })).toHaveClass("text-[2rem]");
+    expect(screen.getByRole("heading", { level: 2, name: "Next steps" })).toHaveClass("text-[1.4rem]");
+    expect(screen.getByRole("list")).toHaveClass("list-disc");
+    expect(screen.getByText("Validate the chart").closest("li")).toHaveClass("pl-1");
+  });
+
+  it("uses softer caption and metadata typography for assistant media and footer", () => {
+    const timestamp = new Date(2026, 3, 22, 16, 45, 0);
+    const expectedFooter = `${timestamp.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })} · ${timestamp.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:docs/results_chart.png"}
+        projectId="project-alpha"
+        timestamp={timestamp}
+      />,
+    );
+
+    expect(screen.getByText("docs/results_chart.png")).toHaveClass("text-[11px]");
+    expect(screen.getByText(expectedFooter)).toHaveClass("text-slate-400");
   });
 
   it("keeps user turns inside the accent bubble", () => {
