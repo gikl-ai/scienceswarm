@@ -307,11 +307,11 @@ function formatPromptCharCountsForSummary(
 
 function formatSkippedTimingPhasesForSummary(
   phases: ChatBenchmarkTimingPhaseSummary[],
-): string | null {
+): string {
   const skipped = phases
     .filter((phase) => phase.skipped)
     .map((phase) => phase.name);
-  return skipped.length === 0 ? null : skipped.join(", ");
+  return skipped.length === 0 ? "none" : skipped.join(", ");
 }
 
 function formatPromptBudgetHighlights(
@@ -356,7 +356,7 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
   const skippedTimingPhases =
     timingArtifact && !isTimingArtifactUnavailable(timingArtifact)
       ? formatSkippedTimingPhasesForSummary(timingArtifact.phases)
-      : null;
+      : "none";
   return [
     "Chat Hi Benchmark",
     `Status: ${summary.status} ${summary.ok ? "ok" : "failed"}`,
@@ -386,9 +386,7 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
               timingArtifact.outcome ?? "unknown"
             }, status ${timingArtifact.status ?? "unknown"}`,
             `Timing phases: ${formatTimingPhasesForSummary(timingArtifact.phases)}`,
-            ...(skippedTimingPhases
-              ? [`Skipped phases: ${skippedTimingPhases}`]
-              : []),
+            `Skipped phases: ${skippedTimingPhases}`,
             `Prompt chars: ${formatPromptCharCountsForSummary(
               timingArtifact.promptCharCounts,
             )}`,
