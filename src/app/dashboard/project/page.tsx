@@ -4966,13 +4966,13 @@ function ProjectPageContent() {
                     >
                       <div className="flex flex-col gap-2.5 border-b border-rule/70 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-dim">
                             Project Chat
                           </p>
-                          <p className="mt-1 text-[13px] font-medium leading-5 text-slate-900">
+                          <p className="mt-1 text-[13px] font-medium leading-5 text-foreground">
                             Ask about the project, run a task, or compare runtimes without leaving the thread.
                           </p>
-                          <p className="mt-1 text-[11px] text-slate-500">
+                          <p className="mt-1 text-[11px] text-muted">
                             Enter to send. Shift+Enter for a new line.
                           </p>
                         </div>
