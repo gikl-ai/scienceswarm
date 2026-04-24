@@ -17,6 +17,7 @@ export async function listScienceSwarmOpenClawSlashCommandSkills(): Promise<Open
       description: skill.description,
       runtime: skill.runtime,
       emoji: skill.emoji,
+      aliases: readStringArray(skill.frontmatter.aliases),
     });
   }
 
@@ -39,4 +40,11 @@ export async function listScienceSwarmOpenClawSlashCommandSkills(): Promise<Open
   }
 
   return [...merged.values()].sort((left, right) => left.slug.localeCompare(right.slug));
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string =>
+    typeof entry === "string" && entry.trim().length > 0
+  );
 }

@@ -1,0 +1,24 @@
+{
+  "slug": "scienceswarm-md-evidence-grounding",
+  "name": "ScienceSwarm MD Evidence Grounding",
+  "description": "Search the project paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "molecular-dynamics",
+    "evidence"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Ground MD planning in project literature before external search and preserve evidence classes for downstream parameter decisions.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-24T00:00:00.000Z",
+  "updatedAt": "2026-04-24T00:00:00.000Z"
+}

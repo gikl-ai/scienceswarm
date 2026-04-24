@@ -1,0 +1,24 @@
+{
+  "slug": "scienceswarm-md-results-interpretation",
+  "name": "ScienceSwarm MD Results Interpretation",
+  "description": "Interpret MD outputs, separate run completion from scientific support, and classify conclusions as supported, suggestive, weak, or unsupported.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "molecular-dynamics",
+    "interpretation"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Post-run MD interpretation skill that explains metrics, avoids overclaims, and recommends the next step.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-24T00:00:00.000Z",
+  "updatedAt": "2026-04-24T00:00:00.000Z"
+}

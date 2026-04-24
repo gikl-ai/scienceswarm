@@ -16,6 +16,8 @@ describe("openclaw slash commands route", () => {
       "scienceswarm-capture": `---
 name: scienceswarm-capture
 description: Capture notes
+aliases:
+  - save-note
 ---
 
 # Capture
@@ -48,7 +50,7 @@ runtime: separate-node-process
       expect.arrayContaining([
         expect.objectContaining({ command: "help", kind: "builtin" }),
         expect.objectContaining({
-          command: "capture",
+          command: "save-note",
           kind: "skill",
           skillSlug: "scienceswarm-capture",
         }),

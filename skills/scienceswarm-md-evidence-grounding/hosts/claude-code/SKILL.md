@@ -1,0 +1,24 @@
+---
+name: scienceswarm-md-evidence-grounding
+description: Search the project paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.
+---
+
+# ScienceSwarm MD Evidence Grounding
+
+Use this skill to ground an MD plan in project evidence before parameters are
+chosen.
+
+## Workflow
+
+1. Search the project paper library and existing gbrain artifacts first.
+2. Use external sources only when project evidence is insufficient or requested.
+3. Extract comparable systems, protocol details, structures, targets, ligands,
+   conflicts, and key papers to read.
+4. Label evidence as `project-literature`, `external-literature`,
+   `common-heuristic`, `tool-default`, or `speculative`.
+5. Produce an `Evidence Grounding Packet` with
+   `asset_kind: md_evidence_grounding_packet`.
+
+Include a `Confidence Boundary` section in the packet.
+
+Do not replace missing evidence with confident defaults.
