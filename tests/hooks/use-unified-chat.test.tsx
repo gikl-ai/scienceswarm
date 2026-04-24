@@ -5018,6 +5018,9 @@ describe("useUnifiedChat persistence", () => {
     const progressLog = screen.getByTestId("progress-log").textContent ?? "";
     expect(progressLog).not.toContain("Turn started");
     expect(progressLog).not.toContain("Turn finished");
+    const activityLog = screen.getByTestId("activity-log").textContent ?? "";
+    expect(activityLog).not.toContain("Sending request to OpenClaw");
+    expect(activityLog).not.toContain("Waiting for OpenClaw to respond");
 
     act(() => {
       deferredStream.send({ text: "Done" });
@@ -5480,7 +5483,7 @@ describe("useUnifiedChat persistence", () => {
         "activity:Chat failed: OpenClaw transport failed | activity:Chat aborted: User interrupted the run",
       );
     });
-    expect(screen.getByTestId("activity-log").textContent).toContain(
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
       "Sending request to OpenClaw | Waiting for OpenClaw to respond",
     );
   });
@@ -5725,7 +5728,7 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("progress-log").textContent).toContain(
       "activity:Chat failed: ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
     );
-    expect(screen.getByTestId("activity-log").textContent).toContain(
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
       "Chat failed: ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
     );
   });
