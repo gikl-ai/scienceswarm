@@ -201,10 +201,15 @@ describe("runtime host adapters", () => {
     const env = {
       ...process.env,
       ANTHROPIC_API_KEY: "placeholder-anthropic-api-key",
+      ANTHROPIC_BASE_URL: "https://api.anthropic.test",
       OPENAI_API_KEY: "placeholder-openai-api-key",
       OPENAI_BASE_URL: "https://api.openai.test/v1",
+      OPENAI_ORG_ID: "org-test",
+      OPENAI_PROJECT: "proj-test",
       GEMINI_API_KEY: "placeholder-gemini-api-key",
       GOOGLE_API_KEY: "placeholder-google-api-key",
+      GOOGLE_CLOUD_API_KEY: "placeholder-google-cloud-api-key",
+      GOOGLE_GENERATIVE_AI_API_KEY: "placeholder-google-generative-ai-key",
       SCIENCESWARM_DIR: "/tmp/scienceswarm",
     };
 
@@ -218,16 +223,21 @@ describe("runtime host adapters", () => {
 
     const claudeEnv = transport.requests[0]?.env as NodeJS.ProcessEnv;
     expect(claudeEnv.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(claudeEnv.ANTHROPIC_BASE_URL).toBeUndefined();
     expect(claudeEnv.SCIENCESWARM_DIR).toBe("/tmp/scienceswarm");
 
     const codexEnv = transport.requests[1]?.env as NodeJS.ProcessEnv;
     expect(codexEnv.OPENAI_API_KEY).toBeUndefined();
     expect(codexEnv.OPENAI_BASE_URL).toBeUndefined();
+    expect(codexEnv.OPENAI_ORG_ID).toBeUndefined();
+    expect(codexEnv.OPENAI_PROJECT).toBeUndefined();
     expect(codexEnv.SCIENCESWARM_DIR).toBe("/tmp/scienceswarm");
 
     const geminiEnv = transport.requests[2]?.env as NodeJS.ProcessEnv;
     expect(geminiEnv.GEMINI_API_KEY).toBeUndefined();
     expect(geminiEnv.GOOGLE_API_KEY).toBeUndefined();
+    expect(geminiEnv.GOOGLE_CLOUD_API_KEY).toBeUndefined();
+    expect(geminiEnv.GOOGLE_GENERATIVE_AI_API_KEY).toBeUndefined();
     expect(geminiEnv.SCIENCESWARM_DIR).toBe("/tmp/scienceswarm");
   });
 
