@@ -259,17 +259,69 @@ function formatTimingPhasesForSummary(
   return phases.length === 0
     ? "none"
     : phases
-        .map((phase) => `${phase.name} ${phase.durationMs} ms`)
+        .map((phase) =>
+          phase.skipped
+            ? `${phase.name} skipped`
+            : `${phase.name} ${phase.durationMs} ms${
+              phase.inferred ? " (inferred)" : ""
+            }`
+        )
         .join(", ");
 }
 
 function formatPromptCharCountsForSummary(
   promptCharCounts: Record<string, number>,
 ): string {
-  const entries = Object.entries(promptCharCounts);
+  const preferredOrder = [
+    "total",
+    "recent_chat_context",
+    "workspace_files",
+    "user_text",
+    "guardrails",
+    "project_prompt",
+    "active_file",
+  ];
+  const entries = Object.entries(promptCharCounts).sort(([leftKey], [rightKey]) => {
+    const leftIndex = preferredOrder.indexOf(leftKey);
+    const rightIndex = preferredOrder.indexOf(rightKey);
+    if (leftIndex === -1 && rightIndex === -1) {
+      return leftKey.localeCompare(rightKey);
+    }
+    if (leftIndex === -1) {
+      return 1;
+    }
+    if (rightIndex === -1) {
+      return -1;
+    }
+    return leftIndex - rightIndex;
+  });
   return entries.length === 0
     ? "none"
     : entries.map(([key, value]) => `${key} ${value}`).join(", ");
+}
+
+function formatSkippedTimingPhasesForSummary(
+  phases: ChatBenchmarkTimingPhaseSummary[],
+): string {
+  const skipped = phases
+    .filter((phase) => phase.skipped)
+    .map((phase) => phase.name);
+  return skipped.length === 0 ? "none" : skipped.join(", ");
+}
+
+function formatPromptBudgetHighlights(
+  promptCharCounts: Record<string, number>,
+): string {
+  const highlights = [
+    "total",
+    "recent_chat_context",
+    "workspace_files",
+  ].flatMap((key) =>
+    typeof promptCharCounts[key] === "number"
+      ? [`${key} ${promptCharCounts[key]}`]
+      : []
+  );
+  return highlights.length === 0 ? "none" : highlights.join(", ");
 }
 
 function isTimingArtifactUnavailable(
@@ -329,7 +381,13 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
               timingArtifact.outcome ?? "unknown"
             }, status ${timingArtifact.status ?? "unknown"}`,
             `Timing phases: ${formatTimingPhasesForSummary(timingArtifact.phases)}`,
+            `Skipped phases: ${formatSkippedTimingPhasesForSummary(
+              timingArtifact.phases,
+            )}`,
             `Prompt chars: ${formatPromptCharCountsForSummary(
+              timingArtifact.promptCharCounts,
+            )}`,
+            `Prompt highlights: ${formatPromptBudgetHighlights(
               timingArtifact.promptCharCounts,
             )}`,
           ]),
