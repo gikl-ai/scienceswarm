@@ -661,6 +661,30 @@ function shouldUseCompactOpenClawArtifactContext(
   );
 }
 
+function shouldRunOpenClawArtifactImportRepair(params: {
+  response: string;
+  userMessage: string;
+  projectId: string | null;
+  files: UploadedFileDescriptor[];
+}): boolean {
+  if (!params.projectId) {
+    return false;
+  }
+
+  if (params.response.includes("```scienceswarm-artifact")) {
+    return true;
+  }
+
+  if (extractOutputPathCandidates(params.response).length > 0) {
+    return true;
+  }
+
+  return (
+    shouldForceOpenClawToolExecution(params.userMessage) ||
+    shouldUseCompactOpenClawArtifactContext(params.userMessage, params.files)
+  );
+}
+
 function hasWorkspaceReferenceNotes(
   referenceNotes?: WorkspaceReferenceNotes | null,
 ): boolean {
@@ -7918,6 +7942,35 @@ function streamOpenClawResponse(params: {
               return;
             }
 
+            if (
+              !shouldRunOpenClawArtifactImportRepair({
+                response,
+                userMessage: params.userMessage,
+                projectId: params.projectId,
+                files: params.files,
+              })
+            ) {
+              params.timing?.recordSkippedPhase("artifact_import_repair", {
+                reason: "no_artifact_markers",
+              });
+              completedIds = new Set(
+                params.taskPhases.map((phase) => phase.id),
+              );
+              await sendFinalEvent({
+                text: sanitizeOpenClawUserVisibleResponse(response),
+                conversationId: params.conversationId,
+                backend: "openclaw",
+                generatedFiles: [],
+                taskPhases: snapshotOpenClawTaskPhases(
+                  params.taskPhases,
+                  completedIds,
+                  null,
+                ),
+              });
+              params.onComplete?.();
+              return;
+            }
+
             const completedBeforeImport = new Set<OpenClawTaskPhaseId>(
               params.taskPhases
                 .map((phase) => phase.id)
@@ -9219,6 +9272,41 @@ export async function handleUnifiedChatPost(
             RUNTIME_HANDLER_ERROR_CODE,
           ),
           "openclaw_failure_output",
+        );
+      }
+
+      if (
+        !shouldRunOpenClawArtifactImportRepair({
+          response,
+          userMessage: userIntentMessage,
+          projectId: validatedProjectId,
+          files: mergedFiles,
+        })
+      ) {
+        const sanitizedResponse = sanitizeOpenClawUserVisibleResponse(response);
+        chatTiming.recordSkippedPhase("artifact_import_repair", {
+          reason: "no_artifact_markers",
+        });
+        chatTiming.markFinalAssistantText(sanitizedResponse.length);
+        return finishChatTimingResponse(
+          chatTiming,
+          completeRuntimeTurn(Response.json(
+            {
+              response: sanitizedResponse,
+              conversationId: openClawConversationId,
+              backend: "openclaw",
+              mode: chatMode,
+              generatedFiles: [],
+              generatedArtifacts: [],
+            },
+            {
+              headers: {
+                "X-Chat-Backend": "openclaw",
+                "X-Chat-Mode": chatMode,
+              },
+            },
+          )),
+          "completed",
         );
       }
 
