@@ -215,20 +215,20 @@ const ASSISTANT_BODY_TEXT_CLASS =
 const ASSISTANT_TITLE_CLASS =
   "mb-4 text-[2rem] leading-[1.04] font-semibold tracking-[-0.045em] text-slate-950";
 const ASSISTANT_SUBTITLE_CLASS =
-  "mb-3 text-[1.4rem] leading-[1.15] font-semibold tracking-[-0.03em] text-slate-900";
+  "mb-3 text-[1.4rem] leading-[1.15] font-semibold tracking-[-0.03em] text-sky-950";
 const ASSISTANT_SECTION_CLASS =
-  "mb-3 text-[1.05rem] leading-6 font-semibold tracking-[-0.015em] text-slate-900";
+  "mb-3 text-[1.05rem] leading-6 font-semibold tracking-[-0.015em] text-emerald-900";
 const ASSISTANT_LIST_CLASS =
   "mb-4 pl-4 text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
 const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-slate-500";
 const ASSISTANT_METADATA_CLASS =
   "text-[10px] font-medium tracking-[0.02em] text-slate-400";
 const ASSISTANT_BLOCKQUOTE_CLASS =
-  "mb-4 border-l-2 border-slate-200 pl-4 italic text-slate-600";
+  "mb-4 rounded-r-2xl border-l-2 border-sky-300 bg-sky-50/75 px-4 py-3 italic text-sky-900";
 const ASSISTANT_LINK_CLASS =
-  "font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition-colors hover:decoration-slate-500";
+  "font-medium text-blue-700 underline decoration-blue-200 underline-offset-4 transition-colors hover:text-blue-800 hover:decoration-blue-400";
 const ASSISTANT_CODE_BLOCK_CLASS =
-  "mb-4 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-950 px-4 py-3 text-[13px] leading-6 text-slate-100";
+  "mb-4 overflow-x-auto rounded-2xl border border-slate-300 bg-slate-950 px-4 py-3 text-[13px] leading-6 text-slate-100 shadow-[0_1px_0_rgba(15,23,42,0.08)]";
 
 function sanitizeMarkdownHref(href: string | undefined): string | null {
   if (!href) {
