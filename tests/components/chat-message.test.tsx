@@ -961,6 +961,22 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("maps legacy snake webpage refs to the single-file html preview", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"[embed ref=\"snake-webpage\" title=\"Snake\" height=\"420\" /]\n\nSource: `snake_game.html`"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-20T10:12:42.000Z")}
+      />,
+    );
+
+    expect(screen.getByTitle("Snake")).toHaveAttribute(
+      "src",
+      "/api/workspace/raw/project-alpha/snake_game.html",
+    );
+  });
+
   it("falls back to legacy embed refs when url is present but empty", () => {
     render(
       <ChatMessage
