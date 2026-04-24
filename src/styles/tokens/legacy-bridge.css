@@ -44,9 +44,14 @@
 /* bg-muted stays meaningful for raw shadcn primitives (Select, Sheet,
    Skeleton, Dialog) that compose a muted *background* rather than
    muted text. These authored rules beat Tailwind's @theme-generated
-   utility because they live outside @layer utilities. */
+   utility because they live outside @layer utilities.
+   Alpha variants must be authored explicitly: Tailwind generates
+   bg-muted/N directly from --color-muted (now a text token), so the
+   alphas in active use are re-routed onto --surface-sunk here. */
 .bg-muted                    { background-color: var(--surface-sunk); }
 .hover\:bg-muted:hover       { background-color: var(--surface-sunk); }
+.bg-muted\/5                 { background-color: color-mix(in srgb, var(--surface-sunk) 5%, transparent); }
+.hover\:bg-muted\/10:hover   { background-color: color-mix(in srgb, var(--surface-sunk) 10%, transparent); }
 .data-\[state\=active\]\:bg-muted[data-state="active"] {
   background-color: var(--surface-sunk);
 }
