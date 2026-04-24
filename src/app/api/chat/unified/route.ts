@@ -239,7 +239,7 @@ const OPENCLAW_PROJECT_HISTORY_CONTEXT_BUDGET: OpenClawRecentChatContextBudget =
 const OPENCLAW_CONVERSATIONAL_HISTORY_CONTEXT_BUDGET: OpenClawRecentChatContextBudget = {
   maxMessages: 2,
   maxChars: 1_000,
-  maxCharsPerMessage: 500,
+  maxCharsPerMessage: 420,
 };
 const OPENCLAW_ARTIFACT_TASK_TIMEOUT_MS = 180_000;
 const AUTO_PROJECT_CONTEXT_HINT_RE =
