@@ -670,7 +670,7 @@ function hasWorkspaceReferenceNotes(
   );
 }
 
-function isBriefConversationalOpenClawTurn(message: string): boolean {
+export function isBriefConversationalOpenClawTurn(message: string): boolean {
   const normalized = message
     .trim()
     .toLowerCase()
@@ -681,7 +681,7 @@ function isBriefConversationalOpenClawTurn(message: string): boolean {
   );
 }
 
-function shouldUseMinimalOpenClawConversationalContext(params: {
+export function shouldUseLightweightOpenClawPreparation(params: {
   message: string;
   files: UploadedFileDescriptor[];
   activeFile: { path: string; content: string } | null;
@@ -695,6 +695,16 @@ function shouldUseMinimalOpenClawConversationalContext(params: {
     !hasWorkspaceReferenceNotes(params.referenceNotes) &&
     isBriefConversationalOpenClawTurn(params.message)
   );
+}
+
+function shouldUseMinimalOpenClawConversationalContext(params: {
+  message: string;
+  files: UploadedFileDescriptor[];
+  activeFile: { path: string; content: string } | null;
+  referenceNotes?: WorkspaceReferenceNotes | null;
+  forceToolExecution: boolean;
+}): boolean {
+  return shouldUseLightweightOpenClawPreparation(params);
 }
 
 function openClawAgentOptions(

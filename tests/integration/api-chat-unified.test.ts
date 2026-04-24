@@ -169,6 +169,7 @@ import {
   __resetConfiguredAgentRuntimeStatusCacheForTests,
   GET,
   POST,
+  shouldUseLightweightOpenClawPreparation,
   shouldPreMaterializeProjectWorkspaceForTurn,
 } from "@/app/api/chat/unified/route";
 
@@ -2571,6 +2572,52 @@ describe("POST /api/chat/unified", () => {
         activeFile: null,
       }),
     ).toBe(true);
+  });
+
+  it("classifies plain OpenClaw greetings as lightweight preparation turns", () => {
+    expect(
+      shouldUseLightweightOpenClawPreparation({
+        message: "Hi",
+        files: [],
+        activeFile: null,
+        forceToolExecution: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldUseLightweightOpenClawPreparation({
+        message: "good morning!",
+        files: [],
+        activeFile: null,
+        forceToolExecution: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps file- or tool-heavy OpenClaw turns on full preparation", () => {
+    expect(
+      shouldUseLightweightOpenClawPreparation({
+        message: "Hi",
+        files: [{ name: "notes.md", size: "12", workspacePath: "notes.md" }],
+        activeFile: null,
+        forceToolExecution: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldUseLightweightOpenClawPreparation({
+        message: "Hi",
+        files: [],
+        activeFile: { path: "notes.md", content: "selected content" },
+        forceToolExecution: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldUseLightweightOpenClawPreparation({
+        message: "run the tests",
+        files: [],
+        activeFile: null,
+        forceToolExecution: true,
+      }),
+    ).toBe(false);
   });
 
   it("returns 503 when OpenClaw is not the configured agent", async () => {
