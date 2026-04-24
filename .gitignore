@@ -64,3 +64,6 @@ bench-stdout.log
 
 # local main-edit bypass sentinel (PreToolUse hook in .claude/settings.json)
 .claude/allow-main-edits
+
+# Design-system bootstrap log (generated, not tracked)
+.scienceswarm-design.log
