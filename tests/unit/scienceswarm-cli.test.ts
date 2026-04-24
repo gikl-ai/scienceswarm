@@ -146,6 +146,38 @@ exit 1
     );
   });
 
+  it("falls back to http probing when https mode is enabled but the https probe fails", () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-https-then-http-"));
+    const binRoot = path.join(tmpRoot, "bin");
+    const curlLogPath = path.join(tmpRoot, "curl.log");
+    fs.mkdirSync(binRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(binRoot, "curl"),
+      `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> ${JSON.stringify(curlLogPath)}
+if [ "$1" = "-fsS" ] && [ "$2" = "--max-time" ] && [ "$3" = "2" ] && [ "$4" = "http://127.0.0.1:43997/api/health" ]; then
+  exit 0
+fi
+exit 1
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = runCli(["status"], {
+      SCIENCESWARM_DIR: tmpRoot,
+      FRONTEND_PORT: "43997",
+      FRONTEND_USE_HTTPS: "true",
+      HOME: tmpRoot,
+      PATH: `${binRoot}:${process.env.PATH ?? ""}`,
+    });
+
+    expect(output).toContain("Frontend health: ok");
+    expect(fs.readFileSync(curlLogPath, "utf8").trim().split("\n")).toEqual([
+      "-kfsS --max-time 2 https://127.0.0.1:43997/api/health",
+      "-fsS --max-time 2 http://127.0.0.1:43997/api/health",
+    ]);
+  });
+
   it("prefers http probing by default when https mode is not enabled", () => {
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-http-fallback-"));
     const binRoot = path.join(tmpRoot, "bin");
