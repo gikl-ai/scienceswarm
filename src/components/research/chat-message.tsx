@@ -162,16 +162,24 @@ type ProgressTranscriptBlock =
 
 const PROGRESS_SECTION_META: Record<
   "thinking" | "activity",
-  { title: string; icon: string; className: string; rowClassName: string }
+  {
+    title: string;
+    compactTitle: string;
+    icon: string;
+    className: string;
+    rowClassName: string;
+  }
 > = {
   thinking: {
     title: "Thinking Trace",
+    compactTitle: "Thinking",
     icon: "🧠",
     className: "border-sky-200 bg-sky-50 text-sky-700",
     rowClassName: "text-sky-900/90",
   },
   activity: {
     title: "OpenClaw Activity",
+    compactTitle: "Activity",
     icon: "⚙️",
     className: "border-border bg-slate-50 text-muted",
     rowClassName: "text-muted",
@@ -579,7 +587,7 @@ function buildProgressSectionChanges(
             key={`section-${nextSection}-${index}`}
             className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"
           >
-            {nextSection === "thinking" ? "Thinking" : "Activity"}
+            {sectionMeta.compactTitle}
           </div>
         ) : (
           <div
