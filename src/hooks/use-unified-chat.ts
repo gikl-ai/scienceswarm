@@ -2846,6 +2846,7 @@ export function useUnifiedChat(
   const sendQueueProcessingRef = useRef(false);
   const activeRuntimeSessionIdRef = useRef<string | null>(null);
   const activeRuntimeReaderRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+  const activeRuntimeAbortControllerRef = useRef<AbortController | null>(null);
   const scopedConversationId = getScopedConversationId(conversationId, conversationBackend, backend);
 
   // Keep state updater callbacks pure. The layout effect below mirrors the
@@ -3744,25 +3745,50 @@ export function useUnifiedChat(
       }
 
       const useStreamingSession = context.runtimeMode === "chat";
-      const response = await fetch(useStreamingSession
-        ? "/api/runtime/sessions/stream"
-        : "/api/runtime/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...baseBody,
-          hostId: context.backend,
-          mode: context.runtimeMode,
-        }),
-      });
+      const streamAbortController = useStreamingSession ? new AbortController() : null;
+      if (streamAbortController) {
+        activeRuntimeAbortControllerRef.current = streamAbortController;
+      }
+      let response: Response;
+      try {
+        response = await fetch(useStreamingSession
+          ? "/api/runtime/sessions/stream"
+          : "/api/runtime/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: streamAbortController?.signal,
+          body: JSON.stringify({
+            ...baseBody,
+            hostId: context.backend,
+            mode: context.runtimeMode,
+          }),
+        });
+      } catch (error) {
+        if (
+          streamAbortController
+          && activeRuntimeAbortControllerRef.current === streamAbortController
+        ) {
+          activeRuntimeAbortControllerRef.current = null;
+        }
+        throw error;
+      }
 
       if (useStreamingSession) {
-        if (!response.ok) {
-          const errorPayload = await response.json().catch(() => null) as { error?: string } | null;
-          throw new Error(errorPayload?.error || `Runtime session failed: ${response.status}`);
+        try {
+          if (!response.ok) {
+            const errorPayload = await response.json().catch(() => null) as { error?: string } | null;
+            throw new Error(errorPayload?.error || `Runtime session failed: ${response.status}`);
+          }
+          await consumeRuntimeSessionStream(response, assistantId, context);
+          await syncWorkspaceTreeAfterChat();
+        } finally {
+          if (
+            streamAbortController
+            && activeRuntimeAbortControllerRef.current === streamAbortController
+          ) {
+            activeRuntimeAbortControllerRef.current = null;
+          }
         }
-        await consumeRuntimeSessionStream(response, assistantId, context);
-        await syncWorkspaceTreeAfterChat();
         return;
       }
 
@@ -4309,7 +4335,9 @@ export function useUnifiedChat(
 
   const cancelActiveTurn = useCallback(async (): Promise<boolean> => {
     const sessionId = activeRuntimeSessionIdRef.current;
+    const abortController = activeRuntimeAbortControllerRef.current;
     const reader = activeRuntimeReaderRef.current;
+    abortController?.abort();
     if (reader) {
       await reader.cancel().catch(() => undefined);
     }
@@ -4708,6 +4736,7 @@ export function useUnifiedChat(
 
     const name = file.name?.trim() || getBasename(workspacePath || brainSlug);
     const extension = name.includes(".") ? (name.split(".").pop() || "file") : "file";
+    const content = file.content?.slice(0, RUNTIME_ACTIVE_FILE_CONTEXT_MAX_CHARS);
     const nextFile: UploadedFile = isGbrain
       ? {
           name,
@@ -4718,7 +4747,7 @@ export function useUnifiedChat(
           brainSlug,
           workspacePath: `gbrain:${brainSlug}`,
           displayPath: file.displayPath || `gbrain:${brainSlug}`,
-          content: file.content,
+          content,
         }
       : {
           name,
@@ -4728,7 +4757,7 @@ export function useUnifiedChat(
           source: "workspace",
           workspacePath,
           displayPath: file.displayPath || workspacePath,
-          content: file.content,
+          content,
         };
 
     setUploadedFiles((prev) => {

@@ -134,7 +134,7 @@ function ChatHarness({ projectName }: { projectName: string }) {
             path: "notes/context.md",
             name: "Context Note",
             source: "workspace",
-            content: "Context note body for direct runtime.",
+            content: `Context note body for direct runtime.\n${"x".repeat(8_100)}\nAFTER-CAP`,
           })));
         }}
       >
@@ -644,18 +644,20 @@ describe("useUnifiedChat persistence", () => {
         expect.objectContaining({
           kind: "workspace-file",
           label: "notes/context.md",
-          bytes: 37,
+          bytes: 8_000,
         }),
       ]),
     });
     const runtimePrompt = String(runtimeBodies[0].prompt);
     expect(runtimePrompt).toContain("Explicitly selected attached file context (JSON):");
     expect(runtimePrompt).toContain("Context note body for direct runtime.");
+    expect(runtimePrompt).not.toContain("AFTER-CAP");
   });
 
   it("cancels an active direct runtime stream by runtime session id", async () => {
     const runtimeStream = createDeferredSseResponse();
     const cancelRequests: string[] = [];
+    let streamSignal: AbortSignal | undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       const method = init?.method ?? "GET";
@@ -663,6 +665,7 @@ describe("useUnifiedChat persistence", () => {
         return Response.json({ openclaw: "connected" });
       }
       if (url === "/api/runtime/sessions/stream") {
+        streamSignal = init?.signal ?? undefined;
         return runtimeStream.response;
       }
       if (url === "/api/runtime/sessions/rt-session-codex/cancel" && method === "POST") {
@@ -701,6 +704,7 @@ describe("useUnifiedChat persistence", () => {
 
     await waitFor(() => {
       expect(cancelRequests).toEqual(["/api/runtime/sessions/rt-session-codex/cancel"]);
+      expect(streamSignal?.aborted).toBe(true);
       expect(screen.getByTestId("can-cancel").textContent).toBe("false");
     });
   });
