@@ -159,6 +159,7 @@ type ProgressTranscriptBlock =
     }
   | {
       type: "explored";
+      stableKey: string;
       lines: string[];
       section: "activity";
     };
@@ -652,12 +653,18 @@ function normalizeProgressTextForDisplay(text: string): string | null {
 function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTranscriptBlock[] {
   const blocks: ProgressTranscriptBlock[] = [];
   let exploredLines: string[] = [];
+  const exploredBlockCounts = new Map<string, number>();
 
   const flushExploredLines = () => {
     if (exploredLines.length === 0) return;
+    const coalescedLines = coalesceExploredLines(exploredLines);
+    const firstLine = coalescedLines[0] ?? "explored";
+    const occurrence = exploredBlockCounts.get(firstLine) ?? 0;
+    exploredBlockCounts.set(firstLine, occurrence + 1);
     blocks.push({
       type: "explored",
-      lines: coalesceExploredLines(exploredLines),
+      stableKey: `${firstLine}::${occurrence}`,
+      lines: coalescedLines,
       section: "activity",
     });
     exploredLines = [];
@@ -908,7 +915,7 @@ function buildProgressSectionChanges(
     if (block.type === "explored") {
       elements.push(
         <ExploredTranscriptBlock
-          key={`${index}-explored`}
+          key={block.stableKey}
           blockIndex={index}
           lines={block.lines}
           compact={compact}
