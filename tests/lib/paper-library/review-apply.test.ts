@@ -356,7 +356,7 @@ describe("paper-library review and apply", () => {
     expect(await exists(firstPath)).toBe(false);
   });
 
-  it("treats case-only apply and undo operations as noops", async () => {
+  it("applies and undoes case-only rename operations", async () => {
     const originalPath = path.join(paperRoot, "Paper.pdf");
     await writeFile(originalPath, "case-only pdf", "utf-8");
 
@@ -412,7 +412,8 @@ describe("paper-library review and apply", () => {
       brainRoot,
     });
     expect(applied?.manifest.status).toBe("applied");
-    expect(await exists(originalPath)).toBe(true);
+    expect(applied?.operations[0]?.status).toBe("verified");
+    await expect(readFile(path.join(paperRoot, "paper.pdf"), "utf-8")).resolves.toBe("case-only pdf");
 
     const undone = await undoApplyManifest({
       project: "project-alpha",
@@ -421,7 +422,7 @@ describe("paper-library review and apply", () => {
     });
     expect(undone?.manifest.status).toBe("undone");
     expect(undone?.operations[0]?.status).toBe("undone");
-    expect(await exists(originalPath)).toBe(true);
+    await expect(readFile(originalPath, "utf-8")).resolves.toBe("case-only pdf");
   });
 
   it("does not create directories through symlinked destination parents during apply", async () => {
