@@ -31,6 +31,34 @@ describe("ChatMessage", () => {
     expect(screen.getByText(expectedFooter)).toBeInTheDocument();
   });
 
+  it("renders assistant turns without the legacy card bubble chrome", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByTestId("chat-bubble")).not.toHaveClass("rounded-xl");
+    expect(screen.getByTestId("chat-bubble")).not.toHaveClass("border-2");
+    expect(screen.getByTestId("chat-bubble")).not.toHaveClass("bg-white");
+  });
+
+  it("keeps user turns inside the accent bubble", () => {
+    render(
+      <ChatMessage
+        role="user"
+        content="Hi"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByTestId("chat-bubble")).toHaveClass("rounded-xl");
+    expect(screen.getByTestId("chat-bubble")).toHaveClass("bg-accent");
+    expect(screen.getByTestId("chat-bubble")).toHaveClass("border-2");
+  });
+
   it("copies rendered message text instead of raw bubble directives", async () => {
     const writeText = vi.fn<(value: string) => Promise<void>>(async (_value) => {});
     Object.defineProperty(navigator, "clipboard", {
@@ -546,11 +574,11 @@ describe("ChatMessage", () => {
 
     expect(screen.getByTitle("Alpha")).toHaveAttribute(
       "src",
-      "/api/workspace?action=raw&file=alpha.html&projectId=project-alpha",
+      "/api/workspace/raw/project-alpha/alpha.html",
     );
     expect(screen.getByTitle("Beta")).toHaveAttribute(
       "src",
-      "/api/workspace?action=raw&file=beta.html&projectId=project-alpha",
+      "/api/workspace/raw/project-alpha/beta.html",
     );
   });
 
@@ -568,7 +596,7 @@ describe("ChatMessage", () => {
 
     expect(screen.getByTitle("Cat SVG")).toHaveAttribute(
       "src",
-      "/api/workspace?action=raw&file=__openclaw__%2Fcanvas%2Fdocuments%2Fcat-svg-preview%2Findex.html&projectId=project-alpha",
+      "/api/workspace/raw/project-alpha/__openclaw__/canvas/documents/cat-svg-preview/index.html",
     );
     expect(screen.queryByText(/\[embed url=.*Cat SVG.*\]/)).not.toBeInTheDocument();
   });
@@ -585,7 +613,7 @@ describe("ChatMessage", () => {
 
     expect(screen.getByTitle("Snake")).toHaveAttribute(
       "src",
-      "/api/workspace?action=raw&file=figures%2Fsnake-game%2Findex.html&projectId=project-alpha",
+      "/api/workspace/raw/project-alpha/figures/snake-game/index.html",
     );
   });
 
@@ -633,7 +661,7 @@ describe("ChatMessage", () => {
 
     expect(screen.getByTitle("Alpha Again")).toHaveAttribute(
       "src",
-      "/api/workspace?action=raw&file=alpha.html&projectId=project-alpha",
+      "/api/workspace/raw/project-alpha/alpha.html",
     );
   });
 
@@ -680,11 +708,11 @@ describe("ChatMessage", () => {
 
     expect(screen.getByTitle("Alpha")).toHaveAttribute(
       "src",
-      "/api/workspace?action=raw&file=alpha.html&projectId=project-alpha",
+      "/api/workspace/raw/project-alpha/alpha.html",
     );
     expect(screen.getByTitle("Beta")).toHaveAttribute(
       "src",
-      "/api/workspace?action=raw&file=beta.html&projectId=project-alpha",
+      "/api/workspace/raw/project-alpha/beta.html",
     );
   });
 
@@ -704,7 +732,7 @@ describe("ChatMessage", () => {
 
     expect(screen.getByTitle("Alpha Again")).toHaveAttribute(
       "src",
-      "/api/workspace?action=raw&file=alpha.html&projectId=project-alpha",
+      "/api/workspace/raw/project-alpha/alpha.html",
     );
   });
 });

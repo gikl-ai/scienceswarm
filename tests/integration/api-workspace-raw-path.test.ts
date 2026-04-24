@@ -1,0 +1,82 @@
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { tmpdir } from "node:os";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/brain/store", () => ({
+  ensureBrainStoreReady: vi.fn(async () => {}),
+  getBrainStore: vi.fn(() => ({
+    listPages: vi.fn(async () => []),
+    getPage: vi.fn(async () => null),
+  })),
+}));
+
+const ROOT = path.join(tmpdir(), "scienceswarm-api-workspace-raw-path");
+const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
+
+beforeEach(() => {
+  rmSync(ROOT, { recursive: true, force: true });
+  process.env.SCIENCESWARM_DIR = ROOT;
+  vi.resetModules();
+});
+
+afterEach(() => {
+  rmSync(ROOT, { recursive: true, force: true });
+  if (ORIGINAL_SCIENCESWARM_DIR !== undefined) {
+    process.env.SCIENCESWARM_DIR = ORIGINAL_SCIENCESWARM_DIR;
+  } else {
+    delete process.env.SCIENCESWARM_DIR;
+  }
+  vi.restoreAllMocks();
+});
+
+async function importRawPathRoute() {
+  return await import("@/app/api/workspace/raw/[projectId]/[...file]/route");
+}
+
+describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
+  it("serves sandboxed html previews with sibling JS and CSS assets", async () => {
+    const projectId = "test-project";
+    const snakeDir = path.join(ROOT, "projects", projectId, "figures", "snake-game");
+    mkdirSync(snakeDir, { recursive: true });
+    writeFileSync(
+      path.join(snakeDir, "index.html"),
+      "<!doctype html><title>Snake</title><link rel=\"stylesheet\" href=\"./style.css\"><script src=\"./game.js\"></script>",
+    );
+    writeFileSync(path.join(snakeDir, "style.css"), "body { background: black; color: white; }");
+    writeFileSync(path.join(snakeDir, "game.js"), "globalThis.snakeLoaded = true;");
+
+    const { GET } = await importRawPathRoute();
+    const htmlRes = await GET(
+      new Request(`http://localhost/api/workspace/raw/${projectId}/figures/snake-game/index.html`),
+      { params: { projectId, file: ["figures", "snake-game", "index.html"] } },
+    );
+
+    expect(htmlRes.status).toBe(200);
+    expect(htmlRes.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(htmlRes.headers.get("Content-Security-Policy")).toContain("script-src 'self'");
+    expect(htmlRes.headers.get("Content-Security-Policy")).toContain("style-src 'self'");
+    const html = await htmlRes.text();
+    expect(html).toContain("./game.js");
+    expect(html).toContain("./style.css");
+    expect(html).toContain("data-scienceswarm-html-preview-shim");
+
+    const scriptRes = await GET(
+      new Request(`http://localhost/api/workspace/raw/${projectId}/figures/snake-game/game.js`),
+      { params: { projectId, file: ["figures", "snake-game", "game.js"] } },
+    );
+
+    expect(scriptRes.status).toBe(200);
+    expect(scriptRes.headers.get("Content-Type")).toBe("text/javascript; charset=utf-8");
+    await expect(scriptRes.text()).resolves.toContain("snakeLoaded");
+
+    const styleRes = await GET(
+      new Request(`http://localhost/api/workspace/raw/${projectId}/figures/snake-game/style.css`),
+      { params: { projectId, file: ["figures", "snake-game", "style.css"] } },
+    );
+
+    expect(styleRes.status).toBe(200);
+    expect(styleRes.headers.get("Content-Type")).toBe("text/css; charset=utf-8");
+    await expect(styleRes.text()).resolves.toContain("background: black");
+  });
+});

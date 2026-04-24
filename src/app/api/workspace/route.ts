@@ -1402,6 +1402,16 @@ const RAW_RENDERABLE_EXTENSIONS = new Set([
   "flac",
   "opus",
   "aac",
+  "css",
+  "js",
+  "mjs",
+  "cjs",
+  "json",
+  "ico",
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
 ]);
 const SANDBOXED_PREVIEW_EXTENSIONS = new Set(["html", "htm", "svg"]);
 
@@ -1427,6 +1437,16 @@ const RAW_CONTENT_TYPES: Record<string, string> = {
   flac: "audio/flac",
   opus: "audio/ogg; codecs=opus",
   aac: "audio/aac",
+  css: "text/css; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  mjs: "text/javascript; charset=utf-8",
+  cjs: "text/javascript; charset=utf-8",
+  json: "application/json; charset=utf-8",
+  ico: "image/x-icon",
+  woff: "font/woff",
+  woff2: "font/woff2",
+  ttf: "font/ttf",
+  otf: "font/otf",
 };
 
 const HTML_PREVIEW_SHIM_MARKER = "data-scienceswarm-html-preview-shim";
@@ -1484,7 +1504,7 @@ function buildSandboxedPreviewHeaders(
     return {
       ...base,
       "Content-Security-Policy":
-        "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+        "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
       "X-Content-Type-Options": "nosniff",
     };
   }
