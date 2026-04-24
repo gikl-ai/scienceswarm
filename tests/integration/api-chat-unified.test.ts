@@ -3435,6 +3435,113 @@ describe("POST /api/chat/unified", () => {
     );
   });
 
+  it("caps recent chat context to the compact prompt budget for plain follow-ups", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const longPriorTurn = "Discuss the chart trend and the regression caveats. ".repeat(40);
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("I can restate that.");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "openclaw-compact-history-budget",
+      },
+      body: JSON.stringify({
+        message: "Can you restate that more simply?",
+        projectId: "alpha-project",
+        messages: [
+          { role: "user", content: longPriorTurn },
+          { role: "assistant", content: "I summarized the chart." },
+          { role: "user", content: `${longPriorTurn}${longPriorTurn}` },
+          { role: "assistant", content: "I called out the regression caveats." },
+          { role: "user", content: "Can you restate that more simply?" },
+        ],
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
+    expect(openClawMessage).toContain("Recent web chat context for continuity");
+    expect(openClawMessage).toContain("[truncated]");
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      promptCharCounts: Record<string, number>;
+    };
+    expect(payload.promptCharCounts.recent_chat_context).toBeLessThanOrEqual(1_000);
+    infoSpy.mockRestore();
+  });
+
+  it("keeps a larger capped recent chat budget for artifact-producing follow-ups", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const longPriorTurn = "Please audit the imported paper and outline the revision package. ".repeat(45);
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("Saved artifacts.");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "openclaw-project-history-budget",
+      },
+      body: JSON.stringify({
+        message: "Please save the critique and proposed revision plan as artifacts.",
+        projectId: "alpha-project",
+        messages: [
+          { role: "user", content: longPriorTurn },
+          { role: "assistant", content: "I drafted a critique and revision plan." },
+          { role: "user", content: `${longPriorTurn}${longPriorTurn}` },
+          { role: "assistant", content: "The plan is ready to save." },
+          {
+            role: "user",
+            content: "Please save the critique and proposed revision plan as artifacts.",
+          },
+        ],
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      promptCharCounts: Record<string, number>;
+    };
+    expect(payload.promptCharCounts.recent_chat_context).toBeGreaterThan(1_000);
+    expect(payload.promptCharCounts.recent_chat_context).toBeLessThanOrEqual(6_000);
+    infoSpy.mockRestore();
+  });
+
   it("frames revise-and-resubmit audits as direct artifact-producing OpenClaw tasks", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     resolveAgentConfig.mockReturnValue({
