@@ -22,6 +22,9 @@ export async function GET(request: Request, context: WorkspaceRawRouteContext) {
   if (fileSegments.length === 0) {
     return new Response("file parameter required", { status: 400 });
   }
+  if (fileSegments.some((segment) => segment === "." || segment === "..")) {
+    return new Response("Invalid file path", { status: 400 });
+  }
 
   const forwardedUrl = new URL(request.url);
   forwardedUrl.pathname = "/api/workspace";
