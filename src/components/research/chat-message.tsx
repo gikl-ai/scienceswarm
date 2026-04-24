@@ -1222,6 +1222,7 @@ export function ChatMessage({
 
   const badge = channel ? CHANNEL_BADGES[channel] : undefined;
   const isCrossChannel = channel && channel !== "web";
+  const isAssistantTurn = role === "assistant";
   const isLiveAssistantTurn = role === "assistant" && Boolean(isStreaming);
   const visibleTaskPhases =
     role === "assistant" && Array.isArray(taskPhases) && taskPhases.length > 0
@@ -1330,7 +1331,7 @@ export function ChatMessage({
         }`
       : role === "system"
         ? "w-full max-w-[min(92vw,72rem)] rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text bg-white border-2 border-border text-muted text-xs font-mono"
-        : "w-full max-w-[min(92vw,72rem)] px-0 py-1 text-sm leading-relaxed select-text cursor-text text-foreground";
+        : "w-full max-w-[min(90vw,56rem)] px-1 py-2 text-[15px] leading-7 select-text cursor-text text-slate-900 sm:px-2";
 
   useEffect(() => () => {
     if (copyFeedbackTimerRef.current !== null) {
@@ -1368,7 +1369,13 @@ export function ChatMessage({
 
   return (
     <div
-      className={`flex ${role === "user" ? "justify-end" : "justify-start"}`}
+      className={`flex ${
+        role === "user"
+          ? "justify-end"
+          : isAssistantTurn
+            ? "justify-center"
+            : "justify-center"
+      }`}
     >
       <div
         data-testid="chat-bubble"

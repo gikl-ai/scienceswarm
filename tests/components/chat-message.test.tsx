@@ -45,6 +45,20 @@ describe("ChatMessage", () => {
     expect(screen.getByTestId("chat-bubble")).not.toHaveClass("bg-white");
   });
 
+  it("centers assistant turns on the narrower reading lane", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByTestId("chat-bubble").parentElement).toHaveClass("justify-center");
+    expect(screen.getByTestId("chat-bubble")).toHaveClass("max-w-[min(90vw,56rem)]");
+    expect(screen.getByTestId("chat-bubble")).toHaveClass("leading-7");
+  });
+
   it("keeps user turns inside the accent bubble", () => {
     render(
       <ChatMessage
