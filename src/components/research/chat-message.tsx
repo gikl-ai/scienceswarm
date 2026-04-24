@@ -655,7 +655,7 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
     if (exploredLines.length === 0) return;
     blocks.push({
       type: "explored",
-      lines: exploredLines,
+      lines: coalesceExploredLines(exploredLines),
       section: "activity",
     });
     exploredLines = [];
@@ -680,6 +680,65 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
 
   flushExploredLines();
   return blocks;
+}
+
+function parseCoalescibleExploredLine(
+  line: string,
+): { verb: "Read" | "Write" | "Edit" | "List"; target: string } | null {
+  const match = line.match(/^(Read|Write|Edit|List)\s+(.+)$/);
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+
+  const verb = match[1] as "Read" | "Write" | "Edit" | "List";
+  const target = match[2].trim();
+  if (!target) {
+    return null;
+  }
+
+  return { verb, target };
+}
+
+function coalesceExploredLines(lines: string[]): string[] {
+  const grouped: string[] = [];
+  let pending:
+    | { verb: "Read" | "Write" | "Edit" | "List"; targets: string[] }
+    | null = null;
+
+  const flushPending = () => {
+    if (!pending) {
+      return;
+    }
+    grouped.push(
+      pending.targets.length > 1
+        ? `${pending.verb} ${pending.targets.join(" · ")}`
+        : `${pending.verb} ${pending.targets[0]}`,
+    );
+    pending = null;
+  };
+
+  for (const line of lines) {
+    const parsed = parseCoalescibleExploredLine(line);
+    if (!parsed) {
+      flushPending();
+      grouped.push(line);
+      continue;
+    }
+
+    if (pending && pending.verb === parsed.verb) {
+      pending.targets.push(parsed.target);
+      continue;
+    }
+
+    flushPending();
+    pending = {
+      verb: parsed.verb,
+      targets: [parsed.target],
+    };
+  }
+
+  flushPending();
+  return grouped;
 }
 
 function summarizeCompactPhaseStatus(phases: ChatTaskPhase[]): string[] {

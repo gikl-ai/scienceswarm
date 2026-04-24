@@ -15,6 +15,11 @@
  * render in the muted-background color (near-invisible labels in
  * sidebars, composer hints, and many chrome surfaces).
  *
+ * The old app also used Tailwind's literal `bg-white` as a generic
+ * panel surface. In the dark-first v1 system, that class must behave
+ * like a raised surface for legacy code; true white foregrounds
+ * (`text-white`) still remain real white for accent buttons.
+ *
  * The fix: re-register these names in Tailwind v4's @theme inline
  * with the scienceswarm interpretation. Because Tailwind generates
  * all variants (hover, focus, alpha, data-state) from the color
@@ -35,6 +40,7 @@
   --color-foreground:    var(--text-strong);
   --color-surface:       var(--surface-raised);
   --color-background:    var(--surface-ink);
+  --color-surface-hover: var(--surface-hover);
   --color-accent-hover:  var(--accent-dim);
 
   /* border-border routes through --color-border already mapped in
@@ -55,3 +61,19 @@
 .data-\[state\=active\]\:bg-muted[data-state="active"] {
   background-color: var(--surface-sunk);
 }
+
+/* Legacy white surface utilities. These intentionally do not remap
+   Tailwind's --color-white token, because text-white should stay white
+   on accent and danger buttons. */
+.bg-white { background-color: var(--surface-raised); }
+.bg-white\/10 { background-color: color-mix(in srgb, var(--surface-raised) 10%, transparent); }
+.bg-white\/15 { background-color: color-mix(in srgb, var(--surface-raised) 15%, transparent); }
+.bg-white\/50 { background-color: color-mix(in srgb, var(--surface-raised) 50%, transparent); }
+.bg-white\/70 { background-color: color-mix(in srgb, var(--surface-raised) 70%, transparent); }
+.bg-white\/80 { background-color: color-mix(in srgb, var(--surface-raised) 80%, transparent); }
+.bg-white\/95 { background-color: color-mix(in srgb, var(--surface-raised) 95%, transparent); }
+.hover\:bg-white:hover { background-color: var(--surface-raised); }
+.hover\:bg-white\/10:hover { background-color: color-mix(in srgb, var(--surface-raised) 10%, transparent); }
+.hover\:bg-white\/20:hover { background-color: color-mix(in srgb, var(--surface-raised) 20%, transparent); }
+.focus\:bg-white:focus { background-color: var(--surface-raised); }
+.odd\:bg-white:nth-child(odd) { background-color: var(--surface-raised); }

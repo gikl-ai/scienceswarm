@@ -62,9 +62,17 @@ export interface ChatTaskPhase {
   status: "pending" | "active" | "completed" | "failed";
 }
 
+export type MessageProgressSource = "gateway" | "agent" | "server" | "client";
+export type MessageProgressStatus = "started" | "running" | "complete" | "failed";
+
 export interface MessageProgressEntry {
   kind: "thinking" | "activity";
   text: string;
+  source?: MessageProgressSource;
+  phase?: string;
+  timestampMs?: number;
+  status?: MessageProgressStatus;
+  label?: string;
 }
 
 export interface GeneratedArtifact {
@@ -1033,6 +1041,18 @@ const PERSISTABLE_NOISE_PREFIXES = [
   "__FILE_PREVIEW__:",
   "__FILE_STATIC__:",
 ];
+const VALID_PROGRESS_SOURCES = new Set<MessageProgressSource>([
+  "gateway",
+  "agent",
+  "server",
+  "client",
+]);
+const VALID_PROGRESS_STATUSES = new Set<MessageProgressStatus>([
+  "started",
+  "running",
+  "complete",
+  "failed",
+]);
 
 function isLowSignalLifecycleEntryText(text: string): boolean {
   return (
@@ -1078,12 +1098,14 @@ function appendProgressLog(
     const normalizedEntry: MessageProgressEntry = {
       kind: entry.kind,
       text,
+      ...normalizeProgressEntryMeta(entry, text),
     };
     const last = merged.at(-1);
     if (shouldSuppressProgressEntry(last, normalizedEntry)) {
       continue;
     }
     if (last && last.kind === normalizedEntry.kind && last.text === normalizedEntry.text) {
+      merged[merged.length - 1] = mergeProgressEntryMetadata(last, normalizedEntry);
       continue;
     }
     merged.push(normalizedEntry);
@@ -1120,10 +1142,11 @@ function normalizeProgressEntryText(value: string): string {
 }
 
 function buildThinkingProgressEntries(value: string): MessageProgressEntry[] {
-  return splitProgressText(value).map((text) => ({
-    kind: "thinking" as const,
-    text,
-  }));
+  return buildProgressEntries("thinking", splitProgressText(value), {
+    source: "gateway",
+    phase: "thinking",
+    status: "running",
+  });
 }
 
 function buildThinkingProgressDeltaEntries(
@@ -1156,21 +1179,21 @@ function buildThinkingProgressDeltaEntries(
 }
 
 function buildActivityProgressEntries(lines: string[]): MessageProgressEntry[] {
-  return lines
-    .map((line) => normalizeProgressEntryText(line))
-    .filter((line) => line.length > 0)
-    .map((text) => ({
-      kind: "activity" as const,
-      text,
-    }));
+  return buildProgressEntries("activity", lines);
 }
 
 function buildOptionalActivityProgressEntries(
   lines: Array<string | null | undefined>,
+  meta: Partial<Omit<MessageProgressEntry, "kind" | "text">> = {},
 ): MessageProgressEntry[] {
-  return buildActivityProgressEntries(
+  return buildProgressEntries(
+    "activity",
     lines.filter((line): line is string => typeof line === "string" && line.trim().length > 0),
-  );
+    meta,
+  ).map((entry) => ({
+    ...entry,
+    label: entry.label ?? inferProgressEntryLabel(entry.text),
+  }));
 }
 
 function buildOpenClawSendPhaseEntries(
@@ -1181,11 +1204,134 @@ function buildOpenClawSendPhaseEntries(
     return [];
   }
 
-  return buildActivityProgressEntries([
-    phase === "dispatch"
-      ? "Sending request to OpenClaw"
-      : "Waiting for OpenClaw to respond",
-  ]);
+  return buildProgressEntries(
+    "activity",
+    [
+      phase === "dispatch"
+        ? "Sending request to OpenClaw"
+        : "Waiting for OpenClaw to respond",
+    ],
+    {
+      source: "server",
+      phase: phase === "dispatch" ? "send" : "waiting",
+      status: phase === "dispatch" ? "started" : "running",
+    },
+  );
+}
+
+function inferProgressEntryLabel(text: string): string | undefined {
+  const normalized = normalizeProgressEntryText(text);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const directMatch = normalized.match(/^(Read|Search|Write|Edit|Run|List|Plan)\b/i);
+  if (directMatch?.[1]) {
+    return directMatch[1][0].toUpperCase() + directMatch[1].slice(1).toLowerCase();
+  }
+  if (/^Sending request to OpenClaw$/i.test(normalized)) {
+    return "Send";
+  }
+  if (/^Waiting for OpenClaw to respond$/i.test(normalized)) {
+    return "Wait";
+  }
+  if (/^Generate image\b/i.test(normalized)) {
+    return "Generate image";
+  }
+  if (/^Chat failed\b/i.test(normalized)) {
+    return "Failed";
+  }
+  if (/^Chat aborted\b/i.test(normalized)) {
+    return "Aborted";
+  }
+  return undefined;
+}
+
+function normalizeProgressEntryMeta(
+  meta: Partial<Omit<MessageProgressEntry, "kind" | "text">>,
+  text: string,
+): Omit<MessageProgressEntry, "kind" | "text"> {
+  const source =
+    typeof meta.source === "string" && VALID_PROGRESS_SOURCES.has(meta.source)
+      ? meta.source
+      : undefined;
+  const phase =
+    typeof meta.phase === "string" && meta.phase.trim().length > 0
+      ? meta.phase.trim()
+      : undefined;
+  const status =
+    typeof meta.status === "string" && VALID_PROGRESS_STATUSES.has(meta.status)
+      ? meta.status
+      : undefined;
+  const timestampMs =
+    typeof meta.timestampMs === "number"
+    && Number.isFinite(meta.timestampMs)
+    && meta.timestampMs >= 0
+      ? Math.floor(meta.timestampMs)
+      : undefined;
+  const label =
+    typeof meta.label === "string" && meta.label.trim().length > 0
+      ? meta.label.trim()
+      : inferProgressEntryLabel(text);
+
+  return {
+    source,
+    phase,
+    status,
+    timestampMs,
+    label,
+  };
+}
+
+function buildProgressEntries(
+  kind: MessageProgressEntry["kind"],
+  rawLines: string[],
+  meta: Partial<Omit<MessageProgressEntry, "kind" | "text">> = {},
+): MessageProgressEntry[] {
+  const timestampMs = meta.timestampMs ?? Date.now();
+
+  return rawLines
+    .map((line) => normalizeProgressEntryText(line))
+    .filter((line) => line.length > 0)
+    .map((text) => ({
+      kind,
+      text,
+      ...normalizeProgressEntryMeta({ ...meta, timestampMs }, text),
+    }));
+}
+
+function mergeProgressEntryMetadata(
+  existing: MessageProgressEntry,
+  incoming: MessageProgressEntry,
+): MessageProgressEntry {
+  return {
+    ...existing,
+    source: incoming.source ?? existing.source,
+    phase: incoming.phase ?? existing.phase,
+    timestampMs: incoming.timestampMs ?? existing.timestampMs,
+    status: incoming.status ?? existing.status,
+    label: incoming.label ?? existing.label,
+  };
+}
+
+function progressStatusForPhase(
+  phase: string | undefined,
+  fallback: MessageProgressStatus = "running",
+): MessageProgressStatus {
+  const normalized = phase?.trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  if (["start", "started", "begin", "dispatch"].includes(normalized)) {
+    return "started";
+  }
+  if (["result", "done", "end", "complete", "completed"].includes(normalized)) {
+    return "complete";
+  }
+  if (["error", "failed", "abort", "aborted"].includes(normalized)) {
+    return "failed";
+  }
+  return "running";
 }
 
 function isConcreteActionWithPrefix(text: string, prefix: string, generic: string): boolean {
@@ -1506,7 +1652,11 @@ function extractGatewayChatProgressUpdate(
       const statusLine = formatGatewayChatStatusLine(eventName, payload);
       if (statusLine) {
         update.activityLines.push(statusLine);
-        update.progressEntries.push(...buildActivityProgressEntries([statusLine]));
+        update.progressEntries.push(...buildProgressEntries("activity", [statusLine], {
+          source: "gateway",
+          phase: "waiting",
+          status: "failed",
+        }));
       }
       break;
     }
@@ -1520,7 +1670,11 @@ function extractGatewayChatProgressUpdate(
       if (sideResultText) {
         const line = `Side result: ${summarizeProgressText(sideResultText)}`;
         update.activityLines.push(line);
-        update.progressEntries.push(...buildActivityProgressEntries([line]));
+        update.progressEntries.push(...buildProgressEntries("activity", [line], {
+          source: "gateway",
+          phase: "waiting",
+          status: "running",
+        }));
       }
       break;
     }
@@ -1560,7 +1714,11 @@ function extractAgentEventProgressUpdate(
     const activityLine = formatToolActivityLine(toolPhase, toolName, toolDetail);
     const progressEntries = buildOptionalActivityProgressEntries([
       formatToolProgressEntry(toolPhase, toolName, toolDetail),
-    ]);
+    ], {
+      source: "agent",
+      phase: toolPhase ?? "tool",
+      status: progressStatusForPhase(toolPhase),
+    });
     update.activityLines.push(activityLine);
     if (progressEntries.length > 0) {
       update.progressEntries.push(...progressEntries);
@@ -1595,7 +1753,11 @@ function extractAgentEventProgressUpdate(
       lifecycleDetail,
     );
     if (lifecycleProgressLine) {
-      update.progressEntries.push(...buildActivityProgressEntries([lifecycleProgressLine]));
+      update.progressEntries.push(...buildProgressEntries("activity", [lifecycleProgressLine], {
+        source: "agent",
+        phase: lifecyclePhase ?? "lifecycle",
+        status: progressStatusForPhase(lifecyclePhase),
+      }));
     }
   }
 
@@ -1672,7 +1834,11 @@ function extractSessionMessageProgressUpdate(
       const activityLine = formatToolActivityLine("result", toolName, detail);
       const progressEntries = buildOptionalActivityProgressEntries([
         formatToolProgressEntry("result", toolName, detail),
-      ]);
+      ], {
+        source: "agent",
+        phase: "result",
+        status: "complete",
+      });
       update.activityLines.push(activityLine);
       if (progressEntries.length > 0) {
         update.progressEntries.push(...progressEntries);
@@ -1717,7 +1883,11 @@ function extractSessionMessageProgressUpdate(
       );
       const progressEntries = buildOptionalActivityProgressEntries([
         formatToolProgressEntry(toolPhase, toolName, detail),
-      ]);
+      ], {
+        source: "agent",
+        phase: toolPhase ?? "tool",
+        status: progressStatusForPhase(toolPhase),
+      });
       update.activityLines.push(activityLine);
       if (progressEntries.length > 0) {
         update.progressEntries.push(...progressEntries);
@@ -1731,7 +1901,11 @@ function extractSessionMessageProgressUpdate(
     if (genericText) {
       const activityLine = type ? `${type}: ${genericText}` : genericText;
       update.activityLines.push(activityLine);
-      update.progressEntries.push(...buildActivityProgressEntries([activityLine]));
+      update.progressEntries.push(...buildProgressEntries("activity", [activityLine], {
+        source: "gateway",
+        phase: type || "activity",
+        status: "running",
+      }));
     }
   }
 
@@ -1804,7 +1978,11 @@ function extractOpenClawProgressUpdate(progress: {
     );
     const progressEntries = buildOptionalActivityProgressEntries([
       formatToolProgressEntry(toolPhase, toolName, toolDetail),
-    ]);
+    ], {
+      source: "agent",
+      phase: toolPhase ?? "tool",
+      status: progressStatusForPhase(toolPhase),
+    });
     update.activityLines.push(activityLine);
     if (progressEntries.length > 0) {
       update.progressEntries.push(...progressEntries);
@@ -1826,7 +2004,11 @@ function extractOpenClawProgressUpdate(progress: {
       lifecycleDetail,
     );
     if (lifecycleProgressLine) {
-      update.progressEntries.push(...buildActivityProgressEntries([lifecycleProgressLine]));
+      update.progressEntries.push(...buildProgressEntries("activity", [lifecycleProgressLine], {
+        source: "agent",
+        phase: lifecyclePhase ?? "lifecycle",
+        status: progressStatusForPhase(lifecyclePhase),
+      }));
     }
   }
 
@@ -1841,7 +2023,11 @@ function extractOpenClawProgressUpdate(progress: {
     payloadNarration
   ) {
     update.activityLines.push(payloadNarration);
-    update.progressEntries.push(...buildActivityProgressEntries([payloadNarration]));
+    update.progressEntries.push(...buildProgressEntries("activity", [payloadNarration], {
+      source: "gateway",
+      phase: stream || "activity",
+      status: "running",
+    }));
   }
 
   return update;
@@ -2175,6 +2361,7 @@ function restoreProgressLog(value: unknown): MessageProgressEntry[] | undefined 
       return {
         kind: entry.kind,
         text: normalizeProgressEntryText(text),
+        ...normalizeProgressEntryMeta(entry, text),
       } satisfies MessageProgressEntry;
     })
     .filter((entry): entry is MessageProgressEntry => entry !== null);
