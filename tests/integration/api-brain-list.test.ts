@@ -36,6 +36,7 @@ describe("GET /api/brain/list", () => {
           },
         },
       })),
+      isBrainBackendUnavailableError: vi.fn(() => false),
     }));
 
     const { GET } = await importRoute();
