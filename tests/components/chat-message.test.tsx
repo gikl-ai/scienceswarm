@@ -474,8 +474,8 @@ describe("ChatMessage", () => {
     );
 
     const progressLog = screen.getByRole("log");
-    expect(progressLog).toHaveTextContent("Read src/a.ts, src/b.ts");
-    expect(progressLog).toHaveTextContent("Write docs/summary.md, docs/chart.md");
+    expect(progressLog).toHaveTextContent("Read src/a.ts · src/b.ts");
+    expect(progressLog).toHaveTextContent("Write docs/summary.md · docs/chart.md");
     expect(progressLog).toHaveTextContent("Search gateway in src/hooks/use-unified-chat.ts");
   });
 
