@@ -56,6 +56,7 @@ beforeEach(() => {
   __setRuntimeApiServicesForTests({
     adapters: [
       adapter(requireRuntimeHostProfile("openclaw")),
+      adapter(requireRuntimeHostProfile("claude-code")),
       adapter(requireRuntimeHostProfile("codex")),
     ],
   });
@@ -107,5 +108,32 @@ describe("POST /api/runtime/preview", () => {
       kind: "prompt",
       label: "User prompt",
     });
+  });
+
+  it("discloses generated ScienceSwarm and scoped gbrain context for Claude Code", async () => {
+    const response = await POST(request({
+      hostId: "claude-code",
+      projectId: "project-alpha",
+      projectPolicy: "cloud-ok",
+      mode: "chat",
+      prompt: "What should we do next?",
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.preview.dataIncluded).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "workspace-file",
+        label: "ScienceSwarm runtime guidance (SCIENCESWARM.md)",
+      }),
+      expect.objectContaining({
+        kind: "gbrain-excerpt",
+        label: "Compact gbrain project brief",
+      }),
+      expect.objectContaining({
+        kind: "mcp-tool-call",
+        label: "Scoped gbrain MCP tools",
+      }),
+    ]));
   });
 });

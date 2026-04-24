@@ -41,6 +41,7 @@ import { createClaudeCodeRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters
 import { createCodexRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/codex";
 import { createGeminiCliRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/gemini-cli";
 import { createOpenHandsRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/openhands";
+import { claudeCodeRuntimeContextDataIncluded } from "@/lib/runtime-hosts/adapters/claude-code-context";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 import { isLocalRequest } from "@/lib/local-guard";
 
@@ -368,6 +369,26 @@ export function dataIncludedFromBody(
         },
       ]
     : [];
+}
+
+export function dataIncludedFromBodyWithRuntimeContext(input: {
+  body: Record<string, unknown>;
+  projectId?: string | null;
+  hostId?: string | null;
+  selectedHostIds?: readonly string[];
+}): RuntimeDataIncluded[] {
+  const dataIncluded = dataIncludedFromBody(input.body);
+  const includesClaudeCode =
+    input.hostId === "claude-code"
+    || input.selectedHostIds?.includes("claude-code") === true;
+  if (!includesClaudeCode) return dataIncluded;
+
+  const existingLabels = new Set(dataIncluded.map((item) => item.label));
+  const contextData = claudeCodeRuntimeContextDataIncluded({
+    projectId: input.projectId,
+  }).filter((item) => !existingLabels.has(item.label));
+
+  return [...dataIncluded, ...contextData];
 }
 
 export function adapterMapForServices(

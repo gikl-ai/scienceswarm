@@ -4,7 +4,7 @@ import {
   assertRuntimeApiLocalRequest,
   buildRuntimeTurnRequest,
   computeRuntimeApiPreview,
-  dataIncludedFromBody,
+  dataIncludedFromBodyWithRuntimeContext,
   getRuntimeApiServices,
   optionalStringArrayField,
   optionalStringField,
@@ -66,12 +66,17 @@ export async function POST(request: Request): Promise<Response> {
     const conversationId = optionalStringField(body, "conversationId") ?? null;
     const approvalState = approvalStateFromBody(body);
     const inputFileRefs = optionalStringArrayField(body, "inputFileRefs") ?? [];
+    const dataIncluded = dataIncludedFromBodyWithRuntimeContext({
+      body,
+      projectId,
+      hostId,
+    });
     const preview = computeRuntimeApiPreview({
       services,
       hostId,
       projectPolicy: projectPolicyFromBody(body),
       mode,
-      dataIncluded: dataIncludedFromBody(body),
+      dataIncluded,
     });
     assertPreviewAllowed(preview, approvalState);
 

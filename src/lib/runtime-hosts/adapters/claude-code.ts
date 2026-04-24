@@ -31,6 +31,11 @@ import {
   type CliTransport,
 } from "../transport/cli";
 import { buildSubscriptionNativeCliEnv } from "../transport/subscription-env";
+import {
+  buildClaudeCodeRuntimeContext,
+  type ClaudeCodeInvocationContext,
+  type ClaudeCodeRuntimeContextBuilder,
+} from "./claude-code-context";
 
 function isNativeClaudeCodeSessionId(
   conversationId: string | null,
@@ -49,6 +54,10 @@ export interface ClaudeCodeRuntimeHostAdapterOptions {
   healthArgs?: string[];
   authArgs?: string[];
   env?: NodeJS.ProcessEnv | (() => NodeJS.ProcessEnv);
+  repoRoot?: string;
+  sessionRoot?: string;
+  enableRuntimeMcp?: boolean;
+  contextBuilder?: ClaudeCodeRuntimeContextBuilder;
 }
 
 export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
@@ -60,6 +69,10 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
   private readonly healthArgs: string[];
   private readonly authArgs?: string[];
   private readonly env?: NodeJS.ProcessEnv | (() => NodeJS.ProcessEnv);
+  private readonly repoRoot?: string;
+  private readonly sessionRoot?: string;
+  private readonly enableRuntimeMcp?: boolean;
+  private readonly contextBuilder: ClaudeCodeRuntimeContextBuilder;
   private messageEventSequence = 0;
 
   constructor(options: ClaudeCodeRuntimeHostAdapterOptions = {}) {
@@ -71,6 +84,10 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
     this.healthArgs = options.healthArgs ?? ["--version"];
     this.authArgs = options.authArgs;
     this.env = options.env;
+    this.repoRoot = options.repoRoot;
+    this.sessionRoot = options.sessionRoot;
+    this.enableRuntimeMcp = options.enableRuntimeMcp;
+    this.contextBuilder = options.contextBuilder ?? buildClaudeCodeRuntimeContext;
   }
 
   profile(): RuntimeHostProfile {
@@ -118,12 +135,19 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       hostId: this.runtimeProfile.id,
       sessionId: wrapperSessionId,
     });
+    const env = this.cliEnv();
+    const context = await this.buildRuntimeContext({
+      request,
+      wrapperSessionId,
+      env,
+    });
     const result = await this.transport.run({
       hostId: this.runtimeProfile.id,
       sessionId: wrapperSessionId,
       command: this.command,
-      args: this.buildPromptArgs(request),
-      env: this.cliEnv(),
+      args: this.buildPromptArgs(request, context),
+      cwd: context?.cwd,
+      env,
       timeoutMs: this.timeoutMs,
       onStdoutLine: (line) => {
         const event = stream.acceptLine(line);
@@ -165,13 +189,20 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       hostId: this.runtimeProfile.id,
       sessionId: wrapperSessionId,
     });
+    const env = this.cliEnv();
+    const context = await this.buildRuntimeContext({
+      request,
+      wrapperSessionId,
+      env,
+    });
 
     const result = await this.transport.run({
       hostId: this.runtimeProfile.id,
       sessionId: wrapperSessionId,
       command: this.command,
-      args: this.buildPromptArgs(request),
-      env: this.cliEnv(),
+      args: this.buildPromptArgs(request, context),
+      cwd: context?.cwd,
+      env,
       timeoutMs: this.timeoutMs,
       onStdoutLine: (line) => {
         const event = stream.acceptLine(line);
@@ -259,7 +290,23 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
     );
   }
 
-  private buildPromptArgs(request: RuntimeTurnRequest): string[] {
+  private async buildRuntimeContext(input: {
+    request: RuntimeTurnRequest;
+    wrapperSessionId: string;
+    env: NodeJS.ProcessEnv;
+  }): Promise<ClaudeCodeInvocationContext | null> {
+    return await this.contextBuilder({
+      ...input,
+      repoRoot: this.repoRoot,
+      sessionRoot: this.sessionRoot,
+      enableRuntimeMcp: this.enableRuntimeMcp,
+    });
+  }
+
+  private buildPromptArgs(
+    request: RuntimeTurnRequest,
+    context?: ClaudeCodeInvocationContext | null,
+  ): string[] {
     const args = [
       "-p",
       request.prompt,
@@ -268,6 +315,15 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       "--verbose",
       "--include-partial-messages",
     ];
+    if (context?.appendSystemPrompt) {
+      args.push("--append-system-prompt", context.appendSystemPrompt);
+    }
+    if (context?.addDirs?.length) {
+      args.push("--add-dir", ...context.addDirs);
+    }
+    if (context?.mcpConfigPath) {
+      args.push("--mcp-config", context.mcpConfigPath, "--strict-mcp-config");
+    }
     if (isNativeClaudeCodeSessionId(request.conversationId)) {
       args.push("--resume", request.conversationId);
     }

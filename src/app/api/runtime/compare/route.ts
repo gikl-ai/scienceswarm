@@ -6,7 +6,7 @@ import {
   assertRuntimeApiLocalRequest,
   buildRuntimeTurnRequest,
   computeRuntimeApiPreview,
-  dataIncludedFromBody,
+  dataIncludedFromBodyWithRuntimeContext,
   getRuntimeApiServices,
   optionalStringArrayField,
   optionalStringField,
@@ -62,25 +62,35 @@ export async function POST(request: Request): Promise<Response> {
     const synthesisHostId = optionalStringField(body, "synthesisHostId") ?? "openclaw";
     const conversationId = optionalStringField(body, "conversationId") ?? null;
     const inputFileRefs = optionalStringArrayField(body, "inputFileRefs") ?? [];
-    const dataIncluded = dataIncludedFromBody(body);
+    const compareDataIncluded = dataIncludedFromBodyWithRuntimeContext({
+      body,
+      projectId,
+      hostId: selectedHostIds[0],
+      selectedHostIds,
+    });
 
     const comparePreview = computeRuntimeApiPreview({
       services,
       hostId: selectedHostIds[0],
       projectPolicy,
       mode: "compare",
-      dataIncluded,
+      dataIncluded: compareDataIncluded,
       selectedHostIds,
     });
     assertPreviewAllowed(comparePreview, approvalState);
 
     const childPreviews = selectedHostIds.map((hostId) => {
+      const childDataIncluded = dataIncludedFromBodyWithRuntimeContext({
+        body,
+        projectId,
+        hostId,
+      });
       const preview = computeRuntimeApiPreview({
         services,
         hostId,
         projectPolicy,
         mode: "chat",
-        dataIncluded,
+        dataIncluded: childDataIncluded,
       });
       assertPreviewAllowed(preview, approvalState);
       return preview;
