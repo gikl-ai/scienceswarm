@@ -221,6 +221,10 @@ function runtimeTurnModeForChatMode(chatMode: ChatMode): RuntimeTurnMode {
 const MAX_CONTEXT_FILES = 10;
 const AUTO_PROJECT_CONTEXT_MAX_FILES = 3;
 const MAX_CONTEXT_CHARS_PER_FILE = 20_000;
+const MAX_WORKSPACE_CONTEXT_TOTAL_CHARS = 24_000;
+const WORKSPACE_CONTEXT_BUDGET_TRUNCATION_NOTE =
+  "\n\n[truncated to stay within workspace prompt budget]";
+const MIN_WORKSPACE_CONTEXT_SECTION_CHARS = 256;
 const OPENCLAW_HISTORY_CONTEXT_MAX_MESSAGES = 6;
 const OPENCLAW_HISTORY_CONTEXT_MAX_CHARS = 12_000;
 const OPENCLAW_HISTORY_CONTEXT_MAX_CHARS_PER_MESSAGE = 3_500;
@@ -806,6 +810,29 @@ function trimFileContext(text: string): string {
     text.slice(0, MAX_CONTEXT_CHARS_PER_FILE) +
     "\n\n[... truncated for chat context ...]"
   );
+}
+
+function fitWorkspaceContextSectionToBudget(
+  section: string,
+  remainingChars: number,
+): string | null {
+  if (remainingChars <= 0) {
+    return null;
+  }
+  if (section.length <= remainingChars) {
+    return section;
+  }
+  if (remainingChars < MIN_WORKSPACE_CONTEXT_SECTION_CHARS) {
+    return null;
+  }
+
+  const maxSectionChars =
+    remainingChars - WORKSPACE_CONTEXT_BUDGET_TRUNCATION_NOTE.length;
+  if (maxSectionChars <= 0) {
+    return null;
+  }
+
+  return `${section.slice(0, maxSectionChars).trimEnd()}${WORKSPACE_CONTEXT_BUDGET_TRUNCATION_NOTE}`;
 }
 
 function stripQuotedToken(token: string): string {
@@ -1595,7 +1622,9 @@ async function buildWorkspaceFileContext(
 
   const contextualizedFiles: Array<{ name: string; size: string }> = [];
   const missingFiles: string[] = [];
+  const budgetOmittedFiles: string[] = [];
   const sections: string[] = [];
+  let remainingContextChars = MAX_WORKSPACE_CONTEXT_TOTAL_CHARS;
 
   for (const file of readableFiles.slice(0, MAX_CONTEXT_FILES)) {
     const gbrainSlug =
@@ -1612,15 +1641,23 @@ async function buildWorkspaceFileContext(
           typeof page.frontmatter?.type === "string"
             ? page.frontmatter.type
             : page.type;
-        contextualizedFiles.push({ name: file.name, size: file.size });
-      sections.push(
-        [
+        const section = [
           `Brain page: gbrain:${gbrainSlug}`,
           `Title: ${escapePromptXml(page.title)}`,
           `Type: ${escapePromptXml(frontmatterType)}`,
           escapePromptXml(trimFileContext(page.content)),
-        ].join("\n"),
-      );
+        ].join("\n");
+        const budgetedSection = fitWorkspaceContextSectionToBudget(
+          section,
+          remainingContextChars,
+        );
+        if (!budgetedSection) {
+          budgetOmittedFiles.push(`gbrain:${gbrainSlug}`);
+          continue;
+        }
+        contextualizedFiles.push({ name: file.name, size: file.size });
+        sections.push(budgetedSection);
+        remainingContextChars -= budgetedSection.length;
       } catch {
         missingFiles.push(`gbrain:${gbrainSlug}`);
       }
@@ -1639,13 +1676,21 @@ async function buildWorkspaceFileContext(
     try {
       const buffer = await readFile(resolvedPath);
       const parsed = await parseFile(buffer, file.name);
-      contextualizedFiles.push({ name: file.name, size: file.size });
-      sections.push(
-        [
-          `File: ${escapePromptXml(file.workspacePath)}${parsed.pages ? ` (${parsed.pages} pages)` : ""}`,
-          escapePromptXml(trimFileContext(parsed.text)),
-        ].join("\n"),
+      const section = [
+        `File: ${escapePromptXml(file.workspacePath)}${parsed.pages ? ` (${parsed.pages} pages)` : ""}`,
+        escapePromptXml(trimFileContext(parsed.text)),
+      ].join("\n");
+      const budgetedSection = fitWorkspaceContextSectionToBudget(
+        section,
+        remainingContextChars,
       );
+      if (!budgetedSection) {
+        budgetOmittedFiles.push(file.workspacePath);
+        continue;
+      }
+      contextualizedFiles.push({ name: file.name, size: file.size });
+      sections.push(budgetedSection);
+      remainingContextChars -= budgetedSection.length;
     } catch {
       missingFiles.push(file.workspacePath);
     }
@@ -1670,6 +1715,11 @@ async function buildWorkspaceFileContext(
 
   if (missingFiles.length > 0) {
     parts.push(`Files that could not be read: ${missingFiles.map((file) => escapePromptXml(file)).join(", ")}`);
+  }
+  if (budgetOmittedFiles.length > 0) {
+    parts.push(
+      `Additional file context omitted to stay within prompt budget: ${budgetOmittedFiles.map((file) => escapePromptXml(file)).join(", ")}`,
+    );
   }
 
   parts.push("</scienceswarm_workspace_file_context>");
