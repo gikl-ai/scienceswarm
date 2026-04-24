@@ -1107,8 +1107,9 @@ function renderContent(content: string, projectId: string) {
         typeof embedDirective.ref === "string"
           ? resolveLegacyHtmlAliasPath(embedDirective.ref)
           : null;
-      if (embedDirective.url || legacyEmbedRefPath) {
-        let embedUrl = embedDirective.url ?? legacyEmbedRefPath!;
+      const embedDirectiveUrl = embedDirective.url?.trim() || null;
+      if (embedDirectiveUrl || legacyEmbedRefPath) {
+        let embedUrl = embedDirectiveUrl || legacyEmbedRefPath!;
         // OpenClaw canvas/internal URLs need proxying through workspace API
         if (embedUrl.includes("__openclaw__") || embedUrl.includes("canvas/documents")) {
           // Find the most recent saved HTML filename anywhere earlier in the
