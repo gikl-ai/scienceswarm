@@ -6,6 +6,7 @@ import { StringDecoder } from "node:string_decoder";
 import type { RuntimeHostAuthStatus, RuntimeHostHealth } from "../contracts";
 import { RuntimeHostError } from "../errors";
 import {
+  buildRuntimeCliFailureUserMessage,
   isCliAuthChallengeText,
   normalizeCliOutput,
   type NormalizedCliOutput,
@@ -295,7 +296,11 @@ export class LocalCliTransport implements CliTransport {
               code: "RUNTIME_TRANSPORT_ERROR",
               status: 502,
               message: `Runtime CLI exited with code ${exitCode}: ${request.command}`,
-              userMessage: "Runtime host command failed.",
+              userMessage: buildRuntimeCliFailureUserMessage({
+                hostId: request.hostId,
+                command: request.command,
+                output,
+              }),
               recoverable: true,
               context: {
                 hostId: request.hostId,

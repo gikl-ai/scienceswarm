@@ -17,6 +17,12 @@ export interface NormalizedCliOutput {
   authChallenge: boolean;
 }
 
+export interface RuntimeCliFailureUserMessageInput {
+  hostId?: string;
+  command: string;
+  output?: Pick<NormalizedCliOutput, "stderr" | "stdout" | "text" | "combined">;
+}
+
 export class RuntimeCliMalformedOutputError extends RuntimeHostError {
   constructor(input: { hostId?: string; command?: string; detail: string }) {
     super({
@@ -64,6 +70,83 @@ export function normalizeCliText(input: string | Buffer | undefined): string {
 
 export function isCliAuthChallengeText(input: string): boolean {
   return AUTH_CHALLENGE_PATTERN.test(input);
+}
+
+function runtimeHostLabel(hostId: string | undefined): string {
+  switch (hostId) {
+    case "claude-code":
+      return "Claude Code";
+    case "codex":
+      return "Codex";
+    case "gemini-cli":
+      return "Gemini CLI";
+    case "openhands":
+      return "OpenHands";
+    case "openclaw":
+      return "OpenClaw";
+    default:
+      return "Runtime host";
+  }
+}
+
+function summarizeCliDetail(
+  output: RuntimeCliFailureUserMessageInput["output"],
+): string | null {
+  const text = output?.stderr || output?.text || output?.stdout || output?.combined || "";
+  const normalized = normalizeCliText(text)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(" ");
+  if (!normalized) return null;
+  return normalized.length <= 360 ? normalized : `${normalized.slice(0, 357)}...`;
+}
+
+export function buildRuntimeCliFailureUserMessage(
+  input: RuntimeCliFailureUserMessageInput,
+): string {
+  const label = runtimeHostLabel(input.hostId);
+  const detail = summarizeCliDetail(input.output);
+  const combined = input.output?.combined ?? input.output?.text ?? "";
+
+  const looksLikeScienceSwarmMcp =
+    /scienceswarm|runtime mcp|mcp server|gbrain|brain/i.test(combined);
+  const looksLikeRuntimeMcpAuth =
+    /Runtime MCP access token|SCIENCESWARM_RUNTIME_MCP|signature is invalid|not scoped to this/i
+      .test(combined);
+  const looksLikeBrainConfig =
+    /Brain not configured|BRAIN_ROOT|brain backend unavailable|PGLite|pglite/i
+      .test(combined);
+
+  if (input.hostId === "claude-code" && looksLikeRuntimeMcpAuth) {
+    return [
+      "Claude Code could not access ScienceSwarm's scoped gbrain tools because the runtime MCP authorization failed.",
+      "Retry the turn; if it keeps happening, restart the ScienceSwarm preview so a fresh MCP session is minted.",
+      detail ? `Detail: ${detail}` : null,
+    ].filter(Boolean).join(" ");
+  }
+
+  if (input.hostId === "claude-code" && looksLikeBrainConfig) {
+    return [
+      "Claude Code reached ScienceSwarm, but the gbrain backend was not readable.",
+      "Check that the project brain is initialized and BRAIN_ROOT points at the expected brain.",
+      detail ? `Detail: ${detail}` : null,
+    ].filter(Boolean).join(" ");
+  }
+
+  if (input.hostId === "claude-code" && looksLikeScienceSwarmMcp) {
+    return [
+      "Claude Code exited while using ScienceSwarm's scoped gbrain tools.",
+      "Try a narrower question or restart the ScienceSwarm preview if the MCP server is stale.",
+      detail ? `Detail: ${detail}` : null,
+    ].filter(Boolean).join(" ");
+  }
+
+  return [
+    `${label} command failed.`,
+    detail ? `Detail: ${detail}` : `Command: ${input.command}`,
+  ].join(" ");
 }
 
 function parseJsonLine(line: string): unknown | null {

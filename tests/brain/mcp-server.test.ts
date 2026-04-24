@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
 import { tmpdir } from "os";
 import * as brainInitModule from "@/brain/init";
 import * as projectOrganizerModule from "@/brain/project-organizer";
 import * as researchPacketsModule from "@/lib/research-packets";
 import type { BrainConfig } from "@/brain/types";
 import type { LLMClient, LLMResponse } from "@/brain/llm";
+import { getBrainStore, resetBrainStore } from "@/brain/store";
 import {
   handleBrainInit,
   handleBrainImportRegistry,
@@ -22,6 +23,9 @@ import {
 } from "@/brain/mcp-server";
 
 let TEST_ROOT = "";
+let originalBrainRoot: string | undefined;
+let originalPglitePath: string | undefined;
+let originalUserHandle: string | undefined;
 
 function assignTestRoot(): string {
   TEST_ROOT = mkdtempSync(join(tmpdir(), "scienceswarm-brain-test-mcp-"));
@@ -72,17 +76,42 @@ function mockLLM(): LLMClient {
 }
 
 beforeEach(() => {
+  originalBrainRoot = process.env.BRAIN_ROOT;
+  originalPglitePath = process.env.BRAIN_PGLITE_PATH;
+  originalUserHandle = process.env.SCIENCESWARM_USER_HANDLE;
   assignTestRoot();
   brainInitModule.initBrain({ root: TEST_ROOT, name: "Test Researcher" });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await resetBrainStore();
   if (TEST_ROOT) {
     rmSync(TEST_ROOT, { recursive: true, force: true });
   }
   TEST_ROOT = "";
+  restoreEnv("BRAIN_ROOT", originalBrainRoot);
+  restoreEnv("BRAIN_PGLITE_PATH", originalPglitePath);
+  restoreEnv("SCIENCESWARM_USER_HANDLE", originalUserHandle);
   vi.restoreAllMocks();
 });
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
+}
+
+function writeCorpusFixture(name: string, files: Record<string, string>): string {
+  const root = join(TEST_ROOT, name);
+  for (const [relativePath, content] of Object.entries(files)) {
+    const filePath = join(root, relativePath);
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, content);
+  }
+  return root;
+}
 
 // ── brain_init ────────────────────────────────────────────
 
@@ -368,6 +397,33 @@ describe("brain_read", () => {
 
     expect(result.isError).toBeUndefined();
     expect(result.content[0].text).toContain("ScienceSwarm Research Brain");
+  });
+
+  it("reads gbrain pages by search-result path when no mirror file exists", async () => {
+    const config = makeConfig();
+    process.env.BRAIN_ROOT = TEST_ROOT;
+    process.env.BRAIN_PGLITE_PATH = join(TEST_ROOT, "brain.pglite");
+    process.env.SCIENCESWARM_USER_HANDLE = "@mcp-test";
+    await resetBrainStore();
+    await getBrainStore({ root: TEST_ROOT }).importCorpus(
+      writeCorpusFixture("gbrain-import", {
+        "wiki/entities/papers/math-paper.md": [
+          "---",
+          "title: Math Paper",
+          "type: paper",
+          "---",
+          "This page studies algebraic topology.",
+        ].join("\n"),
+      }),
+    );
+
+    const result = await handleBrainRead(config, {
+      path: "wiki/entities/papers/math-paper.md",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain("Math Paper");
+    expect(result.content[0].text).toContain("algebraic topology");
   });
 
   it("returns error for non-existent file", async () => {

@@ -370,7 +370,7 @@ describe("runtime host adapters", () => {
       expect(appendedPrompt).toContain("Current project: `project-alpha`.");
       expect(appendedPrompt).toContain("Use narrow gbrain reads.");
       expect(appendedPrompt).toContain("runtime-scoped MCP server named `scienceswarm`");
-      expect(appendedPrompt).toContain("runtime server injects its access token");
+      expect(appendedPrompt).toContain("injects the runtime MCP access token");
       expect(appendedPrompt).not.toContain("- token:");
 
       const mcpConfigIndex = launch?.args?.indexOf("--mcp-config") ?? -1;
@@ -385,9 +385,9 @@ describe("runtime host adapters", () => {
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_DIR).toBe(dataRoot);
       expect(mcpConfig.mcpServers.scienceswarm.env.BRAIN_ROOT).toBe(brainRoot);
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET)
-        .toBeUndefined();
+        .toEqual(expect.any(String));
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN)
-        .toBeUndefined();
+        .toEqual(expect.any(String));
       expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET).toEqual(expect.any(String));
       expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN).toEqual(expect.any(String));
       await expect(readFile(mcpConfigPath, "utf8")).rejects.toThrow();

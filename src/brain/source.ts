@@ -5,6 +5,35 @@ import { loadPdfParseCtor, withPdfParseTimeout } from "@/lib/pdf-parse";
 import type { ContentType } from "./types";
 import { resolveArxivSource, downloadArxivPdf } from "./arxiv-download";
 
+const MAX_TEXT_FILE_CHARS = 80_000;
+const BINARY_EXTENSIONS = new Set([
+  ".avi",
+  ".bin",
+  ".bmp",
+  ".dmg",
+  ".doc",
+  ".docx",
+  ".gif",
+  ".gz",
+  ".heic",
+  ".ico",
+  ".jpeg",
+  ".jpg",
+  ".mov",
+  ".mp3",
+  ".mp4",
+  ".parquet",
+  ".png",
+  ".ppt",
+  ".pptx",
+  ".sqlite",
+  ".tiff",
+  ".webp",
+  ".xls",
+  ".xlsx",
+  ".zip",
+]);
+
 const RAW_DIRECTORY_BY_TYPE: Record<ContentType, string> = {
   paper: "papers",
   dataset: "data",
@@ -90,7 +119,17 @@ export async function readBrainFile(absPath: string): Promise<string> {
   if (ext === ".pdf") {
     return extractPdfText(absPath);
   }
-  return readFileSync(absPath, "utf-8");
+  const buffer = readFileSync(absPath);
+  if (BINARY_EXTENSIONS.has(ext) || looksBinary(buffer)) {
+    return [
+      `# File: ${basename(absPath)}`,
+      "",
+      "[Unsupported binary file. ScienceSwarm can read Markdown, text, code, CSV/TSV, JSON, and text-layer PDFs through this gbrain tool. Use an OCR, conversion, or file-specific import path before asking Claude Code to inspect this file's contents.]",
+    ].join("\n");
+  }
+  const text = buffer.toString("utf-8");
+  if (text.length <= MAX_TEXT_FILE_CHARS) return text;
+  return `${text.slice(0, MAX_TEXT_FILE_CHARS)}\n\n[... truncated at 80k chars ...]`;
 }
 
 export function isArxivId(value: string): boolean {
@@ -163,4 +202,15 @@ async function extractPdfText(absPath: string): Promise<string> {
       `[PDF extraction failed: ${message}]`,
     ].join("\n");
   }
+}
+
+function looksBinary(buffer: Buffer): boolean {
+  const sample = buffer.subarray(0, Math.min(buffer.length, 4096));
+  if (sample.includes(0)) return true;
+  if (sample.length === 0) return false;
+  let suspicious = 0;
+  for (const byte of sample) {
+    if (byte < 7 || (byte > 14 && byte < 32)) suspicious += 1;
+  }
+  return suspicious / sample.length > 0.3;
 }
