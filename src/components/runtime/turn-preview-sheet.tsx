@@ -93,7 +93,7 @@ export function TurnPreviewSheet({
 
         <div className="space-y-5 overflow-y-auto px-5 py-4">
           {reminderCopy && (
-            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="rounded border border-warn/30 bg-warn/10 p-3 text-sm text-warn">
               {reminderCopy}
             </p>
           )}
