@@ -456,6 +456,29 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
   });
 
+  it("coalesces consecutive explored file actions into compact summaries", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read src/a.ts" },
+          { kind: "activity", text: "Read src/b.ts" },
+          { kind: "activity", text: "Write docs/summary.md" },
+          { kind: "activity", text: "Write docs/chart.md" },
+          { kind: "activity", text: "Search gateway in src/hooks/use-unified-chat.ts" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent("Read src/a.ts, src/b.ts");
+    expect(progressLog).toHaveTextContent("Write docs/summary.md, docs/chart.md");
+    expect(progressLog).toHaveTextContent("Search gateway in src/hooks/use-unified-chat.ts");
+  });
+
   it("renders thinking and activity sections in chronological order", () => {
     render(
       <ChatMessage
