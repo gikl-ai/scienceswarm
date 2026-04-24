@@ -1504,7 +1504,7 @@ function buildSandboxedPreviewHeaders(
     return {
       ...base,
       "Content-Security-Policy":
-        "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+        "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
       "X-Content-Type-Options": "nosniff",
     };
   }

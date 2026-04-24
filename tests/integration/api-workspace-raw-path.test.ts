@@ -56,6 +56,7 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
     expect(htmlRes.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(htmlRes.headers.get("Content-Security-Policy")).toContain("script-src 'self'");
     expect(htmlRes.headers.get("Content-Security-Policy")).toContain("style-src 'self'");
+    expect(htmlRes.headers.get("Content-Security-Policy")).toContain("connect-src 'none'");
     const html = await htmlRes.text();
     expect(html).toContain("./game.js");
     expect(html).toContain("./style.css");
@@ -78,5 +79,16 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
     expect(styleRes.status).toBe(200);
     expect(styleRes.headers.get("Content-Type")).toBe("text/css; charset=utf-8");
     await expect(styleRes.text()).resolves.toContain("background: black");
+  });
+
+  it("rejects traversal attempts via the path-based endpoint", async () => {
+    const { GET } = await importRawPathRoute();
+    const res = await GET(
+      new Request("http://localhost/api/workspace/raw/test-project/../../etc/passwd"),
+      { params: { projectId: "test-project", file: ["..", "..", "etc", "passwd"] } },
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.text()).resolves.toBe("Invalid file path");
   });
 });
