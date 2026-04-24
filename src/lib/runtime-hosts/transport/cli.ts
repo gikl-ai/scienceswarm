@@ -236,6 +236,7 @@ export async function detectCliHealth(input: {
   hostId: string;
   command: string;
   args?: string[];
+  env?: NodeJS.ProcessEnv;
   transport?: CliTransport;
   timeoutMs?: number;
 }): Promise<RuntimeHostHealth> {
@@ -245,6 +246,7 @@ export async function detectCliHealth(input: {
       hostId: input.hostId,
       command: input.command,
       args: input.args ?? ["--version"],
+      env: input.env,
       timeoutMs: input.timeoutMs ?? 5_000,
     });
     return {
@@ -290,6 +292,7 @@ export async function detectCliAuthStatus(input: {
   hostId: string;
   command: string;
   args?: string[];
+  env?: NodeJS.ProcessEnv;
   transport?: CliTransport;
   timeoutMs?: number;
 }): Promise<RuntimeHostAuthStatus> {
@@ -307,6 +310,7 @@ export async function detectCliAuthStatus(input: {
       hostId: input.hostId,
       command: input.command,
       args: input.args,
+      env: input.env,
       timeoutMs: input.timeoutMs ?? 5_000,
     });
     return {

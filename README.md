@@ -176,7 +176,10 @@ unknown host id, ScienceSwarm keeps those rows as read-only history rather than
 deleting them.
 
 To connect a subscription-backed CLI, sign in with the provider's own command.
-ScienceSwarm does not collect Claude, Codex, or Gemini credentials.
+ScienceSwarm does not collect Claude, Codex, or Gemini credentials. When it
+launches a subscription-native runtime, it removes provider API-key environment
+variables from that child process so the native CLI login stays in charge of
+billing and auth.
 
 ```bash
 # Claude Code

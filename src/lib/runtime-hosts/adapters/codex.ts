@@ -26,6 +26,7 @@ import {
   detectCliHealth,
   type CliTransport,
 } from "../transport/cli";
+import { buildSubscriptionNativeCliEnv } from "../transport/subscription-env";
 
 export interface CodexRuntimeHostAdapterOptions {
   profile?: RuntimeHostProfile;
@@ -35,6 +36,7 @@ export interface CodexRuntimeHostAdapterOptions {
   sessionIdGenerator?: () => string;
   healthArgs?: string[];
   authArgs?: string[];
+  env?: NodeJS.ProcessEnv | (() => NodeJS.ProcessEnv);
 }
 
 export class CodexRuntimeHostAdapter implements ResearchRuntimeHost {
@@ -45,6 +47,7 @@ export class CodexRuntimeHostAdapter implements ResearchRuntimeHost {
   private readonly sessionIdGenerator: () => string;
   private readonly healthArgs: string[];
   private readonly authArgs?: string[];
+  private readonly env?: NodeJS.ProcessEnv | (() => NodeJS.ProcessEnv);
   private messageEventSequence = 0;
 
   constructor(options: CodexRuntimeHostAdapterOptions = {}) {
@@ -55,6 +58,7 @@ export class CodexRuntimeHostAdapter implements ResearchRuntimeHost {
     this.sessionIdGenerator = options.sessionIdGenerator ?? (() => randomUUID());
     this.healthArgs = options.healthArgs ?? ["--version"];
     this.authArgs = options.authArgs;
+    this.env = options.env;
   }
 
   profile(): RuntimeHostProfile {
@@ -66,6 +70,7 @@ export class CodexRuntimeHostAdapter implements ResearchRuntimeHost {
       hostId: this.runtimeProfile.id,
       command: this.command,
       args: this.healthArgs,
+      env: this.cliEnv(),
       transport: this.transport,
     });
   }
@@ -77,6 +82,7 @@ export class CodexRuntimeHostAdapter implements ResearchRuntimeHost {
       hostId: this.runtimeProfile.id,
       command: this.command,
       args: this.authArgs,
+      env: this.cliEnv(),
       transport: this.transport,
     });
   }
@@ -97,6 +103,7 @@ export class CodexRuntimeHostAdapter implements ResearchRuntimeHost {
       hostId: this.runtimeProfile.id,
       command: this.command,
       args: ["exec", "--json", request.prompt],
+      env: this.cliEnv(),
       timeoutMs: this.timeoutMs,
     });
 
@@ -122,6 +129,7 @@ export class CodexRuntimeHostAdapter implements ResearchRuntimeHost {
       hostId: this.runtimeProfile.id,
       command: this.command,
       args: ["exec", "--json", request.prompt],
+      env: this.cliEnv(),
       timeoutMs: this.timeoutMs,
     });
 
@@ -171,6 +179,14 @@ export class CodexRuntimeHostAdapter implements ResearchRuntimeHost {
     assertTurnPreviewAllowsPromptConstruction(
       request.preview,
       request.approvalState === "approved",
+    );
+  }
+
+  private cliEnv(): NodeJS.ProcessEnv {
+    const baseEnv = typeof this.env === "function" ? this.env() : this.env;
+    return buildSubscriptionNativeCliEnv(
+      this.runtimeProfile.authProvider,
+      baseEnv ?? process.env,
     );
   }
 
