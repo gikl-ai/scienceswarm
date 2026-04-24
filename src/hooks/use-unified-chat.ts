@@ -1186,11 +1186,13 @@ function buildOptionalActivityProgressEntries(
   lines: Array<string | null | undefined>,
   meta: Partial<Omit<MessageProgressEntry, "kind" | "text">> = {},
 ): MessageProgressEntry[] {
-  return buildActivityProgressEntries(
+  return buildProgressEntries(
+    "activity",
     lines.filter((line): line is string => typeof line === "string" && line.trim().length > 0),
+    meta,
   ).map((entry) => ({
     ...entry,
-    ...normalizeProgressEntryMeta(meta, entry.text),
+    label: entry.label ?? inferProgressEntryLabel(entry.text),
   }));
 }
 
