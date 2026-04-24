@@ -178,6 +178,19 @@ function ChatHarness({ projectName }: { projectName: string }) {
           `${message.role}:${(message.progressLog || []).map((entry) => `${entry.kind}:${entry.text}`).join(" | ")}`
         ).join("\n")}
       </div>
+      <div data-testid="progress-log-meta">
+        {messages.map((message) =>
+          `${message.role}:${(message.progressLog || []).map((entry) =>
+            [
+              entry.source || "",
+              entry.phase || "",
+              entry.status || "",
+              entry.label || "",
+              typeof entry.timestampMs === "number" ? String(entry.timestampMs) : "",
+            ].join("/")
+          ).join(" | ")}`
+        ).join("\n")}
+      </div>
       <div data-testid="phase-log">
         {messages.map((message) =>
           `${message.role}:${(message.taskPhases || []).map((phase) => `${phase.label}:${phase.status}`).join("|")}`
@@ -955,6 +968,84 @@ describe("useUnifiedChat persistence", () => {
           content: "Persisted answer",
         }),
       ]),
+    );
+  });
+
+  it("restores structured progress metadata from persisted chat state", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: "web:alpha-project:session-1",
+        conversationBackend: "openclaw",
+        messages: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "Persisted answer",
+            timestamp: "2026-04-11T08:00:01.000Z",
+            progressLog: [
+              {
+                kind: "activity",
+                text: "Read docs/results_table.csv",
+                source: "agent",
+                phase: "result",
+                status: "complete",
+                label: "Read",
+                timestampMs: 1713523200123,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return new Promise<Response>(() => {});
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Promise.resolve(Response.json({ ok: true }));
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Promise.resolve(
+          Response.json({
+            agent: { type: "openclaw", status: "connected" },
+            openclaw: "connected",
+            nanoclaw: "disconnected",
+            openhands: "disconnected",
+          }),
+        );
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Promise.resolve(Response.json({ tree: [] }));
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("progress-log").textContent).toContain(
+        "assistant:activity:Read docs/results_table.csv",
+      );
+    });
+
+    expect(screen.getByTestId("progress-log-meta").textContent).toContain(
+      "assistant:agent/result/complete/Read/1713523200123",
     );
   });
 
@@ -4714,6 +4805,89 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("activity-log").textContent).toContain(
       "Tool read_file result: Loaded 42 rows.",
     );
+  });
+
+  it("records structured metadata for server send phases and agent tool progress", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "agent.tool.start",
+              payload: {
+                data: {
+                  phase: "start",
+                  name: "read_file",
+                  input: { path: "docs/results_table.csv" },
+                },
+              },
+            },
+          },
+          {
+            progress: {
+              method: "agent.tool.result",
+              payload: {
+                data: {
+                  phase: "result",
+                  name: "read_file",
+                  output: "Loaded 42 rows.",
+                },
+              },
+            },
+          },
+          { text: "Done" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+
+    const progressMeta = screen.getByTestId("progress-log-meta").textContent ?? "";
+    expect(progressMeta).toContain("assistant:server/send/started/Send/");
+    expect(progressMeta).toContain("server/waiting/running/Wait/");
+    expect(progressMeta).toContain("agent/start/started/Read/");
   });
 
   it("does not duplicate new-format agent events that also carry legacy fields", async () => {
