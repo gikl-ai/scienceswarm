@@ -111,6 +111,44 @@ describe("ChatMessage", () => {
     expect(screen.getByText(expectedFooter)).toHaveClass("text-slate-400");
   });
 
+  it("renders nested lists, block quotes, and code fences in assistant markdown", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "1. Outline the experiment\n   - Collect the baseline samples\n\n" +
+          "> Keep the calibration notebook nearby.\n\n" +
+          "```ts\nconst total = 2;\n```"
+        }
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getAllByRole("list")).toHaveLength(2);
+    expect(screen.getByText("Keep the calibration notebook nearby.").closest("blockquote")).toHaveClass("border-l-2");
+    expect(screen.getByText("const total = 2;").closest("pre")).toHaveClass("bg-slate-950");
+  });
+
+  it("renders safe markdown links and suppresses unsafe html and relative links", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "[Guide](https://example.com/guide)\n\n" +
+          "[Unsafe](../api/chat/unified)\n\n" +
+          "<button>Do not render</button>"
+        }
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute("href", "https://example.com/guide");
+    expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute("target", "_blank");
+    expect(screen.queryByRole("link", { name: "Unsafe" })).not.toBeInTheDocument();
+    expect(screen.getByText("Unsafe")).toHaveClass("text-slate-400");
+    expect(screen.queryByRole("button", { name: "Do not render" })).not.toBeInTheDocument();
+  });
+
   it("keeps user turns inside the accent bubble", () => {
     render(
       <ChatMessage
