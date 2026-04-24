@@ -1164,6 +1164,21 @@ function buildOptionalActivityProgressEntries(
   );
 }
 
+function buildOpenClawSendPhaseEntries(
+  context: Pick<SendContext, "backend">,
+  phase: "dispatch" | "waiting",
+): MessageProgressEntry[] {
+  if (context.backend !== "openclaw") {
+    return [];
+  }
+
+  return buildActivityProgressEntries([
+    phase === "dispatch"
+      ? "Sending request to OpenClaw"
+      : "Waiting for OpenClaw to respond",
+  ]);
+}
+
 function isConcreteActionWithPrefix(text: string, prefix: string, generic: string): boolean {
   return text.startsWith(prefix) && text !== generic;
 }
@@ -3929,6 +3944,26 @@ export function useUnifiedChat(
         res = await sendChatRequest("/api/chat/unified");
       }
 
+      if (isSendContextCurrent(context)) {
+        const waitingEntries = buildOpenClawSendPhaseEntries(context, "waiting");
+        if (waitingEntries.length > 0) {
+          applyMessagesUpdate((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    activityLog: appendActivityLog(
+                      message.activityLog,
+                      waitingEntries.map((entry) => entry.text),
+                    ),
+                    progressLog: appendProgressLog(message.progressLog, waitingEntries),
+                  }
+                : message,
+            ),
+          );
+        }
+      }
+
       const contentType = res.headers.get("content-type") || "";
       const backendHeader = res.headers.get("X-Chat-Backend");
       const modeHeader = normalizeChatMode(res.headers.get("X-Chat-Mode"));
@@ -4177,7 +4212,19 @@ export function useUnifiedChat(
         applyMessagesUpdate((prev) =>
           prev.map((message) =>
             message.id === queued.assistantId
-              ? { ...message, content: "" }
+              ? {
+                  ...message,
+                  content: "",
+                  activityLog: appendActivityLog(
+                    message.activityLog,
+                    buildOpenClawSendPhaseEntries(queued.context, "dispatch")
+                      .map((entry) => entry.text),
+                  ),
+                  progressLog: appendProgressLog(
+                    message.progressLog,
+                    buildOpenClawSendPhaseEntries(queued.context, "dispatch"),
+                  ),
+                }
               : message,
           ),
         );
