@@ -4162,6 +4162,7 @@ export function useUnifiedChat(
       liveBackendRef.current = requestedBackend;
       liveChatModeRef.current = chatMode;
       setBackend(requestedBackend);
+      initialBackendSetRef.current = true;
       if (runtimeMode !== "compare") {
         setRuntimeCompareResult(null);
       }

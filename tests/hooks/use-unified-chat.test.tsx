@@ -343,10 +343,14 @@ describe("useUnifiedChat persistence", () => {
   });
 
   it("stores runtime host ids for new non-OpenClaw sessions", async () => {
+    let resolveHealth: (response: Response) => void = () => {};
+    const delayedHealth = new Promise<Response>((resolve) => {
+      resolveHealth = resolve;
+    });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url === "/api/chat/unified?action=health") {
-        return Response.json({ openclaw: "connected" });
+        return delayedHealth;
       }
       if (url === "/api/runtime/sessions/stream") {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
@@ -384,6 +388,10 @@ describe("useUnifiedChat persistence", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime" }));
 
     await screen.findByText(/Codex runtime response/);
+    await act(async () => {
+      resolveHealth(Response.json({ openclaw: "connected" }));
+      await delayedHealth;
+    });
     expect(screen.getByTestId("message-log").textContent).toContain("[session] keep this native line");
     await waitFor(() => {
       expect(screen.getByTestId("backend").textContent).toBe("codex");
