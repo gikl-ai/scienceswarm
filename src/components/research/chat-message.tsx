@@ -847,6 +847,58 @@ function buildProgressSectionChanges(
 
   return elements;
 }
+
+function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): string | null {
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (block.type === "narrative") {
+      return block.entry.text.trim() || null;
+    }
+    if (block.lines.length > 0) {
+      return block.lines[block.lines.length - 1].trim() || null;
+    }
+  }
+
+  return null;
+}
+
+function ActiveRunStateSurface({
+  workingElapsed,
+  summaries,
+  detail,
+}: {
+  workingElapsed: string | null;
+  summaries: string[];
+  detail: string | null;
+}) {
+  return (
+    <div
+      data-testid="assistant-run-state"
+      className="mb-3 rounded-xl border border-rule bg-sunk/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
+    >
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-dim">
+        <span className="inline-flex items-center gap-1.5 font-medium text-body">
+          <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
+          <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
+        </span>
+        {summaries.map((summary, index) => (
+          <span
+            key={`${summary}-${index}`}
+            className="inline-flex items-center rounded-full border border-rule bg-raised px-2 py-0.5 text-[10px] font-medium text-body"
+          >
+            {summary}
+          </span>
+        ))}
+      </div>
+      {detail && (
+        <div className="mt-2 text-[12px] leading-6 text-dim">
+          {detail}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatElapsedCompact(elapsedMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
   const seconds = totalSeconds % 60;
@@ -1569,6 +1621,9 @@ export function ChatMessage({
         ...summarizeCompactSteps(visibleSteps),
       ]
     : [];
+  const liveRunStateDetail = isLiveAssistantTurn
+    ? summarizeLatestRunStateDetail(progressTranscript)
+    : null;
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
@@ -1720,35 +1775,27 @@ export function ChatMessage({
 
       {/* Streaming indicator */}
       {role === "assistant" && content === "" && isStreaming && !showCompactLiveTranscript && visibleProgressLog.length === 0 && (
-        <div className="flex items-center gap-2 text-accent/60">
-          <Spinner size="h-4 w-4" testId="chat-streaming-spinner" />
-          <span className="text-xs">Thinking…</span>
-        </div>
+        <ActiveRunStateSurface
+          workingElapsed={workingElapsed}
+          summaries={compactLiveRunSummary}
+          detail={null}
+        />
       )}
 
       {showCompactLiveTranscript && (
         <div
           aria-live="polite"
-          className="mb-3 rounded-xl border border-rule bg-sunk/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
+          className="mb-3 space-y-2"
           role="log"
         >
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-dim">
-            <span className="inline-flex items-center gap-1.5 font-medium text-body">
-              <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
-              <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
-            </span>
-            {compactLiveRunSummary.map((summary, index) => (
-              <span
-                key={`${summary}-${index}`}
-                className="inline-flex items-center rounded-full border border-rule bg-raised px-2 py-0.5 text-[10px] font-medium text-body"
-              >
-                {summary}
-              </span>
-            ))}
-          </div>
+          <ActiveRunStateSurface
+            workingElapsed={workingElapsed}
+            summaries={compactLiveRunSummary}
+            detail={liveRunStateDetail}
+          />
 
           {progressTranscript.length > 0 && (
-            <div className="mt-2 space-y-2">
+            <div className="space-y-2">
               {buildProgressSectionChanges(progressTranscript, { compact: true })}
             </div>
           )}

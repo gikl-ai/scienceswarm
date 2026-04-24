@@ -425,6 +425,25 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("log")).toHaveTextContent("Read docs/results_table.csv");
   });
 
+  it("renders a dedicated run-state surface before transcript progress arrives", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Working (5s • esc to interrupt)",
+    );
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+  });
+
   it("renders assistant progress as a single inline transcript", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
@@ -454,6 +473,25 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Thinking Trace")).not.toBeInTheDocument();
     expect(screen.queryByText("OpenClaw Activity")).not.toBeInTheDocument();
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
+  });
+
+  it("surfaces the latest compact progress detail under the live run-state header", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "thinking", text: "Plan: compare the timing artifact" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Plan: compare the timing artifact",
+    );
   });
 
   it("renders thinking and activity sections in chronological order", () => {
