@@ -2252,6 +2252,103 @@ describe("POST /api/chat/unified", () => {
     expect(streamChat).not.toHaveBeenCalled();
   });
 
+  it("marks prompt context construction as skipped for lightweight conversational turns", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw says hi");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Hi",
+        projectId: "alpha-project",
+        mode: "reasoning",
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      phases: Array<{ name: string; skipped?: boolean; detail?: Record<string, unknown> }>;
+    };
+    expect(
+      payload.phases.find((phase) => phase.name === "prompt_context_construction"),
+    ).toMatchObject({
+      skipped: true,
+      detail: { reason: "lightweight_conversation" },
+    });
+    infoSpy.mockRestore();
+  });
+
+  it("keeps prompt context construction active for file-backed turns", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const projectRoot = createProjectRoot("alpha-project");
+    writeWorkspaceFile(projectRoot, "docs/results.md", "# Results\n\n1 2 3\n");
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    readFile.mockResolvedValueOnce(Buffer.from("# Results\n\n1 2 3\n"));
+    parseFile.mockResolvedValueOnce({
+      text: "# Results\n\n1 2 3\n",
+      pages: 1,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw summarized the file");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Summarize docs/results.md",
+        projectId: "alpha-project",
+        mode: "reasoning",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      phases: Array<{ name: string; skipped?: boolean }>;
+    };
+    const promptContextPhase = payload.phases.find(
+      (phase) => phase.name === "prompt_context_construction",
+    );
+    expect(promptContextPhase).toBeTruthy();
+    expect(promptContextPhase?.skipped).not.toBe(true);
+    infoSpy.mockRestore();
+  });
+
   it("emits opt-in chat timing logs without prompt contents", async () => {
     vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
