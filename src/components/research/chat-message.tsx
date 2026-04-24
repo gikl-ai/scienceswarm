@@ -832,7 +832,7 @@ function buildProgressSectionChanges(
           {isMarkdownBlock ? "↳ " : "• "}
         </span>
         {isMarkdownBlock
-          ? renderProgressMarkdown(block.entry.text, `progress-${index}`)
+          ? renderProgressMarkdown(block.entry.text)
           : (
             <span className="min-w-0 flex-1">
               {renderInlineMarkdownLite(block.entry.text, `progress-${index}`)}
@@ -1169,10 +1169,9 @@ function shouldRenderProgressMarkdownBlock(value: string): boolean {
   );
 }
 
-function renderProgressMarkdown(value: string, keyPrefix: string) {
+function renderProgressMarkdown(value: string) {
   return (
     <div
-      key={keyPrefix}
       className="min-w-0 flex-1 [&>div>p:first-child]:mt-0 [&>div>ul:last-child]:mb-0 [&>div>ol:last-child]:mb-0 [&>div>pre:last-child]:mb-0"
     >
       <ReactMarkdown
