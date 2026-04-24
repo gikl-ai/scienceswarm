@@ -169,6 +169,7 @@ import {
   __resetConfiguredAgentRuntimeStatusCacheForTests,
   GET,
   POST,
+  shouldUseLightweightOpenClawPreparation,
   shouldPreMaterializeProjectWorkspaceForTurn,
 } from "@/app/api/chat/unified/route";
 
@@ -2251,6 +2252,104 @@ describe("POST /api/chat/unified", () => {
     expect(streamChat).not.toHaveBeenCalled();
   });
 
+  it("marks file reference merge as skipped when a turn has no file hints", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw says hi");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Hi",
+        projectId: "alpha-project",
+        mode: "reasoning",
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      phases: Array<{ name: string; skipped?: boolean; detail?: Record<string, unknown> }>;
+    };
+    const fileMergePhase = payload.phases.find(
+      (phase) => phase.name === "file_reference_merge",
+    );
+    expect(fileMergePhase).toMatchObject({
+      skipped: true,
+      detail: { reason: "no_file_references" },
+    });
+    infoSpy.mockRestore();
+  });
+
+  it("still runs file reference merge when the user explicitly names a project file", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const projectRoot = createProjectRoot("alpha-project");
+    writeWorkspaceFile(projectRoot, "docs/results.md", "# Results\n\n1 2 3\n");
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    readFile.mockResolvedValueOnce(Buffer.from("# Results\n\n1 2 3\n"));
+    parseFile.mockResolvedValueOnce({
+      text: "# Results\n\n1 2 3\n",
+      pages: 1,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("OpenClaw summarized the file");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Summarize docs/results.md",
+        projectId: "alpha-project",
+        mode: "reasoning",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      phases: Array<{ name: string; skipped?: boolean }>;
+    };
+    const fileMergePhase = payload.phases.find(
+      (phase) => phase.name === "file_reference_merge",
+    );
+    expect(fileMergePhase).toBeTruthy();
+    expect(fileMergePhase?.skipped).not.toBe(true);
+    infoSpy.mockRestore();
+  });
+
   it("emits opt-in chat timing logs without prompt contents", async () => {
     vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -2571,6 +2670,52 @@ describe("POST /api/chat/unified", () => {
         activeFile: null,
       }),
     ).toBe(true);
+  });
+
+  it("classifies plain OpenClaw greetings as lightweight preparation turns", () => {
+    expect(
+      shouldUseLightweightOpenClawPreparation({
+        message: "Hi",
+        files: [],
+        activeFile: null,
+        forceToolExecution: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldUseLightweightOpenClawPreparation({
+        message: "good morning!",
+        files: [],
+        activeFile: null,
+        forceToolExecution: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps file- or tool-heavy OpenClaw turns on full preparation", () => {
+    expect(
+      shouldUseLightweightOpenClawPreparation({
+        message: "Hi",
+        files: [{ name: "notes.md", size: "12", workspacePath: "notes.md" }],
+        activeFile: null,
+        forceToolExecution: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldUseLightweightOpenClawPreparation({
+        message: "Hi",
+        files: [],
+        activeFile: { path: "notes.md", content: "selected content" },
+        forceToolExecution: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldUseLightweightOpenClawPreparation({
+        message: "run the tests",
+        files: [],
+        activeFile: null,
+        forceToolExecution: true,
+      }),
+    ).toBe(false);
   });
 
   it("returns 503 when OpenClaw is not the configured agent", async () => {
@@ -3557,6 +3702,72 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).not.toContain("File: notes/file-11.md");
     expect(readFile).toHaveBeenCalledTimes(10);
     expect(parseFile).toHaveBeenCalledTimes(10);
+  });
+
+  it("caps workspace file context to the prompt budget and omits overflow files", async () => {
+    const projectRoot = createProjectRoot("alpha-project");
+    const files = Array.from({ length: 3 }, (_, index) => {
+      const number = index + 1;
+      const workspacePath = `docs/file-${number}.md`;
+      writeWorkspaceFile(projectRoot, workspacePath, `placeholder ${number}`);
+      return {
+        name: `file-${number}.md`,
+        size: "40 KB",
+        workspacePath,
+      };
+    });
+    const alphaText = `ALPHA_START\n${"A".repeat(19_950)}\nALPHA_END`;
+    const betaText = `BETA_START\n${"B".repeat(19_950)}\nBETA_END`;
+    const gammaText = `GAMMA_START\n${"C".repeat(19_950)}\nGAMMA_END`;
+
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    for (const text of [alphaText, betaText, gammaText]) {
+      readFile.mockResolvedValueOnce(Buffer.from(text));
+      parseFile.mockResolvedValueOnce({
+        text,
+        pages: 1,
+      });
+    }
+    sendOpenClawMessage.mockResolvedValueOnce("Budgeted answer");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Summarize these project notes.",
+        projectId: "alpha-project",
+        mode: "openclaw-tools",
+        files,
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
+    expect(openClawMessage).toContain("File: docs/file-1.md (1 pages)");
+    expect(openClawMessage).toContain("ALPHA_START");
+    expect(openClawMessage).toContain("ALPHA_END");
+    expect(openClawMessage).toContain("File: docs/file-2.md (1 pages)");
+    expect(openClawMessage).toContain("BETA_START");
+    expect(openClawMessage).toContain(
+      "[truncated to stay within workspace prompt budget]",
+    );
+    expect(openClawMessage).not.toContain("BETA_END");
+    expect(openClawMessage).not.toContain("GAMMA_START");
+    expect(openClawMessage).toContain(
+      "Additional file context omitted to stay within prompt budget: docs/file-3.md",
+    );
   });
 
   it("implicitly attaches imported project notes for broad literature questions", async () => {

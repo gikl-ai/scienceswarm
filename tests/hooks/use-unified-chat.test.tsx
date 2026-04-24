@@ -3909,7 +3909,7 @@ describe("useUnifiedChat persistence", () => {
       );
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:thinking:Scanning the import manifest... | thinking:Counting PDF entries by committed file ref.",
+      "thinking:Scanning the import manifest... | thinking:Counting PDF entries by committed file ref.",
     );
     expect(screen.getByTestId("message-log").textContent).toContain(
       "assistant:I found 12 imported PDFs.",
@@ -4063,7 +4063,7 @@ describe("useUnifiedChat persistence", () => {
       "Tool read_file result: Loaded 42 rows.",
     );
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:thinking:Planning how to inspect the chart files. | activity:Read docs/results_table.csv",
+      "thinking:Planning how to inspect the chart files. | activity:Read docs/results_table.csv",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
       "Read file result: Loaded 42 rows.",
@@ -4142,7 +4142,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Preview opened");
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Read figures/cat-svg-preview/index.html",
+      "activity:Read figures/cat-svg-preview/index.html",
     );
     expect(screen.getByTestId("activity-log").textContent).toContain(
       "Tool read: figures/cat-svg-preview/index.html",
@@ -4221,7 +4221,7 @@ describe("useUnifiedChat persistence", () => {
 
     const progressLog = screen.getByTestId("progress-log").textContent ?? "";
     expect(progressLog).toContain(
-      "assistant:activity:Search **needle** in docs/results_table.csv | activity:Read docs/summary.md",
+      "activity:Search **needle** in docs/results_table.csv | activity:Read docs/summary.md",
     );
     expect(progressLog).not.toContain("Use search:");
     expect(progressLog).not.toContain("/Users/example/.scienceswarm/projects/alpha-project/docs/results_table.csv");
@@ -4305,7 +4305,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Generate image cat-image.png (1024x1024)",
+      "activity:Generate image cat-image.png (1024x1024)",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
       "{\"prompt\":\"A charming cat sitting and looking at the viewer, warm soft lighting.",
@@ -4388,7 +4388,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Write scripts/generate_mouse_chasing_cat_gif.py",
+      "activity:Write scripts/generate_mouse_chasing_cat_gif.py",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
       "\"content\":\"#!/usr/bin/env python3",
@@ -4469,7 +4469,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Run python3 scripts/generate_mouse_chasing_cat_gif.py",
+      "activity:Run python3 scripts/generate_mouse_chasing_cat_gif.py",
     );
     expect(screen.getByTestId("progress-log").textContent).not.toContain(
       "/usr/bin/python3",
@@ -4551,7 +4551,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Plan: Inspect the imported markdown table -> Generate the output chart",
+      "activity:Plan: Inspect the imported markdown table -> Generate the output chart",
     );
   });
 
@@ -4622,7 +4622,7 @@ describe("useUnifiedChat persistence", () => {
       "assistant:Inspecting the imported project manifest.",
     );
     expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:thinking:Inspecting the imported project manifest.",
+      "thinking:Inspecting the imported project manifest.",
     );
   });
 
@@ -4704,9 +4704,10 @@ describe("useUnifiedChat persistence", () => {
     await waitFor(() => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
-    expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Read docs/results_table.csv",
-    );
+    const progressLog = screen.getByTestId("progress-log").textContent ?? "";
+    expect(progressLog).toContain("assistant:activity:Sending request to OpenClaw");
+    expect(progressLog).toContain("activity:Waiting for OpenClaw to respond");
+    expect(progressLog).toContain("activity:Read docs/results_table.csv");
     expect(screen.getByTestId("activity-log").textContent).toContain(
       "Tool read_file: docs/results_table.csv | Tool read_file result: Loaded 42 rows.",
     );
@@ -4781,6 +4782,130 @@ describe("useUnifiedChat persistence", () => {
     const progressLog = screen.getByTestId("progress-log").textContent ?? "";
     expect(progressLog.match(/Read docs\/results_table\.csv/g)).toHaveLength(1);
     expect(progressLog).not.toContain("duplicate top-level narration");
+  });
+
+  it("narrates the OpenClaw send phases before the first stream delta arrives", async () => {
+    const deferredStream = createDeferredSseResponse();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return deferredStream.response;
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      const progressLog = screen.getByTestId("progress-log").textContent ?? "";
+      expect(progressLog).toContain("assistant:activity:Sending request to OpenClaw");
+      expect(progressLog).toContain("activity:Waiting for OpenClaw to respond");
+    });
+
+    const progressLog = screen.getByTestId("progress-log").textContent ?? "";
+    expect(progressLog).not.toContain("Turn started");
+    expect(progressLog).not.toContain("Turn finished");
+
+    act(() => {
+      deferredStream.send({ text: "Done" });
+      deferredStream.close();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+  });
+
+  it("does not emit the waiting narration when a non-streaming chat response fails", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return Response.json({ error: "OpenClaw transport failed" }, { status: 500 });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("error").textContent).toBe("OpenClaw transport failed");
+    });
+
+    const progressLog = screen.getByTestId("progress-log").textContent ?? "";
+    expect(progressLog).toContain("assistant:activity:Sending request to OpenClaw");
+    expect(progressLog).not.toContain("activity:Waiting for OpenClaw to respond");
   });
 
   it("captures lifecycle-only gateway progress as assistant activity", async () => {
@@ -4869,14 +4994,139 @@ describe("useUnifiedChat persistence", () => {
     await waitFor(() => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
-    expect(screen.getByTestId("activity-log").textContent).toContain(
-      "assistant:Turn started | Turn finished",
-    );
-    expect(screen.getByTestId("progress-log").textContent).toContain(
-      "assistant:activity:Status: running | activity:Status: idle",
-    );
+    expect(screen.getByTestId("activity-log").textContent).toContain("assistant:");
+    expect(screen.getByTestId("activity-log").textContent).not.toContain("Turn started");
+    expect(screen.getByTestId("activity-log").textContent).not.toContain("Turn finished");
+    expect(screen.getByTestId("progress-log").textContent).toContain("assistant:");
+    expect(screen.getByTestId("progress-log").textContent).not.toContain("Status: running");
+    expect(screen.getByTestId("progress-log").textContent).not.toContain("Status: idle");
     expect(screen.getByTestId("progress-log").textContent).not.toContain("Turn started");
     expect(screen.getByTestId("progress-log").textContent).not.toContain("Turn finished");
+  });
+
+  it("suppresses lifecycle filler while preserving useful tool progress rows", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return createSseResponse([
+          {
+            progress: {
+              method: "agent",
+              payload: {
+                stream: "lifecycle",
+                data: {
+                  phase: "start",
+                },
+              },
+            },
+          },
+          {
+            progress: {
+              method: "agent",
+              payload: {
+                stream: "tool",
+                data: {
+                  phase: "start",
+                  name: "read_file",
+                  input: { path: "docs/results_table.csv" },
+                },
+              },
+            },
+          },
+          {
+            progress: {
+              method: "agent",
+              payload: {
+                stream: "lifecycle",
+                data: {
+                  phase: "running",
+                },
+              },
+            },
+          },
+          {
+            progress: {
+              method: "agent",
+              payload: {
+                stream: "tool",
+                data: {
+                  phase: "result",
+                  name: "read_file",
+                  output: "Loaded 42 rows.",
+                },
+              },
+            },
+          },
+          {
+            progress: {
+              method: "agent",
+              payload: {
+                stream: "lifecycle",
+                data: {
+                  phase: "end",
+                },
+              },
+            },
+          },
+          { text: "Done" },
+        ]);
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+
+    const progressLog = screen.getByTestId("progress-log").textContent ?? "";
+    expect(progressLog).toContain("activity:Read docs/results_table.csv");
+    expect(progressLog).not.toContain("Status: running");
+    expect(progressLog).not.toContain("Status: idle");
+
+    const activityLog = screen.getByTestId("activity-log").textContent ?? "";
+    expect(activityLog).toContain(
+      "Tool read_file: docs/results_table.csv | Tool read_file result: Loaded 42 rows.",
+    );
+    expect(activityLog).not.toContain("Turn started");
+    expect(activityLog).not.toContain("Turn finished");
   });
 
   it("streams gateway chat.delta into the assistant bubble before chat.final replaces it", async () => {
@@ -5051,11 +5301,11 @@ describe("useUnifiedChat persistence", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("progress-log").textContent).toContain(
-        "assistant:activity:Chat failed: OpenClaw transport failed | activity:Chat aborted: User interrupted the run",
+        "activity:Chat failed: OpenClaw transport failed | activity:Chat aborted: User interrupted the run",
       );
     });
     expect(screen.getByTestId("activity-log").textContent).toContain(
-      "Chat failed: OpenClaw transport failed | Chat aborted: User interrupted the run",
+      "Waiting for OpenClaw to respond | Chat failed: OpenClaw transport failed | Chat aborted: User interrupted the run",
     );
   });
 
@@ -5229,7 +5479,7 @@ describe("useUnifiedChat persistence", () => {
   // direction to switch to; the tests lose their meaning along with the
   // "Switch Direct" harness button.
 
-  it("times out a slash command that never starts and removes the empty placeholder", async () => {
+  it("times out a slash command that never starts and keeps the placeholder with a failure progress row", async () => {
     vi.useFakeTimers();
 
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -5293,9 +5543,15 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("error").textContent).toBe(
       "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
     );
-    expect(screen.getByTestId("message-count").textContent).toBe("3");
+    expect(screen.getByTestId("message-count").textContent).toBe("4");
     const restoredMessages = (screen.getByTestId("message-log").textContent || "").split("\n");
-    expect(restoredMessages.filter((message) => message.startsWith("assistant:"))).toHaveLength(1);
+    expect(restoredMessages.filter((message) => message.startsWith("assistant:"))).toHaveLength(2);
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "activity:Chat failed: ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
+    );
+    expect(screen.getByTestId("activity-log").textContent).toContain(
+      "Chat failed: ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.",
+    );
   });
 
   it("blocks send when local provider is selected but the configured model is missing", async () => {

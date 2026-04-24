@@ -997,6 +997,15 @@ const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 8_000;
 const SLASH_COMMAND_START_TIMEOUT_MS = 15_000;
 const SLASH_COMMAND_TIMEOUT_MESSAGE =
   "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.";
+const SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE = `Chat failed: ${SLASH_COMMAND_TIMEOUT_MESSAGE}`;
+
+class SlashCommandTimeoutError extends Error {
+  constructor() {
+    super(SLASH_COMMAND_TIMEOUT_MESSAGE);
+    this.name = "SlashCommandTimeoutError";
+  }
+}
+
 const QUEUED_ASSISTANT_CONTENT = "Queued...";
 const INTERNAL_SYSTEM_NOISE_PREFIXES = [
   "[User opened file:",
@@ -1025,6 +1034,15 @@ const PERSISTABLE_NOISE_PREFIXES = [
   "__FILE_STATIC__:",
 ];
 
+function isLowSignalLifecycleEntryText(text: string): boolean {
+  return (
+    text === "Turn started" ||
+    text === "Turn finished" ||
+    text === "Status: running" ||
+    text === "Status: idle"
+  );
+}
+
 function appendActivityLog(
   existing: string[] | undefined,
   nextLines: string[],
@@ -1033,6 +1051,7 @@ function appendActivityLog(
   for (const rawLine of nextLines) {
     const line = normalizeProgressEntryText(rawLine);
     if (!line) continue;
+    if (isLowSignalLifecycleEntryText(line)) continue;
     if (merged.at(-1) === line) continue;
     merged.push(line);
   }
@@ -1154,6 +1173,21 @@ function buildOptionalActivityProgressEntries(
   );
 }
 
+function buildOpenClawSendPhaseEntries(
+  context: Pick<SendContext, "backend">,
+  phase: "dispatch" | "waiting",
+): MessageProgressEntry[] {
+  if (context.backend !== "openclaw") {
+    return [];
+  }
+
+  return buildActivityProgressEntries([
+    phase === "dispatch"
+      ? "Sending request to OpenClaw"
+      : "Waiting for OpenClaw to respond",
+  ]);
+}
+
 function isConcreteActionWithPrefix(text: string, prefix: string, generic: string): boolean {
   return text.startsWith(prefix) && text !== generic;
 }
@@ -1166,7 +1200,7 @@ function shouldSuppressProgressEntry(
     return false;
   }
 
-  if (next.text === "Turn started" || next.text === "Turn finished") {
+  if (isLowSignalLifecycleEntryText(next.text)) {
     return true;
   }
 
@@ -1910,7 +1944,7 @@ async function fetchWithTimeout(
       if (settled) return;
       settled = true;
       controller.abort();
-      reject(new Error(SLASH_COMMAND_TIMEOUT_MESSAGE));
+      reject(new SlashCommandTimeoutError());
     }, timeoutMs);
 
     fetch(input, { ...init, signal: controller.signal })
@@ -3923,6 +3957,26 @@ export function useUnifiedChat(
       const backendHeader = res.headers.get("X-Chat-Backend");
       const modeHeader = normalizeChatMode(res.headers.get("X-Chat-Mode"));
 
+      if (res.ok && isSendContextCurrent(context)) {
+        const waitingEntries = buildOpenClawSendPhaseEntries(context, "waiting");
+        if (waitingEntries.length > 0) {
+          applyMessagesUpdate((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    activityLog: appendActivityLog(
+                      message.activityLog,
+                      waitingEntries.map((entry) => entry.text),
+                    ),
+                    progressLog: appendProgressLog(message.progressLog, waitingEntries),
+                  }
+                : message,
+            ),
+          );
+        }
+      }
+
       if (contentType.includes("text/event-stream")) {
         const responseBackend = mapResponseBackend(backendHeader) ?? context.backend;
         await consumeSSEStream(res, assistantId, context, content, requestFiles);
@@ -4164,10 +4218,22 @@ export function useUnifiedChat(
           continue;
         }
 
+        const dispatchEntries = buildOpenClawSendPhaseEntries(queued.context, "dispatch");
         applyMessagesUpdate((prev) =>
           prev.map((message) =>
             message.id === queued.assistantId
-              ? { ...message, content: "" }
+              ? {
+                  ...message,
+                  content: "",
+                  activityLog: appendActivityLog(
+                    message.activityLog,
+                    dispatchEntries.map((entry) => entry.text),
+                  ),
+                  progressLog: appendProgressLog(
+                    message.progressLog,
+                    dispatchEntries,
+                  ),
+                }
               : message,
           ),
         );
@@ -4213,6 +4279,28 @@ export function useUnifiedChat(
           if (err instanceof Error && err.name === "AbortError") {
             // A newer project/backend context superseded this request.
           } else if (isSendContextCurrent(queued.context)) {
+            if (
+              err instanceof SlashCommandTimeoutError
+              && looksLikeSlashCommandInput(queued.content)
+            ) {
+              applyMessagesUpdate((prev) =>
+                prev.map((message) =>
+                  message.id === queued.assistantId
+                    ? {
+                        ...message,
+                        activityLog: appendActivityLog(
+                          message.activityLog,
+                          [SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE],
+                        ),
+                        progressLog: appendProgressLog(
+                          message.progressLog,
+                          buildActivityProgressEntries([SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE]),
+                        ),
+                      }
+                    : message,
+                ),
+              );
+            }
             setError(
               err instanceof Error
                 ? err.message

@@ -212,23 +212,31 @@ const LEGACY_HTML_EMBED_ALIASES: Record<string, string> = {
 };
 const ASSISTANT_BODY_TEXT_CLASS =
   "text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
+const ASSISTANT_PARAGRAPH_CLASS = `mb-5 ${ASSISTANT_BODY_TEXT_CLASS}`;
 const ASSISTANT_TITLE_CLASS =
-  "mb-5 text-[2rem] leading-[1.04] font-semibold tracking-[-0.045em] text-slate-950";
+  "mb-6 text-[2.25rem] leading-[0.98] font-semibold tracking-[-0.05em] text-slate-950 sm:text-[2.6rem]";
 const ASSISTANT_SUBTITLE_CLASS =
-  "mt-8 first:mt-0 mb-3 text-[1.4rem] leading-[1.15] font-semibold tracking-[-0.03em] text-sky-950";
+  "mt-10 mb-4 text-[1.7rem] leading-[1.08] font-semibold tracking-[-0.04em] text-sky-950 first:mt-0 sm:text-[1.95rem]";
 const ASSISTANT_SECTION_CLASS =
-  "mt-6 first:mt-0 mb-2 text-[1.05rem] leading-6 font-semibold tracking-[-0.015em] text-emerald-900";
+  "mt-8 mb-3 text-[1.18rem] leading-7 font-semibold tracking-[-0.02em] text-emerald-900 first:mt-0 sm:text-[1.24rem]";
+const ASSISTANT_SUBSECTION_CLASS =
+  "mt-6 mb-3 text-[1rem] leading-6 font-semibold tracking-[-0.01em] text-slate-900 first:mt-0";
 const ASSISTANT_LIST_CLASS =
-  "mb-5 pl-4 text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
+  "mb-5 pl-6 text-[15px] leading-7 tracking-[0.005em] text-slate-800 sm:text-base sm:leading-8";
+const ASSISTANT_LIST_ITEM_CLASS = "pl-2 [&>ol]:mt-3 [&>ul]:mt-3";
 const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-slate-500";
 const ASSISTANT_METADATA_CLASS =
   "text-[10px] font-medium tracking-[0.02em] text-slate-400";
+const ASSISTANT_METADATA_CHIP_CLASS =
+  "inline-flex items-center rounded-full bg-slate-100/85 px-2.5 py-1 text-[10px] font-medium tracking-[0.015em] text-slate-400";
 const ASSISTANT_BLOCKQUOTE_CLASS =
-  "mb-5 rounded-r-2xl border-l-2 border-sky-300 bg-sky-50/75 px-4 py-3 italic text-sky-900";
+  "my-6 rounded-r-2xl border-l-2 border-sky-300 bg-sky-50/75 px-4 py-3 italic text-sky-900";
 const ASSISTANT_LINK_CLASS =
   "font-medium text-blue-700 underline decoration-blue-200 underline-offset-4 transition-colors hover:text-blue-800 hover:decoration-blue-400";
+const ASSISTANT_INLINE_CODE_CLASS =
+  "rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-slate-800";
 const ASSISTANT_CODE_BLOCK_CLASS =
-  "mb-5 overflow-x-auto rounded-2xl border border-slate-300 bg-slate-950 px-4 py-3 text-[13px] leading-6 text-slate-100 shadow-[0_1px_0_rgba(15,23,42,0.08)]";
+  "my-6 overflow-x-auto rounded-3xl border border-slate-300 bg-slate-950 px-5 py-4 text-[13px] leading-6 text-slate-100 shadow-[0_12px_30px_rgba(15,23,42,0.12)]";
 const ASSISTANT_MEDIA_CARD_CLASS =
   "overflow-hidden rounded-[1.35rem] border border-slate-200/90 bg-white shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]";
 const ASSISTANT_MEDIA_FRAME_CLASS =
@@ -261,17 +269,17 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   h1: ({ children }) => <h1 className={ASSISTANT_TITLE_CLASS}>{children}</h1>,
   h2: ({ children }) => <h2 className={ASSISTANT_SUBTITLE_CLASS}>{children}</h2>,
   h3: ({ children }) => <h3 className={ASSISTANT_SECTION_CLASS}>{children}</h3>,
-  h4: ({ children }) => <h4 className={ASSISTANT_SECTION_CLASS}>{children}</h4>,
-  h5: ({ children }) => <h5 className={ASSISTANT_SECTION_CLASS}>{children}</h5>,
-  h6: ({ children }) => <h6 className={ASSISTANT_SECTION_CLASS}>{children}</h6>,
-  p: ({ children }) => <p className={`mb-4 ${ASSISTANT_BODY_TEXT_CLASS}`}>{children}</p>,
+  h4: ({ children }) => <h4 className={ASSISTANT_SUBSECTION_CLASS}>{children}</h4>,
+  h5: ({ children }) => <h5 className={ASSISTANT_SUBSECTION_CLASS}>{children}</h5>,
+  h6: ({ children }) => <h6 className={ASSISTANT_SUBSECTION_CLASS}>{children}</h6>,
+  p: ({ children }) => <p className={ASSISTANT_PARAGRAPH_CLASS}>{children}</p>,
   ul: ({ children }) => (
-    <ul className={`${ASSISTANT_LIST_CLASS} list-disc space-y-2 marker:text-slate-400`}>{children}</ul>
+    <ul className={`${ASSISTANT_LIST_CLASS} list-disc space-y-2.5 marker:text-slate-400`}>{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className={`${ASSISTANT_LIST_CLASS} list-decimal space-y-2 marker:font-medium marker:text-slate-500`}>{children}</ol>
+    <ol className={`${ASSISTANT_LIST_CLASS} list-decimal space-y-2.5 marker:font-medium marker:text-slate-500`}>{children}</ol>
   ),
-  li: ({ children }) => <li className="pl-1">{children}</li>,
+  li: ({ children }) => <li className={ASSISTANT_LIST_ITEM_CLASS}>{children}</li>,
   blockquote: ({ children }) => <blockquote className={ASSISTANT_BLOCKQUOTE_CLASS}>{children}</blockquote>,
   pre: ({ children }) => <pre className={ASSISTANT_CODE_BLOCK_CLASS}>{children}</pre>,
   code: ({ className, children }) => {
@@ -283,7 +291,7 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
       return <code className="font-mono">{children}</code>;
     }
     return (
-      <code className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-slate-800">
+      <code className={ASSISTANT_INLINE_CODE_CLASS}>
         {children}
       </code>
     );
@@ -1103,7 +1111,7 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
       elements.push(
         <code
           key={tokenKey}
-          className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-slate-800"
+          className={ASSISTANT_INLINE_CODE_CLASS}
         >
           {token.value}
         </code>,
@@ -1567,10 +1575,12 @@ export function ChatMessage({
           ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/15 text-rose-100 transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
           : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-white/70 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
       : copyState === "copied"
-        ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
+        ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition-all hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
         : copyState === "error"
-        ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rose-200 bg-rose-50 text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
-        : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-slate-50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
+        ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700 transition-all hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
+        : isAssistantTurn
+          ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-slate-400 opacity-0 transition-all group-hover/assistant:opacity-100 group-focus-within/assistant:opacity-100 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+          : "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-slate-50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
   const bubbleClass =
     role === "user"
       ? `max-w-2xl rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text ${
@@ -1582,13 +1592,13 @@ export function ChatMessage({
         ? "w-full max-w-[min(92vw,72rem)] rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text bg-white border-2 border-border text-muted text-xs font-mono"
         : "w-full max-w-[min(90vw,56rem)] px-1 py-3 select-text cursor-text text-slate-900 sm:px-2";
   const assistantSurfaceClass = isAssistantTurn
-    ? "mx-auto flex w-full max-w-[48rem] flex-col"
+    ? "group/assistant mx-auto flex w-full max-w-[48rem] flex-col"
     : "";
   const contentClass = isAssistantTurn
-    ? `select-text text-slate-900 ${selectionClass}`
+    ? `select-text text-slate-900 [&>*:last-child]:mb-0 ${selectionClass}`
     : `whitespace-pre-wrap select-text ${selectionClass}`;
   const footerRowClass = isAssistantTurn
-    ? "mt-4 flex items-center justify-end gap-3"
+    ? "mt-5 flex items-center justify-end gap-2"
     : "mt-3 flex items-center justify-end gap-3";
 
   useEffect(() => () => {
@@ -1739,7 +1749,9 @@ export function ChatMessage({
             <CopyStatusIcon size={18} weight="regular" aria-hidden="true" />
           </button>
         )}
-        <div className={`text-[9px] ${footerTextClass}`}>{timestampText}</div>
+        <div className={isAssistantTurn ? ASSISTANT_METADATA_CHIP_CLASS : `text-[9px] ${footerTextClass}`}>
+          {timestampText}
+        </div>
       </div>
     </>
   );
