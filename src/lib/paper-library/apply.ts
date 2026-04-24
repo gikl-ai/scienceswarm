@@ -884,7 +884,7 @@ export async function undoApplyManifest(input: {
     try {
       const sourceAbsolutePath = path.join(manifest.rootRealpath, operation.sourceRelativePath);
       const destinationAbsolutePath = path.join(manifest.rootRealpath, operation.destinationRelativePath);
-      if (operation.sourceRelativePath === operation.destinationRelativePath) {
+      if (relativePathKey(operation.sourceRelativePath) === relativePathKey(operation.destinationRelativePath)) {
         operations[index] = {
           ...operation,
           status: "undone",

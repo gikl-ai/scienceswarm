@@ -356,6 +356,74 @@ describe("paper-library review and apply", () => {
     expect(await exists(firstPath)).toBe(false);
   });
 
+  it("treats case-only apply and undo operations as noops", async () => {
+    const originalPath = path.join(paperRoot, "Paper.pdf");
+    await writeFile(originalPath, "case-only pdf", "utf-8");
+
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const reviewPage = await listPaperReviewItems({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      limit: 10,
+    });
+    const item = reviewPage?.items[0];
+    if (!item) throw new Error("expected review item");
+
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: item.id,
+      action: "correct",
+      selectedCandidateId: item.candidates[0]?.id,
+      correction: { title: "paper" },
+      brainRoot,
+    });
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{title}.pdf",
+    });
+    expect(created?.plan.status).toBe("validated");
+    expect(created?.operations[0]).toMatchObject({
+      source: { relativePath: "Paper.pdf" },
+      destinationRelativePath: "paper.pdf",
+      conflictCodes: [],
+    });
+
+    const approval = await approveApplyPlan({
+      project: "project-alpha",
+      applyPlanId: created?.plan.id ?? "",
+      brainRoot,
+    });
+    const applied = await applyApprovedPlan({
+      project: "project-alpha",
+      applyPlanId: approval?.plan.id ?? "",
+      approvalToken: approval?.approvalToken ?? "",
+      brainRoot,
+    });
+    expect(applied?.manifest.status).toBe("applied");
+    expect(await exists(originalPath)).toBe(true);
+
+    const undone = await undoApplyManifest({
+      project: "project-alpha",
+      manifestId: applied?.manifest.id ?? "",
+      brainRoot,
+    });
+    expect(undone?.manifest.status).toBe("undone");
+    expect(undone?.operations[0]?.status).toBe("undone");
+    expect(await exists(originalPath)).toBe(true);
+  });
+
   it("does not create directories through symlinked destination parents during apply", async () => {
     const originalPath = path.join(paperRoot, "source.pdf");
     await writeFile(originalPath, "fake pdf", "utf-8");
