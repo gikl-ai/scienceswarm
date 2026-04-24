@@ -179,6 +179,22 @@ describe("runtime host CLI transport", () => {
     ).rejects.toThrow("signal SIGTERM");
   });
 
+  it("cancels a tracked local subprocess by runtime session id", async () => {
+    const transport = new LocalCliTransport();
+    const run = transport.run({
+      hostId: "claude-code",
+      sessionId: "rt-session-cancellable",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 5_000)"],
+      timeoutMs: 10_000,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await expect(transport.cancel("rt-session-cancellable")).resolves.toBe(true);
+    await expect(run).rejects.toThrow("signal SIGTERM");
+    await expect(transport.cancel("rt-session-cancellable")).resolves.toBe(false);
+  });
+
   it("times out hung subprocesses with a typed timeout error", async () => {
     const transport = new LocalCliTransport();
 

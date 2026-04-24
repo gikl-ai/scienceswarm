@@ -199,6 +199,31 @@ describe("runtime host adapters", () => {
     expect(transport.requests.at(-1)?.args).not.toContain("--resume");
   });
 
+  it("tracks the ScienceSwarm runtime session id while resuming Claude Code native sessions", async () => {
+    const transport = new FakeCliTransport((request) =>
+      fakeResult(request, "{\"type\":\"result\",\"result\":\"Resumed answer\",\"session_id\":\"claude-native-existing\"}")
+    );
+    const adapter = createClaudeCodeRuntimeHostAdapter({
+      transport,
+      sessionIdGenerator: () => "wrapper-session",
+    });
+
+    await expect(
+      adapter.sendTurn({
+        ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+        runtimeSessionId: "rt-session-cancel-target",
+        conversationId: "claude-native-existing",
+      }),
+    ).resolves.toMatchObject({
+      sessionId: "claude-native-existing",
+      message: "Resumed answer",
+    });
+    expect(transport.requests.at(-1)).toMatchObject({
+      sessionId: "rt-session-cancel-target",
+      args: expect.arrayContaining(["--resume", "claude-native-existing"]),
+    });
+  });
+
   it("captures only top-level Claude Code session ids for native resume", () => {
     const nestedOnly = parseClaudeCodeStreamOutput({
       hostId: "claude-code",
@@ -480,7 +505,7 @@ describe("runtime host adapters", () => {
     });
 
     expect(preview).toMatchObject({
-      requiresUserApproval: false,
+      requiresUserApproval: true,
       accountDisclosure: {
         authMode: "api-key",
         provider: "openai",

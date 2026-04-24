@@ -120,6 +120,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const turnRequest = buildRuntimeTurnRequest({
       hostId,
+      runtimeSessionId: session.id,
       projectId,
       conversationId,
       mode,

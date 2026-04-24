@@ -1421,7 +1421,7 @@ describe("Project dashboard smoke test", () => {
     });
   });
 
-  it("auto-sends hosted chat when runtime preview does not require approval", async () => {
+  it("auto-sends chat when runtime preview does not require approval", async () => {
     const runtimePreviewBodies: Record<string, unknown>[] = [];
     const runtimeSessionBodies: Record<string, unknown>[] = [];
 

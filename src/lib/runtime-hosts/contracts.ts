@@ -167,6 +167,7 @@ export type RuntimeApprovalState =
 
 export interface RuntimeTurnRequest {
   hostId: RuntimeHostId;
+  runtimeSessionId?: string;
   projectId: string | null;
   conversationId: string | null;
   mode: RuntimeTurnMode;
