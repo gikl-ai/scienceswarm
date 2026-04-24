@@ -1482,10 +1482,7 @@ function extractGatewayChatProgressUpdate(
   eventName: string,
   payload: Record<string, unknown>,
 ): OpenClawProgressUpdate {
-  const update: OpenClawProgressUpdate = {
-    activityLines: [],
-    progressEntries: [],
-  };
+  const update = createOpenClawProgressUpdate();
 
   switch (eventName) {
     case "chat.delta": {
@@ -1538,10 +1535,7 @@ function extractAgentEventProgressUpdate(
   eventName: string,
   payload: Record<string, unknown>,
 ): OpenClawProgressUpdate {
-  const update: OpenClawProgressUpdate = {
-    activityLines: [],
-    progressEntries: [],
-  };
+  const update = createOpenClawProgressUpdate();
   const data = asRecord(payload.data) ?? payload;
 
   if (eventName.startsWith("agent.tool")) {
@@ -1563,12 +1557,16 @@ function extractAgentEventProgressUpdate(
         ? (data.output ?? data.result ?? data.text ?? data.content)
         : (data.args ?? data.arguments ?? data.input ?? data.text ?? data.content);
 
-    update.activityLines.push(formatToolActivityLine(toolPhase, toolName, toolDetail));
-    update.progressEntries.push(
-      ...buildOptionalActivityProgressEntries([
-        formatToolProgressEntry(toolPhase, toolName, toolDetail),
-      ]),
-    );
+    const activityLine = formatToolActivityLine(toolPhase, toolName, toolDetail);
+    const progressEntries = buildOptionalActivityProgressEntries([
+      formatToolProgressEntry(toolPhase, toolName, toolDetail),
+    ]);
+    update.activityLines.push(activityLine);
+    if (progressEntries.length > 0) {
+      update.progressEntries.push(...progressEntries);
+    } else {
+      update.legacyOnlyActivityLines.push(activityLine);
+    }
     return update;
   }
 
@@ -1609,8 +1607,17 @@ type OpenClawProgressUpdate = {
   assistantText?: string;
   assistantTextMode?: "append" | "replace";
   activityLines: string[];
+  legacyOnlyActivityLines: string[];
   progressEntries: MessageProgressEntry[];
 };
+
+function createOpenClawProgressUpdate(): OpenClawProgressUpdate {
+  return {
+    activityLines: [],
+    legacyOnlyActivityLines: [],
+    progressEntries: [],
+  };
+}
 
 function mergeOpenClawProgressUpdate(
   left: OpenClawProgressUpdate,
@@ -1631,6 +1638,10 @@ function mergeOpenClawProgressUpdate(
         ? "replace"
         : left.assistantTextMode,
     activityLines: [...left.activityLines, ...right.activityLines],
+    legacyOnlyActivityLines: [
+      ...left.legacyOnlyActivityLines,
+      ...right.legacyOnlyActivityLines,
+    ],
     progressEntries: [...left.progressEntries, ...right.progressEntries],
   };
 }
@@ -1642,10 +1653,10 @@ function extractSessionMessageProgressUpdate(
   const content = Array.isArray(message?.content) ? message.content : null;
   const messageRole = typeof message?.role === "string" ? message.role.toLowerCase() : "";
   if (!content || messageRole === "user" || messageRole === "system") {
-    return { activityLines: [], progressEntries: [] };
+    return createOpenClawProgressUpdate();
   }
 
-  const update: OpenClawProgressUpdate = { activityLines: [], progressEntries: [] };
+  const update = createOpenClawProgressUpdate();
 
   if (messageRole === "toolresult" || messageRole === "tool_result") {
     const toolName = firstNonEmptyString(message?.toolName, message?.tool_name, message?.name);
@@ -1658,14 +1669,16 @@ function extractSessionMessageProgressUpdate(
     const detail = textParts.length > 0 ? textParts.join("\n") : (message?.details ?? undefined);
 
     if (detail || toolName) {
-      update.activityLines.push(
-        formatToolActivityLine("result", toolName, detail),
-      );
-      update.progressEntries.push(
-        ...buildOptionalActivityProgressEntries([
-          formatToolProgressEntry("result", toolName, detail),
-        ]),
-      );
+      const activityLine = formatToolActivityLine("result", toolName, detail);
+      const progressEntries = buildOptionalActivityProgressEntries([
+        formatToolProgressEntry("result", toolName, detail),
+      ]);
+      update.activityLines.push(activityLine);
+      if (progressEntries.length > 0) {
+        update.progressEntries.push(...progressEntries);
+      } else {
+        update.legacyOnlyActivityLines.push(activityLine);
+      }
     }
 
     return update;
@@ -1697,18 +1710,20 @@ function extractSessionMessageProgressUpdate(
         /result|output/i.test(type)
           ? (part.output ?? part.result ?? part.content ?? part.text)
           : (part.input ?? part.args ?? part.arguments ?? part.text ?? part.content);
-      update.activityLines.push(
-        formatToolActivityLine(
-          toolPhase,
-          toolName,
-          detail,
-        ),
+      const activityLine = formatToolActivityLine(
+        toolPhase,
+        toolName,
+        detail,
       );
-      update.progressEntries.push(
-        ...buildOptionalActivityProgressEntries([
-          formatToolProgressEntry(toolPhase, toolName, detail),
-        ]),
-      );
+      const progressEntries = buildOptionalActivityProgressEntries([
+        formatToolProgressEntry(toolPhase, toolName, detail),
+      ]);
+      update.activityLines.push(activityLine);
+      if (progressEntries.length > 0) {
+        update.progressEntries.push(...progressEntries);
+      } else {
+        update.legacyOnlyActivityLines.push(activityLine);
+      }
       continue;
     }
 
@@ -1731,13 +1746,10 @@ function extractOpenClawProgressUpdate(progress: {
 }): OpenClawProgressUpdate {
   const payload = asRecord(progress.payload);
   if (!payload) {
-    return { activityLines: [], progressEntries: [] };
+    return createOpenClawProgressUpdate();
   }
 
-  let update: OpenClawProgressUpdate = {
-    activityLines: [],
-    progressEntries: [],
-  };
+  let update = createOpenClawProgressUpdate();
 
   const eventName = normalizeGatewayProgressEventName(progress);
 
@@ -1790,12 +1802,15 @@ function extractOpenClawProgressUpdate(progress: {
       toolName,
       toolDetail,
     );
+    const progressEntries = buildOptionalActivityProgressEntries([
+      formatToolProgressEntry(toolPhase, toolName, toolDetail),
+    ]);
     update.activityLines.push(activityLine);
-    update.progressEntries.push(
-      ...buildOptionalActivityProgressEntries([
-        formatToolProgressEntry(toolPhase, toolName, toolDetail),
-      ]),
-    );
+    if (progressEntries.length > 0) {
+      update.progressEntries.push(...progressEntries);
+    } else {
+      update.legacyOnlyActivityLines.push(activityLine);
+    }
   } else if (stream === "lifecycle") {
     const lifecyclePhase = firstNonEmptyString(data?.phase, payload.phase);
     const lifecycleDetail = firstNonEmptyTextContent(data?.text, data?.message, payload.text, payload.content);
@@ -3449,10 +3464,11 @@ export function useUnifiedChat(
                             ? progressUpdate.assistantText
                             : mergeStreamingText(m.content, progressUpdate.assistantText)
                           : m.content,
-                        activityLog:
-                          progressUpdate.activityLines.length > 0
-                          && progressUpdate.progressEntries.length === 0
-                          ? appendActivityLog(m.activityLog, progressUpdate.activityLines)
+                        activityLog: progressUpdate.legacyOnlyActivityLines.length > 0
+                          ? appendActivityLog(
+                            m.activityLog,
+                            progressUpdate.legacyOnlyActivityLines,
+                          )
                           : m.activityLog,
                         progressLog: progressUpdate.progressEntries.length > 0
                           ? appendProgressLog(m.progressLog, progressUpdate.progressEntries)
