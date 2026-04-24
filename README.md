@@ -184,8 +184,10 @@ Claude Code launches from a generated ScienceSwarm session capsule rather than
 the ScienceSwarm source checkout. The capsule includes `SCIENCESWARM.md` for
 product and project orientation, a thin `CLAUDE.md` that points Claude back to
 that guidance, a compact gbrain project brief, and a runtime-scoped MCP config
-for selective gbrain search/read/write tools. The preview lists this generated
-guidance and scoped brain access before the prompt is sent.
+for selective gbrain search/read/write tools. MCP bearer credentials are injected
+through the spawned process environment rather than the prompt text, and the
+temporary MCP config is deleted after each invocation. The preview lists this
+generated guidance and scoped brain access before the prompt is sent.
 
 Runtime-host sessions stay visible from Settings after runtime sends. Session
 history keeps host, mode, status, events, and artifact/writeback state so

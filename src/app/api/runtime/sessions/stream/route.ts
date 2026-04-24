@@ -67,6 +67,7 @@ export async function POST(request: Request): Promise<Response> {
     const approvalState = approvalStateFromBody(body);
     const inputFileRefs = optionalStringArrayField(body, "inputFileRefs") ?? [];
     const dataIncluded = dataIncludedFromBodyWithRuntimeContext({
+      services,
       body,
       projectId,
       hostId,

@@ -33,6 +33,7 @@ import {
 import { buildSubscriptionNativeCliEnv } from "../transport/subscription-env";
 import {
   buildClaudeCodeRuntimeContext,
+  claudeCodeRuntimeContextDataIncluded,
   type ClaudeCodeInvocationContext,
   type ClaudeCodeRuntimeContextBuilder,
 } from "./claude-code-context";
@@ -94,6 +95,15 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
     return this.runtimeProfile;
   }
 
+  runtimeContextDataIncluded(input: {
+    projectId?: string | null;
+  }) {
+    return claudeCodeRuntimeContextDataIncluded({
+      projectId: input.projectId,
+      includeRuntimeMcp: this.enableRuntimeMcp !== false,
+    });
+  }
+
   async health(): Promise<RuntimeHostHealth> {
     return await detectCliHealth({
       hostId: this.runtimeProfile.id,
@@ -141,19 +151,21 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       wrapperSessionId,
       env,
     });
-    const result = await this.transport.run({
-      hostId: this.runtimeProfile.id,
-      sessionId: wrapperSessionId,
-      command: this.command,
-      args: this.buildPromptArgs(request, context),
-      cwd: context?.cwd,
-      env,
-      timeoutMs: this.timeoutMs,
-      onStdoutLine: (line) => {
-        const event = stream.acceptLine(line);
-        if (event) request.onEvent?.(event);
-      },
-    });
+    const result = await this.runWithContextCleanup(context, () =>
+      this.transport.run({
+        hostId: this.runtimeProfile.id,
+        sessionId: wrapperSessionId,
+        command: this.command,
+        args: this.buildPromptArgs(request, context),
+        cwd: context?.cwd,
+        env: this.runtimeEnv(env, context),
+        timeoutMs: this.timeoutMs,
+        onStdoutLine: (line) => {
+          const event = stream.acceptLine(line);
+          if (event) request.onEvent?.(event);
+        },
+      })
+    );
     const parsed = stream.hasLines
       ? stream.result()
       : parseClaudeCodeStreamOutput({
@@ -196,19 +208,21 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       env,
     });
 
-    const result = await this.transport.run({
-      hostId: this.runtimeProfile.id,
-      sessionId: wrapperSessionId,
-      command: this.command,
-      args: this.buildPromptArgs(request, context),
-      cwd: context?.cwd,
-      env,
-      timeoutMs: this.timeoutMs,
-      onStdoutLine: (line) => {
-        const event = stream.acceptLine(line);
-        if (event) request.onEvent?.(event);
-      },
-    });
+    const result = await this.runWithContextCleanup(context, () =>
+      this.transport.run({
+        hostId: this.runtimeProfile.id,
+        sessionId: wrapperSessionId,
+        command: this.command,
+        args: this.buildPromptArgs(request, context),
+        cwd: context?.cwd,
+        env: this.runtimeEnv(env, context),
+        timeoutMs: this.timeoutMs,
+        onStdoutLine: (line) => {
+          const event = stream.acceptLine(line);
+          if (event) request.onEvent?.(event);
+        },
+      })
+    );
     const parsed = stream.hasLines
       ? stream.result()
       : parseClaudeCodeStreamOutput({
@@ -301,6 +315,24 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       sessionRoot: this.sessionRoot,
       enableRuntimeMcp: this.enableRuntimeMcp,
     });
+  }
+
+  private runtimeEnv(
+    env: NodeJS.ProcessEnv,
+    context?: ClaudeCodeInvocationContext | null,
+  ): NodeJS.ProcessEnv {
+    return context?.env ? { ...env, ...context.env } : env;
+  }
+
+  private async runWithContextCleanup<T>(
+    context: ClaudeCodeInvocationContext | null,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await operation();
+    } finally {
+      await context?.cleanup?.().catch(() => undefined);
+    }
   }
 
   private buildPromptArgs(

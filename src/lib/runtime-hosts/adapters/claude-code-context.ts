@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { buildProjectBrief } from "@/brain/briefing";
@@ -26,7 +26,9 @@ export interface ClaudeCodeInvocationContext {
   cwd?: string;
   appendSystemPrompt?: string;
   addDirs?: string[];
+  env?: Record<string, string>;
   mcpConfigPath?: string;
+  cleanup?: () => Promise<void>;
 }
 
 export interface ClaudeCodeRuntimeContextBuilderInput {
@@ -137,7 +139,9 @@ export async function buildClaudeCodeRuntimeContext(
     cwd: sessionDir,
     appendSystemPrompt: scienceswarmMd,
     addDirs,
+    env: runtimeMcp?.env,
     mcpConfigPath: runtimeMcp?.configPath,
+    cleanup: runtimeMcp?.cleanup,
   };
 }
 
@@ -262,7 +266,12 @@ async function buildRuntimeMcpContext(input: {
   sessionDir: string;
   env: NodeJS.ProcessEnv;
   tokenTtlMs: number;
-}): Promise<{ configPath: string; instructions: string }> {
+}): Promise<{
+  configPath: string;
+  instructions: string;
+  env: Record<string, string>;
+  cleanup: () => Promise<void>;
+}> {
   const secret = randomBytes(32).toString("base64url");
   const allowedTools = resolveRuntimeMcpToolProfile("claude-code").allowedTools;
   const token = mintRuntimeMcpAccessToken({
@@ -274,6 +283,7 @@ async function buildRuntimeMcpContext(input: {
     secret,
   });
   const configPath = path.join(input.sessionDir, "scienceswarm-mcp.json");
+  const shell = input.env.SCIENCESWARM_RUNTIME_MCP_SHELL ?? "/bin/sh";
   const command = [
     "cd",
     shellQuote(input.repoRoot),
@@ -286,8 +296,8 @@ async function buildRuntimeMcpContext(input: {
   const mcpConfig = {
     mcpServers: {
       scienceswarm: {
-        command: "/bin/zsh",
-        args: ["-lc", command],
+        command: shell,
+        args: ["-c", command],
         env: {
           ...copyEnv(input.env, [
             "BRAIN_ROOT",
@@ -295,7 +305,6 @@ async function buildRuntimeMcpContext(input: {
             "NODE_ENV",
             "PATH",
           ]),
-          SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET: secret,
         },
       },
     },
@@ -308,9 +317,10 @@ async function buildRuntimeMcpContext(input: {
       "A runtime-scoped MCP server named `scienceswarm` is available for selective gbrain access.",
       "Use search before read. Prefer narrow queries tied to the user's project or named artifact.",
       "Do not enumerate the whole brain or read broad directories.",
+      "The runtime server injects its access token from process environment.",
+      "Do not ask the user for bearer tokens, and do not write token values into prompts, files, or captured notes.",
       "",
-      "For each `scienceswarm` MCP call, include these auth fields exactly:",
-      `- token: ${token}`,
+      "For each `scienceswarm` MCP call, include these non-secret auth fields exactly:",
       `- projectId: ${input.projectId}`,
       `- runtimeSessionId: ${input.runtimeSessionId}`,
       "- hostId: claude-code",
@@ -320,7 +330,26 @@ async function buildRuntimeMcpContext(input: {
       `Allowed tools: ${allowedTools.join(", ")}.`,
       "For runtime-originated gbrain writes, include RuntimeGbrainProvenance matching this session.",
     ].join("\n"),
+    env: {
+      SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN: token,
+      SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET: secret,
+    },
+    cleanup: async () => {
+      await unlink(configPath).catch(ignoreMissingFile);
+    },
   };
+}
+
+function ignoreMissingFile(error: unknown): void {
+  if (
+    typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as { code?: unknown }).code === "ENOENT"
+  ) {
+    return;
+  }
+  throw error;
 }
 
 function trimForPrompt(value: string, maxChars: number): string {

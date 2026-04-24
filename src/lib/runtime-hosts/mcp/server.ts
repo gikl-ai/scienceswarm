@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import {
   createRuntimeMcpToolset,
+  type RuntimeMcpAuthParams,
   type RuntimeMcpToolsetDeps,
 } from "./tools";
 
@@ -12,7 +13,9 @@ type McpToolResponse = {
   [key: string]: unknown;
 };
 
-export type RegisterRuntimeMcpToolsDeps = RuntimeMcpToolsetDeps;
+export interface RegisterRuntimeMcpToolsDeps extends RuntimeMcpToolsetDeps {
+  defaultAuth?: Pick<RuntimeMcpAuthParams, "token">;
+}
 
 const projectPolicySchema = z.enum(["local-only", "cloud-ok", "execution-ok"]);
 const approvalStateSchema = z.enum([
@@ -23,7 +26,10 @@ const approvalStateSchema = z.enum([
 ]);
 
 const runtimeMcpAuthSchema = {
-  token: z.string().describe("Short-lived RuntimeMcpAccessToken"),
+  token: z
+    .string()
+    .optional()
+    .describe("Short-lived RuntimeMcpAccessToken; runtime stdio servers may inject this from process env"),
   projectId: z.string().describe("ScienceSwarm project slug"),
   runtimeSessionId: z.string().describe("ScienceSwarm runtime session id"),
   hostId: z.string().describe("Runtime host id"),
@@ -77,6 +83,16 @@ async function runRuntimeTool(
   }
 }
 
+function withDefaultAuth<T extends { token?: string | null }>(
+  params: T,
+  deps: RegisterRuntimeMcpToolsDeps,
+): T {
+  return {
+    ...params,
+    token: params.token ?? deps.defaultAuth?.token,
+  };
+}
+
 export function registerRuntimeMcpTools(
   server: McpServer,
   deps: RegisterRuntimeMcpToolsDeps = {},
@@ -93,7 +109,9 @@ export function registerRuntimeMcpTools(
       limit: z.number().optional().describe("Maximum results"),
       detail: z.string().optional().describe("Search detail level"),
     },
-    async (params) => runRuntimeTool(() => tools.gbrainSearch(params)),
+    async (params) => runRuntimeTool(() =>
+      tools.gbrainSearch(withDefaultAuth(params, deps))
+    ),
   );
 
   server.tool(
@@ -103,7 +121,9 @@ export function registerRuntimeMcpTools(
       ...runtimeMcpAuthSchema,
       path: z.string().describe("gbrain page path relative to the brain root"),
     },
-    async (params) => runRuntimeTool(() => tools.gbrainRead(params)),
+    async (params) => runRuntimeTool(() =>
+      tools.gbrainRead(withDefaultAuth(params, deps))
+    ),
   );
 
   server.tool(
@@ -122,7 +142,9 @@ export function registerRuntimeMcpTools(
         .optional()
         .describe("RuntimeGbrainProvenance for runtime-originated writes"),
     },
-    async (params) => runRuntimeTool(() => tools.gbrainCapture(params)),
+    async (params) => runRuntimeTool(() =>
+      tools.gbrainCapture(withDefaultAuth(params, deps))
+    ),
   );
 
   server.tool(
@@ -134,7 +156,9 @@ export function registerRuntimeMcpTools(
       projectRoot: z.string().optional().describe("Project root override"),
       maxBytes: z.number().optional().describe("Maximum bytes to return"),
     },
-    async (params) => runRuntimeTool(() => tools.projectWorkspaceRead(params)),
+    async (params) => runRuntimeTool(() =>
+      tools.projectWorkspaceRead(withDefaultAuth(params, deps))
+    ),
   );
 
   server.tool(
@@ -148,7 +172,9 @@ export function registerRuntimeMcpTools(
         .optional()
         .describe("Optional RuntimeGbrainProvenance payload"),
     },
-    async (params) => runRuntimeTool(() => tools.provenanceLog(params)),
+    async (params) => runRuntimeTool(() =>
+      tools.provenanceLog(withDefaultAuth(params, deps))
+    ),
   );
 
   server.tool(
@@ -183,7 +209,7 @@ export function registerRuntimeMcpTools(
     async (params) =>
       runRuntimeTool(() =>
         tools.artifactImport({
-          ...params,
+          ...withDefaultAuth(params, deps),
           allowedRoots: params.allowedRoots ?? [],
         })
       ),
@@ -199,6 +225,8 @@ export function registerRuntimeMcpTools(
       branch: z.string().optional().describe("Repository branch"),
       model: z.string().optional().describe("OpenHands model override"),
     },
-    async (params) => runRuntimeTool(() => tools.openhandsDelegate(params)),
+    async (params) => runRuntimeTool(() =>
+      tools.openhandsDelegate(withDefaultAuth(params, deps))
+    ),
   );
 }
