@@ -284,6 +284,38 @@ describe("runtime host adapters", () => {
     expect(accumulator.result().message).toBe("First chunk and second streamed");
   });
 
+  it("separates unrelated Claude Code assistant chunks while streaming", () => {
+    const accumulator = new ClaudeCodeStreamAccumulator({
+      hostId: "claude-code",
+      sessionId: "wrapper-session",
+    });
+
+    const first = accumulator.acceptLine(JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "I'll search for X" }],
+      },
+    }));
+    const second = accumulator.acceptLine(JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "Here's what I found: Y" }],
+      },
+    }));
+    const final = accumulator.acceptLine(JSON.stringify({
+      type: "result",
+      result: "I'll search for X. Here's what I found: Y",
+      session_id: "claude-native-session",
+    }));
+
+    expect(first?.payload.text).toBe("I'll search for X");
+    expect(second?.payload.text).toBe("I'll search for X\nHere's what I found: Y");
+    expect(final?.payload.text).toBe("I'll search for X. Here's what I found: Y");
+    expect(accumulator.result().message).toBe(
+      "I'll search for X. Here's what I found: Y",
+    );
+  });
+
   it("emits unique message event ids for repeated wrapper turns in one session", async () => {
     const transport = new FakeCliTransport((request) => fakeResult(request, "answer"));
     const adapter = createClaudeCodeRuntimeHostAdapter({ transport });

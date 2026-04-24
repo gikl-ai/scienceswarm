@@ -64,7 +64,8 @@ function mergeAssistantMessage(
   if (!current) return next;
   if (next.startsWith(current)) return next;
   if (current.endsWith(next) || current.includes(next)) return current;
-  return `${current}${next}`;
+  const separator = /\s$/.test(current) || /^\s/.test(next) ? "" : "\n";
+  return `${current}${separator}${next}`;
 }
 
 function textFromContentItem(item: unknown): string | null {
