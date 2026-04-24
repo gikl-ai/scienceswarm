@@ -652,6 +652,23 @@ function normalizeWorkspaceRelativePath(value: string): string | null {
   return collapsed;
 }
 
+function buildWorkspaceRawPreviewUrl(
+  filePath: string,
+  projectId: string,
+  { preferPathRoute = false }: { preferPathRoute?: boolean } = {},
+): string {
+  const normalizedPath = normalizeWorkspaceRelativePath(filePath) ?? filePath;
+  if (preferPathRoute && projectId) {
+    const encodedSegments = normalizedPath
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    return `/api/workspace/raw/${encodeURIComponent(projectId)}/${encodedSegments}`;
+  }
+
+  return `/api/workspace?action=raw&file=${encodeURIComponent(normalizedPath)}&projectId=${encodeURIComponent(projectId)}`;
+}
+
 function resolveEmbeddedRawPath(
   embedUrl: string,
   savedFileName: string | undefined,
@@ -882,7 +899,9 @@ function renderContent(content: string, projectId: string) {
       const filePath = part.slice(6).trim();
       const workspaceFilePath = normalizeMediaWorkspacePath(filePath);
       const ext = workspaceFilePath.split(".").pop()?.toLowerCase() || "";
-      const src = `/api/workspace?action=raw&file=${encodeURIComponent(workspaceFilePath)}&projectId=${encodeURIComponent(projectId)}`;
+      const src = buildWorkspaceRawPreviewUrl(workspaceFilePath, projectId, {
+        preferPathRoute: ext === "html" || ext === "htm",
+      });
       if (["png", "jpg", "jpeg", "gif", "webp", "avif"].includes(ext)) {
         return (
           <div key={i} className="my-2">
@@ -967,11 +986,13 @@ function renderContent(content: string, projectId: string) {
               </div>
             );
           }
-          embedUrl = `/api/workspace?action=raw&file=${encodeURIComponent(fileName)}&projectId=${encodeURIComponent(projectId)}`;
+          embedUrl = buildWorkspaceRawPreviewUrl(fileName, projectId, { preferPathRoute: true });
         } else {
           const workspaceHtmlPath = normalizeWorkspaceRelativePath(embedUrl);
           if (workspaceHtmlPath && /\.html?$/i.test(workspaceHtmlPath)) {
-            embedUrl = `/api/workspace?action=raw&file=${encodeURIComponent(workspaceHtmlPath)}&projectId=${encodeURIComponent(projectId)}`;
+            embedUrl = buildWorkspaceRawPreviewUrl(workspaceHtmlPath, projectId, {
+              preferPathRoute: true,
+            });
           } else if (/\.html?$/i.test(embedUrl)) {
             return (
               <div key={i} className="my-2">
@@ -1123,8 +1144,18 @@ export function ChatMessage({
       : copyState === "copied"
         ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
         : copyState === "error"
-          ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rose-200 bg-rose-50 text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
-          : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-slate-50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
+        ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rose-200 bg-rose-50 text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
+        : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-slate-50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
+  const bubbleClass =
+    role === "user"
+      ? `max-w-2xl rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text ${
+          isOpenClawToolsTurn
+            ? "bg-green-600 text-white border-2 border-green-600"
+            : "bg-accent text-white border-2 border-accent"
+        }`
+      : role === "system"
+        ? "w-full max-w-[min(92vw,72rem)] rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text bg-white border-2 border-border text-muted text-xs font-mono"
+        : "w-full max-w-[min(92vw,72rem)] px-0 py-1 text-sm leading-relaxed select-text cursor-text text-foreground";
 
   useEffect(() => () => {
     if (copyFeedbackTimerRef.current !== null) {
@@ -1167,19 +1198,7 @@ export function ChatMessage({
       <div
         data-testid="chat-bubble"
         data-chat-selectable={role === "user" ? "true" : undefined}
-        className={`${
-          role === "user" ? "max-w-2xl" : "w-full max-w-[min(92vw,72rem)]"
-        } rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text ${
-          role === "user"
-            ? isOpenClawToolsTurn
-              ? "bg-green-600 text-white border-2 border-green-600"
-              : "bg-accent text-white border-2 border-accent"
-            : role === "system"
-              ? "bg-white border-2 border-border text-muted text-xs font-mono"
-              : isOpenClawToolsTurn
-                ? "bg-green-50 border-2 border-green-200 text-foreground"
-                : "bg-white border-2 border-border text-foreground"
-        }`}
+        className={bubbleClass}
       >
         {isOpenClawToolsTurn && (
           <div className={`mb-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
