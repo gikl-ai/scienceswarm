@@ -206,8 +206,8 @@ async function extractPdfText(absPath: string): Promise<string> {
 
 function looksBinary(buffer: Buffer): boolean {
   const sample = buffer.subarray(0, Math.min(buffer.length, 4096));
-  if (sample.includes(0)) return true;
   if (sample.length === 0) return false;
+  if (sample.includes(0)) return true;
   let suspicious = 0;
   for (const byte of sample) {
     if (byte < 7 || (byte > 14 && byte < 32)) suspicious += 1;

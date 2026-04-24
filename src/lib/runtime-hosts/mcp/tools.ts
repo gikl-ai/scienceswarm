@@ -90,6 +90,7 @@ export interface RuntimeMcpAuthorizationInput extends RuntimeMcpAuthParams {
   toolName: RuntimeMcpToolName;
   dataIncluded?: RuntimeDataIncluded[];
   tokenSecret?: string;
+  trustedToken?: string;
   now?: () => Date;
 }
 
@@ -173,6 +174,7 @@ export interface RuntimeMcpArtifactImportResult {
 
 export interface RuntimeMcpToolsetDeps {
   tokenSecret?: string;
+  trustedToken?: string;
   now?: () => Date;
   concurrencyManager?: RuntimeConcurrencyManager;
   brainSearch?: (
@@ -240,6 +242,7 @@ export function authorizeRuntimeMcpToolCall(
     toolName: input.toolName,
     now: input.now,
     secret: input.tokenSecret,
+    trustedToken: input.trustedToken,
   });
 
   if (!tokenVerification.ok) {
@@ -295,7 +298,10 @@ async function withRuntimeMcpToolAuthorization<T>(
   input: RuntimeMcpAuthorizationInput,
   operation: (auth: RuntimeMcpAuthorizationResult) => Promise<T>,
 ): Promise<T> {
-  const auth = authorizeRuntimeMcpToolCall(input);
+  const auth = authorizeRuntimeMcpToolCall({
+    ...input,
+    trustedToken: input.trustedToken ?? deps.trustedToken,
+  });
   const concurrencyManager = deps.concurrencyManager;
   const slot = concurrencyManager.requestSlot({
     lane: laneForTool(input.toolName),
