@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import os from "node:os";
+import path from "node:path";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createApiKeyRuntimeHostAdapter, createApiKeyRuntimeHostProfile } from "@/lib/runtime-hosts/adapters/api-key";
 import { createClaudeCodeRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/claude-code";
@@ -31,6 +34,17 @@ import {
   parseClaudeCodeStreamOutput,
 } from "@/lib/runtime-hosts/transport/claude-code-stream";
 import type { SavedLlmRuntimeEnv } from "@/lib/runtime-saved-env";
+
+const noClaudeRuntimeContext = async () => null;
+
+function createTestClaudeCodeRuntimeHostAdapter(
+  options: Parameters<typeof createClaudeCodeRuntimeHostAdapter>[0] = {},
+) {
+  return createClaudeCodeRuntimeHostAdapter({
+    contextBuilder: noClaudeRuntimeContext,
+    ...options,
+  });
+}
 
 class FakeCliTransport implements CliTransport {
   readonly requests: CliTransportRunRequest[] = [];
@@ -109,6 +123,10 @@ function requestFor(
 }
 
 describe("runtime host adapters", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("detects Claude Code health/auth and sends approved turns through the CLI transport", async () => {
     const transport = new FakeCliTransport((request) => {
       if (request.args?.includes("--version")) {
@@ -126,7 +144,7 @@ describe("runtime host adapters", () => {
         ].join("\n"),
       );
     });
-    const adapter = createClaudeCodeRuntimeHostAdapter({
+    const adapter = createTestClaudeCodeRuntimeHostAdapter({
       transport,
       authArgs: ["whoami"],
       sessionIdGenerator: () => "session-1",
@@ -164,7 +182,7 @@ describe("runtime host adapters", () => {
     const transport = new FakeCliTransport((request) =>
       fakeResult(request, "{\"type\":\"result\",\"result\":\"Fresh answer\",\"session_id\":\"fresh-claude-session\"}")
     );
-    const adapter = createClaudeCodeRuntimeHostAdapter({
+    const adapter = createTestClaudeCodeRuntimeHostAdapter({
       transport,
       sessionIdGenerator: () => "wrapper-session",
     });
@@ -184,7 +202,7 @@ describe("runtime host adapters", () => {
     const transport = new FakeCliTransport((request) =>
       fakeResult(request, "{\"type\":\"result\",\"result\":\"Wrapper answer\",\"session_id\":\"native-after-wrapper\"}")
     );
-    const adapter = createClaudeCodeRuntimeHostAdapter({
+    const adapter = createTestClaudeCodeRuntimeHostAdapter({
       transport,
       sessionIdGenerator: () => "wrapper-session",
     });
@@ -204,7 +222,7 @@ describe("runtime host adapters", () => {
     const transport = new FakeCliTransport((request) =>
       fakeResult(request, "{\"type\":\"result\",\"result\":\"Resumed answer\",\"session_id\":\"claude-native-existing\"}")
     );
-    const adapter = createClaudeCodeRuntimeHostAdapter({
+    const adapter = createTestClaudeCodeRuntimeHostAdapter({
       transport,
       sessionIdGenerator: () => "wrapper-session",
     });
@@ -236,7 +254,7 @@ describe("runtime host adapters", () => {
         ].join("\n"),
       )
     );
-    const adapter = createClaudeCodeRuntimeHostAdapter({
+    const adapter = createTestClaudeCodeRuntimeHostAdapter({
       transport,
       sessionIdGenerator: () => "wrapper-session",
     });
@@ -266,6 +284,99 @@ describe("runtime host adapters", () => {
       sessionId: "rt-session-task",
     });
     expect(transport.requests.at(-1)?.args).not.toContain("--resume");
+  });
+
+  it("launches Claude Code from a generated ScienceSwarm session capsule", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-claude-context-"));
+    try {
+      const dataRoot = path.join(tempRoot, "data");
+      const brainRoot = path.join(dataRoot, "brain");
+      const projectRoot = path.join(dataRoot, "projects", "project-alpha");
+      const sessionRoot = path.join(tempRoot, "sessions");
+      await mkdir(projectRoot, { recursive: true });
+      await mkdir(brainRoot, { recursive: true });
+      await writeFile(
+        path.join(projectRoot, "SCIENCESWARM.md"),
+        [
+          "---",
+          "allowedTools:",
+          "  - brain-read",
+          "---",
+          "# Project Alpha",
+          "",
+          "Use narrow gbrain reads.",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeFile(
+        path.join(brainRoot, "BRAIN.md"),
+        "# BRAIN.md\n\n## Preferences\nserendipity_rate: 0.1\n",
+        "utf8",
+      );
+      vi.stubEnv("SCIENCESWARM_DIR", dataRoot);
+      vi.stubEnv("BRAIN_ROOT", brainRoot);
+
+      const transport = new FakeCliTransport((request) =>
+        fakeResult(request, "{\"type\":\"result\",\"result\":\"Capsule answer\",\"session_id\":\"claude-native-capsule\"}")
+      );
+      const adapter = createClaudeCodeRuntimeHostAdapter({
+        transport,
+        sessionRoot,
+        repoRoot: process.cwd(),
+        env: {
+          ...process.env,
+          SCIENCESWARM_DIR: dataRoot,
+          BRAIN_ROOT: brainRoot,
+        },
+      });
+
+      await expect(
+        adapter.sendTurn({
+          ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+          runtimeSessionId: "rt-session-claude",
+          conversationId: null,
+        }),
+      ).resolves.toMatchObject({
+        sessionId: "claude-native-capsule",
+        message: "Capsule answer",
+      });
+
+      const launch = transport.requests.at(-1);
+      expect(launch?.cwd).toBe(path.join(sessionRoot, "project-alpha", "rt-session-claude"));
+      expect(launch?.args).toEqual(expect.arrayContaining([
+        "--add-dir",
+        projectRoot,
+        "--strict-mcp-config",
+      ]));
+      const appendSystemPromptIndex = launch?.args?.indexOf("--append-system-prompt") ?? -1;
+      expect(appendSystemPromptIndex).toBeGreaterThanOrEqual(0);
+      const appendedPrompt = launch?.args?.[appendSystemPromptIndex + 1] ?? "";
+      expect(appendedPrompt).toContain("Current project: `project-alpha`.");
+      expect(appendedPrompt).toContain("Use narrow gbrain reads.");
+      expect(appendedPrompt).toContain("runtime-scoped MCP server named `scienceswarm`");
+
+      const mcpConfigIndex = launch?.args?.indexOf("--mcp-config") ?? -1;
+      expect(mcpConfigIndex).toBeGreaterThanOrEqual(0);
+      const mcpConfigPath = launch?.args?.[mcpConfigIndex + 1] ?? "";
+      const mcpConfig = JSON.parse(await readFile(mcpConfigPath, "utf8")) as {
+        mcpServers: { scienceswarm: { command: string; args: string[]; env: Record<string, string> } };
+      };
+      expect(mcpConfig.mcpServers.scienceswarm.command).toBe("/bin/zsh");
+      expect(mcpConfig.mcpServers.scienceswarm.args.join(" ")).toContain(
+        "src/lib/runtime-hosts/mcp/runtime-stdio-server.ts",
+      );
+      expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_DIR).toBe(dataRoot);
+      expect(mcpConfig.mcpServers.scienceswarm.env.BRAIN_ROOT).toBe(brainRoot);
+      expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET)
+        .toEqual(expect.any(String));
+
+      await expect(readFile(path.join(launch?.cwd ?? "", "CLAUDE.md"), "utf8"))
+        .resolves.toContain("Read `SCIENCESWARM.md` first");
+      await expect(readFile(path.join(launch?.cwd ?? "", "SCIENCESWARM.md"), "utf8"))
+        .resolves.toContain("ScienceSwarm is a local-first research workspace");
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it("captures only top-level Claude Code session ids for native resume", () => {
@@ -387,7 +498,7 @@ describe("runtime host adapters", () => {
 
   it("emits unique message event ids for repeated wrapper turns in one session", async () => {
     const transport = new FakeCliTransport((request) => fakeResult(request, "answer"));
-    const adapter = createClaudeCodeRuntimeHostAdapter({ transport });
+    const adapter = createTestClaudeCodeRuntimeHostAdapter({ transport });
     const request = requestFor(requireRuntimeHostProfile("claude-code"), "chat");
 
     const first = await adapter.sendTurn(request);
@@ -459,7 +570,7 @@ describe("runtime host adapters", () => {
       SCIENCESWARM_DIR: "/tmp/scienceswarm",
     };
 
-    await createClaudeCodeRuntimeHostAdapter({ transport, env }).health();
+    await createTestClaudeCodeRuntimeHostAdapter({ transport, env }).health();
     await createCodexRuntimeHostAdapter({ transport, env }).sendTurn(
       requestFor(requireRuntimeHostProfile("codex"), "chat"),
     );
