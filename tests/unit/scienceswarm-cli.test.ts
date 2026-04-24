@@ -223,6 +223,78 @@ exit 0
     );
   });
 
+  it("prints open help without loading runtime env", () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-open-help-"));
+    const binRoot = path.join(tmpRoot, "bin");
+    const npxLogPath = path.join(tmpRoot, "npx.log");
+    fs.mkdirSync(binRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(binRoot, "npx"),
+      `#!/usr/bin/env bash
+printf '%s\\n' "$*" > ${JSON.stringify(npxLogPath)}
+exit 42
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = runCli(["open", "--help"], {
+      SCIENCESWARM_DIR: tmpRoot,
+      FRONTEND_PORT: "43990",
+      HOME: tmpRoot,
+      PATH: `${binRoot}:${process.env.PATH ?? ""}`,
+    });
+
+    expect(output).toContain("Usage: scienceswarm open");
+    expect(output).toContain("--browser <browser>");
+    expect(fs.existsSync(npxLogPath)).toBe(false);
+  });
+
+  it("uses localhost when opening a WSL browser from Windows", () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scienceswarm-cli-wsl-open-"));
+    const binRoot = path.join(tmpRoot, "bin");
+    const wslviewLogPath = path.join(tmpRoot, "wslview.log");
+    fs.mkdirSync(binRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(binRoot, "curl"),
+      `#!/usr/bin/env bash
+if [ "$1" = "-fsS" ] && [ "$2" = "--max-time" ] && [ "$3" = "2" ] && [ "$4" = "http://127.0.0.1:43989/api/health" ]; then
+  exit 0
+fi
+exit 1
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+    for (const command of ["open", "xdg-open"]) {
+      fs.writeFileSync(
+        path.join(binRoot, command),
+        `#!/usr/bin/env bash
+exit 1
+`,
+        { encoding: "utf8", mode: 0o755 },
+      );
+    }
+    fs.writeFileSync(
+      path.join(binRoot, "wslview"),
+      `#!/usr/bin/env bash
+printf '%s\\n' "$*" > ${JSON.stringify(wslviewLogPath)}
+exit 0
+`,
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = runCli(["open"], {
+      SCIENCESWARM_DIR: tmpRoot,
+      FRONTEND_PORT: "43989",
+      HOME: tmpRoot,
+      PATH: `${binRoot}:/bin:/usr/bin`,
+    });
+
+    expect(output).toContain("Chrome was not available; trying the system default browser.");
+    expect(fs.readFileSync(wslviewLogPath, "utf8").trim()).toBe(
+      "http://localhost:43989/dashboard/project",
+    );
+  });
+
   it("documents restart auto-open controls without starting the foreground server", () => {
     const output = runCli(["restart", "--help"]);
 
@@ -237,10 +309,12 @@ exit 0
     const startScript = fs.readFileSync(path.join(repoRoot, "start.sh"), "utf8");
 
     expect(startScript).toContain("auto_open_when_frontend_ready()");
+    expect(startScript).toContain("frontend_probe_host()");
     expect(startScript).toContain("probe_frontend_health");
     expect(startScript).toContain("./scienceswarm open");
     expect(startScript).toContain("start_auto_open_watcher");
     expect(startScript).toContain("SCIENCESWARM_NO_OPEN=true");
+    expect(startScript).toMatch(/frontend_health_url\(\)[\s\S]*frontend_probe_host/);
   });
 
   it("falls back to http probing when https mode is enabled but the https probe fails", () => {

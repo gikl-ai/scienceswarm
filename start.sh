@@ -348,6 +348,20 @@ frontend_browser_host() {
   esac
 }
 
+frontend_probe_host() {
+  case "${FRONTEND_HOST:-127.0.0.1}" in
+    ""|localhost|0.0.0.0|"::")
+      printf '%s\n' "127.0.0.1"
+      ;;
+    "::1"|"[::1]")
+      printf '%s\n' "[::1]"
+      ;;
+    *)
+      printf '%s\n' "$FRONTEND_HOST"
+      ;;
+  esac
+}
+
 FRONTEND_BROWSER_HOST="$(frontend_browser_host)"
 FRONTEND_DASHBOARD_URL="${FRONTEND_SCHEME}://${FRONTEND_BROWSER_HOST}:${FRONTEND_PORT}/dashboard/project"
 FRONTEND_SETUP_URL="${FRONTEND_SCHEME}://${FRONTEND_BROWSER_HOST}:${FRONTEND_PORT}/setup"
@@ -408,7 +422,7 @@ print_browser_launch_guide() {
 }
 
 frontend_health_url() {
-  printf '%s://%s:%s/api/health\n' "$FRONTEND_SCHEME" "$FRONTEND_BROWSER_HOST" "$FRONTEND_PORT"
+  printf '%s://%s:%s/api/health\n' "$FRONTEND_SCHEME" "$(frontend_probe_host)" "$FRONTEND_PORT"
 }
 
 probe_frontend_health() {
@@ -494,8 +508,6 @@ if [ -n "$EXISTING_LAUNCHER_PID" ] && [ "$EXISTING_LAUNCHER_PID" != "$$" ]; then
 fi
 write_launcher_pid
 
-print_browser_launch_guide "How to use this local app after startup:"
-echo ""
 echo "Resolved runtime:"
 echo "  ScienceSwarm data root: $DATA_ROOT"
 [ -n "${LAUNCHER_PID_FILE:-}" ] && echo "  Launcher pid file: $LAUNCHER_PID_FILE"

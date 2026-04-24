@@ -370,6 +370,19 @@ open_with_browser_app() {
   return 1
 }
 
+wsl_browser_url() {
+  local url="$1"
+
+  case "$url" in
+    http://127.0.0.1:*|https://127.0.0.1:*)
+      printf '%s\n' "${url/127.0.0.1/localhost}"
+      ;;
+    *)
+      printf '%s\n' "$url"
+      ;;
+  esac
+}
+
 open_with_system_default() {
   local url="$1"
 
@@ -379,7 +392,7 @@ open_with_system_default() {
   if command -v xdg-open >/dev/null 2>&1 && xdg-open "$url" >/dev/null 2>&1; then
     return 0
   fi
-  if command -v wslview >/dev/null 2>&1 && wslview "$url" >/dev/null 2>&1; then
+  if command -v wslview >/dev/null 2>&1 && wslview "$(wsl_browser_url "$url")" >/dev/null 2>&1; then
     return 0
   fi
 
@@ -545,10 +558,25 @@ cmd_start() {
   exec ./start.sh "$@"
 }
 
+print_open_usage() {
+  note "Usage: scienceswarm open [browser] [dashboard|setup|/path]"
+  note "       scienceswarm open [dashboard|setup|/path] --browser <browser>"
+  note "Examples: scienceswarm open, scienceswarm open safari setup, scienceswarm open --browser firefox /dashboard/project"
+}
+
 cmd_open() {
   local requested_browser=""
   local target_path=""
   local url=""
+
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help)
+        print_open_usage
+        return 0
+        ;;
+    esac
+  done
 
   load_repo_env
 
@@ -563,9 +591,7 @@ cmd_open() {
         requested_browser="${1#--browser=}"
         ;;
       -h|--help)
-        note "Usage: scienceswarm open [browser] [dashboard|setup|/path]"
-        note "       scienceswarm open [dashboard|setup|/path] --browser <browser>"
-        note "Examples: scienceswarm open, scienceswarm open safari setup, scienceswarm open --browser firefox /dashboard/project"
+        print_open_usage
         return 0
         ;;
       *)

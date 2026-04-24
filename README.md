@@ -121,7 +121,7 @@ Important:
   scanning, imports, and file watching
 - Do not point `SCIENCESWARM_DIR` or `BRAIN_ROOT` at mounted Windows drives for
   normal use
-- After `./scienceswarm start` in WSL, open <http://127.0.0.1:3001/setup> from
+- After `./scienceswarm start` in WSL, open <http://localhost:3001/setup> from
   your Windows browser
 
 ### First Use

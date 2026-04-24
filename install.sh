@@ -135,6 +135,12 @@ if install_scienceswarm_cli; then
 fi
 
 FRONTEND_PORT="${FRONTEND_PORT:-3001}"
+FRONTEND_SCHEME="http"
+case "$(printf '%s' "${FRONTEND_USE_HTTPS:-false}" | tr '[:upper:]' '[:lower:]')" in
+  true|1|yes|on)
+    FRONTEND_SCHEME="https"
+    ;;
+esac
 
 echo ""
 echo -e "${GREEN}══════════════════════════════════════${NC}"
@@ -147,7 +153,7 @@ if [ "$CLI_SHIM_INSTALLED" = "true" ] && cli_bin_on_path; then
 fi
 echo "    The browser opens automatically when the frontend is ready."
 echo "    To open setup directly: ./scienceswarm start --open setup"
-echo "    Manual setup URL: http://127.0.0.1:${FRONTEND_PORT}/setup"
+echo "    Manual setup URL: ${FRONTEND_SCHEME}://127.0.0.1:${FRONTEND_PORT}/setup"
 echo ""
 if [ "$CLI_SHIM_INSTALLED" = "true" ] && cli_bin_on_path; then
   echo "  CLI installed at $CLI_BIN_DIR/scienceswarm"
