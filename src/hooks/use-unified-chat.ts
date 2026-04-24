@@ -1025,6 +1025,15 @@ const PERSISTABLE_NOISE_PREFIXES = [
   "__FILE_STATIC__:",
 ];
 
+function isLowSignalLifecycleEntryText(text: string): boolean {
+  return (
+    text === "Turn started" ||
+    text === "Turn finished" ||
+    text === "Status: running" ||
+    text === "Status: idle"
+  );
+}
+
 function appendActivityLog(
   existing: string[] | undefined,
   nextLines: string[],
@@ -1033,6 +1042,7 @@ function appendActivityLog(
   for (const rawLine of nextLines) {
     const line = normalizeProgressEntryText(rawLine);
     if (!line) continue;
+    if (isLowSignalLifecycleEntryText(line)) continue;
     if (merged.at(-1) === line) continue;
     merged.push(line);
   }
@@ -1166,7 +1176,7 @@ function shouldSuppressProgressEntry(
     return false;
   }
 
-  if (next.text === "Turn started" || next.text === "Turn finished") {
+  if (isLowSignalLifecycleEntryText(next.text)) {
     return true;
   }
 
