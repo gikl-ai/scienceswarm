@@ -189,6 +189,29 @@ describe("ChatMessage", () => {
     expect(screen.getByText("const ready = true;").closest("pre")).toHaveClass("border-slate-300");
   });
 
+  it("adds calmer section rhythm between assistant headings, lists, and galleries", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "# Experiment summary\n\n" +
+          "Intro paragraph.\n\n" +
+          "## Follow-up\n\n" +
+          "- Review the run log\n\n" +
+          "MEDIA:docs/chart-a.png\n" +
+          "MEDIA:docs/chart-b.png"
+        }
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Experiment summary" })).toHaveClass("mb-5");
+    expect(screen.getByRole("heading", { level: 2, name: "Follow-up" })).toHaveClass("mt-8");
+    expect(screen.getByRole("list")).toHaveClass("mb-5");
+    expect(screen.getByTestId("assistant-media-gallery")).toHaveClass("my-6");
+  });
+
   it("keeps user turns inside the accent bubble", () => {
     render(
       <ChatMessage
