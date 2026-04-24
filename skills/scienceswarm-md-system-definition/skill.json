@@ -1,0 +1,24 @@
+{
+  "slug": "scienceswarm-md-system-definition",
+  "name": "ScienceSwarm MD System Definition",
+  "description": "Define the exact molecular system for an MD study, including entities, structures, states, cofactors, protonation, membranes, ions, and preparation risks.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "molecular-dynamics",
+    "system-definition"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Turns an MD study goal and evidence packet into a precise molecular system definition before parameter planning.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-24T00:00:00.000Z",
+  "updatedAt": "2026-04-24T00:00:00.000Z"
+}

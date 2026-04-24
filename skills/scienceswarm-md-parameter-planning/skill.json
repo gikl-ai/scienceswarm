@@ -1,0 +1,24 @@
+{
+  "slug": "scienceswarm-md-parameter-planning",
+  "name": "ScienceSwarm MD Parameter Planning",
+  "description": "Recommend MD parameters with rationale, confidence, assumptions, alternatives, expert-sensitivity labels, and risks if chosen incorrectly.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "molecular-dynamics",
+    "parameters"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Creates the Parameter Decision Ledger for force fields, solvent, ions, box, timestep, ensembles, equilibration, runtime, restraints, sampling, and analysis choices.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-24T00:00:00.000Z",
+  "updatedAt": "2026-04-24T00:00:00.000Z"
+}

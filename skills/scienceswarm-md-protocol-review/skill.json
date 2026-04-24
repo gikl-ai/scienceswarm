@@ -1,0 +1,24 @@
+{
+  "slug": "scienceswarm-md-protocol-review",
+  "name": "ScienceSwarm MD Protocol Review",
+  "description": "Review an MD setup before execution and flag blocking assumptions, unsafe defaults, missing controls, reproducibility gaps, and overclaim risks.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "molecular-dynamics",
+    "review"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Quality gate for the MD pipeline: approve, approve with caveats, or block execution based on scientific and reproducibility risks.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-24T00:00:00.000Z",
+  "updatedAt": "2026-04-24T00:00:00.000Z"
+}

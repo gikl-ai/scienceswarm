@@ -3,10 +3,15 @@ import { listOpenClawSkills } from "@/lib/openclaw/skill-catalog";
 import { listInstalledMarketPlugins } from "@/lib/plugins/market";
 
 export async function listScienceSwarmOpenClawSlashCommandSkills(): Promise<OpenClawSlashCommandSkill[]> {
-  const [repoSkills, marketPlugins] = await Promise.all([
+  const [repoSkillsResult, marketPluginsResult] = await Promise.allSettled([
     listOpenClawSkills(),
     listInstalledMarketPlugins(),
   ]);
+
+  const repoSkills =
+    repoSkillsResult.status === "fulfilled" ? repoSkillsResult.value : [];
+  const marketPlugins =
+    marketPluginsResult.status === "fulfilled" ? marketPluginsResult.value : [];
 
   const merged = new Map<string, OpenClawSlashCommandSkill>();
 
@@ -17,6 +22,9 @@ export async function listScienceSwarmOpenClawSlashCommandSkills(): Promise<Open
       description: skill.description,
       runtime: skill.runtime,
       emoji: skill.emoji,
+      aliases: readStringArray(
+        (skill as { frontmatter?: { aliases?: unknown } }).frontmatter?.aliases,
+      ),
     });
   }
 
@@ -39,4 +47,11 @@ export async function listScienceSwarmOpenClawSlashCommandSkills(): Promise<Open
   }
 
   return [...merged.values()].sort((left, right) => left.slug.localeCompare(right.slug));
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string =>
+    typeof entry === "string" && entry.trim().length > 0
+  );
 }

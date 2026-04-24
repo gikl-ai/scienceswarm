@@ -4,6 +4,7 @@ export interface OpenClawSlashCommandSkill {
   description: string;
   runtime: string | null;
   emoji: string | null;
+  aliases?: string[];
 }
 
 export type OpenClawSlashCommandKind = "builtin" | "skill";
@@ -75,26 +76,29 @@ export function buildOpenClawSlashCommands(
       continue;
     }
 
-    const preferred = preferredCommandName(skill).toLowerCase();
-    const fallback = skill.slug.toLowerCase();
-    const commandName =
-      isValidSlashCommandName(preferred) && !taken.has(preferred)
-        ? preferred
-        : fallback;
+    const commandCandidates = [
+      ...(skill.aliases ?? []),
+      preferredCommandName(skill),
+      skill.slug,
+    ];
 
-    if (!isValidSlashCommandName(commandName) || taken.has(commandName)) {
-      continue;
+    for (const candidate of commandCandidates) {
+      const commandName = candidate.toLowerCase();
+      if (!isValidSlashCommandName(commandName) || taken.has(commandName)) {
+        continue;
+      }
+
+      commands.push({
+        kind: "skill",
+        command: commandName,
+        description: skill.description,
+        argumentHint: skillArgumentHint(skill),
+        emoji: skill.emoji,
+        skillSlug: skill.slug,
+      });
+      taken.add(commandName);
+      break;
     }
-
-    commands.push({
-      kind: "skill",
-      command: commandName,
-      description: skill.description,
-      argumentHint: skillArgumentHint(skill),
-      emoji: skill.emoji,
-      skillSlug: skill.slug,
-    });
-    taken.add(commandName);
   }
 
   return commands;

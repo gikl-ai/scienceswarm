@@ -8133,13 +8133,26 @@ async function handleExplicitOpenClawSlashCommand(params: {
   }
 
   const {
-    gatewayHealthCheck: openClawHealthCheck,
+    gatewayHealthCheck: openClawGatewayHealthCheck,
+    healthCheck: openClawLegacyHealthCheck,
     sendOpenClawChatMessage: sendToOpenClaw,
   } = await import("@/lib/openclaw");
-  const openClawStatus = await openClawHealthCheck().catch(() => ({
-    status: "disconnected" as const,
-  }));
-  if (openClawStatus.status !== "connected") {
+  const openClawStatus = await (async () => {
+    if (typeof openClawGatewayHealthCheck === "function") {
+      const gatewayStatus = await openClawGatewayHealthCheck().catch(() => null);
+      if (gatewayStatus?.status === "connected") {
+        return { status: "connected" as const };
+      }
+    }
+
+    if (typeof openClawLegacyHealthCheck !== "function") {
+      return null;
+    }
+
+    return openClawLegacyHealthCheck();
+  })().catch(() => null);
+
+  if (!openClawStatus || openClawStatus.status !== "connected") {
     return Response.json(
       {
         error: `ScienceSwarm slash command \`/${params.parsedSlashCommand.command.command}\` requires OpenClaw, but OpenClaw is not reachable. Start OpenClaw in Settings before using installed skills.`,

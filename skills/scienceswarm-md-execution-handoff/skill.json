@@ -1,0 +1,24 @@
+{
+  "slug": "scienceswarm-md-execution-handoff",
+  "name": "ScienceSwarm MD Execution Handoff",
+  "description": "Create a Claude Code or OpenHands-ready execution plan for preparing, running, validating, and collecting artifacts for an MD study without inventing scientific choices.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "molecular-dynamics",
+    "execution"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Bridges scientific planning to local execution by producing a conservative MD Execution Handoff Plan for coding agents.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-24T00:00:00.000Z",
+  "updatedAt": "2026-04-24T00:00:00.000Z"
+}
