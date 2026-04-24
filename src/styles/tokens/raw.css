@@ -4,9 +4,7 @@
  * Named color scales ONLY. Application code never references these
  * directly; semantic.css (Layer 1) maps them to roles.
  *
- * Internal codename: "Slate v2." Public-facing name: "ScienceSwarm
- * design system v1." Do not use the internal codename in any file
- * that ships to the public scienceswarm repository.
+ * ScienceSwarm design system v1.
  * ────────────────────────────────────────────────────────────────
  */
 

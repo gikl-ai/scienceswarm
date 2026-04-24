@@ -38,7 +38,7 @@ const BANNED_TAILWIND_COLORS = new Set([
   "rose", "slate", "gray", "zinc", "neutral", "stone",
 ]);
 
-const RAW_HEX = /#[0-9a-fA-F]{3,8}\b/;
+const RAW_HEX = /#[0-9a-fA-F]{3,8}(?![0-9a-fA-F])/;
 const TAILWIND_COLOR = /\b(bg|text|border|ring|divide|fill|stroke|placeholder|outline|decoration|shadow|from|via|to)-([a-z]+)-(50|[1-9]00)\b/;
 const BANNED_FONTS = /\b(Geist|Inter|Roboto|Arial|--font-geist)\b/;
 const SHADCN_IMPORT = /from\s+["']@\/components\/ui\/([a-z0-9-]+)["']/;
@@ -47,6 +47,7 @@ const findings: Finding[] = [];
 
 for (const f of gitLsFiles()) {
   if (f.startsWith("src/styles/tokens/")) continue;
+  if (f === "scripts/check-design-drift.ts") continue;  // self-match on regex literals
   if (f.startsWith("src/components/ui/") && !f.includes("/ss-")) {
     // raw shadcn wrappers are allowed to reference tailwind/hex colors
     // internally; only check for banned fonts there.
