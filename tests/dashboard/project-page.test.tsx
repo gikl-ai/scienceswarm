@@ -260,6 +260,21 @@ describe("Project dashboard smoke test", () => {
     expect(screen.queryByText("Low-Confidence Project Read")).not.toBeInTheDocument();
   });
 
+  it("renders the chat on a centered white canvas surface", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    const canvas = await screen.findByTestId("project-chat-canvas");
+    const column = await screen.findByTestId("project-chat-column");
+
+    expect(canvas).toHaveClass("bg-white");
+    expect(canvas).toHaveClass("px-6");
+    expect(column).toHaveClass("max-w-[60rem]");
+    expect(column).toHaveClass("gap-6");
+  });
+
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
     const fetchMock = stubDashboardFetch({
       latestPaperLibraryScan: {

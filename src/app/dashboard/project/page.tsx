@@ -4389,8 +4389,8 @@ function ProjectPageContent() {
             )}
 
             {paneMode !== "visualizer-only" && (
-              <div className="flex min-h-0 flex-1 flex-col bg-surface/30">
-                <div className="flex shrink-0 items-center justify-between border-b border-border bg-white px-3 py-2">
+              <div className="flex min-h-0 flex-1 flex-col bg-white">
+                <div className="flex shrink-0 items-center justify-between border-b border-border/70 bg-white/95 px-4 py-3 backdrop-blur-sm">
                   <div className="flex items-center gap-2 text-xs font-semibold text-muted">
                     <ChatCircleText size={15} />
                     Chat
@@ -4417,7 +4417,14 @@ function ProjectPageContent() {
                     </button>
                   </div>
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-4 bg-surface/30 select-text">
+                <div
+                  data-testid="project-chat-canvas"
+                  className="min-h-0 flex-1 overflow-y-auto bg-white px-6 py-8 select-text"
+                >
+                  <div
+                    data-testid="project-chat-column"
+                    className="mx-auto flex w-full max-w-[60rem] flex-col gap-6"
+                  >
                   {!activeProjectSlug && messages.length === 0 && (
                     <section className="rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">
                       <div className="flex flex-col items-center text-center">
@@ -4728,26 +4735,30 @@ function ProjectPageContent() {
                     );
                   })}
                   <div ref={messagesEndRef} />
+                  </div>
                 </div>
 
                 {(error || voiceError) && (
-                  <div className="px-6 py-2 bg-red-50 border-t-2 border-red-200 text-red-700 text-sm flex items-center justify-between">
-                    <span>
-                      <strong>Error:</strong> {error || voiceError}
-                    </span>
-                    <button
-                      onClick={() => {
-                        clearError();
-                        clearVoiceError();
-                      }}
-                      className="text-red-400 hover:text-red-600 ml-4"
-                    >
-                      x
-                    </button>
+                  <div className="border-t border-red-200 bg-red-50/95 px-6 py-3 text-red-700 backdrop-blur-sm">
+                    <div className="mx-auto flex w-full max-w-[60rem] items-center justify-between gap-4 text-sm">
+                      <span>
+                        <strong>Error:</strong> {error || voiceError}
+                      </span>
+                      <button
+                        onClick={() => {
+                          clearError();
+                          clearVoiceError();
+                        }}
+                        className="ml-4 text-red-400 hover:text-red-600"
+                      >
+                        x
+                      </button>
+                    </div>
                   </div>
                 )}
 
-                <div className="p-4 border-t-2 border-border bg-white flex-shrink-0">
+                <div className="flex-shrink-0 border-t border-border/70 bg-white/95 px-6 py-4 backdrop-blur-sm">
+                  <div className="mx-auto w-full max-w-[60rem]">
                   {chatContextItems.length > 0 && (
                     <div className="mb-2 flex items-center justify-between gap-3 text-xs">
                       <div className="flex min-w-0 items-center gap-2">
@@ -4889,6 +4900,7 @@ function ProjectPageContent() {
                     >
                       Send
                     </button>
+                  </div>
                   </div>
                 </div>
                 <CompareResults result={runtimeCompareResult} />
