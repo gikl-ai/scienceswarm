@@ -79,6 +79,31 @@ function resolveGbrainSourceSpecifier(relativePathFromCore) {
   ).href;
 }
 
+function isRecoverableEngineFactoryImportError(error) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = "code" in error ? error.code : undefined;
+  const message = "message" in error ? String(error.message) : "";
+  return (
+    code === "ERR_PACKAGE_PATH_NOT_EXPORTED"
+    || code === "ERR_MODULE_NOT_FOUND"
+    || code === "MODULE_NOT_FOUND"
+    || (
+      (
+        message.includes("gbrain/engine-factory")
+        || message.includes("./engine-factory")
+      )
+      && (
+        message.includes("is not exported under the conditions")
+        || message.includes("Package subpath './engine-factory' is not defined by \"exports\"")
+        || message.includes("Failed to resolve import")
+      )
+    )
+  );
+}
+
 async function loadCreateEngine() {
   try {
     const engineFactorySpecifier = "gbrain/engine-factory";
@@ -86,8 +111,11 @@ async function loadCreateEngine() {
     if (typeof engineFactoryModule.createEngine === "function") {
       return engineFactoryModule.createEngine;
     }
-  } catch {
+  } catch (error) {
     // Older installed gbrain builds do not export this subpath yet.
+    if (!isRecoverableEngineFactoryImportError(error)) {
+      throw error;
+    }
   }
 
   const fallbackEngineFactorySpecifier = resolveGbrainSourceSpecifier(
@@ -96,6 +124,11 @@ async function loadCreateEngine() {
   const fallbackEngineFactoryModule = await import(
     /* @vite-ignore */ fallbackEngineFactorySpecifier
   );
+  if (typeof fallbackEngineFactoryModule.createEngine !== "function") {
+    throw new Error(
+      `Installed gbrain fallback module "${fallbackEngineFactorySpecifier}" does not export createEngine.`,
+    );
+  }
   return fallbackEngineFactoryModule.createEngine;
 }
 
