@@ -273,7 +273,7 @@ export default function VoiceTestPage() {
           {voiceState === "speaking" && (
             <button
               onClick={stopPlayback}
-              className="px-4 py-2 rounded-md border-none bg-accent text-strong cursor-pointer font-semibold"
+              className="px-4 py-2 rounded-md border-none bg-accent text-white cursor-pointer font-semibold"
             >
               Stop Playback
             </button>

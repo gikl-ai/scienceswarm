@@ -76,6 +76,16 @@ const PALETTES: Record<ChartPalette, string[]> = {
   ],
 };
 
+// Hex equivalents of each palette's first color (mirrors --chart-*-1 in
+// semantic.css). Used by renderHeatmap, which numerically interpolates
+// between two hex values and cannot accept a CSS custom-property string.
+const PALETTE_PRIMARY_HEX: Record<ChartPalette, string> = {
+  ocean:   "#0891b2",
+  emerald: "#059669",
+  sunset:  "#f97316",
+  mono:    "#334155",
+};
+
 const TEXT_COLOR = "var(--chart-text)";
 const GRID_COLOR = "var(--chart-grid)";
 const BG_COLOR = "var(--chart-bg)";
@@ -509,7 +519,11 @@ function renderHeatmap(spec: ChartSpec): string {
       const key = `${xl}::${yl}`;
       const val = grid.get(key) ?? 0;
       const t = maxV > minV ? (val - minV) / (maxV - minV) : 0;
-      const color = interpolateColor("var(--surface-raised)", colors[0], t);
+      // interpolateColor parses hex literals — both inputs must be hex.
+      // Background matches --ss-mist-50 (surface-raised in light mode);
+      // endHex mirrors --chart-*-1 for the active palette.
+      const endHex = PALETTE_PRIMARY_HEX[spec.palette ?? "ocean"];
+      const color = interpolateColor("#fafbfc", endHex, t);
 
       parts.push(`<rect x="${xi * cellW}" y="${yi * cellH}" width="${cellW - 1}" height="${cellH - 1}" fill="${color}" rx="2"/>`);
       if (cellW > 25 && cellH > 16) {
@@ -528,7 +542,17 @@ function renderHeatmap(spec: ChartSpec): string {
   return svgWrap(d, parts.join("\n"), spec.title);
 }
 
+const HEX_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
+
 function interpolateColor(startHex: string, endHex: string, t: number): string {
+  if (!HEX_RE.test(startHex) || !HEX_RE.test(endHex)) {
+    // Guard against CSS variables or rgb() strings — parseInt would
+    // silently yield NaN and the chart would render black. Fail loudly
+    // so regressions surface in tests instead of at runtime.
+    throw new Error(
+      `interpolateColor expects hex literals (#rrggbb or #rgb); got "${startHex}", "${endHex}"`,
+    );
+  }
   const clamped = Math.max(0, Math.min(1, t));
   const start = parseInt(startHex.slice(1), 16);
   const end = parseInt(endHex.slice(1), 16);
@@ -574,6 +598,17 @@ export function generateChartSVG(spec: ChartSpec): string {
 
 export function generateChartHTML(specs: ChartSpec[]): string {
   const charts = specs.map((spec) => generateChartSVG(spec));
+  // Standalone export — the SVGs reference var(--chart-*) tokens, so the
+  // chart palette tokens are inlined into this document's root to keep the
+  // exported file self-contained. Layout uses plain inline CSS because no
+  // Tailwind runtime is available here.
+  const inlineTokens = `:root{--chart-ocean-1:#0891b2;--chart-ocean-2:#0e7490;--chart-ocean-3:#155e75;--chart-ocean-4:#06b6d4;--chart-ocean-5:#22d3ee;--chart-ocean-6:#67e8f9;--chart-ocean-7:#164e63;--chart-ocean-8:#0284c7;--chart-ocean-9:#0369a1;--chart-ocean-10:#7c3aed;--chart-emerald-1:#059669;--chart-emerald-2:#047857;--chart-emerald-3:#10b981;--chart-emerald-4:#34d399;--chart-emerald-5:#6ee7b7;--chart-emerald-6:#065f46;--chart-emerald-7:#22c55e;--chart-emerald-8:#16a34a;--chart-emerald-9:#4ade80;--chart-emerald-10:#86efac;--chart-sunset-1:#f97316;--chart-sunset-2:#ea580c;--chart-sunset-3:#dc2626;--chart-sunset-4:#fb7185;--chart-sunset-5:#f59e0b;--chart-sunset-6:#f43f5e;--chart-sunset-7:#7c2d12;--chart-sunset-8:#c2410c;--chart-sunset-9:#e11d48;--chart-sunset-10:#fdba74;--chart-mono-1:#334155;--chart-mono-2:#475569;--chart-mono-3:#64748b;--chart-mono-4:#94a3b8;--chart-mono-5:#0f172a;--chart-mono-6:#1e293b;--chart-mono-7:#475569;--chart-mono-8:#64748b;--chart-mono-9:#94a3b8;--chart-mono-10:#cbd5e1;--chart-text:#1e293b;--chart-grid:#e2e8f0;--chart-bg:#ffffff;--text-strong:#14171c;--text-dim:#70757d;}`;
+  const pageStyles =
+    "body{font-family:sans-serif;background:#f9fafb;padding:2rem;margin:0;}" +
+    ".ss-chart-grid{display:grid;grid-template-columns:1fr;gap:1.5rem;max-width:1400px;margin:0 auto;}" +
+    "@media (min-width:1024px){.ss-chart-grid{grid-template-columns:repeat(2,1fr);}}" +
+    ".ss-chart-card{background:#ffffff;border:2px solid #e2e8f0;border-radius:0.75rem;padding:1rem;}" +
+    ".ss-chart-card svg{width:100%;height:auto;}";
   return [
     "<!DOCTYPE html>",
     '<html lang="en">',
@@ -581,11 +616,11 @@ export function generateChartHTML(specs: ChartSpec[]): string {
     '<meta charset="UTF-8"/>',
     '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>',
     "<title>ScienceSwarm Charts</title>",
-    '<style>body{font-family:sans-serif;background:rgb(249,250,251);padding:2rem;}</style>',
+    `<style>${inlineTokens}${pageStyles}</style>`,
     "</head>",
-    '<body>',
-    '<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-[1400px] mx-auto">',
-    ...charts.map((svg) => `<div class="style="background:white;border:2px solid rgb(226,232,240);border-radius:0.75rem;padding:1rem;"">${svg}</div>`),
+    "<body>",
+    '<div class="ss-chart-grid">',
+    ...charts.map((svg) => `<div class="ss-chart-card">${svg}</div>`),
     "</div>",
     "</body>",
     "</html>",
