@@ -5,8 +5,8 @@ Date: 2026-04-24
 ## Inputs
 
 - Local ScienceSwarm screenshots from the current chat canvas and assistant lane
-- Local Codex app screenshot shared in the active implementation thread
-- ChatGPT web screenshot shared in the active implementation thread
+- Local Codex desktop app reference screenshot
+- Local ChatGPT web reference screenshot
 
 ## What Already Moved In The Right Direction
 
