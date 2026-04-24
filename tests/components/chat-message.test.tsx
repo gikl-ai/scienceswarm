@@ -159,6 +159,22 @@ describe("ChatMessage", () => {
     expect(screen.getByText("const total = 2;").closest("pre")).toHaveClass("px-5");
   });
 
+  it("renders markdown section dividers with the assistant reading rhythm", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        content={"## Findings\n\n- First result\n\n---\n\n## Next step\n\nFollow up on the benchmark."}
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    const divider = container.querySelector("hr");
+    expect(divider).toBeTruthy();
+    expect(divider).toHaveClass("my-8");
+    expect(divider).toHaveClass("border-t");
+    expect(screen.getByRole("heading", { level: 2, name: "Next step" })).toHaveClass("mt-10");
+  });
+
   it("keeps language-less fenced code blocks on the block-code surface", () => {
     render(
       <ChatMessage
