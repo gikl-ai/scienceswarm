@@ -3656,6 +3656,7 @@ describe("POST /api/chat/unified", () => {
       body: JSON.stringify({
         message: "Please save the critique and proposed revision plan as artifacts.",
         projectId: "alpha-project",
+        mode: "openclaw-tools",
         messages: [
           { role: "user", content: longPriorTurn },
           { role: "assistant", content: "I drafted a critique and revision plan." },
