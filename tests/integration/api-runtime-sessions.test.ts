@@ -239,7 +239,6 @@ describe("runtime session APIs", () => {
       },
     ));
     const body = await response.json();
-    console.log("cancel-race-debug", response.status, body, sessions.listSessions());
 
     expect(response.status).toBe(200);
     expect(body.session).toMatchObject({
