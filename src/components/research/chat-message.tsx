@@ -1369,13 +1369,7 @@ export function ChatMessage({
 
   return (
     <div
-      className={`flex ${
-        role === "user"
-          ? "justify-end"
-          : isAssistantTurn
-            ? "justify-center"
-            : "justify-center"
-      }`}
+      className={`flex ${role === "user" ? "justify-end" : "justify-center"}`}
     >
       <div
         data-testid="chat-bubble"
