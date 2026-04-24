@@ -114,6 +114,20 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("button", { name: "Copy message" })).toHaveClass("opacity-0");
   });
 
+  it("keeps system-message copy actions visible without assistant hover chrome", () => {
+    render(
+      <ChatMessage
+        role="system"
+        content="System note"
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    const copyButton = screen.getByRole("button", { name: "Copy message" });
+    expect(copyButton).not.toHaveClass("opacity-0");
+    expect(copyButton).toHaveClass("text-muted/65");
+  });
+
   it("renders nested lists, block quotes, and code fences in assistant markdown", () => {
     render(
       <ChatMessage

@@ -1572,7 +1572,9 @@ export function ChatMessage({
         ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition-all hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
         : copyState === "error"
         ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700 transition-all hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
-        : "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-slate-400 opacity-0 transition-all group-hover/assistant:opacity-100 group-focus-within/assistant:opacity-100 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
+        : isAssistantTurn
+          ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-slate-400 opacity-0 transition-all group-hover/assistant:opacity-100 group-focus-within/assistant:opacity-100 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+          : "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-slate-50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
   const bubbleClass =
     role === "user"
       ? `max-w-2xl rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text ${
