@@ -7791,6 +7791,9 @@ function streamOpenClawResponse(params: {
 
             const response = await sendOpenClawMessageWithArtifactRetry({
               onBeforeInitialSend: () => {
+                // Keep both messages ahead of the first gateway event so the
+                // transcript shows immediate human-readable progress even when
+                // OpenClaw's first streamed callback arrives synchronously.
                 sendServerProgress("Sending request to OpenClaw");
                 sendServerProgress("Waiting for OpenClaw to respond");
               },
