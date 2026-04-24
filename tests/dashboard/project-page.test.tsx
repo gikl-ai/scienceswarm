@@ -292,6 +292,21 @@ describe("Project dashboard smoke test", () => {
     expect(column).toHaveClass("gap-6");
   });
 
+  it("renders the refreshed composer surface with guidance and runtime context", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    const composer = await screen.findByTestId("project-chat-composer");
+    expect(within(composer).getByText("Project Chat")).toBeInTheDocument();
+    expect(
+      within(composer).getByText("Enter to send. Shift+Enter for a new line."),
+    ).toBeInTheDocument();
+    expect(within(composer).getByText(/Drop files, type/i)).toBeInTheDocument();
+    expect(within(composer).getByText("Chat mode")).toBeInTheDocument();
+  });
+
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
     const fetchMock = stubDashboardFetch({
       latestPaperLibraryScan: {

@@ -1660,6 +1660,23 @@ function ProjectPageContent() {
     useState<PendingRuntimeSend | null>(null);
   const [runtimePreviewBusy, setRuntimePreviewBusy] = useState(false);
   const [runtimePreviewError, setRuntimePreviewError] = useState<string | null>(null);
+  const selectedComposerRuntimeHost = useMemo(
+    () =>
+      runtimeHosts.hosts.find((host) => host.profile.id === selectedRuntimeHostId)
+      ?? null,
+    [runtimeHosts.hosts, selectedRuntimeHostId],
+  );
+  const composerModeCopy = useMemo(() => {
+    if (runtimeMode === "compare") {
+      return `Compare ${Math.max(1, compareHostIds.length)} hosts`;
+    }
+    return runtimeMode === "task" ? "Task mode" : "Chat mode";
+  }, [compareHostIds.length, runtimeMode]);
+  const composerPolicyCopy = useMemo(() => {
+    if (runtimeProjectPolicy === "execution-ok") return "Execution ok";
+    if (runtimeProjectPolicy === "cloud-ok") return "Cloud ok";
+    return "Local only";
+  }, [runtimeProjectPolicy]);
   useEffect(() => {
     if (runtimeMode !== "compare") {
       clearRuntimeCompareResult();
@@ -4765,163 +4782,204 @@ function ProjectPageContent() {
 
                 <div className="flex-shrink-0 border-t border-border/70 bg-white/95 px-6 py-4 backdrop-blur-sm">
                   <div className="mx-auto w-full max-w-[60rem]">
-                  {chatContextItems.length > 0 && (
-                    <div className="mb-2 flex items-center justify-between gap-3 text-xs">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="shrink-0 font-semibold text-muted">
-                          Context: {chatContextItems.length} file
-                          {chatContextItems.length === 1 ? "" : "s"}
-                        </span>
-                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                          {visibleChatContextItems.map((file) => (
-                            <span
-                              key={file.key}
-                              className="inline-flex max-w-[15rem] items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-foreground"
-                              title={file.path}
-                            >
-                              <span className="truncate">{file.label}</span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  removeFileFromChatContext(file.path)
-                                }
-                                className="text-muted transition-colors hover:text-foreground"
-                                aria-label={`Remove ${file.path} from chat context`}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                          {hiddenChatContextItemCount > 0 && (
-                            <span className="rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-muted">
-                              +{hiddenChatContextItemCount} more
+                    <div
+                      data-testid="project-chat-composer"
+                      className={`rounded-[28px] border bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)] transition-colors ${
+                        chatInputDragOver
+                          ? "border-accent ring-4 ring-accent/10"
+                          : "border-slate-200/90 focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
+                      }`}
+                    >
+                      <div className="flex flex-col gap-3 border-b border-slate-200/80 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                            Project Chat
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-foreground">
+                            Ask about the project, run a task, or compare runtimes without leaving the thread.
+                          </p>
+                          <p className="mt-1 text-xs text-muted">
+                            Enter to send. Shift+Enter for a new line.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                          {activeProjectSlug && (
+                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                              {activeProjectSlug}
                             </span>
                           )}
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                            {composerModeCopy}
+                          </span>
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                            {composerPolicyCopy}
+                          </span>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={clearChatContext}
-                        className="shrink-0 text-[11px] font-semibold text-muted transition-colors hover:text-foreground"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex gap-2 items-end">
-                    <div className="relative flex-1">
-                      <ChatMentionInput
-                        ref={inputRef}
-                        value={input}
-                        onValueChange={handleChatInputChange}
-                        onKeyDown={handleChatInputKeyDown}
-                        onFocus={() => setChatInputFocused(true)}
-                        onBlur={() => setChatInputFocused(false)}
-                        onDragEnter={(e) => {
-                          if (isChatBusy) return;
-                          if (!e.dataTransfer.types.includes("Files")) return;
-                          e.preventDefault();
-                          setChatInputDragOver(true);
-                        }}
-                        onDragOver={(e) => {
-                          if (isChatBusy) return;
-                          if (!e.dataTransfer.types.includes("Files")) return;
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = "copy";
-                          if (!chatInputDragOver) setChatInputDragOver(true);
-                        }}
-                        onDragLeave={(e) => {
-                          if (
-                            e.currentTarget.contains(
-                              e.relatedTarget as Node | null,
-                            )
-                          )
-                            return;
-                          setChatInputDragOver(false);
-                        }}
-                        onDrop={(e) => {
-                          // Always consume the drop on the chat textarea so the
-                          // browser's default drop behavior (navigate to a dropped
-                          // file's URL, insert filename as text) never fires.
-                          e.preventDefault();
-                          setChatInputDragOver(false);
-                          if (isChatBusy) return;
-                          const dropped = Array.from(
-                            e.dataTransfer.files || [],
-                          );
-                          if (dropped.length === 0) return;
-                          void handleProjectUpload(dropped);
-                        }}
-                        aria-label="Chat with your project"
-                        mentionFiles={mentionFiles}
-                        slashCommands={slashCommands}
-                        slashCommandsLoading={slashCommandsStatus === "loading"}
-                        onMentionSelect={handleMentionSelect}
-                        data-testid="chat-input"
-                        placeholder={
-                          isChatBusy
-                            ? "Processing..."
-                            : CHAT_PLACEHOLDER_PROMPTS[placeholderIndex]
-                        }
-                        disabled={isChatBusy}
-                        rows={2}
-                        className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 bg-surface border-2 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-colors resize-none overflow-auto disabled:opacity-50 leading-5 ${
-                          chatInputDragOver
-                            ? "border-accent ring-2 ring-accent/30"
-                            : "border-border"
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onPointerDown={handleComposerResizePointerDown}
-                        className="absolute right-2 top-1 z-10 flex h-5 w-5 cursor-ns-resize items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
-                        aria-label="Resize message composer"
-                        title="Drag up to resize"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="text-[13px] leading-none"
+                      {chatContextItems.length > 0 && (
+                        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3 text-xs">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="shrink-0 font-semibold text-muted">
+                              Context: {chatContextItems.length} file
+                              {chatContextItems.length === 1 ? "" : "s"}
+                            </span>
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              {visibleChatContextItems.map((file) => (
+                                <span
+                                  key={file.key}
+                                  className="inline-flex max-w-[15rem] items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-foreground"
+                                  title={file.path}
+                                >
+                                  <span className="truncate">{file.label}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removeFileFromChatContext(file.path)
+                                    }
+                                    className="text-muted transition-colors hover:text-foreground"
+                                    aria-label={`Remove ${file.path} from chat context`}
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                              {hiddenChatContextItemCount > 0 && (
+                                <span className="rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-muted">
+                                  +{hiddenChatContextItemCount} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={clearChatContext}
+                            className="shrink-0 text-[11px] font-semibold text-muted transition-colors hover:text-foreground"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      )}
+                      <div className="px-4 pb-2 pt-4">
+                        <div className="relative flex-1">
+                          <ChatMentionInput
+                            ref={inputRef}
+                            value={input}
+                            onValueChange={handleChatInputChange}
+                            onKeyDown={handleChatInputKeyDown}
+                            onFocus={() => setChatInputFocused(true)}
+                            onBlur={() => setChatInputFocused(false)}
+                            onDragEnter={(e) => {
+                              if (isChatBusy) return;
+                              if (!e.dataTransfer.types.includes("Files")) return;
+                              e.preventDefault();
+                              setChatInputDragOver(true);
+                            }}
+                            onDragOver={(e) => {
+                              if (isChatBusy) return;
+                              if (!e.dataTransfer.types.includes("Files")) return;
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = "copy";
+                              if (!chatInputDragOver) setChatInputDragOver(true);
+                            }}
+                            onDragLeave={(e) => {
+                              if (
+                                e.currentTarget.contains(
+                                  e.relatedTarget as Node | null,
+                                )
+                              )
+                                return;
+                              setChatInputDragOver(false);
+                            }}
+                            onDrop={(e) => {
+                              // Always consume the drop on the chat textarea so the
+                              // browser's default drop behavior (navigate to a dropped
+                              // file's URL, insert filename as text) never fires.
+                              e.preventDefault();
+                              setChatInputDragOver(false);
+                              if (isChatBusy) return;
+                              const dropped = Array.from(
+                                e.dataTransfer.files || [],
+                              );
+                              if (dropped.length === 0) return;
+                              void handleProjectUpload(dropped);
+                            }}
+                            aria-label="Chat with your project"
+                            mentionFiles={mentionFiles}
+                            slashCommands={slashCommands}
+                            slashCommandsLoading={slashCommandsStatus === "loading"}
+                            onMentionSelect={handleMentionSelect}
+                            data-testid="chat-input"
+                            placeholder={
+                              isChatBusy
+                                ? "Processing..."
+                                : CHAT_PLACEHOLDER_PROMPTS[placeholderIndex]
+                            }
+                            disabled={isChatBusy}
+                            rows={2}
+                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[22px] border-0 bg-transparent px-0 py-1 pr-10 text-[15px] leading-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 disabled:opacity-50`}
+                          />
+                          <button
+                            type="button"
+                            onPointerDown={handleComposerResizePointerDown}
+                            className="absolute right-0 top-0 z-10 flex h-7 w-7 cursor-ns-resize items-center justify-center rounded-full border border-transparent text-muted transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
+                            aria-label="Resize message composer"
+                            title="Drag up to resize"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="text-[13px] leading-none"
+                            >
+                              ↕
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-3 border-t border-slate-200/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <ComposerRuntimeSwitcher
+                            hosts={runtimeHosts.hosts}
+                            selectedHostId={selectedRuntimeHostId}
+                            projectPolicy={runtimeProjectPolicy}
+                            mode={runtimeMode}
+                            compareHostIds={compareHostIds}
+                            loading={runtimeHosts.loading}
+                            error={runtimeHosts.error}
+                            open={runtimeSwitcherOpen}
+                            onOpenChange={setRuntimeSwitcherOpen}
+                            onSelectedHostIdChange={setSelectedRuntimeHostId}
+                            onProjectPolicyChange={setRuntimeProjectPolicy}
+                            onModeChange={setRuntimeMode}
+                            onCompareHostIdsChange={setRuntimeCompareHostIds}
+                          />
+                          {voiceSupported && (
+                            <VoiceButton
+                              voiceState={voiceState}
+                              voiceError={voiceError}
+                              onClearError={clearVoiceError}
+                              disabled={isChatBusy}
+                              onStart={startRecording}
+                              onStop={() => {
+                                if (voiceState === "recording") stopRecording();
+                                else if (voiceState === "speaking") stopPlayback();
+                              }}
+                            />
+                          )}
+                          <div className="min-w-0 text-[11px] leading-5 text-muted">
+                            <span className="font-semibold text-slate-700">
+                              {selectedComposerRuntimeHost?.profile.label ?? "Runtime"}
+                            </span>{" "}
+                            is ready. Drop files, type <span className="font-semibold">@</span> to mention context, or use <span className="font-semibold">/</span> for commands.
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleSend}
+                          disabled={isChatBusy || !input.trim()}
+                          className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-accent-hover disabled:opacity-40"
                         >
-                          ↕
-                        </span>
-                      </button>
+                          Send
+                        </button>
+                      </div>
                     </div>
-                    {voiceSupported && (
-                      <VoiceButton
-                        voiceState={voiceState}
-                        voiceError={voiceError}
-                        onClearError={clearVoiceError}
-                        disabled={isChatBusy}
-                        onStart={startRecording}
-                        onStop={() => {
-                          if (voiceState === "recording") stopRecording();
-                          else if (voiceState === "speaking") stopPlayback();
-                        }}
-                      />
-                    )}
-                    <ComposerRuntimeSwitcher
-                      hosts={runtimeHosts.hosts}
-                      selectedHostId={selectedRuntimeHostId}
-                      projectPolicy={runtimeProjectPolicy}
-                      mode={runtimeMode}
-                      compareHostIds={compareHostIds}
-                      loading={runtimeHosts.loading}
-                      error={runtimeHosts.error}
-                      open={runtimeSwitcherOpen}
-                      onOpenChange={setRuntimeSwitcherOpen}
-                      onSelectedHostIdChange={setSelectedRuntimeHostId}
-                      onProjectPolicyChange={setRuntimeProjectPolicy}
-                      onModeChange={setRuntimeMode}
-                      onCompareHostIdsChange={setRuntimeCompareHostIds}
-                    />
-                    <button
-                      onClick={handleSend}
-                      disabled={isChatBusy || !input.trim()}
-                      className="flex-shrink-0 h-11 inline-flex items-center bg-accent text-white px-6 rounded-xl text-sm font-semibold hover:bg-accent-hover transition-colors disabled:opacity-40"
-                    >
-                      Send
-                    </button>
-                  </div>
                   </div>
                 </div>
                 <CompareResults result={runtimeCompareResult} />
