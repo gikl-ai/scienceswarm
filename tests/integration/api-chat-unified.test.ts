@@ -3685,6 +3685,61 @@ describe("POST /api/chat/unified", () => {
     infoSpy.mockRestore();
   });
 
+  it("uses the larger recent chat budget when the message content implies tool execution", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const longPriorTurn =
+      "Discuss the prior findings, the draft note, and the artifact packaging plan. ".repeat(45);
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    sendOpenClawMessage.mockResolvedValueOnce("Saved the note.");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": "openclaw-content-triggered-history-budget",
+      },
+      body: JSON.stringify({
+        message: "Save this note as an artifact in the project.",
+        projectId: "alpha-project",
+        messages: [
+          { role: "user", content: longPriorTurn },
+          { role: "assistant", content: "I drafted the note." },
+          { role: "user", content: `${longPriorTurn}${longPriorTurn}` },
+          { role: "assistant", content: "The artifact packaging plan is ready." },
+          {
+            role: "user",
+            content: "Save this note as an artifact in the project.",
+          },
+        ],
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const timingCall = infoSpy.mock.calls.find(
+      ([prefix]) => prefix === "[scienceswarm-chat-timing]",
+    );
+    expect(timingCall).toBeTruthy();
+    const payload = JSON.parse(String(timingCall?.[1])) as {
+      promptCharCounts: Record<string, number>;
+    };
+    expect(payload.promptCharCounts.recent_chat_context).toBeGreaterThan(1_000);
+    expect(payload.promptCharCounts.recent_chat_context).toBeLessThanOrEqual(6_000);
+    infoSpy.mockRestore();
+  });
+
   it("frames revise-and-resubmit audits as direct artifact-producing OpenClaw tasks", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     resolveAgentConfig.mockReturnValue({
