@@ -3559,6 +3559,72 @@ describe("POST /api/chat/unified", () => {
     expect(parseFile).toHaveBeenCalledTimes(10);
   });
 
+  it("caps workspace file context to the prompt budget and omits overflow files", async () => {
+    const projectRoot = createProjectRoot("alpha-project");
+    const files = Array.from({ length: 3 }, (_, index) => {
+      const number = index + 1;
+      const workspacePath = `docs/file-${number}.md`;
+      writeWorkspaceFile(projectRoot, workspacePath, `placeholder ${number}`);
+      return {
+        name: `file-${number}.md`,
+        size: "40 KB",
+        workspacePath,
+      };
+    });
+    const alphaText = `ALPHA_START\n${"A".repeat(19_950)}\nALPHA_END`;
+    const betaText = `BETA_START\n${"B".repeat(19_950)}\nBETA_END`;
+    const gammaText = `GAMMA_START\n${"C".repeat(19_950)}\nGAMMA_END`;
+
+    resolveAgentConfig.mockReturnValue({
+      type: "openclaw",
+      url: "http://localhost:19002",
+    });
+    openClawHealthCheck.mockResolvedValueOnce({
+      status: "connected",
+      gateway: "ws://127.0.0.1:19002",
+      channels: [],
+      agents: 1,
+      sessions: 2,
+    });
+    for (const text of [alphaText, betaText, gammaText]) {
+      readFile.mockResolvedValueOnce(Buffer.from(text));
+      parseFile.mockResolvedValueOnce({
+        text,
+        pages: 1,
+      });
+    }
+    sendOpenClawMessage.mockResolvedValueOnce("Budgeted answer");
+
+    const request = new Request("http://localhost/api/chat/unified", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Summarize these project notes.",
+        projectId: "alpha-project",
+        mode: "openclaw-tools",
+        files,
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
+    expect(openClawMessage).toContain("File: docs/file-1.md (1 pages)");
+    expect(openClawMessage).toContain("ALPHA_START");
+    expect(openClawMessage).toContain("ALPHA_END");
+    expect(openClawMessage).toContain("File: docs/file-2.md (1 pages)");
+    expect(openClawMessage).toContain("BETA_START");
+    expect(openClawMessage).toContain(
+      "[truncated to stay within workspace prompt budget]",
+    );
+    expect(openClawMessage).not.toContain("BETA_END");
+    expect(openClawMessage).not.toContain("GAMMA_START");
+    expect(openClawMessage).toContain(
+      "Additional file context omitted to stay within prompt budget: docs/file-3.md",
+    );
+  });
+
   it("implicitly attaches imported project notes for broad literature questions", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeWorkspaceFile(
