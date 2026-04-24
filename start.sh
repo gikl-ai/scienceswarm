@@ -128,6 +128,71 @@ cleanup_start_runtime() {
 
 trap cleanup_start_runtime EXIT INT TERM
 
+print_start_usage() {
+  cat <<'EOF'
+Usage:
+  ./scienceswarm start [options]
+  ./scienceswarm restart [options]
+
+Options:
+  --no-open             Do not open a browser after the frontend is healthy
+  --browser <name>      Browser to open after readiness: chrome, safari, firefox, edge, brave, arc
+  --browser=<name>      Same as --browser <name>
+  --open <target>       Page to open after readiness: dashboard, setup, or /path
+  --open=<target>       Same as --open <target>
+  -h, --help            Show this help
+
+Environment:
+  SCIENCESWARM_NO_OPEN=true        Disable auto-open
+  SCIENCESWARM_BROWSER=safari      Default browser for auto-open
+  SCIENCESWARM_OPEN_TARGET=setup   Default auto-open target
+EOF
+}
+
+START_NO_OPEN_ARG=false
+START_OPEN_BROWSER_ARG=""
+START_OPEN_TARGET_ARG=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --no-open)
+      START_NO_OPEN_ARG=true
+      ;;
+    --browser)
+      shift
+      [ "$#" -gt 0 ] || {
+        echo "error: missing browser name after --browser" >&2
+        exit 1
+      }
+      START_OPEN_BROWSER_ARG="$1"
+      ;;
+    --browser=*)
+      START_OPEN_BROWSER_ARG="${1#--browser=}"
+      ;;
+    --open)
+      shift
+      [ "$#" -gt 0 ] || {
+        echo "error: missing target after --open" >&2
+        exit 1
+      }
+      START_OPEN_TARGET_ARG="$1"
+      ;;
+    --open=*)
+      START_OPEN_TARGET_ARG="${1#--open=}"
+      ;;
+    -h|--help)
+      print_start_usage
+      exit 0
+      ;;
+    *)
+      echo "error: unexpected start option '$1'" >&2
+      echo "Run ./scienceswarm start --help for usage." >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
 echo "🔬 ScienceSwarm — Starting..."
 echo ""
 
@@ -183,7 +248,7 @@ fi
 : "${FRONTEND_PORT:=3001}"
 : "${FRONTEND_HOST:=127.0.0.1}"
 : "${FRONTEND_PUBLIC_HOST:=$FRONTEND_HOST}"
-: "${FRONTEND_USE_HTTPS:=true}"
+: "${FRONTEND_USE_HTTPS:=false}"
 : "${OPENHANDS_PORT:=3000}"
 : "${OPENHANDS_IMAGE:=docker.openhands.dev/openhands/openhands@sha256:5c0dc26f467bf8e47a6e76308edb7a30af4084b17e23a3460b5467008b12111b}"
 export FRONTEND_HOST FRONTEND_PUBLIC_HOST OPENHANDS_IMAGE
@@ -269,10 +334,142 @@ fi
 
 NEXT_FRONTEND_ARGS+=(--webpack -H "${FRONTEND_HOST}" -p "${FRONTEND_PORT}")
 
-if [ -z "${APP_ORIGIN:-}" ] && [ "${FRONTEND_SCHEME}" = "https" ]; then
-  APP_ORIGIN="${FRONTEND_SCHEME}://${FRONTEND_PUBLIC_HOST}:${FRONTEND_PORT}"
+frontend_browser_host() {
+  case "${FRONTEND_PUBLIC_HOST:-$FRONTEND_HOST}" in
+    ""|localhost|0.0.0.0|"::")
+      printf '%s\n' "127.0.0.1"
+      ;;
+    "::1"|"[::1]")
+      printf '%s\n' "[::1]"
+      ;;
+    *)
+      printf '%s\n' "${FRONTEND_PUBLIC_HOST:-$FRONTEND_HOST}"
+      ;;
+  esac
+}
+
+frontend_probe_host() {
+  case "${FRONTEND_HOST:-127.0.0.1}" in
+    ""|localhost|0.0.0.0|"::")
+      printf '%s\n' "127.0.0.1"
+      ;;
+    "::1"|"[::1]")
+      printf '%s\n' "[::1]"
+      ;;
+    *)
+      printf '%s\n' "$FRONTEND_HOST"
+      ;;
+  esac
+}
+
+FRONTEND_BROWSER_HOST="$(frontend_browser_host)"
+FRONTEND_DASHBOARD_URL="${FRONTEND_SCHEME}://${FRONTEND_BROWSER_HOST}:${FRONTEND_PORT}/dashboard/project"
+FRONTEND_SETUP_URL="${FRONTEND_SCHEME}://${FRONTEND_BROWSER_HOST}:${FRONTEND_PORT}/setup"
+if [ -z "${APP_ORIGIN:-}" ]; then
+  APP_ORIGIN="${FRONTEND_SCHEME}://${FRONTEND_BROWSER_HOST}:${FRONTEND_PORT}"
   export APP_ORIGIN
 fi
+
+START_AUTO_OPEN=true
+START_OPEN_BROWSER="${SCIENCESWARM_BROWSER:-}"
+START_OPEN_TARGET="${SCIENCESWARM_OPEN_TARGET:-dashboard}"
+if [ -n "$START_OPEN_BROWSER_ARG" ]; then
+  START_OPEN_BROWSER="$START_OPEN_BROWSER_ARG"
+fi
+if [ -n "$START_OPEN_TARGET_ARG" ]; then
+  START_OPEN_TARGET="$START_OPEN_TARGET_ARG"
+fi
+if [ "$START_NO_OPEN_ARG" = true ] || is_truthy "${SCIENCESWARM_NO_OPEN:-false}" || is_truthy "${CI:-false}"; then
+  START_AUTO_OPEN=false
+fi
+
+export SCIENCESWARM_BROWSER="$START_OPEN_BROWSER"
+export SCIENCESWARM_OPEN_TARGET="$START_OPEN_TARGET"
+
+print_browser_launch_guide() {
+  local heading="${1:-Next steps}"
+
+  echo "$heading"
+  echo "  Keep this terminal open. It is the live ScienceSwarm server log."
+  if [ "$START_AUTO_OPEN" = true ]; then
+    if [ -n "$START_OPEN_BROWSER" ]; then
+      echo "  ScienceSwarm will open $START_OPEN_TARGET in $START_OPEN_BROWSER after the frontend is healthy."
+    else
+      echo "  ScienceSwarm will open $START_OPEN_TARGET in Chrome after the frontend is healthy."
+    fi
+    echo "  If the browser does not appear, open another terminal and run:"
+    echo "    ./scienceswarm open $START_OPEN_TARGET"
+  else
+    echo "  Auto-open is disabled. When Next.js prints \"Ready\", open another terminal and run:"
+    echo "    ./scienceswarm open $START_OPEN_TARGET"
+  fi
+  echo ""
+  echo "  Commands:"
+  echo "    Dashboard in Chrome: ./scienceswarm open"
+  echo "    Setup in Chrome:     ./scienceswarm open setup"
+  echo "    Start without open:  ./scienceswarm start --no-open"
+  echo "    Pick a browser:      ./scienceswarm open safari   # chrome, firefox, edge, brave, arc also work"
+  echo ""
+  echo "  Exact URLs:"
+  echo "    Dashboard: $FRONTEND_DASHBOARD_URL"
+  echo "    Setup:     $FRONTEND_SETUP_URL"
+  if [ "$FRONTEND_SCHEME" = "https" ]; then
+    echo "    Protocol:  use https:// only on this port; http:// will fail."
+    echo "    Safari:    self-signed local HTTPS can fail. Prefer Chrome or set FRONTEND_USE_HTTPS=false."
+  else
+    echo "    Protocol:  use http:// only on this port; https:// will fail."
+  fi
+}
+
+frontend_health_url() {
+  printf '%s://%s:%s/api/health\n' "$FRONTEND_SCHEME" "$(frontend_probe_host)" "$FRONTEND_PORT"
+}
+
+probe_frontend_health() {
+  local url
+  url="$(frontend_health_url)"
+
+  if [ "$FRONTEND_SCHEME" = "https" ]; then
+    curl -kfsS --max-time 2 "$url" >/dev/null 2>&1
+  else
+    curl -fsS --max-time 2 "$url" >/dev/null 2>&1
+  fi
+}
+
+auto_open_when_frontend_ready() {
+  local attempts="${SCIENCESWARM_OPEN_WAIT_ATTEMPTS:-90}"
+  local delay_seconds="${SCIENCESWARM_OPEN_WAIT_SECONDS:-1}"
+  local i=1
+  local open_args=()
+
+  while [ "$i" -le "$attempts" ]; do
+    if probe_frontend_health; then
+      echo "  Frontend is healthy; opening ScienceSwarm..."
+      if [ -n "$START_OPEN_BROWSER" ]; then
+        open_args+=(--browser "$START_OPEN_BROWSER")
+      fi
+      open_args+=("$START_OPEN_TARGET")
+      if ./scienceswarm open "${open_args[@]}"; then
+        return 0
+      fi
+      echo "  Auto-open failed. Manual fallback:"
+      echo "    ./scienceswarm open $START_OPEN_TARGET"
+      return 0
+    fi
+    sleep "$delay_seconds"
+    i=$((i + 1))
+  done
+
+  echo "  Auto-open skipped because the frontend did not become healthy at $(frontend_health_url)."
+  echo "  Run ./scienceswarm status for the current URL and health state."
+}
+
+start_auto_open_watcher() {
+  [ "$START_AUTO_OPEN" = true ] || return 0
+
+  auto_open_when_frontend_ready &
+  BACKGROUND_PIDS+=("$!")
+}
 
 is_placeholder_value() {
   case "${1:-}" in
@@ -299,7 +496,14 @@ warn_wsl_path "BRAIN_ROOT" "${BRAIN_ROOT:-}"
 EXISTING_LAUNCHER_PID="$(read_launcher_pid || true)"
 if [ -n "$EXISTING_LAUNCHER_PID" ] && [ "$EXISTING_LAUNCHER_PID" != "$$" ]; then
   echo "ScienceSwarm is already running for $DATA_ROOT (launcher pid $EXISTING_LAUNCHER_PID)."
-  echo "Use ./scienceswarm status, ./scienceswarm stop, or ./scienceswarm restart."
+  echo ""
+  echo "What to do now:"
+  echo "  Open dashboard: ./scienceswarm open"
+  echo "  Check status:   ./scienceswarm status"
+  echo "  Restart it:     ./scienceswarm restart"
+  echo ""
+  echo "Direct dashboard URL:"
+  echo "  $FRONTEND_DASHBOARD_URL"
   exit 1
 fi
 write_launcher_pid
@@ -313,6 +517,8 @@ echo "  Frontend scheme: $FRONTEND_SCHEME"
 [ "$FRONTEND_PUBLIC_HOST" != "$FRONTEND_HOST" ] && echo "  Frontend public host: $FRONTEND_PUBLIC_HOST"
 echo "  Frontend port: $FRONTEND_PORT"
 echo "  Frontend origin: ${APP_ORIGIN:-${FRONTEND_SCHEME}://${FRONTEND_HOST}:${FRONTEND_PORT}}"
+echo "  Dashboard URL: $FRONTEND_DASHBOARD_URL"
+echo "  Setup URL: $FRONTEND_SETUP_URL"
 echo "  OpenClaw port: ${OPENCLAW_PORT:-18789}"
 [ -n "${OPENCLAW_STATE_DIR:-}" ] && echo "  OpenClaw state dir: $OPENCLAW_STATE_DIR"
 [ -n "${OPENCLAW_CONFIG_PATH:-}" ] && echo "  OpenClaw config path: $OPENCLAW_CONFIG_PATH"
@@ -394,7 +600,7 @@ if [ "$API_KEY_OK" = false ]; then
   echo "No OPENAI_API_KEY in .env. That's fine for the default local path."
   echo "  ScienceSwarm setup uses Ollama + gemma4:latest first."
   echo "  OpenHands cloud-backed agent start is deferred until you configure an API-backed model."
-  echo "  Open ${FRONTEND_SCHEME}://127.0.0.1:${FRONTEND_PORT}/setup to connect OpenClaw and Telegram."
+  echo "  Open $FRONTEND_SETUP_URL to connect OpenClaw and Telegram."
   echo ""
 fi
 
@@ -590,6 +796,8 @@ fi
 # Start frontend
 echo ""
 echo "Starting ScienceSwarm frontend..."
+print_browser_launch_guide "Next step once the server is ready:"
+start_auto_open_watcher
 echo ""
 
 # Note: we intentionally do NOT `exec` next-dev here when background loops

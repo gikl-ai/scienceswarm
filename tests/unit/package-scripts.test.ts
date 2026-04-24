@@ -12,6 +12,7 @@ const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
   scripts: Record<string, string>;
 };
 const startScript = fs.readFileSync("start.sh", "utf-8");
+const installScript = fs.readFileSync("install.sh", "utf-8");
 
 describe("package.json scripts", () => {
   // Regression: `next dev` alone falls back to Next.js's built-in default
@@ -38,11 +39,19 @@ describe("package.json scripts", () => {
     expect(pkg.overrides?.gbrain?.["@electric-sql/pglite"]).toBe("0.4.4");
   });
 
-  it("starts HTTPS dev server with explicit ScienceSwarm certificate paths", () => {
+  it("keeps optional HTTPS dev server support on explicit ScienceSwarm certificate paths", () => {
     expect(startScript).toContain("FRONTEND_HTTPS_KEY=\"$DATA_ROOT/certificates/localhost-key.pem\"");
     expect(startScript).toContain("FRONTEND_HTTPS_CERT=\"$DATA_ROOT/certificates/localhost.pem\"");
     expect(startScript).toContain("--experimental-https-key");
     expect(startScript).toContain("--experimental-https-cert");
     expect(startScript).toContain("openssl req -x509");
+  });
+
+  it("keeps installer setup output aligned with optional local HTTPS", () => {
+    expect(installScript).toContain('FRONTEND_SCHEME="http"');
+    expect(installScript).toContain("FRONTEND_USE_HTTPS");
+    expect(installScript).toContain(
+      "Manual setup URL: ${FRONTEND_SCHEME}://127.0.0.1:${FRONTEND_PORT}/setup",
+    );
   });
 });
