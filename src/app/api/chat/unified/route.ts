@@ -8465,9 +8465,6 @@ export async function handleUnifiedChatPost(
       }
     }
 
-    const projectMaterializationPhase = chatTiming.startPhase(
-      "project_materialization",
-    );
     const shouldPreMaterializeProjectWorkspace =
       shouldPreMaterializeProjectWorkspaceForTurn({
         projectId: validatedProjectId,
@@ -8477,14 +8474,17 @@ export async function handleUnifiedChatPost(
         activeFile,
       });
     if (shouldPreMaterializeProjectWorkspace) {
+      const projectMaterializationPhase = chatTiming.startPhase(
+        "project_materialization",
+      );
       await materializeGbrainProjectWorkspaceForAgent(validatedProjectId);
       chatTiming.endPhase(projectMaterializationPhase, {
         detail: { materialized: true },
       });
     } else {
-      chatTiming.endPhase(projectMaterializationPhase, {
-        skipped: true,
-        detail: { materialized: false },
+      chatTiming.recordSkippedPhase("project_materialization", {
+        reason: "no_project_context_needed",
+        materialized: false,
       });
     }
 
