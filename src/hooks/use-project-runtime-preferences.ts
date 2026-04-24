@@ -7,6 +7,7 @@ import {
   type RuntimeComposerMode,
 } from "@/hooks/use-runtime-hosts";
 import {
+  DEFAULT_RUNTIME_PROJECT_PREFERENCES,
   readRuntimeProjectPreferences,
   writeRuntimeProjectPreferences,
   type RuntimeProjectPreferences,
@@ -31,7 +32,7 @@ export function useProjectRuntimePreferences(
 ) {
   const normalizedProjectId = projectId ?? null;
   const [preferences, setPreferences] = useState<RuntimeProjectPreferences>(() =>
-    readRuntimeProjectPreferences(normalizedProjectId),
+    DEFAULT_RUNTIME_PROJECT_PREFERENCES,
   );
 
   useIsomorphicLayoutEffect(() => {
