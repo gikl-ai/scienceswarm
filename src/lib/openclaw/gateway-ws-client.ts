@@ -758,14 +758,21 @@ export async function sendChatViaGateway(
   };
 
   const turnPromise = new Promise<void>((resolve, reject) => {
-    turnTimeoutId = setTimeout(() => {
-      cleanupListener();
-      reject(
-        new Error(
-          `OpenClaw chat turn timed out after ${timeoutMs}ms for session "${sessionKey}"`,
-        ),
-      );
-    }, timeoutMs);
+    const armTurnTimeout = () => {
+      if (turnTimeoutId !== null) {
+        clearTimeout(turnTimeoutId);
+      }
+      turnTimeoutId = setTimeout(() => {
+        cleanupListener();
+        reject(
+          new Error(
+            `OpenClaw chat turn timed out after ${timeoutMs}ms for session "${sessionKey}"`,
+          ),
+        );
+      }, timeoutMs);
+    };
+
+    armTurnTimeout();
 
     const listener = (frame: GatewayFrame) => {
       const method = frame.event ?? frame.method ?? "";
@@ -791,6 +798,7 @@ export async function sendChatViaGateway(
         payload: frame.payload,
         raw: frame,
       };
+      armTurnTimeout();
       safeEmitGatewayEvent(events, onEvent, event);
 
       if (method === "chat") {
@@ -981,14 +989,21 @@ export async function sendMessageViaGateway(
   };
 
   const turnPromise = new Promise<void>((resolve, reject) => {
-    turnTimeoutId = setTimeout(() => {
-      cleanupListener();
-      reject(
-        new Error(
-          `OpenClaw agent turn timed out after ${timeoutMs}ms for session "${sessionKey}"`,
-        ),
-      );
-    }, timeoutMs);
+    const armTurnTimeout = () => {
+      if (turnTimeoutId !== null) {
+        clearTimeout(turnTimeoutId);
+      }
+      turnTimeoutId = setTimeout(() => {
+        cleanupListener();
+        reject(
+          new Error(
+            `OpenClaw agent turn timed out after ${timeoutMs}ms for session "${sessionKey}"`,
+          ),
+        );
+      }, timeoutMs);
+    };
+
+    armTurnTimeout();
 
     const listener = (frame: GatewayFrame) => {
       if (turnComplete) return;
@@ -1008,6 +1023,7 @@ export async function sendMessageViaGateway(
       };
 
       // Forward to caller
+      armTurnTimeout();
       safeEmitGatewayEvent(events, onEvent, event);
 
       // Capture assistant text from streaming events
