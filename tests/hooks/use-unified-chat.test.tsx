@@ -3447,7 +3447,7 @@ describe("useUnifiedChat persistence", () => {
     ).toHaveLength(2);
   });
 
-  it("appends ordered timing meta events from the SSE stream", async () => {
+  it("keeps ordered timing meta events out of the visible transcript", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       const method = init?.method ?? "GET";
@@ -3508,15 +3508,7 @@ describe("useUnifiedChat persistence", () => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Streamed answer");
     });
 
-    expect(screen.getByTestId("progress-log").textContent).toContain(
-      [
-        "activity:Timing: request started (0 ms)",
-        "activity:Timing: OpenClaw readiness complete (12 ms)",
-        "activity:Timing: OpenClaw gateway acknowledged (18 ms)",
-        "activity:Timing: first OpenClaw event (21 ms)",
-        "activity:Timing: final assistant text (55 ms)",
-      ].join(" | "),
-    );
+    expect(screen.getByTestId("progress-log").textContent).not.toContain("Timing:");
   });
 
   it("accumulates direct-stream thinking traces and restores them after remount", async () => {
