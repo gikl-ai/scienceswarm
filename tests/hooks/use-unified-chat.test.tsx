@@ -5507,6 +5507,160 @@ describe("useUnifiedChat persistence", () => {
     });
   });
 
+  it("reuses the in-flight OpenClaw load probe when the project changes", async () => {
+    const healthDeferred: { resolve: ((response: Response) => void) | null } = {
+      resolve: null,
+    };
+    let healthProbeCount = 0;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        healthProbeCount += 1;
+        return await new Promise<Response>((resolve) => {
+          healthDeferred.resolve = resolve;
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project" || url === "/api/chat/thread?project=beta-project") {
+        return Response.json({
+          version: 1,
+          project: url.endsWith("beta-project") ? "beta-project" : "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (
+        url === "/api/workspace?action=tree&projectId=alpha-project"
+        || url === "/api/workspace?action=tree&projectId=beta-project"
+      ) {
+        return Response.json({ tree: [] });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(healthProbeCount).toBe(1);
+    });
+
+    view.rerender(<ChatHarness projectName="beta-project" />);
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map((call) => String(call[0]))).toContain(
+        "/api/chat/thread?project=beta-project",
+      );
+    });
+    expect(healthProbeCount).toBe(1);
+
+    if (!healthDeferred.resolve) {
+      throw new Error("Expected an in-flight health probe to expose a resolver");
+    }
+
+    healthDeferred.resolve(Response.json({
+      agent: { type: "openclaw", status: "connected" },
+      openclaw: "connected",
+      nanoclaw: "disconnected",
+      openhands: "connected",
+      ollama: "connected",
+      ollamaModels: ["gemma4:latest"],
+      configuredLocalModel: "gemma4",
+      llmProvider: "local",
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+  });
+
+  it("starts a fresh OpenClaw load probe for the next project after a failed preconnect", async () => {
+    let healthProbeCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        healthProbeCount += 1;
+        if (healthProbeCount === 1) {
+          throw new Error("OpenClaw gateway booting");
+        }
+
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+          ollama: "connected",
+          ollamaModels: ["gemma4:latest"],
+          configuredLocalModel: "gemma4",
+          llmProvider: "local",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project" || url === "/api/chat/thread?project=beta-project") {
+        return Response.json({
+          version: 1,
+          project: url.endsWith("beta-project") ? "beta-project" : "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (
+        url === "/api/workspace?action=tree&projectId=alpha-project"
+        || url === "/api/workspace?action=tree&projectId=beta-project"
+      ) {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return Response.json({
+          response: "Recovered after project-load preconnect failure",
+          conversationId: "web:beta-project:session-1",
+          messages: [],
+        });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(healthProbeCount).toBe(1);
+    });
+
+    view.rerender(<ChatHarness projectName="beta-project" />);
+
+    await waitFor(() => {
+      expect(healthProbeCount).toBe(2);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain(
+        "assistant:Recovered after project-load preconnect failure",
+      );
+    });
+    expect(screen.getByTestId("error").textContent).toBe("");
+  });
+
   it("rechecks OpenClaw health on send before surfacing a disconnected error", async () => {
     let healthProbeCount = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
