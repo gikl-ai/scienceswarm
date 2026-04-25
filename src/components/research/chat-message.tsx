@@ -973,6 +973,9 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): strin
       continue;
     }
     if (block.lines.length > 0) {
+      if (block.lines.length > 1) {
+        return `Explored ${block.lines.length} actions`;
+      }
       const detail = compactDetail(block.lines[block.lines.length - 1]);
       if (detail) {
         return detail;
