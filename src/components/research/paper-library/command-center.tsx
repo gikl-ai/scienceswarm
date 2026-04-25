@@ -1152,7 +1152,8 @@ export function PaperLibraryCommandCenter({
     setApprovalToken({ token: payload.approvalToken, expiresAt: payload.expiresAt });
     await loadApplyPlan({ applyPlanId });
     if (Date.parse(payload.expiresAt) <= Date.now()) {
-      throw new Error(`Approval expired at ${new Date(payload.expiresAt).toLocaleString()}. Refresh approval to continue.`);
+      setApprovalToken(null);
+      throw new Error(`Approval expired at ${new Date(payload.expiresAt).toLocaleString()}. Applying will refresh approval first.`);
     }
     return payload.approvalToken;
   }, [loadApplyPlan, projectSlug]);
@@ -1323,19 +1324,12 @@ export function PaperLibraryCommandCenter({
   const persistedApprovalExpired = persistedApprovalExpiresAt
     ? Date.parse(persistedApprovalExpiresAt) <= Date.now()
     : false;
-  const approvalNeedsRefresh = Boolean(
-    activePlan
-    && activePlanMatchesTemplate
-    && activePlan.status === "approved"
-    && !activePlan.manifestId
-    && (!approvalToken || approvalTokenExpired),
-  );
   const canApplyPlan = Boolean(
     activePlan
     && activePlanMatchesTemplate
     && activePlan.conflictCount === 0
     && !activePlan.manifestId
-    && (activePlan.status === "validated" || activePlan.status === "approved" || approvalNeedsRefresh)
+    && (activePlan.status === "validated" || activePlan.status === "approved")
   );
   const applyButtonLabel = applyActionLoading
     ? "Applying..."
@@ -1345,7 +1339,7 @@ export function PaperLibraryCommandCenter({
   const approvalStatusMessage = approvalToken
     ? (
         approvalTokenExpired
-          ? `Approval expired at ${new Date(approvalToken.expiresAt).toLocaleString()}. Refresh approval to continue.`
+          ? `Approval expired at ${new Date(approvalToken.expiresAt).toLocaleString()}. Applying will refresh approval first.`
           : `Plan approved until ${new Date(approvalToken.expiresAt).toLocaleString()}.`
       )
     : activePlan?.status === "approved"

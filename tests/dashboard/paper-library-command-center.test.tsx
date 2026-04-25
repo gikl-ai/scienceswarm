@@ -1192,6 +1192,8 @@ describe("PaperLibraryCommandCenter", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Approval expired at/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/Applying will refresh approval first/i);
+    expect(screen.queryByText(/Refresh approval to continue/i)).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/apply"),
     ).toBe(false);
