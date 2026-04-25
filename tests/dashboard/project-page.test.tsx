@@ -325,7 +325,7 @@ describe("Project dashboard smoke test", () => {
     expect(column).toHaveClass("gap-6");
   });
 
-  it("renders a compact composer surface without guidance copy or status pills", async () => {
+  it("renders a guided composer surface with project context", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -340,14 +340,12 @@ describe("Project dashboard smoke test", () => {
     expect(input).toHaveClass("pr-12");
     expect(input).not.toHaveClass("px-0");
     expect(input).not.toHaveClass("py-1");
-    expect(within(composer).queryByText("Project Chat")).not.toBeInTheDocument();
+    expect(within(composer).getByText("Project Chat")).toBeInTheDocument();
     expect(
-      within(composer).queryByText("Enter to send. Shift+Enter for a new line."),
-    ).not.toBeInTheDocument();
-    expect(within(composer).queryByText(/Drop files, type/i)).not.toBeInTheDocument();
-    expect(within(composer).queryByText("Chat mode")).not.toBeInTheDocument();
-    expect(within(composer).queryByText("Local only")).not.toBeInTheDocument();
-    expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
+      within(composer).getByText("Keep the next turn grounded in this workspace."),
+    ).toBeInTheDocument();
+    expect(within(composer).getByText("OpenClaw")).toBeInTheDocument();
+    expect(within(composer).getByText("demo-project")).toBeInTheDocument();
   });
 
   it("renders footer guidance copy and a prominent send button", async () => {
