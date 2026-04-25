@@ -476,6 +476,29 @@ describe("getConfigStatus", () => {
     });
   });
 
+  it("does not treat a placeholder Telegram token as configured setup data", async () => {
+    const brainRoot = path.join(tmpHome, "brain");
+    await createReadyBrainRoot(brainRoot);
+    await writeEnvLocal(
+      repoRoot,
+      [
+        "SCIENCESWARM_USER_HANDLE=testuser",
+        "TELEGRAM_BOT_TOKEN=replace-me",
+        `BRAIN_ROOT=${brainRoot}`,
+        "",
+      ].join("\n"),
+    );
+
+    const status = await getConfigStatus(repoRoot);
+
+    expect(status.persistedSetup).toMatchObject({
+      hasUserHandle: true,
+      hasTelegramBotToken: false,
+      brainRootReady: true,
+      complete: true,
+    });
+  });
+
   it("reports ready=false for local mode when the agent backend is missing", async () => {
     await writeEnvLocal(
       repoRoot,
