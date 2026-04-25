@@ -167,7 +167,7 @@ export async function POST(request: Request) {
     assertStrictLocalDestinationAllowed({
       destination: "hosted-critique",
       dataClass: "critique-payload",
-      feature: "hosted structured critique",
+      feature: "Cloud structured critique",
       privacy: "hosted",
     });
     const config = getStructuredCritiqueConfig();
@@ -309,7 +309,7 @@ export async function GET(request: Request) {
     assertStrictLocalDestinationAllowed({
       destination: "hosted-critique",
       dataClass: "critique-payload",
-      feature: "hosted structured critique polling",
+      feature: "Cloud structured critique polling",
       privacy: "hosted",
     });
     const config = getStructuredCritiqueConfig();

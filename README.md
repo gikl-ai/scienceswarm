@@ -43,9 +43,9 @@ The core system is:
   Crossref, with durable `research_packet` and `overnight_journal` artifacts
 - Direct chat plus OpenClaw-routed chat when the agent runtime is available
 - OpenHands-backed execution for code and longer-running agent tasks
-- Runtime host controls for OpenClaw, Claude Code, Codex, Gemini CLI, and
+- AI destination controls for OpenClaw, Claude Code, Codex, Gemini CLI, and
   OpenHands, with per-project privacy policy gates and preview approval before
-  hosted or execution-capable sends
+  third-party or execution-capable sends
 - Dream Cycle and Research Radar overnight runs that leave auditable journal
   artifacts in the brain, including project-specific frontier matches that
   explain what changed and can be saved back into gbrain memory
@@ -154,51 +154,51 @@ From the `Paper Library` view inside a project, you can:
 The workflow is project-scoped, so each project can organize and explore its
 own paper archive without treating every imported folder as one global library.
 
-### Runtime Hosts
+### AI Destinations
 
-OpenClaw remains the local-first default runtime. The project composer starts
-with the `local-only` policy, which allows OpenClaw chat and blocks hosted
+OpenClaw remains the local-first default destination. The project composer starts
+with the `local-only` policy, which allows OpenClaw chat and blocks third-party
 Claude Code, Codex, and Gemini CLI sends before prompt construction. You can
-choose `cloud-ok` for turns where hosted subscription-native CLIs are
+choose `cloud-ok` for turns where third-party subscription-native CLIs are
 acceptable, or `execution-ok` when OpenHands-style execution is acceptable.
 
-The project chat composer includes a compact runtime switcher next to Send.
+The project chat composer includes a compact destination switcher next to Send.
 Use it to pick Claude Code, OpenClaw, Codex, Gemini CLI, or compare mode
 without leaving the conversation. Settings remains the diagnostics and
-advanced-history surface for runtime hosts, policies, compare targets, and
+advanced-history surface for destinations, policies, compare targets, and
 sessions.
 
 Direct Claude Code chat goes through the local `claude` CLI, not through
 OpenClaw. ScienceSwarm sends the visible prompt plus explicitly selected
 context or attachments, preserves Claude Code's native session id for resume,
 streams Claude Code output into the assistant bubble, and does not apply
-OpenClaw response cleanup to Claude Code text before you see it. Any hosted,
+OpenClaw response cleanup to Claude Code text before you see it. Any third-party,
 task, compare, or execution-capable turn is previewed before send: the preview
-lists destinations, account source, privacy class, and the prompt or project
+lists where the data will be sent, account source, and the prompt or project
 context that will leave the local workspace. ScienceSwarm does not store
-Claude Code, Codex, or Gemini subscription tokens; those hosts use your local
-CLI login. API-key runtime adapters read keys from `.env` only when configured
+Claude Code, Codex, or Gemini subscription tokens; those destinations use your local
+CLI login. API-key adapters read keys from `.env` only when configured
 and do not echo secret values back through the UI.
 
 Claude Code launches from a generated ScienceSwarm session capsule rather than
 the ScienceSwarm source checkout. The capsule includes `SCIENCESWARM.md` for
 product and project orientation, a thin `CLAUDE.md` that points Claude back to
-that guidance, a compact gbrain project brief, and a runtime-scoped MCP config
+that guidance, a compact gbrain project brief, and a destination-scoped MCP config
 for selective gbrain search/read/write tools. MCP bearer credentials are injected
 through the spawned process environment rather than the prompt text, and the
 temporary MCP config is deleted after each invocation. The preview lists this
 generated guidance and scoped brain access before the prompt is sent.
 
-Runtime-host sessions stay visible from Settings after runtime sends. Session
-history keeps host, mode, status, events, and artifact/writeback state so
-failed artifact imports can be retried from the composer after changing host or
-policy. If a future rollback or host removal leaves old sessions with an
-unknown host id, ScienceSwarm keeps those rows as read-only history rather than
+AI sessions stay visible from Settings after destination sends. Session
+history keeps destination, mode, status, events, and artifact/writeback state so
+failed artifact imports can be retried from the composer after changing destination or
+policy. If a future rollback or destination removal leaves old sessions with an
+unknown destination id, ScienceSwarm keeps those rows as read-only history rather than
 deleting them.
 
 To connect a subscription-backed CLI, sign in with the provider's own command.
 ScienceSwarm does not collect Claude, Codex, or Gemini credentials. When it
-launches a subscription-native runtime, it removes provider API-key environment
+launches a subscription-native destination, it removes provider API-key environment
 variables from that child process so the native CLI login stays in charge of
 billing and auth.
 
@@ -220,12 +220,12 @@ gemini
 ```
 
 After the CLI is installed and signed in, open a project, use the composer
-runtime switcher to choose Claude Code, switch Project policy from `local-only`
-to `cloud-ok` when prompted, and approve the preview before sending hosted
-context. Settings > Project runtime remains available for session history,
-diagnostics, and advanced runtime modes.
+destination switcher to choose Claude Code, switch Project policy from `local-only`
+to `cloud-ok` when prompted, and approve the preview before sending third-party
+context. Settings > Project AI destinations remains available for session history,
+diagnostics, and advanced modes.
 
-Rollback smoke after reverting or patching a runtime-host PR:
+Rollback smoke after reverting or patching an AI-destination PR:
 
 ```bash
 npm run test:e2e -- tests/e2e/runtime-hosts.spec.ts
@@ -233,8 +233,8 @@ npm run test -- tests/integration/api-runtime-preview.test.ts tests/integration/
 ```
 
 The minimum manual smoke is: confirm OpenClaw local chat still works with the
-default `gemma4:latest` model, local-only policy blocks hosted hosts, cloud-ok
-policy shows a preview and approval gate, runtime health renders missing or
+default `gemma4:latest` model, local-only policy blocks third-party destinations, cloud-ok
+policy shows a preview and approval gate, destination health renders missing or
 not-authenticated CLIs without crashing settings, and historical sessions remain
 readable.
 

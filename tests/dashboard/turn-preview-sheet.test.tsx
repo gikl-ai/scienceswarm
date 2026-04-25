@@ -40,7 +40,7 @@ function preview(overrides: Partial<TurnPreview> = {}): TurnPreview {
 }
 
 describe("TurnPreviewSheet", () => {
-  it("shows the hosted reminder, destination, account source, included data, and controls", () => {
+  it("shows the third-party data reminder, destination, account source, included data, and controls", () => {
     const onApprove = vi.fn();
     const onCancel = vi.fn();
 
@@ -55,13 +55,18 @@ describe("TurnPreviewSheet", () => {
       />,
     );
 
-    expect(screen.getByRole("dialog", { name: "Hosted runtime reminder" })).toBeInTheDocument();
-    expect(screen.getByText(/future chat turns to the same host can send without interrupting/)).toBeInTheDocument();
+    expect(screen.getByRole("dialog", {
+      name: "Reminder: your data will be sent to a third party",
+    })).toBeInTheDocument();
+    expect(screen.getByText(/will be sent to Codex, a third party/)).toBeInTheDocument();
+    expect(screen.getByText(/remember this choice for future chat turns to Codex/)).toBeInTheDocument();
     expect(screen.getByText("Codex")).toBeInTheDocument();
     expect(screen.getByText("Native CLI login")).toBeInTheDocument();
     expect(screen.getByText("notes/current.md")).toBeInTheDocument();
+    expect(screen.queryByText("Policy passed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Hosted")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Acknowledge and send" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send to third party" }));
     expect(onApprove).toHaveBeenCalled();
 
     fireEvent.keyDown(window, { key: "Escape" });
@@ -74,7 +79,7 @@ describe("TurnPreviewSheet", () => {
         open
         preview={preview({
           allowed: false,
-          blockReason: "Project policy local-only blocks runtime host codex.",
+          blockReason: "Local-only policy blocks Codex because it would send data to a third party.",
         })}
         pendingLabel="chat via Codex"
         onApprove={vi.fn()}
@@ -84,8 +89,8 @@ describe("TurnPreviewSheet", () => {
     );
 
     const sheet = screen.getByTestId("turn-preview-sheet");
-    expect(within(sheet).getByText(/local-only blocks/)).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Runtime preview" })).toBeInTheDocument();
+    expect(within(sheet).getByText(/Local-only policy blocks/)).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Review before sending" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve and send" })).toBeDisabled();
   });
 
@@ -101,8 +106,26 @@ describe("TurnPreviewSheet", () => {
       />,
     );
 
-    expect(screen.getByRole("dialog", { name: "Runtime preview" })).toBeInTheDocument();
-    expect(screen.queryByText(/future chat turns to the same host/)).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Review before sending" })).toBeInTheDocument();
+    expect(screen.queryByText(/will be sent to Codex, a third party/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve and send" })).toBeEnabled();
+  });
+
+  it("keeps empty-destination reminder copy plain", () => {
+    render(
+      <TurnPreviewSheet
+        open
+        preview={preview({ destinations: [] })}
+        pendingLabel="chat via selected destination"
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+        onChangeHost={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(
+      "Your prompt and the data listed below will be sent to a third party. ScienceSwarm will remember this choice for future chat turns to this destination.",
+    )).toBeInTheDocument();
+    expect(screen.queryByText(/third party, a third party/)).not.toBeInTheDocument();
   });
 });

@@ -14,13 +14,13 @@ export const SCIENCESWARM_LOCAL_AUTH_ERROR_MESSAGE_TYPE =
   "scienceswarm.local-auth.error";
 
 export const SCIENCESWARM_CRITIQUE_SIGN_IN_REQUIRED_MESSAGE =
-  "Create a free account at scienceswarm.ai and sign in to use the hosted Reasoning API.";
+  "Create a free account at scienceswarm.ai and sign in to use the Cloud Reasoning API.";
 export const SCIENCESWARM_CRITIQUE_SESSION_EXPIRED_MESSAGE =
-  "Your ScienceSwarm session expired. Sign in again to continue using the hosted Reasoning API.";
+  "Your ScienceSwarm session expired. Sign in again to continue using the Cloud Reasoning API.";
 export const SCIENCESWARM_CRITIQUE_CLOUD_DISCLAIMER =
-  "Hosted Reasoning sends your PDF or pasted text to ScienceSwarm's cloud API. It does not run on the local model.";
+  "Cloud Reasoning sends your PDF or pasted text to ScienceSwarm's cloud API. It does not run on the local model.";
 export const SCIENCESWARM_CRITIQUE_FRONTIER_MODELS_DISCLAIMER =
-  "Hosted Reasoning uses ScienceSwarm-selected frontier models from Google, Anthropic, and OpenAI. During the beta period, ScienceSwarm is covering that access for free.";
+  "Cloud Reasoning uses ScienceSwarm-selected frontier models from Google, Anthropic, and OpenAI. During the beta period, ScienceSwarm is covering that access for free.";
 
 function readConfiguredOverride(name: string): string | null {
   const value = process.env[name]?.trim();

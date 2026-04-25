@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 - `setup.sh` removed. Use `./install.sh` for first-time setup.
 - Ports are now centrally configured. Override local service ports via env vars:
   `FRONTEND_PORT`, `OPENHANDS_PORT`, `OPENCLAW_URL`, `NANOCLAW_PORT`,
-  `OLLAMA_URL`. Hosted structured critique uses
+  `OLLAMA_URL`. Cloud structured critique uses
   `STRUCTURED_CRITIQUE_SERVICE_URL` and is not managed as a local port.
 
 ### Added
@@ -25,7 +25,7 @@ All notable changes to this project will be documented in this file.
 - Simple-onboarding: single-screen `/setup` form replaces the 7-step installer and multi-section setup page. Installs everything in parallel via `/api/setup/bootstrap` SSE (gbrain, openclaw, openhands docker, ollama+gemma).
 - Personal Telegram bot auto-creation via gramjs + BotFather automation. Users see "Meet Wobblefinch" (or any of 45 whimsical creatures) with a QR code to their personal bot — no token passing.
 - `npm run setup:reset` wipes onboarding state for repeat testing; gated `/api/setup/reset` HTTP counterpart.
-- The chat pane can now send plain chat turns directly to the selected runtime host, including Codex and Claude Code, without routing through OpenClaw preview approval.
+- The chat pane can now send plain chat turns directly to the selected AI destination, including Codex and Claude Code, without routing through OpenClaw preview approval.
 
 ### Changed
 
@@ -35,17 +35,17 @@ All notable changes to this project will be documented in this file.
 - The `scienceswarm status` health probe now respects HTTPS local frontends, so healthy self-signed local installs report `Frontend health: ok`.
 - `scienceswarm start`, `scienceswarm status`, install output, and README setup instructions now point users at the exact `127.0.0.1` dashboard/setup URL and call out wrong-protocol local URLs.
 - Local frontend startup now defaults to HTTP loopback instead of self-signed HTTPS. Browsers treat loopback HTTP as trustworthy, while untrusted self-signed local certificates can fail differently across Safari, Chrome, Firefox, and Edge. `FRONTEND_USE_HTTPS=true` remains available for explicit local TLS testing.
-- Settings > Project runtime now shows explicit Claude Code, Codex, and Gemini CLI setup commands, making subscription-backed runtime connection visible without asking ScienceSwarm to store provider tokens.
+- Settings > Project AI destinations now shows explicit Claude Code, Codex, and Gemini CLI setup commands, making subscription-backed destination connection visible without asking ScienceSwarm to store provider tokens.
 
 ### Fixed
 
 - OpenClaw thinking traces no longer replay stale assistant content into the next user turn on reused web conversations.
-- Hosted runtime chat now shows the privacy reminder once per project/host and
-  lets later conversation turns send without the runtime preview interrupting
+- Third-party chat now shows the privacy reminder once per project/destination and
+  lets later conversation turns send without the destination review interrupting
   the composer flow.
 - gbrain's runtime import now uses the exported engine factory and a single PGlite version, avoiding bundled extension lookups under `/_next/static/media/*.tar.gz` during Next.js development.
-- Claude Code and Codex runtime health now run native CLI auth checks, while ready subscription CLIs with host-owned auth can be selected with clear first-send login copy instead of staying blocked as unknown.
-- Subscription-native runtime sends no longer inherit provider API-key env vars from the ScienceSwarm server process, so Codex, Claude Code, and Gemini CLI stay on their native CLI login paths.
+- Claude Code and Codex destination health now run native CLI auth checks, while ready subscription CLIs with provider-owned auth can be selected with clear first-send login copy instead of staying blocked as unknown.
+- Subscription-native destination sends no longer inherit provider API-key env vars from the ScienceSwarm server process, so Codex, Claude Code, and Gemini CLI stay on their native CLI login paths.
 
 ### Removed
 

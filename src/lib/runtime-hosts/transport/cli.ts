@@ -109,7 +109,7 @@ export class RuntimeCliAuthRequiredError extends RuntimeHostError {
       code: "RUNTIME_HOST_AUTH_REQUIRED",
       status: 401,
       message: input.detail ?? `Runtime CLI requires authentication: ${input.command}`,
-      userMessage: "Runtime host requires authentication.",
+      userMessage: "This AI destination requires authentication.",
       recoverable: true,
       context: {
         ...input,
@@ -126,7 +126,7 @@ export class RuntimeCliTimeoutError extends RuntimeHostError {
       code: "RUNTIME_TRANSPORT_ERROR",
       status: 504,
       message: `Runtime CLI timed out after ${input.timeoutMs}ms: ${input.command}`,
-      userMessage: "Runtime host timed out.",
+      userMessage: "The AI destination timed out.",
       recoverable: true,
       context: {
         ...input,
@@ -277,7 +277,7 @@ export class LocalCliTransport implements CliTransport {
               code: "RUNTIME_TRANSPORT_ERROR",
               status: 502,
               message: `Runtime CLI exited due to signal ${signal}: ${request.command}`,
-              userMessage: "Runtime host command was interrupted.",
+              userMessage: "The AI destination command was interrupted.",
               recoverable: true,
               context: {
                 hostId: request.hostId,

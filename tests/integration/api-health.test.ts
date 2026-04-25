@@ -150,7 +150,7 @@ describe("GET /api/health", () => {
       ready: false,
       status: "unavailable",
       detail:
-        "Hosted Descartes critique is configured but blocked in strict local-only mode.",
+        "Cloud Descartes critique is configured but blocked in strict local-only mode.",
     });
     expect(body.agent).toEqual({ type: "openclaw", status: "connected" });
     expect(body.features.chat).toBe(false);
@@ -270,7 +270,7 @@ describe("GET /api/health", () => {
       configured: true,
       ready: false,
       status: "auth_failed",
-      detail: "Hosted Descartes rejected the configured credentials.",
+      detail: "Cloud Descartes rejected the configured credentials.",
     });
     // structuredCritique.hosted capability was removed from the capability matrix
     const capability = body.runtimeContract.capabilities.find(

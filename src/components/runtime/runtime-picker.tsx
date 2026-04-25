@@ -62,7 +62,7 @@ export function RuntimePicker({
   const selectedHost = hostById(hosts, selectedHostId);
   const selectedReason = selectedHost
     ? runtimeHostDisabledReason({ host: selectedHost, policy: projectPolicy, mode })
-    : "Runtime host unavailable";
+    : "Destination unavailable";
   const readyLabel = nativeCliAuthUnknown(selectedHost)
     ? "Ready to try; CLI owns login"
     : mode === "chat"
@@ -79,7 +79,7 @@ export function RuntimePicker({
     <section
       className="space-y-3 border-b border-border bg-white px-4 py-3"
       data-testid="runtime-picker"
-      aria-label="Runtime controls"
+      aria-label="Destination controls"
     >
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
         <label className="min-w-0 space-y-1">
@@ -124,7 +124,7 @@ export function RuntimePicker({
 
         <label className="min-w-0 space-y-1">
           <span className="text-xs font-semibold text-muted">
-            {mode === "compare" ? "Synthesis host" : "Runtime host"}
+            {mode === "compare" ? "Synthesis destination" : "Destination"}
           </span>
           <select
             className="min-h-11 w-full rounded border border-border bg-surface px-3 text-sm focus:border-accent focus:outline-none"
@@ -163,7 +163,7 @@ export function RuntimePicker({
 
       {mode === "compare" && (
         <fieldset className="space-y-2" data-testid="runtime-compare-hosts">
-          <legend className="text-xs font-semibold text-muted">Compare hosts</legend>
+          <legend className="text-xs font-semibold text-muted">Compare destinations</legend>
           <div className="flex flex-wrap gap-2">
             {hosts.map((host) => {
               const disabledReason = runtimeHostDisabledReason({
@@ -198,7 +198,7 @@ export function RuntimePicker({
               );
             })}
             {compareHosts.length === 0 && (
-              <span className="text-sm text-muted">No compare-capable hosts under this policy.</span>
+              <span className="text-sm text-muted">No compare-capable destinations under this policy.</span>
             )}
           </div>
         </fieldset>

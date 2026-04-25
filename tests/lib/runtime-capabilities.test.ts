@@ -129,7 +129,7 @@ describe("runtime capability contract", () => {
         configured: true,
         ready: false,
         status: "auth_failed",
-        detail: "Hosted Descartes rejected the configured credentials.",
+        detail: "Cloud Descartes rejected the configured credentials.",
         endpoint: "https://descartes.example/v1/ready",
         observedAt: "2026-04-17T00:00:00.000Z",
       },

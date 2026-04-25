@@ -224,7 +224,7 @@ function llmUnavailableResponse(err: unknown): Response {
       code: "llm_unavailable",
       cause,
       nextAction:
-        "Open /setup to configure the local model path or add a supported hosted provider key.",
+        "Open /setup to configure the local model path or add a supported cloud provider key.",
     },
     { status: 503 },
   );

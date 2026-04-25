@@ -129,8 +129,8 @@ function structuredCritiqueBlockedByStrictLocal(): StructuredCritiqueReadinessPr
     ready: false,
     status: configStatus.available ? "unavailable" : "not_configured",
     detail: configStatus.available
-      ? "Hosted Descartes critique is configured but blocked in strict local-only mode."
-      : "Hosted Descartes critique is blocked in strict local-only mode.",
+      ? "Cloud Descartes critique is configured but blocked in strict local-only mode."
+      : "Cloud Descartes critique is blocked in strict local-only mode.",
     observedAt: new Date().toISOString(),
   };
 }

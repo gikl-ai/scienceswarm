@@ -37,7 +37,7 @@ export function RuntimeTaskBoard({
     <section className="border-t border-border bg-white" data-testid="runtime-task-board">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Runtime sessions</h2>
+          <h2 className="text-sm font-semibold text-foreground">AI sessions</h2>
           <p className="text-xs text-muted">Chat, task, and compare runs for this project.</p>
         </div>
         <button
@@ -60,7 +60,7 @@ export function RuntimeTaskBoard({
           <thead>
             <tr className="border-y border-border bg-surface text-muted">
               <th className="px-4 py-2 font-semibold">Status</th>
-              <th className="px-3 py-2 font-semibold">Host</th>
+              <th className="px-3 py-2 font-semibold">Destination</th>
               <th className="px-3 py-2 font-semibold">Mode</th>
               <th className="px-3 py-2 font-semibold">Updated</th>
               <th className="px-3 py-2 font-semibold">Controls</th>
@@ -112,7 +112,7 @@ export function RuntimeTaskBoard({
             {sessions.length === 0 && (
               <tr>
                 <td className="px-4 py-4 text-sm text-muted" colSpan={5}>
-                  {loading ? "Loading runtime sessions..." : "No runtime sessions yet."}
+                  {loading ? "Loading AI sessions..." : "No AI sessions yet."}
                 </td>
               </tr>
             )}

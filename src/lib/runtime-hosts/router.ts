@@ -164,7 +164,7 @@ export class RuntimeHostRouter {
         code: "RUNTIME_HOST_UNKNOWN",
         status: 404,
         message: `No runtime adapter registered for ${prepared.request.hostId}.`,
-        userMessage: "That runtime host is not available.",
+        userMessage: "That AI destination is not available.",
         recoverable: true,
         context: { hostId: prepared.request.hostId },
       });

@@ -86,7 +86,7 @@ describe("POST /api/runtime/preview", () => {
 
     expect(response.status).toBe(403);
     expect(body.code).toBe("RUNTIME_PRIVACY_BLOCKED");
-    expect(body.error).toContain("local-only");
+    expect(body.error).toContain("Local-only");
   });
 
   it("returns TurnPreview disclosure for allowed hosted calls", async () => {

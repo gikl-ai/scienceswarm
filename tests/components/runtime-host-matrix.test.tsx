@@ -280,7 +280,7 @@ describe("RuntimeDefaultsForm", () => {
     expect(within(select).getByRole("option", {
       name: "Gemini CLI",
     })).not.toBeDisabled();
-    expect(screen.getByText("The native CLI owns sign-in; first send can surface host login if needed.")).toBeInTheDocument();
+    expect(screen.getByText("The native CLI owns sign-in; first send can surface provider login if needed.")).toBeInTheDocument();
     expect(runtimeHostSelectableForDefault(hosts[1], "cloud-ok")).toBe(true);
   });
 });
@@ -389,7 +389,7 @@ describe("RuntimeSetupCallouts", () => {
       />,
     );
 
-    expect(screen.getByText("Runtime hosts reported ready setup state.")).toBeInTheDocument();
+    expect(screen.getByText("AI destinations reported ready setup state.")).toBeInTheDocument();
     expect(screen.queryByText("Authentication status is unknown.")).not.toBeInTheDocument();
   });
 });

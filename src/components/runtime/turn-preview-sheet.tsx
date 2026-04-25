@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import type { TurnPreview } from "@/lib/runtime-hosts/contracts";
-import { RuntimePrivacyChip, RuntimeStatusChip } from "./runtime-status-chip";
 
 function accountSourceLabel(source: TurnPreview["accountDisclosure"]["accountSource"]): string {
   switch (source) {
@@ -15,6 +14,10 @@ function accountSourceLabel(source: TurnPreview["accountDisclosure"]["accountSou
   }
 }
 
+function destinationLabel(preview: TurnPreview): string | null {
+  return preview.destinations.map((destination) => destination.label).join(", ") || null;
+}
+
 function privacyReminderCopy(preview: TurnPreview): string | null {
   const isLocal = preview.effectivePrivacyClass === "local-only"
     || preview.effectivePrivacyClass === "local-network";
@@ -22,9 +25,16 @@ function privacyReminderCopy(preview: TurnPreview): string | null {
     return null;
   }
 
+  const destination = destinationLabel(preview);
+  if (!destination) {
+    return [
+      "Your prompt and the data listed below will be sent to a third party.",
+      "ScienceSwarm will remember this choice for future chat turns to this destination.",
+    ].join(" ");
+  }
   return [
-    "This chat will leave the local-only OpenClaw path and go to the selected runtime host.",
-    "Review this once so future chat turns to the same host can send without interrupting you.",
+    `Your prompt and the data listed below will be sent to ${destination}, a third party.`,
+    `ScienceSwarm will remember this choice for future chat turns to ${destination}.`,
   ].join(" ");
 }
 
@@ -58,7 +68,9 @@ export function TurnPreviewSheet({
 
   if (!open || !preview) return null;
   const reminderCopy = privacyReminderCopy(preview);
-  const title = reminderCopy ? "Hosted runtime reminder" : "Runtime preview";
+  const title = reminderCopy
+    ? "Reminder: your data will be sent to a third party"
+    : "Review before sending";
 
   return (
     <div
@@ -84,9 +96,9 @@ export function TurnPreviewSheet({
               type="button"
               onClick={onCancel}
               className="min-h-11 rounded border border-border px-3 text-sm font-medium text-muted hover:text-foreground"
-              aria-label="Cancel runtime preview"
+              aria-label="Keep draft and close"
             >
-              Cancel
+              Keep draft
             </button>
           </div>
         </div>
@@ -97,18 +109,6 @@ export function TurnPreviewSheet({
               {reminderCopy}
             </p>
           )}
-
-          <div className="flex flex-wrap gap-2">
-            <RuntimeStatusChip
-              label={preview.allowed ? "Policy passed" : "Policy blocked"}
-              tone={preview.allowed ? "ok" : "danger"}
-            />
-            <RuntimeStatusChip
-              label={preview.requiresUserApproval ? "Approval required" : "No approval required"}
-              tone={preview.requiresUserApproval ? "warn" : "ok"}
-            />
-            <RuntimePrivacyChip privacyClass={preview.effectivePrivacyClass} />
-          </div>
 
           {preview.blockReason && (
             <p className="rounded border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
@@ -125,7 +125,6 @@ export function TurnPreviewSheet({
                   className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
                 >
                   <span className="min-w-0 truncate font-medium">{destination.label}</span>
-                  <RuntimePrivacyChip privacyClass={destination.privacyClass} />
                 </div>
               ))}
             </div>
@@ -176,7 +175,7 @@ export function TurnPreviewSheet({
             onClick={onChangeHost}
             className="min-h-11 rounded border border-border px-4 text-sm font-semibold text-foreground hover:border-accent"
           >
-            Change host
+            Change destination
           </button>
           <button
             type="button"
@@ -184,7 +183,7 @@ export function TurnPreviewSheet({
             disabled={!preview.allowed || busy}
             className="min-h-11 rounded bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? "Starting..." : reminderCopy ? "Acknowledge and send" : "Approve and send"}
+            {busy ? "Sending..." : reminderCopy ? "Send to third party" : "Approve and send"}
           </button>
         </div>
       </section>

@@ -588,7 +588,7 @@ async function installRuntimeRoutes(page: Page): Promise<RuntimeRouteState> {
           route,
           {
             code: "RUNTIME_PRIVACY_BLOCKED",
-            error: "Project policy local-only blocks hosted runtime hosts before prompt construction.",
+            error: "Local-only policy blocks Codex because it would send data to a third party.",
           },
           403,
         );
@@ -746,7 +746,7 @@ async function installRuntimeRoutes(page: Page): Promise<RuntimeRouteState> {
       await fulfillJson(route, {
         project: PROJECT_ID,
         generatedAt: NOW,
-        nextMove: { recommendation: "Review runtime host disclosures before sending hosted work." },
+        nextMove: { recommendation: "Review where data will be sent before sending third-party work." },
         topMatters: [],
         unresolvedRisks: [],
         dueTasks: [],
@@ -858,7 +858,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await stopReadyRuntimeServer(readyServer);
   });
 
-  test("keeps OpenClaw as the local-only default and blocks hosted hosts", async ({
+  test("keeps OpenClaw as the local-only default and blocks third-party destinations", async ({
     page,
   }) => {
     const state = await installRuntimeRoutes(page);
@@ -886,7 +886,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     expect(state.previewRequests).toBe(0);
   });
 
-  test("requires hosted preview approval and keeps recovery visible in sessions", async ({
+  test("requires third-party review approval and keeps recovery visible in sessions", async ({
     page,
   }) => {
     await installRuntimeRoutes(page);
@@ -902,12 +902,12 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await page.getByTestId("runtime-mode-task").click();
 
     await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
-    await sendProjectPrompt(page, "Run a hosted task and write the summary.");
+    await sendProjectPrompt(page, "Run a third-party task and write the summary.");
 
     const preview = page.getByTestId("turn-preview-sheet");
     await expect(preview).toBeVisible();
-    await expect(preview).toContainText("Runtime preview");
-    await expect(preview).toContainText("Approval required");
+    await expect(preview).toContainText("Review before sending");
+    await expect(preview).not.toContainText("Approval required");
     await expect(preview).toContainText("Codex");
     await expect(preview).toContainText("User prompt");
 
@@ -924,7 +924,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     const detail = page.getByTestId("runtime-session-detail");
     await expect(detail).toContainText("results/summary.md");
     await expect(detail).toContainText("gbrain-writeback-failed");
-    await expect(detail).toContainText("Retry from the composer after changing host or policy.");
+    await expect(detail).toContainText("Retry from the composer after changing destination or policy.");
   });
 
   test("shows compare partial failures without hiding synthesis provenance", async ({
@@ -942,7 +942,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     await page.getByTestId("runtime-compare-hosts").getByLabel("Codex").check();
 
     await page.goto(`${readyServer.baseUrl}/dashboard/project?name=${PROJECT_ID}`);
-    await sendProjectPrompt(page, "Compare the runtime host answers.");
+    await sendProjectPrompt(page, "Compare the AI destination answers.");
 
     await expect(page.getByTestId("turn-preview-sheet")).toContainText("Codex");
     await page.getByRole("button", { name: "Approve and send" }).click();

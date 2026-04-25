@@ -5,7 +5,7 @@ type ChipTone = "ok" | "warn" | "danger" | "neutral";
 const PRIVACY_LABELS: Record<RuntimePrivacyClass, string> = {
   "local-only": "Local only",
   "local-network": "Local network",
-  hosted: "Hosted",
+  hosted: "Third party",
   "external-network": "External network",
 };
 

@@ -143,7 +143,7 @@ export class PtyCliTransport implements CliTransport {
             code: "RUNTIME_TRANSPORT_ERROR",
             status: 504,
             message: `PTY runtime command timed out after ${timeoutMs}ms.`,
-            userMessage: "Runtime host timed out.",
+            userMessage: "The AI destination timed out.",
             recoverable: true,
             context: {
               hostId: request.hostId,
@@ -186,7 +186,7 @@ export class PtyCliTransport implements CliTransport {
               code: "RUNTIME_TRANSPORT_ERROR",
               status: 502,
               message: `PTY runtime command exited due to signal ${event.signal}.`,
-              userMessage: "Runtime host command was interrupted.",
+              userMessage: "The AI destination command was interrupted.",
               recoverable: true,
               context: {
                 hostId: request.hostId,

@@ -13,9 +13,9 @@ const POLICY_LABELS: Record<RuntimeSettingsPolicy, string> = {
 };
 
 const POLICY_COPY: Record<RuntimeSettingsPolicy, string> = {
-  "local-only": "Hosted and external hosts are blocked.",
-  "cloud-ok": "Hosted chat hosts are allowed after preview approval.",
-  "execution-ok": "Task-capable execution hosts can be selected.",
+  "local-only": "Third-party and external destinations are blocked.",
+  "cloud-ok": "Third-party chat destinations are allowed after preview approval.",
+  "execution-ok": "Task-capable destinations can be selected.",
 };
 
 function optionDisabledReason(
@@ -72,11 +72,11 @@ export function RuntimeDefaultsForm({
       data-testid="runtime-defaults-form"
     >
       <div>
-        <h2 className="text-lg font-semibold">Runtime defaults</h2>
+        <h2 className="text-lg font-semibold">Destination defaults</h2>
         <p className="mt-1 max-w-3xl text-sm text-muted">
-          Draft defaults are local to this settings view until runtime default
+          Draft defaults are local to this settings view until destination default
           persistence lands. Project send surfaces still show the selected
-          runtime before any hosted request.
+          destination before any third-party request.
         </p>
       </div>
 
@@ -102,7 +102,7 @@ export function RuntimeDefaultsForm({
 
         <label className="space-y-2">
           <span className="text-sm font-medium text-foreground">
-            Default host
+            Default destination
           </span>
           <select
             className="w-full rounded-lg border-2 border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
@@ -126,10 +126,10 @@ export function RuntimeDefaultsForm({
           </select>
           <p className="text-xs text-muted">
             {selectedBlocked
-              ? "The current policy blocks this host; OpenClaw local remains the fallback."
+              ? "The current policy blocks this destination; OpenClaw local remains the fallback."
               : selectedNativeCliAuthUnknown
-                ? "The native CLI owns sign-in; first send can surface host login if needed."
-                : "Only ready hosts allowed by policy can become the draft default."}
+                ? "The native CLI owns sign-in; first send can surface provider login if needed."
+                : "Only ready destinations allowed by policy can become the draft default."}
           </p>
         </label>
       </div>

@@ -173,6 +173,7 @@ export interface RuntimeSendOptions {
   selectedHostIds?: string[];
   synthesisHostId?: string;
   dataIncluded?: RuntimeDataIncluded[];
+  rejectOnError?: boolean;
 }
 
 export interface UseUnifiedChat {
@@ -2052,6 +2053,7 @@ type SendContext = {
   selectedHostIds: string[];
   synthesisHostId: string | null;
   dataIncluded?: RuntimeDataIncluded[];
+  rejectOnError: boolean;
 };
 
 type QueuedSend = {
@@ -2060,6 +2062,7 @@ type QueuedSend = {
   assistantId: string;
   context: SendContext;
   resolve: () => void;
+  reject: (error: unknown) => void;
 };
 
 function buildInitialMessages(projectName: string): Message[] {
@@ -2694,6 +2697,7 @@ function isRuntimeSendOptions(
     || "selectedHostIds" in value
     || "synthesisHostId" in value
     || "dataIncluded" in value
+    || "rejectOnError" in value
     || "activeFile" in value;
 }
 
@@ -3901,7 +3905,7 @@ export function useUnifiedChat(
       activeFile?: ActiveFileContext,
     ) => {
       if (!hasProjectScope(context.projectName)) {
-        throw new Error("Runtime host sends require an active project.");
+        throw new Error("AI destination sends require an active project.");
       }
 
       const requestFiles = liveUploadedFilesRef.current;
@@ -4434,6 +4438,7 @@ export function useUnifiedChat(
           ),
         );
 
+        let sendError: unknown = null;
         try {
           const shouldUseRuntimeApi =
             queued.context.backend !== "openclaw"
@@ -4472,6 +4477,7 @@ export function useUnifiedChat(
             );
           }
         } catch (err) {
+          sendError = err;
           if (err instanceof Error && err.name === "AbortError") {
             // A newer project/backend context superseded this request.
           } else if (isSendContextCurrent(queued.context)) {
@@ -4503,7 +4509,11 @@ export function useUnifiedChat(
           if (isSendProjectCurrent(queued.context)) {
             applyMessagesUpdate((prev) => removeEmptyAssistantPlaceholder(prev, queued.assistantId));
           }
-          queued.resolve();
+          if (sendError && queued.context.rejectOnError) {
+            queued.reject(sendError);
+          } else {
+            queued.resolve();
+          }
         }
       }
     } finally {
@@ -4541,6 +4551,9 @@ export function useUnifiedChat(
         const openClawReady = await refreshOpenClawHealth();
         if (!openClawReady) {
           setError(OPENCLAW_UNREACHABLE_ERROR);
+          if (runtimeOptions.rejectOnError === true) {
+            throw new Error(OPENCLAW_UNREACHABLE_ERROR);
+          }
           return;
         }
       }
@@ -4575,6 +4588,7 @@ export function useUnifiedChat(
         selectedHostIds: runtimeOptions.selectedHostIds ?? [],
         synthesisHostId: runtimeOptions.synthesisHostId ?? null,
         dataIncluded: runtimeOptions.dataIncluded,
+        rejectOnError: runtimeOptions.rejectOnError === true,
       };
 
       liveBackendRef.current = requestedBackend;
@@ -4587,12 +4601,13 @@ export function useUnifiedChat(
       applyMessagesUpdate((prev) => [...prev, userMsg, assistantMsg]);
       setError(null);
 
-      const completion = new Promise<void>((resolve) => {
+      const completion = new Promise<void>((resolve, reject) => {
         const queued: QueuedSend = {
           content: requestContent,
           assistantId,
           context,
           resolve,
+          reject,
         };
         if (runtimeOptions.activeFile) {
           queued.activeFile = runtimeOptions.activeFile;

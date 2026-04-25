@@ -126,7 +126,7 @@ describe("runtime host contracts and registry", () => {
       known: false,
       readOnly: true,
       id: "legacy-runtime-v1",
-      label: "Unknown runtime host (legacy-runtime-v1)",
+      label: "Unknown AI destination (legacy-runtime-v1)",
       profile: null,
     });
     expect(resolveRuntimeHostRecord("codex")).toMatchObject({
@@ -245,7 +245,7 @@ describe("runtime host contracts and registry", () => {
     expect(apiError).toEqual({
       status: 422,
       body: {
-        error: "This runtime does not support the requested action.",
+        error: "This destination does not support the requested action.",
         code: "RUNTIME_HOST_CAPABILITY_UNSUPPORTED",
         recoverable: true,
       },

@@ -3782,7 +3782,7 @@ function ProjectPageContent() {
         setInput("");
       }
       try {
-        await sendMessage(prompt, options);
+        await sendMessage(prompt, { ...options, rejectOnError: true });
       } catch (error) {
         if (clearInputAfterSend) {
           setInput((current) => (current.length === 0 ? prompt : current));
@@ -3838,7 +3838,7 @@ function ProjectPageContent() {
           | { preview?: TurnPreview; error?: string }
           | null;
         if (!response.ok || !payload?.preview) {
-          throw new Error(payload?.error || `Runtime preview failed: ${response.status}`);
+          throw new Error(payload?.error || `Destination review failed: ${response.status}`);
         }
         const previewOptions: RuntimeSendOptions = {
           ...options,
@@ -3870,7 +3870,7 @@ function ProjectPageContent() {
           restoreDraft: prompt,
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Runtime preview failed.";
+        const message = err instanceof Error ? err.message : "Destination review failed.";
         setRuntimePreviewError(message);
         setError(message);
       } finally {
@@ -3889,24 +3889,26 @@ function ProjectPageContent() {
   );
 
   const handleApproveRuntimePreview = useCallback(async () => {
-    if (!pendingRuntimeSend) return;
+    const pendingSend = pendingRuntimeSend;
+    if (!pendingSend) return;
     setRuntimePreviewBusy(true);
     setRuntimePreviewError(null);
+    setPendingRuntimeSend(null);
+    if (shouldRememberRuntimePreview(pendingSend.preview)) {
+      rememberRuntimePreviewAcknowledgement({
+        projectId: activeProjectSlug,
+        preview: pendingSend.preview,
+      });
+    }
     try {
-      await sendRuntimePrompt(pendingRuntimeSend.prompt, pendingRuntimeSend.options);
-      if (shouldRememberRuntimePreview(pendingRuntimeSend.preview)) {
-        rememberRuntimePreviewAcknowledgement({
-          projectId: activeProjectSlug,
-          preview: pendingRuntimeSend.preview,
-        });
-      }
-      setPendingRuntimeSend(null);
+      await sendRuntimePrompt(pendingSend.prompt, pendingSend.options);
     } catch (err) {
-      setRuntimePreviewError(err instanceof Error ? err.message : "Runtime send failed.");
+      const message = err instanceof Error ? err.message : "Send failed.";
+      setError(message);
     } finally {
       setRuntimePreviewBusy(false);
     }
-  }, [activeProjectSlug, pendingRuntimeSend, sendRuntimePrompt]);
+  }, [activeProjectSlug, pendingRuntimeSend, sendRuntimePrompt, setError]);
 
   const restorePendingRuntimeDraft = useCallback((value: string) => {
     setInput((current) => (current.length === 0 ? value : current));
@@ -4060,7 +4062,9 @@ function ProjectPageContent() {
       // The preview pane is part of the visible scientist workflow. If a user
       // opens a report item and asks "what next?", attach that current view as
       // active-file context without requiring a separate context-chip action.
-      void prepareRuntimePreviewAndSend(trimmed, activePreviewFile ?? undefined);
+      void prepareRuntimePreviewAndSend(trimmed, activePreviewFile ?? undefined).catch((err) => {
+        setError(err instanceof Error ? err.message : "Send failed.");
+      });
     },
     [
       activePreviewFile,
@@ -4071,6 +4075,7 @@ function ProjectPageContent() {
       isChatBusy,
       prepareRuntimePreviewAndSend,
       recordPromptHistory,
+      setError,
     ],
   );
 
@@ -4485,7 +4490,7 @@ function ProjectPageContent() {
             {latestPdfFile ? (
               <div className="border-b border-border bg-sunk px-3 py-2 text-[11px] leading-5 text-body">
                 <span className="font-semibold text-strong">
-                  Hosted critique:
+                  Cloud critique:
                 </span>{" "}
                 {SCIENCESWARM_CRITIQUE_CLOUD_DISCLAIMER}{" "}
                 {!isSignedIn ? (
