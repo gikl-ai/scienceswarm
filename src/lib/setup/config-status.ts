@@ -30,11 +30,13 @@
 //     into the structured status object the UI consumes.
 
 import { constants as fsConstants, promises as fs } from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 
 import { isGbrainRootReady } from "@/lib/brain/readiness";
-import { expandHomeDir, resolveConfiguredPath } from "@/lib/scienceswarm-paths";
+import {
+  expandHomeDir,
+  resolveScienceSwarmBrainRootFromValues,
+} from "@/lib/scienceswarm-paths";
 
 import { parseEnvFile, type EnvInvalidLine } from "./env-writer";
 import { isPlaceholderValue } from "./placeholder-detection";
@@ -600,9 +602,10 @@ function computePersistedSetupSummary(
 ): PersistedSetupSummary {
   const hasUserHandle = hasUsablePlainValue(values["SCIENCESWARM_USER_HANDLE"]);
   const hasEmail = hasUsablePlainValue(values["GIT_USER_EMAIL"]);
-  const hasTelegramBotToken =
-    (values["TELEGRAM_BOT_TOKEN"] ?? "").trim().length > 0;
-  const brainRootReady = isGbrainRootReady(resolveBrainRoot(values));
+  const hasTelegramBotToken = hasUsablePlainValue(values["TELEGRAM_BOT_TOKEN"]);
+  const brainRootReady = isGbrainRootReady(
+    resolveScienceSwarmBrainRootFromValues(values),
+  );
 
   return {
     hasUserHandle,
@@ -617,16 +620,6 @@ function hasUsablePlainValue(value: string | undefined): boolean {
   const trimmed = value?.trim() ?? "";
   if (!trimmed) return false;
   return !isPlaceholderValue(trimmed).isPlaceholder;
-}
-
-function resolveBrainRoot(values: Record<string, string>): string {
-  const dataRoot =
-    resolveConfiguredPath(values["SCIENCESWARM_DIR"])
-    ?? path.join(os.homedir(), ".scienceswarm");
-  return (
-    resolveConfiguredPath(values["BRAIN_ROOT"])
-    ?? path.join(dataRoot, "brain")
-  );
 }
 
 function withRuntimeOverrides(

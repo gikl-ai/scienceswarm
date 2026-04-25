@@ -67,6 +67,18 @@ export function getScienceSwarmBrainRoot(): string {
   );
 }
 
+export function resolveScienceSwarmBrainRootFromValues(
+  values: Record<string, string | undefined>,
+): string {
+  const dataRoot =
+    resolveConfiguredPath(values.SCIENCESWARM_DIR) ??
+    path.join(os.homedir(), ".scienceswarm");
+  return (
+    resolveConfiguredPath(values.BRAIN_ROOT) ??
+    path.join(dataRoot, "brain")
+  );
+}
+
 export function getScienceSwarmStateRoot(): string {
   return path.join(getScienceSwarmBrainRoot(), "state");
 }

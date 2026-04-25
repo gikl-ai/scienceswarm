@@ -232,9 +232,7 @@ export default function SetupPage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(
     () => initialPersistedState?.updatedAt ?? null,
   );
-  const [checkingExistingSetup, setCheckingExistingSetup] = useState(
-    () => initialPersistedState === null,
-  );
+  const [checkingExistingSetup, setCheckingExistingSetup] = useState(true);
   const gbrainEvent = getLatestTaskEvent(events, "gbrain-init");
   const openclawEvent = getLatestTaskEvent(events, "openclaw");
   const openhandsEvent = getLatestTaskEvent(events, "openhands-docker");

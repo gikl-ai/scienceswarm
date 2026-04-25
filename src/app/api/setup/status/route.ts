@@ -14,8 +14,6 @@
  */
 
 import { execFile } from "node:child_process";
-import * as os from "node:os";
-import * as path from "node:path";
 import { promisify } from "node:util";
 
 import { isGbrainRootReady } from "@/lib/brain/readiness";
@@ -28,7 +26,7 @@ import {
   buildRuntimeCapabilityContract,
   readOpenHandsLocalEvidence,
 } from "@/lib/runtime";
-import { resolveConfiguredPath } from "@/lib/scienceswarm-paths";
+import { resolveScienceSwarmBrainRootFromValues } from "@/lib/scienceswarm-paths";
 import {
   getConfigStatus,
   type OllamaStatusSummary,
@@ -53,18 +51,8 @@ function getConfiguredAgent(status: ConfigStatusForRuntime): string {
   return backend || "none";
 }
 
-function resolveBrainRootFromStatus(status: ConfigStatusForRuntime): string {
-  const dataRoot =
-    resolveConfiguredPath(status.rawValues.SCIENCESWARM_DIR)
-    ?? path.join(os.homedir(), ".scienceswarm");
-  return (
-    resolveConfiguredPath(status.rawValues.BRAIN_ROOT)
-    ?? path.join(dataRoot, "brain")
-  );
-}
-
 function getGbrainSnapshot(status: ConfigStatusForRuntime) {
-  const root = resolveBrainRootFromStatus(status);
+  const root = resolveScienceSwarmBrainRootFromValues(status.rawValues);
   const ready = isGbrainRootReady(root);
   return {
     read: ready,
