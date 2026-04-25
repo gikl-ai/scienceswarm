@@ -8,10 +8,9 @@ const require = createRequire(import.meta.url);
 /**
  * Runtime bridge for the installed gbrain package.
  *
- * Prefer the package export for engine-factory when the installed gbrain
- * version provides it. Fall back to the installed package path until upstream
- * exports that subpath consistently. The command wrappers still require deep
- * imports until upstream exports stable subpaths for them.
+ * Prefer package exports when the installed gbrain version provides them.
+ * Fall back to the installed package path for older builds or command modules
+ * that do not yet expose stable subpaths.
  */
 
 function timelineDateKey(date) {
@@ -79,25 +78,30 @@ function resolveGbrainSourceSpecifier(relativePathFromCore) {
   ).href;
 }
 
-function isRecoverableEngineFactoryImportError(error) {
+function isRecoverableGbrainSubpathImportError(error, packageSubpath) {
   if (!error || typeof error !== "object") {
     return false;
   }
 
   const code = "code" in error ? error.code : undefined;
   const message = "message" in error ? String(error.message) : "";
+  const exportName = `gbrain/${packageSubpath}`;
+  const packageExportName = `./${packageSubpath}`;
+  const namesRequestedSubpath = (
+    message.includes(exportName)
+    || message.includes(packageExportName)
+  );
   return (
     code === "ERR_PACKAGE_PATH_NOT_EXPORTED"
-    || code === "ERR_MODULE_NOT_FOUND"
-    || code === "MODULE_NOT_FOUND"
     || (
-      (
-        message.includes("gbrain/engine-factory")
-        || message.includes("./engine-factory")
-      )
+      (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND")
+      && namesRequestedSubpath
+    )
+    || (
+      namesRequestedSubpath
       && (
         message.includes("is not exported under the conditions")
-        || message.includes("Package subpath './engine-factory' is not defined by \"exports\"")
+        || message.includes(`Package subpath '${packageExportName}' is not defined by "exports"`)
         || message.includes("Failed to resolve import")
       )
     )
@@ -115,7 +119,7 @@ async function loadCreateEngine() {
     }
   } catch (error) {
     // Older installed gbrain builds do not export this subpath yet.
-    if (!isRecoverableEngineFactoryImportError(error)) {
+    if (!isRecoverableGbrainSubpathImportError(error, "engine-factory")) {
       throw error;
     }
   }
@@ -134,15 +138,29 @@ async function loadCreateEngine() {
   return fallbackEngineFactoryModule.createEngine;
 }
 
+async function loadExtractModule() {
+  try {
+    // gbrain 0.20 exports this command subpath; use it before falling back
+    // to the installed source path used by older pins.
+    return await import("gbrain/extract");
+  } catch (error) {
+    if (!isRecoverableGbrainSubpathImportError(error, "extract")) {
+      throw error;
+    }
+  }
+
+  return import(
+    /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/extract.ts")
+  );
+}
+
 export async function createRuntimeEngine(config) {
   const createEngine = await loadCreateEngine();
   return wrapRuntimeEngine(await createEngine(config));
 }
 
 export async function runRuntimeExtract(engine, args) {
-  const extractModule = await import(
-    /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/extract.ts")
-  );
+  const extractModule = await loadExtractModule();
   const runExtractCore = extractModule.runExtractCore;
   const mode = args[0];
   const dirIdx = args.indexOf("--dir");
