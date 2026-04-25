@@ -700,6 +700,273 @@ export const PaperLibraryGapActionRequestSchema = z.object({
 });
 export type PaperLibraryGapActionRequest = z.infer<typeof PaperLibraryGapActionRequestSchema>;
 
+export const LibraryCitationGraphNodeSchema = PaperLibraryGraphNodeSchema.extend({
+  gbrainSlug: z.string().min(1).optional(),
+  localStatus: z.enum(["local_pdf", "gbrain_page", "external", "suggested"]),
+});
+export type LibraryCitationGraphNode = z.infer<typeof LibraryCitationGraphNodeSchema>;
+
+export const LibraryCitationGraphEdgeSchema = PaperLibraryGraphEdgeSchema.extend({
+  evidence: z.array(z.string().min(1)).min(1),
+  provenance: z.array(z.string().min(1)).min(1),
+  agentDerived: z.boolean().default(false),
+});
+export type LibraryCitationGraphEdge = z.infer<typeof LibraryCitationGraphEdgeSchema>;
+
+export const LibraryCitationGraphSourceSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(["paper_library_graph", "paper_library_gaps", "gbrain_pages", "agent"]),
+  generatedAt: IsoDateStringSchema.optional(),
+  digest: z.string().min(1).optional(),
+  itemCount: z.number().int().nonnegative().optional(),
+});
+export type LibraryCitationGraphSource = z.infer<typeof LibraryCitationGraphSourceSchema>;
+
+export const PaperSuggestionDownloadStatusSchema = z.enum([
+  "open_pdf_found",
+  "metadata_only",
+  "unknown",
+  "already_local",
+]);
+export type PaperSuggestionDownloadStatus = z.infer<typeof PaperSuggestionDownloadStatusSchema>;
+
+export const PaperSuggestionRecommendedActionSchema = z.enum([
+  "download_now",
+  "save_for_later",
+  "cite_only",
+  "ignore",
+]);
+export type PaperSuggestionRecommendedAction = z.infer<typeof PaperSuggestionRecommendedActionSchema>;
+
+export const PaperSuggestionSchema = z.object({
+  title: z.string().min(1),
+  identifiers: PaperIdentifierSchema.default({}),
+  sourceUrls: z.array(z.string().url()).default([]),
+  reasonForThisQuestion: z.string().min(1),
+  graphEvidence: z.array(z.string().min(1)).default([]),
+  localEvidencePaperIds: z.array(z.string().min(1)).default([]),
+  downloadStatus: PaperSuggestionDownloadStatusSchema,
+  recommendedAction: PaperSuggestionRecommendedActionSchema,
+  confidence: z.number().min(0).max(1),
+});
+export type PaperSuggestion = z.infer<typeof PaperSuggestionSchema>;
+
+export const LibraryCitationGraphSchema = z.object({
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1).optional(),
+  question: z.string().min(1).optional(),
+  generatedAt: IsoDateStringSchema,
+  nodes: z.array(LibraryCitationGraphNodeSchema).default([]),
+  edges: z.array(LibraryCitationGraphEdgeSchema).default([]),
+  sources: z.array(LibraryCitationGraphSourceSchema).default([]),
+  suggestions: z.array(PaperSuggestionSchema).default([]),
+  warnings: z.array(z.string()).default([]),
+});
+export type LibraryCitationGraph = z.infer<typeof LibraryCitationGraphSchema>;
+
+export const PaperAcquisitionToolSchema = z.enum([
+  "openhands",
+  "openclaw",
+  "claude_code",
+  "codex",
+  "openai",
+  "anthropic",
+  "gemini",
+  "arxiv",
+  "semantic_scholar",
+  "openalex",
+  "manual",
+]);
+export type PaperAcquisitionTool = z.infer<typeof PaperAcquisitionToolSchema>;
+
+export const PaperAcquisitionConsentScopeSchema = z.enum([
+  "per_session",
+  "single_paper",
+  "manual",
+]);
+export type PaperAcquisitionConsentScope = z.infer<typeof PaperAcquisitionConsentScopeSchema>;
+
+export const PaperAcquisitionRecordStatusSchema = z.enum([
+  "downloaded",
+  "metadata_persisted",
+  "already_local",
+  "skipped",
+  "failed",
+]);
+export type PaperAcquisitionRecordStatus = z.infer<typeof PaperAcquisitionRecordStatusSchema>;
+
+export const PaperAcquisitionRecordSchema = z.object({
+  project: ProjectSlugSchema,
+  originatingQuestion: z.string().min(1).optional(),
+  suggestion: PaperSuggestionSchema,
+  tool: PaperAcquisitionToolSchema,
+  sourceUrl: z.string().url().optional(),
+  downloadedPath: z.string().min(1).optional(),
+  gbrainSlug: z.string().min(1).optional(),
+  checksum: z.string().min(1).optional(),
+  consentScope: PaperAcquisitionConsentScopeSchema.default("per_session"),
+  status: PaperAcquisitionRecordStatusSchema,
+  createdAt: IsoDateStringSchema,
+  error: z.string().min(1).optional(),
+}).superRefine((record, ctx) => {
+  if (record.status === "downloaded") {
+    if (!record.sourceUrl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceUrl"],
+        message: "Downloaded paper records require a source URL.",
+      });
+    }
+    if (!record.downloadedPath) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["downloadedPath"],
+        message: "Downloaded paper records require a local file path.",
+      });
+    }
+  }
+
+  if (record.status === "metadata_persisted" && !record.sourceUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["sourceUrl"],
+      message: "Metadata-only paper records require a source URL.",
+    });
+  }
+});
+export type PaperAcquisitionRecord = z.infer<typeof PaperAcquisitionRecordSchema>;
+
+export const PaperLibraryAcquisitionLocationSourceSchema = z.enum([
+  "arxiv",
+  "doi",
+  "openalex",
+  "pubmed",
+  "semantic_scholar",
+]);
+export type PaperLibraryAcquisitionLocationSource = z.infer<typeof PaperLibraryAcquisitionLocationSourceSchema>;
+
+export const PaperLibraryAcquisitionLocationKindSchema = z.enum([
+  "pdf",
+  "landing",
+  "metadata",
+]);
+export type PaperLibraryAcquisitionLocationKind = z.infer<typeof PaperLibraryAcquisitionLocationKindSchema>;
+
+export const PaperLibraryAcquisitionLocationSchema = z.object({
+  source: PaperLibraryAcquisitionLocationSourceSchema,
+  kind: PaperLibraryAcquisitionLocationKindSchema,
+  identifier: z.string().min(1).optional(),
+  url: z.string().url().optional(),
+  openAccess: z.boolean().default(false),
+  canDownloadPdf: z.boolean().default(false),
+  confidence: z.number().min(0).max(1),
+});
+export type PaperLibraryAcquisitionLocation = z.infer<typeof PaperLibraryAcquisitionLocationSchema>;
+
+export const PaperLibraryAcquisitionModeSchema = z.enum([
+  "download_pdf",
+  "metadata_only",
+  "watch",
+]);
+export type PaperLibraryAcquisitionMode = z.infer<typeof PaperLibraryAcquisitionModeSchema>;
+
+export const PaperLibraryAcquisitionItemStatusSchema = z.enum([
+  "planned",
+  "acquired",
+  "metadata_only",
+  "watching",
+  "failed",
+  "skipped",
+]);
+export type PaperLibraryAcquisitionItemStatus = z.infer<typeof PaperLibraryAcquisitionItemStatusSchema>;
+
+export const PaperLibraryAcquisitionItemSchema = z.object({
+  id: z.string().min(1),
+  suggestionId: z.string().min(1),
+  scanId: z.string().min(1),
+  nodeId: z.string().min(1),
+  title: z.string().min(1),
+  authors: z.array(z.string()).default([]),
+  year: z.number().int().min(1000).max(3000).optional(),
+  venue: z.string().optional(),
+  identifiers: PaperIdentifierSchema.default({}),
+  sources: z.array(PaperMetadataSourceSchema).default([]),
+  reasonCodes: z.array(GapSuggestionReasonCodeSchema).default([]),
+  score: GapSuggestionScoreSchema,
+  localConnectionCount: z.number().int().nonnegative().default(0),
+  evidencePaperIds: z.array(z.string().min(1)).default([]),
+  evidenceClusterIds: z.array(z.string().min(1)).default([]),
+  evidenceNodeIds: z.array(z.string().min(1)).default([]),
+  rationale: z.string().min(1),
+  locations: z.array(PaperLibraryAcquisitionLocationSchema).default([]),
+  selectedLocation: PaperLibraryAcquisitionLocationSchema.optional(),
+  mode: PaperLibraryAcquisitionModeSchema,
+  status: PaperLibraryAcquisitionItemStatusSchema.default("planned"),
+  originatingQuestion: z.string().min(1).optional(),
+  sourceUrl: z.string().url().optional(),
+  localPath: z.string().min(1).optional(),
+  gbrainSlug: z.string().min(1).optional(),
+  checksum: z.string().min(1).optional(),
+  tool: PaperAcquisitionToolSchema.optional(),
+  consentScope: PaperAcquisitionConsentScopeSchema.optional(),
+  error: z.string().optional(),
+  updatedAt: IsoDateStringSchema,
+});
+export type PaperLibraryAcquisitionItem = z.infer<typeof PaperLibraryAcquisitionItemSchema>;
+
+export const PaperLibraryAcquisitionPlanStatusSchema = z.enum([
+  "planned",
+  "running",
+  "completed",
+  "partial",
+  "failed",
+]);
+export type PaperLibraryAcquisitionPlanStatus = z.infer<typeof PaperLibraryAcquisitionPlanStatusSchema>;
+
+export const PaperLibraryAcquisitionPlanSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  id: z.string().min(1),
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1),
+  status: PaperLibraryAcquisitionPlanStatusSchema,
+  itemCount: z.number().int().nonnegative(),
+  downloadableCount: z.number().int().nonnegative(),
+  acquiredCount: z.number().int().nonnegative().default(0),
+  metadataOnlyCount: z.number().int().nonnegative().default(0),
+  watchCount: z.number().int().nonnegative().default(0),
+  failedCount: z.number().int().nonnegative().default(0),
+  items: z.array(PaperLibraryAcquisitionItemSchema).default([]),
+  warnings: z.array(z.string()).default([]),
+  createdAt: IsoDateStringSchema,
+  updatedAt: IsoDateStringSchema,
+});
+export type PaperLibraryAcquisitionPlan = z.infer<typeof PaperLibraryAcquisitionPlanSchema>;
+
+export const PaperLibraryAcquisitionCreateRequestSchema = z.object({
+  action: z.literal("create"),
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1),
+  suggestionIds: z.array(z.string().min(1)).max(100).optional(),
+  limit: z.number().int().min(1).max(100).default(10),
+  includeStates: z.array(GapSuggestionStateSchema).default(["open", "watching", "saved"]),
+  originatingQuestion: z.string().trim().min(1).optional(),
+});
+export type PaperLibraryAcquisitionCreateRequest = z.infer<typeof PaperLibraryAcquisitionCreateRequestSchema>;
+
+export const PaperLibraryAcquisitionExecuteRequestSchema = z.object({
+  action: z.literal("execute"),
+  project: ProjectSlugSchema,
+  acquisitionPlanId: z.string().min(1),
+  userConfirmation: z.literal(true),
+});
+export type PaperLibraryAcquisitionExecuteRequest = z.infer<typeof PaperLibraryAcquisitionExecuteRequestSchema>;
+
+export const PaperLibraryAcquisitionRequestSchema = z.discriminatedUnion("action", [
+  PaperLibraryAcquisitionCreateRequestSchema,
+  PaperLibraryAcquisitionExecuteRequestSchema,
+]);
+export type PaperLibraryAcquisitionRequest = z.infer<typeof PaperLibraryAcquisitionRequestSchema>;
+
 export const RepairableStateSchema = z.object({
   ok: z.literal(false),
   code: z.enum(["missing", "malformed", "unsupported_version"]),
