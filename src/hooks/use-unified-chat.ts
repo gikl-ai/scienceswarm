@@ -2609,33 +2609,35 @@ function buildRuntimeApiDataIncluded(
   files: UploadedFile[],
   explicit?: RuntimeDataIncluded[],
 ): RuntimeDataIncluded[] {
-  if (explicit) return explicit;
+  const data: RuntimeDataIncluded[] = explicit
+    ? [...explicit]
+    : [
+        {
+          kind: "prompt",
+          label: "User prompt",
+          bytes: textBytes(content),
+        },
+      ];
 
-  const data: RuntimeDataIncluded[] = [
-    {
-      kind: "prompt",
-      label: "User prompt",
-      bytes: textBytes(content),
-    },
-  ];
+  if (!explicit) {
+    if (activeFile) {
+      const contextPayload = runtimeActiveFileContextPayload(activeFile);
+      data.push({
+        kind: "workspace-file",
+        label: contextPayload.path,
+        bytes: textBytes(contextPayload.content),
+      });
+    }
 
-  if (activeFile) {
-    const contextPayload = runtimeActiveFileContextPayload(activeFile);
-    data.push({
-      kind: "workspace-file",
-      label: contextPayload.path,
-      bytes: textBytes(contextPayload.content),
-    });
-  }
-
-  for (const file of files) {
-    const label = getUploadedFileReference(file);
-    if (!label) continue;
-    data.push({
-      kind: file.source === "gbrain" ? "gbrain-excerpt" : "workspace-file",
-      label,
-      ...(file.content ? { bytes: textBytes(file.content) } : {}),
-    });
+    for (const file of files) {
+      const label = getUploadedFileReference(file);
+      if (!label) continue;
+      data.push({
+        kind: file.source === "gbrain" ? "gbrain-excerpt" : "workspace-file",
+        label,
+        ...(file.content ? { bytes: textBytes(file.content) } : {}),
+      });
+    }
   }
 
   return data;
@@ -3909,6 +3911,11 @@ export function useUnifiedChat(
       }
 
       const requestFiles = liveUploadedFilesRef.current;
+      const prompt = buildRuntimeApiPrompt(
+        content,
+        activeFile,
+        requestFiles,
+      );
       const dataIncluded = buildRuntimeApiDataIncluded(
         content,
         activeFile,
@@ -3916,7 +3923,6 @@ export function useUnifiedChat(
         context.dataIncluded,
       );
       const inputFileRefs = buildRuntimeApiInputFileRefs(content, activeFile, requestFiles);
-      const prompt = buildRuntimeApiPrompt(content, activeFile, requestFiles);
       const baseBody = {
         projectId: context.projectName,
         projectPolicy: context.projectPolicy,

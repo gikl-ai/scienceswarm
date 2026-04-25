@@ -56,6 +56,17 @@ function ChatHarness({ projectName }: { projectName: string }) {
       </button>
       <button
         onClick={() =>
+          void sendMessage("Use the prior answer and continue", {
+            runtimeHostId: "codex",
+            runtimeMode: "chat",
+            projectPolicy: "cloud-ok",
+          })
+        }
+      >
+        Send Codex follow-up
+      </button>
+      <button
+        onClick={() =>
           void sendMessage("Summarize the selected file with Codex", {
             runtimeHostId: "codex",
             runtimeMode: "chat",
@@ -529,6 +540,63 @@ describe("useUnifiedChat persistence", () => {
     await screen.findByText(/Streaming Codex final answer/);
     expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
     expect(screen.getByTestId("backend").textContent).toBe("codex");
+  });
+
+  it("forwards the native runtime conversation id on direct runtime follow-up turns", async () => {
+    const runtimeBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url === "/api/runtime/sessions/stream") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        runtimeBodies.push(body);
+        const firstTurn = runtimeBodies.length === 1;
+        return createSseResponse([
+          {
+            event: {
+              type: "message",
+              payload: {
+                text: firstTurn
+                  ? "First runtime answer"
+                  : "Follow-up runtime answer",
+                nativeSessionId: "native-codex-session",
+              },
+            },
+          },
+          {
+            session: {
+              id: firstTurn ? "rt-session-codex-1" : "rt-session-codex-2",
+              conversationId: "native-codex-session",
+              status: "completed",
+            },
+          },
+        ]);
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ files: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Codex runtime" }));
+    await screen.findByText(/First runtime answer/);
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-id").textContent).toBe("native-codex-session");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Codex follow-up" }));
+    await screen.findByText(/Follow-up runtime answer/);
+
+    expect(runtimeBodies).toHaveLength(2);
+    expect(runtimeBodies[1]).toMatchObject({
+      conversationId: "native-codex-session",
+      prompt: "Use the prior answer and continue",
+    });
   });
 
   it("includes explicitly selected active file context in direct runtime prompts", async () => {

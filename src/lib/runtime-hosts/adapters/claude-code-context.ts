@@ -17,6 +17,7 @@ import type {
 } from "@/lib/runtime-hosts/contracts";
 import { resolveRuntimeMcpToolProfile } from "@/lib/runtime-hosts/mcp/tool-profiles";
 import { mintRuntimeMcpAccessToken } from "@/lib/runtime-hosts/mcp/tokens";
+import type { RuntimeMcpToolName } from "@/lib/runtime-hosts/mcp/tokens";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
 const DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -28,6 +29,7 @@ export interface ClaudeCodeInvocationContext {
   addDirs?: string[];
   env?: Record<string, string>;
   mcpConfigPath?: string;
+  allowedTools?: string[];
   cleanup?: () => Promise<void>;
 }
 
@@ -143,6 +145,7 @@ export async function buildClaudeCodeRuntimeContext(
     addDirs,
     env: runtimeMcp?.env,
     mcpConfigPath: runtimeMcp?.configPath,
+    allowedTools: runtimeMcp?.allowedTools,
     cleanup: runtimeMcp?.cleanup,
   };
 }
@@ -270,6 +273,7 @@ async function buildRuntimeMcpContext(input: {
   tokenTtlMs: number;
 }): Promise<{
   configPath: string;
+  allowedTools: string[];
   instructions: string;
   env: Record<string, string>;
   cleanup: () => Promise<void>;
@@ -319,6 +323,7 @@ async function buildRuntimeMcpContext(input: {
 
   return {
     configPath,
+    allowedTools: claudeMcpToolNames("scienceswarm", allowedTools),
     instructions: [
       "A runtime-scoped MCP server named `scienceswarm` is available for selective gbrain access.",
       "Use search before read. Prefer narrow queries tied to the user's project or named artifact.",
@@ -341,6 +346,13 @@ async function buildRuntimeMcpContext(input: {
       await unlink(configPath).catch(ignoreMissingFile);
     },
   };
+}
+
+function claudeMcpToolNames(
+  serverName: string,
+  tools: readonly RuntimeMcpToolName[],
+): string[] {
+  return tools.map((tool) => `mcp__${serverName}__${tool}`);
 }
 
 function ignoreMissingFile(error: unknown): void {
