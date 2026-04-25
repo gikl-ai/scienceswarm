@@ -1155,7 +1155,8 @@ export function PaperLibraryCommandCenter({
   }, [loadApplyPlan, projectSlug, session.applyPlanId]);
 
   const handleApplyPlan = useCallback(async () => {
-    if (!session.applyPlanId || !approvalToken) return;
+    const planMatchesSelectedTemplate = applyPlanPage?.plan.templateFormat === session.templateFormat;
+    if (!session.applyPlanId || !approvalToken || !planMatchesSelectedTemplate) return;
     setCommandError(null);
     try {
       const payload = await paperLibraryFetchJson<{ ok: true; manifestId: string }>(
@@ -1187,7 +1188,18 @@ export function PaperLibraryCommandCenter({
       }
       setCommandError(error instanceof Error ? error.message : "Could not apply the approved plan.");
     }
-  }, [approvalToken, loadApplyPlan, loadManifest, loadScan, patchSession, projectSlug, session.applyPlanId, session.scanId]);
+  }, [
+    applyPlanPage?.plan.templateFormat,
+    approvalToken,
+    loadApplyPlan,
+    loadManifest,
+    loadScan,
+    patchSession,
+    projectSlug,
+    session.applyPlanId,
+    session.scanId,
+    session.templateFormat,
+  ]);
 
   const handleUndo = useCallback(async () => {
     if (!session.manifestId) return;

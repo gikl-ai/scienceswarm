@@ -1283,6 +1283,14 @@ describe("PaperLibraryCommandCenter", () => {
         return Response.json({ ok: true, applyPlanId: "plan-2" });
       }
 
+      if (url === "/api/brain/paper-library/apply-plan/approve" && method === "POST") {
+        return Response.json({
+          ok: true,
+          approvalToken: "approval-token",
+          expiresAt: "3026-04-23T13:00:00.000Z",
+        });
+      }
+
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
 
@@ -1293,11 +1301,22 @@ describe("PaperLibraryCommandCenter", () => {
     expect(await screen.findByText(/2024 - Interesting Paper\.pdf/)).toBeInTheDocument();
     const initialPlanLoads = fetchMock.mock.calls.filter(([request]) => String(request).startsWith("/api/brain/paper-library/apply-plan?")).length;
 
+    fireEvent.click(screen.getByRole("button", { name: "Approve plan" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Apply approved plan" })).toBeEnabled();
+    });
+
     fireEvent.click(screen.getByRole("button", { name: /Author Year - Title/ }));
 
     await waitFor(() => {
       expect(fetchMock.mock.calls.filter(([request]) => String(request).startsWith("/api/brain/paper-library/apply-plan?")).length).toBeGreaterThan(initialPlanLoads);
     });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "This preview uses {year} - {title}.pdf. Regenerate rename preview to inspect {first_author} {year} - {title}.pdf.",
+    );
+    expect(screen.getByRole("button", { name: "Approve plan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Apply approved plan" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Regenerate rename preview" }));
 
