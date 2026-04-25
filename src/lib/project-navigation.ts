@@ -65,6 +65,10 @@ export function buildGbrainHrefForSlug(
   return buildProjectScopedDashboardHref("/dashboard/gbrain", slug, brainSlug);
 }
 
+export function buildRoutinesHrefForSlug(slug: string | null | undefined): string {
+  return buildProjectScopedDashboardHref("/dashboard/routines", slug);
+}
+
 export function buildPaperLibraryHrefForSlug(slug: string | null | undefined): string {
   const baseHref = buildProjectScopedDashboardHref("/dashboard/gbrain", slug);
   const [pathname, queryString] = baseHref.split("?");

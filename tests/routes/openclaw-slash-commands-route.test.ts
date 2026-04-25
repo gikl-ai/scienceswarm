@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/plugins/market", () => ({
+  listInstalledMarketPlugins: vi.fn(async () => []),
+}));
+
 import { GET as listSlashCommands } from "@/app/api/openclaw/slash-commands/route";
 import * as skillRegistry from "@/lib/openclaw/skill-registry";
 import * as marketPlugins from "@/lib/plugins/market";

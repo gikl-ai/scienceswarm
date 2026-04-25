@@ -146,12 +146,12 @@ export function RadarOnboardingCard({ onDismiss }: RadarOnboardingCardProps) {
           </h2>
           <p className="mt-3 text-sm leading-6 text-muted">
             You can fine-tune your radar anytime in{" "}
-            <strong>Settings &gt; Research Radar</strong>, or just tell your
+            <strong>Routines &gt; Research Radar</strong>, or just tell your
             OpenClaw: <em>&lsquo;stop watching scaling laws&rsquo;</em> or{" "}
             <em>&lsquo;also track protein folding.&rsquo;</em>
           </p>
           <Link
-            href="/dashboard/settings"
+            href="/dashboard/routines#research-radar"
             className="mt-4 inline-block text-sm font-medium text-accent hover:underline"
           >
             Customize schedule, sources, or topics

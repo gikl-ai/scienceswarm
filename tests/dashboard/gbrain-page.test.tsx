@@ -185,7 +185,7 @@ describe("gbrain page", () => {
     });
   });
 
-  it("renders Dream Cycle and opens a requested brain artifact", async () => {
+  it("keeps routines discoverable while opening a requested brain artifact", async () => {
     searchParamsValue = "name=demo-project&brain_slug=wiki/concepts/tp53-mdm2";
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -242,7 +242,11 @@ describe("gbrain page", () => {
 
     render(<GbrainPage />);
 
-    expect(await screen.findByText("Dream Cycle")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Routines" })).toHaveAttribute(
+      "href",
+      "/dashboard/routines?name=demo-project",
+    );
+    expect(screen.queryByText("Dream Cycle")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Search research brain")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "TP53-MDM2 checkpoint" })).toBeInTheDocument();
     expect(screen.getAllByText(/compiled truth/i).length).toBeGreaterThan(0);

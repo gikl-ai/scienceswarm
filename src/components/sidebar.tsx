@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type SVGProps } from "react";
 import {
   Brain,
+  CalendarCheck,
   Chats,
   GearSix,
   House,
@@ -91,6 +92,7 @@ const ReasoningIcon: Icon = (({ size = 24, color, weight: _weight, ...rest }: Ic
 }) as unknown as Icon;
 import {
   buildGbrainHrefForSlug,
+  buildRoutinesHrefForSlug,
   buildWorkspaceHrefForSlug,
   readLastProjectSlug,
   safeProjectSlugOrNull,
@@ -122,6 +124,7 @@ export function Sidebar() {
     // clicking one opens its directory + chat. /dashboard is now only
     // the "create a new project" form, reached via the + Add menu.
     { label: "Workspace", href: buildWorkspaceHrefForSlug(projectSlug), Icon: Chats },
+    { label: "Routines", href: buildRoutinesHrefForSlug(projectSlug), Icon: CalendarCheck },
     { label: "gbrain", href: buildGbrainHrefForSlug(projectSlug), Icon: Brain },
     { label: "Reasoning", href: "/dashboard/reasoning", Icon: ReasoningIcon },
   ];
@@ -166,10 +169,12 @@ export function Sidebar() {
             pathname?.startsWith("/dashboard/reasoning") ||
             pathname?.startsWith("/dashboard/critique");
           const gbrainActive = pathname?.startsWith("/dashboard/gbrain");
+          const routinesActive = pathname?.startsWith("/dashboard/routines");
           const active =
             pathname === href ||
             (href.startsWith("/dashboard/project") &&
               (pathname?.startsWith("/dashboard/project") || pathname === "/dashboard")) ||
+            (href.startsWith("/dashboard/routines") && routinesActive) ||
             (href.startsWith("/dashboard/gbrain") && gbrainActive) ||
             (href === "/dashboard/reasoning" && reasoningActive);
           return (

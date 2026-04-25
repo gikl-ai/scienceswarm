@@ -115,7 +115,7 @@ describe("handleWatchConversation", () => {
 
     expect(result.handled).toBe(true);
     expect(result.response).toContain("Configured an OpenClaw-powered frontier watch");
-    expect(result.response).toContain("/dashboard/settings?project=alpha#frontier-watch");
+    expect(result.response).toContain("/dashboard/routines?name=alpha#frontier-watch");
     expect(saved?.executionMode).toBe("openclaw");
     expect(saved?.deliveryChannel).toBe("telegram");
     expect(saved?.schedule).toMatchObject({

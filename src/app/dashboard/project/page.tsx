@@ -15,6 +15,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   CaretDown,
   CaretUp,
+  CalendarCheck,
   ChatCircleText,
   FileMagnifyingGlass,
   SidebarSimple,
@@ -76,9 +77,9 @@ import {
   InlineChart,
   splitContentWithCharts,
 } from "@/components/research/inline-chart";
-import { SchedulerPanel } from "@/components/research/scheduler-panel";
 import {
   buildPaperLibraryHrefForSlug,
+  buildRoutinesHrefForSlug,
   buildWorkspaceHrefForSlug,
   persistLastProjectSlug,
   readLastProjectSlug,
@@ -229,8 +230,7 @@ type Tab =
   | "experiments"
   | "results"
   | "data"
-  | "editor"
-  | "scheduler";
+  | "editor";
 
 const STRUCTURED_CRITIQUE_POLL_MS = 3000;
 const STRUCTURED_CRITIQUE_MAX_POLLS = 120;
@@ -4565,6 +4565,15 @@ function ProjectPageContent() {
                     Chat
                   </div>
                   <div className="flex items-center gap-2">
+                    {activeProjectSlug && (
+                      <Link
+                        href={buildRoutinesHrefForSlug(activeProjectSlug)}
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded border border-border bg-white px-2.5 text-[11px] font-semibold text-muted transition-colors hover:border-accent hover:text-foreground"
+                      >
+                        <CalendarCheck size={13} />
+                        Routines
+                      </Link>
+                    )}
                     <Link
                       href={
                         activeProjectSlug
@@ -4611,35 +4620,6 @@ function ProjectPageContent() {
                         >
                           + New Project
                         </Link>
-                      </div>
-                    </section>
-                  )}
-                  {activeProjectSlug && (
-                    <section className="rounded-[28px] border border-border bg-white p-6 shadow-sm">
-                      <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                            Automation & Reruns
-                          </p>
-                          <h2 className="mt-1 text-lg font-semibold text-foreground">
-                            Schedule repeatable project checks
-                          </h2>
-                          <p className="mt-1 max-w-2xl text-sm text-muted">
-                            Keep recurring validation tied to the project, the
-                            command that will run, the next run time, and the
-                            output path where results should appear.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-4 min-h-[420px] overflow-hidden rounded-2xl border border-border bg-white">
-                        <SchedulerPanel
-                          projectId={activeProjectSlug}
-                          defaultJobName="Nightly project rerun"
-                          defaultJobType="recurring"
-                          defaultSchedule="0 0 * * *"
-                          defaultActionType="run-script"
-                          defaultOutputPath="results/nightly-rerun-result.md"
-                        />
                       </div>
                     </section>
                   )}

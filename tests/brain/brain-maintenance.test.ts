@@ -556,6 +556,26 @@ describe("Dream Scheduler", () => {
       expect(result!.dayOfWeek).toBe(1);
     });
 
+    it("parses cron ranges and lists without collapsing them to the first value", async () => {
+      const { matchesCron, parseCron } = await import("@/brain/dream-scheduler");
+
+      const result = parseCron("0 6 * * 1-5");
+      expect(result).not.toBeNull();
+      expect(result!.dayOfWeek).toBeNull();
+      expect(result!.dayOfWeekValues).toEqual([1, 2, 3, 4, 5]);
+
+      const monday = new Date(2024, 5, 17, 6, 0);
+      const friday = new Date(2024, 5, 21, 6, 0);
+      const sunday = new Date(2024, 5, 23, 6, 0);
+
+      expect(matchesCron(result!, monday)).toBe(true);
+      expect(matchesCron(result!, friday)).toBe(true);
+      expect(matchesCron(result!, sunday)).toBe(false);
+
+      const listResult = parseCron("0 6 * * 1,3,5");
+      expect(listResult!.dayOfWeekValues).toEqual([1, 3, 5]);
+    });
+
     it("rejects invalid expressions", async () => {
       const { parseCron } = await import("@/brain/dream-scheduler");
 
@@ -566,6 +586,7 @@ describe("Dream Scheduler", () => {
       expect(parseCron("0 3 32 * *")).toBeNull(); // day > 31
       expect(parseCron("0 3 * 13 *")).toBeNull(); // month > 12
       expect(parseCron("0 3 * * 7")).toBeNull(); // dow > 6
+      expect(parseCron("0 3 * * 5-1")).toBeNull(); // reversed range
     });
   });
 

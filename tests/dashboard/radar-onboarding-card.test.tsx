@@ -181,7 +181,7 @@ describe("RadarOnboardingCard", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Customize schedule, sources, or topics/ }),
-    ).toHaveAttribute("href", "/dashboard/settings");
+    ).toHaveAttribute("href", "/dashboard/routines#research-radar");
 
     // Verify POST was called with topics and channels
     const postCall = fetchMock.mock.calls.find(

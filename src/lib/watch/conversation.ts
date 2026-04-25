@@ -208,8 +208,8 @@ function parseWatchRequest(input: {
   };
 }
 
-function settingsLink(project: string): string {
-  return `/dashboard/settings?project=${encodeURIComponent(project)}#frontier-watch`;
+function routinesLink(project: string): string {
+  return `/dashboard/routines?name=${encodeURIComponent(project)}#frontier-watch`;
 }
 
 function deliveryChannelFor(channel: string): WatchDeliveryChannel | undefined {
@@ -289,7 +289,7 @@ export async function handleWatchConversation(
           "",
           result.response,
           "",
-          `You can turn this into a recurring watch or tweak it in Settings: ${settingsLink(manifest.slug)}`,
+          `You can turn this into a recurring watch or tweak it in Routines: ${routinesLink(manifest.slug)}`,
         ].join("\n"),
       };
     } catch (error) {
@@ -299,7 +299,7 @@ export async function handleWatchConversation(
           `I understood the adhoc frontier search for \`${manifest.slug}\`, but OpenClaw could not run it right now.`,
           `Error: ${error instanceof Error ? error.message : String(error)}`,
           "",
-          `You can still configure or tweak the watch in Settings: ${settingsLink(manifest.slug)}`,
+          `You can still configure or tweak the watch in Routines: ${routinesLink(manifest.slug)}`,
         ].join("\n"),
       };
     }
@@ -320,7 +320,7 @@ export async function handleWatchConversation(
       `Schedule: ${formatSchedule(savedConfig.schedule)}.`,
       "Execution: OpenClaw will run the web/news research and analysis; ScienceSwarm stores the config, schedule, and saved briefing copies.",
       "",
-      `You can tweak the generated prompt, schedule, and advanced settings here: ${settingsLink(manifest.slug)}`,
+      `You can tweak the generated prompt, schedule, and advanced settings here: ${routinesLink(manifest.slug)}`,
     ].join("\n"),
   };
 }
