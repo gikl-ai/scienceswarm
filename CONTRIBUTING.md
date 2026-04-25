@@ -45,6 +45,18 @@ npx tsx scripts/benchmark-chat-hi.ts \
   --json
 ```
 
+When you want a paste-ready report row for the timing table, use:
+
+```bash
+npx tsx scripts/benchmark-chat-hi-row.ts \
+  --url http://localhost:3001 \
+  --project project-alpha \
+  --message Hi \
+  --timing-artifact \
+  --pr '#PR' \
+  --change-area 'change-area'
+```
+
 ## Contribution rules
 
 - Do not commit secrets, private local paths, or local runtime state.
