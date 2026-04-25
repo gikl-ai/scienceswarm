@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 
 describe("gbrain runtime bridge import paths", () => {
@@ -29,5 +32,38 @@ describe("gbrain runtime bridge import paths", () => {
     const runtimeBridge = await import("@/brain/stores/gbrain-runtime.mjs");
 
     expect(runtimeBridge.createRuntimeEngine).toEqual(expect.any(Function));
+  });
+
+  it("falls back to the installed gbrain extract source when the package subpath is absent", async () => {
+    const brainDir = await mkdtemp(join(tmpdir(), "scienceswarm-gbrain-extract-"));
+    try {
+      await writeFile(
+        join(brainDir, "alpha.md"),
+        [
+          "# Alpha",
+          "",
+          "[Beta](beta.md)",
+          "",
+          "- **2026-04-25** | lab - Observed alpha.",
+          "",
+        ].join("\n"),
+        "utf-8",
+      );
+      await writeFile(join(brainDir, "beta.md"), "# Beta\n", "utf-8");
+
+      const runtimeBridge = await import("@/brain/stores/gbrain-runtime.mjs");
+      const result = await runtimeBridge.runRuntimeExtract(
+        {},
+        ["all", "--dir", brainDir, "--dry-run", "--json"],
+      );
+
+      expect(result).toMatchObject({
+        links_created: 1,
+        timeline_entries_created: 1,
+        pages_processed: 2,
+      });
+    } finally {
+      await rm(brainDir, { recursive: true, force: true });
+    }
   });
 });

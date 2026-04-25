@@ -142,7 +142,8 @@ async function loadExtractModule() {
   try {
     // gbrain 0.20 exports this command subpath; use it before falling back
     // to the installed source path used by older pins.
-    return await import("gbrain/extract");
+    const extractSpecifier = ["gbrain", "extract"].join("/");
+    return await import(/* @vite-ignore */ extractSpecifier);
   } catch (error) {
     if (!isRecoverableGbrainSubpathImportError(error, "extract")) {
       throw error;
