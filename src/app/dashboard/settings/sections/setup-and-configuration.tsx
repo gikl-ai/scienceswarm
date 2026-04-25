@@ -54,7 +54,7 @@ export function SetupAndConfigurationSection({
         </button>
       </div>
       <a
-        href="/setup"
+        href="/setup?force=1"
         className="inline-flex items-center px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:opacity-90 transition"
       >
         Open onboarding

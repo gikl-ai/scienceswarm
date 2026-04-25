@@ -10,11 +10,11 @@ import { migrateEnvLocalOnce } from "@/lib/setup/env-migration";
  * Dashboard layout (server component).
  *
  * Guards the entire `/dashboard/*` subtree: if `.env` does not
- * currently hold a valid config, redirect the user to `/setup` before
- * rendering anything else. This is the deterministic server-component
- * equivalent of a middleware redirect, but without the edge-runtime
- * `fs` problem — `getConfigStatus` needs Node APIs to read the
- * on-disk `.env`.
+ * currently hold either a valid runtime config or a completed persisted
+ * setup profile, redirect the user to `/setup` before rendering
+ * anything else. This is the deterministic server-component equivalent
+ * of a middleware redirect, but without the edge-runtime `fs` problem —
+ * `getConfigStatus` needs Node APIs to read the on-disk `.env`.
  *
  * Failure policy
  *   If `getConfigStatus` throws for any reason, we redirect to
@@ -62,12 +62,12 @@ export default async function DashboardLayout({
     );
   }
 
-  let ready = false;
+  let canEnterDashboard = false;
   try {
     const status = await getConfigStatus(process.cwd(), {
       includeRuntimeEnv: true,
     });
-    ready = status.ready;
+    canEnterDashboard = status.ready || status.persistedSetup?.complete === true;
   } catch (err) {
     // Privacy: log only a fixed category plus `err.name`. Never log
     // `err.message` or the whole error object — Node I/O errors
@@ -84,7 +84,7 @@ export default async function DashboardLayout({
     redirect("/setup");
   }
 
-  if (!ready) {
+  if (!canEnterDashboard) {
     redirect("/setup");
   }
 

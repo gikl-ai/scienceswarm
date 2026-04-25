@@ -616,7 +616,7 @@ describe("SettingsPage runtime settings", () => {
     );
 
     const link = await screen.findByRole("link", { name: "Open onboarding" });
-    expect(link).toHaveAttribute("href", "/setup");
+    expect(link).toHaveAttribute("href", "/setup?force=1");
     expect(screen.getByText("Strict local-only mode")).toBeInTheDocument();
     expect(await screen.findByText("API Keys & Model")).toBeInTheDocument();
     expect(screen.getByText("LLM Provider")).toBeInTheDocument();

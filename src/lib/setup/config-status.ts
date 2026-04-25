@@ -30,9 +30,11 @@
 //     into the structured status object the UI consumes.
 
 import { constants as fsConstants, promises as fs } from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
-import { expandHomeDir } from "@/lib/scienceswarm-paths";
+import { isGbrainRootReady } from "@/lib/brain/readiness";
+import { expandHomeDir, resolveConfiguredPath } from "@/lib/scienceswarm-paths";
 
 import { parseEnvFile, type EnvInvalidLine } from "./env-writer";
 import { isPlaceholderValue } from "./placeholder-detection";
@@ -158,6 +160,22 @@ export interface ConfigStatus {
   brainProfile?: BrainProfileSummary;
   openclawStatus?: OpenClawStatusSummary;
   ollamaStatus?: OllamaStatusSummary;
+  /**
+   * Non-secret summary of the durable setup data already available on disk.
+   * This is intentionally separate from `ready`: a runtime provider can be
+   * temporarily incomplete while the user profile and brain are already
+   * initialized, and that state should land in chat/settings instead of
+   * forcing the user through first-run onboarding again.
+   */
+  persistedSetup?: PersistedSetupSummary;
+}
+
+export interface PersistedSetupSummary {
+  hasUserHandle: boolean;
+  hasEmail: boolean;
+  hasTelegramBotToken: boolean;
+  brainRootReady: boolean;
+  complete: boolean;
 }
 
 
@@ -510,6 +528,7 @@ export async function getConfigStatus(
     field: trueValues["BRAIN_PROFILE_FIELD"] ?? "",
     institution: trueValues["BRAIN_PROFILE_INSTITUTION"] ?? "",
   };
+  const persistedSetup = computePersistedSetupSummary(trueValues);
 
   return {
     openaiApiKey: diskReadiness.openaiApiKey,
@@ -520,6 +539,7 @@ export async function getConfigStatus(
     rawValues,
     redactedKeys,
     brainProfile,
+    persistedSetup,
   };
 }
 
@@ -573,6 +593,40 @@ async function computeReadiness(values: Record<string, string>): Promise<{
       && hasUsableLlm
       && scienceswarmDir.state === "ok",
   };
+}
+
+function computePersistedSetupSummary(
+  values: Record<string, string>,
+): PersistedSetupSummary {
+  const hasUserHandle = hasUsablePlainValue(values["SCIENCESWARM_USER_HANDLE"]);
+  const hasEmail = hasUsablePlainValue(values["GIT_USER_EMAIL"]);
+  const hasTelegramBotToken =
+    (values["TELEGRAM_BOT_TOKEN"] ?? "").trim().length > 0;
+  const brainRootReady = isGbrainRootReady(resolveBrainRoot(values));
+
+  return {
+    hasUserHandle,
+    hasEmail,
+    hasTelegramBotToken,
+    brainRootReady,
+    complete: hasUserHandle && brainRootReady,
+  };
+}
+
+function hasUsablePlainValue(value: string | undefined): boolean {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return false;
+  return !isPlaceholderValue(trimmed).isPlaceholder;
+}
+
+function resolveBrainRoot(values: Record<string, string>): string {
+  const dataRoot =
+    resolveConfiguredPath(values["SCIENCESWARM_DIR"])
+    ?? path.join(os.homedir(), ".scienceswarm");
+  return (
+    resolveConfiguredPath(values["BRAIN_ROOT"])
+    ?? path.join(dataRoot, "brain")
+  );
 }
 
 function withRuntimeOverrides(
