@@ -63,6 +63,7 @@ export function prependPathEntries(
     .map((entry) => path.resolve(entry))
     .filter((entry) => !existing.has(entry));
   if (prepend.length === 0) return env;
+
   return {
     ...env,
     [key]: [...prepend, current].filter(Boolean).join(path.delimiter),
@@ -126,6 +127,8 @@ export function readScienceSwarmGbrainPackageState(
     installedName = null;
   }
 
+  const binExists = existsSync(binPath);
+
   return {
     repoRoot: resolvedRepoRoot,
     lockfilePath,
@@ -135,13 +138,13 @@ export function readScienceSwarmGbrainPackageState(
     installedVersion,
     installedName,
     binPath,
-    binExists: existsSync(binPath),
+    binExists,
     inSync: Boolean(
       expectedVersion
         && installedVersion
         && expectedVersion === installedVersion
         && installedName === "gbrain"
-        && existsSync(binPath),
+        && binExists,
     ),
   };
 }

@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET } from "@/app/api/runtime/health/route";
 import {
@@ -10,7 +13,10 @@ import type {
   RuntimeHostProfile,
   RuntimeTurnRequest,
 } from "@/lib/runtime-hosts/contracts";
+import { scienceSwarmGbrainBin } from "@/lib/gbrain/source-of-truth";
 import { requireRuntimeHostProfile } from "@/lib/runtime-hosts/registry";
+
+let tempRoots: string[] = [];
 
 function adapter(profile: RuntimeHostProfile): ResearchRuntimeHost {
   return {
@@ -66,7 +72,44 @@ beforeEach(() => {
 
 afterEach(() => {
   __resetRuntimeApiServicesForTests();
+  vi.unstubAllEnvs();
 });
+
+afterEach(async () => {
+  await Promise.all(
+    tempRoots.map((root) => rm(root, { recursive: true, force: true })),
+  );
+  tempRoots = [];
+});
+
+async function makeGbrainRepo(expectedVersion: string): Promise<string> {
+  const root = await mkdtemp(path.join(tmpdir(), "scienceswarm-health-gbrain-"));
+  tempRoots.push(root);
+  await mkdir(path.join(root, "node_modules", "gbrain"), { recursive: true });
+  await mkdir(path.join(root, "node_modules", ".bin"), { recursive: true });
+  await writeFile(
+    path.join(root, "package-lock.json"),
+    JSON.stringify({
+      packages: {
+        "node_modules/gbrain": {
+          version: expectedVersion,
+          resolved: "git+ssh://git@github.com/garrytan/gbrain.git#abc123",
+        },
+      },
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, "node_modules", "gbrain", "package.json"),
+    JSON.stringify({
+      name: "gbrain",
+      version: expectedVersion,
+    }),
+    "utf8",
+  );
+  await writeFile(scienceSwarmGbrainBin(root), "#!/usr/bin/env node\n", "utf8");
+  return root;
+}
 
 describe("GET /api/runtime/health", () => {
   it("returns host health, auth, capability, and MCP profile data", async () => {
@@ -92,6 +135,22 @@ describe("GET /api/runtime/health", () => {
       binPath: expect.stringContaining("node_modules"),
     });
     expect(body.checkedAt).toBe("2026-04-22T12:00:00.000Z");
+  });
+
+  it("uses SCIENCESWARM_REPO_ROOT for the gbrain package state", async () => {
+    const repoRoot = await makeGbrainRepo("9.9.9");
+    vi.stubEnv("SCIENCESWARM_REPO_ROOT", repoRoot);
+
+    const response = await GET(new Request("http://localhost/api/runtime/health"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.gbrain.package).toMatchObject({
+      repoRoot,
+      expectedVersion: "9.9.9",
+      installedVersion: "9.9.9",
+      inSync: true,
+    });
   });
 
   it("rejects non-local runtime health requests", async () => {

@@ -61,7 +61,7 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({
       hosts,
       gbrain: {
-        package: readScienceSwarmGbrainPackageState(process.cwd()),
+        package: readScienceSwarmGbrainPackageState(),
       },
       checkedAt: services.now().toISOString(),
     });
