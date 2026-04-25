@@ -196,11 +196,27 @@ function toBrainPage(page: GbrainRuntimePage): BrainPage {
 export class GbrainEngineAdapter implements BrainStore {
   private _engine: GbrainRuntimeEngine | null = null;
   private _initPromise: Promise<void> | null = null;
+  // Last init failure observed by `initialize()`. Used by the `engine`
+  // getter and `health()` to surface a one-line cause (`detail`) in the
+  // `BrainBackendUnavailableError` they throw, so consumers like
+  // `/api/brain/capture` and `/api/health` can render an honest probe
+  // result instead of the opaque "Brain backend unavailable" string.
+  private _lastInitError: unknown = null;
 
   get engine(): GbrainRuntimeEngine {
     if (!this._engine) {
+      const detail = this._lastInitError instanceof Error
+        && this._lastInitError.message
+        ? this._lastInitError.message
+        : this._lastInitError !== null
+          ? String(this._lastInitError)
+          : undefined;
       throw new BrainBackendUnavailableError(
         "GbrainEngineAdapter not initialized. Call initialize() first.",
+        {
+          cause: this._lastInitError ?? undefined,
+          detail,
+        },
       );
     }
     return this._engine;
@@ -224,6 +240,7 @@ export class GbrainEngineAdapter implements BrainStore {
       try {
         await engine.connect(engineConfig);
         await engine.initSchema();
+        this._lastInitError = null;
       } catch (error) {
         await engine.disconnect().catch(() => {});
         throw error;
@@ -231,6 +248,7 @@ export class GbrainEngineAdapter implements BrainStore {
     })().catch((error) => {
       this._engine = null;
       this._initPromise = null;
+      this._lastInitError = error;
       throw error;
     });
 
@@ -430,8 +448,20 @@ export class GbrainEngineAdapter implements BrainStore {
         timelineEntryCount: stats.timeline_entry_count,
         syncRepoPath,
       };
-    } catch {
-      return { ok: false, pageCount: 0 };
+    } catch (error) {
+      // Surface the one-line cause to operators. /api/brain/status and
+      // /api/health both consume `health()`, so a failed PGLite init
+      // (stale lock, missing native module, schema-init crash) shows up
+      // as a real error string rather than `{ok: false, pageCount: 0}`.
+      const detail = error instanceof BrainBackendUnavailableError
+        && error.detail
+        ? error.detail
+        : error instanceof Error && error.message
+          ? error.message
+          : error !== undefined && error !== null
+            ? String(error)
+            : "Brain backend unavailable";
+      return { ok: false, pageCount: 0, error: detail };
     }
   }
 

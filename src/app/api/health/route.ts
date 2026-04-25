@@ -5,7 +5,7 @@
 // agrees with /api/chat/unified?action=health on every probe.
 
 import { getOpenHandsUrl } from "@/lib/config/ports";
-import { isGbrainRootReady } from "@/lib/brain/readiness";
+import { probeGbrainEngineHealth } from "@/lib/brain/readiness";
 import {
   buildOpenHandsLocalEvidenceSnapshot,
   buildRuntimeCapabilityContract,
@@ -16,7 +16,6 @@ import {
   probeStructuredCritiqueReadiness,
   type StructuredCritiqueReadinessProbe,
 } from "@/lib/structured-critique-client";
-import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import { getStructuredCritiqueConfigStatus } from "@/lib/structured-critique-config";
 import { getCurrentLlmRuntimeEnv } from "@/lib/runtime-saved-env";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
@@ -201,16 +200,23 @@ async function probeLocal(): Promise<LocalProbe> {
   return { ollama, ollamaModels, configuredLocalModel, localProviderConfigured };
 }
 
-function probeGbrain(): {
+async function probeGbrain(): Promise<{
   read: boolean;
   write: boolean;
   capture: boolean;
   maintenance: boolean;
   uploadFiles: boolean;
   localFolder: boolean;
-} {
-  const root = getScienceSwarmBrainRoot();
-  const ready = isGbrainRootReady(root);
+  cause?: string;
+}> {
+  // Honest engine probe (opens PGLite + runs health()), per the runtime
+  // contract. The earlier file-existence stub painted everything green
+  // even when the engine could not initialize, masking the real
+  // "Brain backend unavailable" failure mode for the dashboard and
+  // /api/brain/capture. Now we report `unavailable` with a one-line
+  // cause whenever the engine cannot answer.
+  const probe = await probeGbrainEngineHealth();
+  const ready = probe.ok;
   return {
     read: ready,
     write: ready,
@@ -218,6 +224,7 @@ function probeGbrain(): {
     maintenance: ready,
     uploadFiles: ready,
     localFolder: ready,
+    cause: probe.cause,
   };
 }
 
@@ -252,6 +259,7 @@ export async function GET(): Promise<Response> {
     localProbe,
     openHandsEvidence,
     structuredCritique,
+    gbrain,
   ] = await Promise.all([
     probeOpenHands(strictLocalOnly, openhandsUrl),
     probeAgent(strictLocalOnly),
@@ -260,6 +268,7 @@ export async function GET(): Promise<Response> {
     strictLocalOnly
       ? Promise.resolve(structuredCritiqueBlockedByStrictLocal())
       : probeStructuredCritiqueReadiness(),
+    probeGbrain(),
   ]);
 
   const agentAvailable = agent.status === "connected";
@@ -300,7 +309,7 @@ export async function GET(): Promise<Response> {
     telegramConfigured: Boolean(
       process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_USER_ID,
     ),
-    gbrain: probeGbrain(),
+    gbrain,
   });
   const localOpenHandsReady =
     runtimeContract.capabilities.find((capability) =>

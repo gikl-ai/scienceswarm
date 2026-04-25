@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +17,40 @@ const getLocalModel = vi.hoisted(() =>
 const isLocalProviderConfigured = vi.hoisted(() =>
   vi.fn(() => process.env.LLM_PROVIDER === "local"),
 );
+
+// Mock `@/brain/store` so the health route's dynamic import does not
+// transitively pull in the gbrain runtime module. Each test controls
+// the probe outcome by tweaking the hoisted refs below.
+const ensureBrainStoreReady = vi.hoisted(() =>
+  vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+);
+const brainHealthFn = vi.hoisted(() =>
+  vi.fn<() => Promise<{ ok: boolean; pageCount: number; error?: string }>>(
+    () => Promise.resolve({ ok: true, pageCount: 7 }),
+  ),
+);
+class MockBrainBackendUnavailableError extends Error {
+  detail?: string;
+  constructor(message: string, options?: { cause?: unknown; detail?: string }) {
+    super(message);
+    this.name = "BrainBackendUnavailableError";
+    if (options?.detail !== undefined) this.detail = options.detail;
+  }
+}
+
+vi.mock("@/brain/store", () => ({
+  ensureBrainStoreReady,
+  getBrainStore: () => ({ health: brainHealthFn }),
+  resetBrainStore: vi.fn().mockResolvedValue(undefined),
+  describeBrainBackendError: (error: unknown) => {
+    if (error instanceof MockBrainBackendUnavailableError && error.detail) return error.detail;
+    if (error instanceof Error && error.message) return error.message;
+    return String(error);
+  },
+  BrainBackendUnavailableError: MockBrainBackendUnavailableError,
+  isBrainBackendUnavailableError: (error: unknown) =>
+    error instanceof MockBrainBackendUnavailableError,
+}));
 
 vi.mock("@/lib/agent-client", () => ({
   resolveAgentConfig,
@@ -45,6 +79,9 @@ describe("GET /api/health", () => {
     localHealth.mockResolvedValue({ running: false, models: [], url: "http://localhost:11434" });
     getLocalModel.mockReturnValue("gemma4");
     isLocalProviderConfigured.mockImplementation(() => process.env.LLM_PROVIDER === "local");
+    // Default: brain is healthy. Override per-test for unhealthy paths.
+    ensureBrainStoreReady.mockReset().mockResolvedValue(undefined);
+    brainHealthFn.mockReset().mockResolvedValue({ ok: true, pageCount: 7 });
   });
 
   afterEach(async () => {
@@ -76,11 +113,12 @@ describe("GET /api/health", () => {
     );
   });
 
-  it("reports gbrain ready for RESOLVER-based installs", async () => {
-    const brainRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-brain-"));
-    await writeFile(path.join(brainRoot, "RESOLVER.md"), "# Resolver\n");
-    await mkdir(path.join(brainRoot, "brain.pglite"), { recursive: true });
-    vi.stubEnv("BRAIN_ROOT", brainRoot);
+  it("reports gbrain capabilities as ready only when the engine health probe says ok", async () => {
+    // The probe now opens the configured PGLite engine and calls
+    // health() rather than only checking on-disk file existence. With
+    // the mocked store happy-path, every gbrain capability flips to
+    // ready and the runtime contract no longer lies about the brain.
+    brainHealthFn.mockResolvedValue({ ok: true, pageCount: 12 });
 
     const response = await GET();
     const body = await response.json();
@@ -95,8 +133,80 @@ describe("GET /api/health", () => {
           capabilityId: "brain.write",
           status: "ready",
         }),
+        expect.objectContaining({
+          capabilityId: "brain.capture",
+          status: "ready",
+        }),
+        expect.objectContaining({
+          capabilityId: "brain.maintenance",
+          status: "ready",
+        }),
       ]),
     );
+  });
+
+  it("reports gbrain capabilities as unavailable with a non-empty cause when the engine init fails", async () => {
+    // Force the store init to reject so the probe surfaces the
+    // underlying cause instead of painting the dashboard green. This
+    // is the regression guard for the "lying probe" bug — the earlier
+    // file-existence stub would return read/write/capture/maintenance:
+    // ready even when PGLite could not initialize.
+    const failure = new MockBrainBackendUnavailableError(
+      "Brain backend unavailable",
+      {
+        detail: "stale .gbrain-lock at brain.pglite/0001 — engine init refused",
+      },
+    );
+    ensureBrainStoreReady.mockRejectedValue(failure);
+
+    const response = await GET();
+    const body = await response.json();
+
+    const capabilityIds = [
+      "brain.read",
+      "brain.write",
+      "brain.capture",
+      "brain.maintenance",
+      "imports.uploadFiles",
+      "imports.localFolder",
+    ];
+    for (const id of capabilityIds) {
+      const capability = body.runtimeContract.capabilities.find(
+        (cap: { capabilityId: string }) => cap.capabilityId === id,
+      );
+      expect(capability).toBeDefined();
+      expect(capability.status).toBe("unavailable");
+      // The cause is surfaced as both an evidence row and the
+      // capability's nextAction so operators see the underlying init
+      // failure on the dashboard instead of the static "Run setup"
+      // hint that hid the real problem.
+      expect(capability.nextAction).toContain(".gbrain-lock");
+      const causeEvidence = capability.evidence.find(
+        (ev: { label: string }) => ev.label === "Cause",
+      );
+      expect(causeEvidence).toBeDefined();
+      expect(causeEvidence.value).toContain(".gbrain-lock");
+      expect(causeEvidence.value).not.toBe("");
+    }
+  });
+
+  it("reports gbrain capabilities as unavailable when health() returns ok:false", async () => {
+    // Equivalent guard for the "engine connects but reports degraded"
+    // path — health() returns ok:false with a one-line error string.
+    brainHealthFn.mockResolvedValue({
+      ok: false,
+      pageCount: 0,
+      error: "PGLite schema migration failed",
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    const capability = body.runtimeContract.capabilities.find(
+      (cap: { capabilityId: string }) => cap.capabilityId === "brain.read",
+    );
+    expect(capability.status).toBe("unavailable");
+    expect(capability.nextAction).toContain("schema migration failed");
   });
 
   it("reports openai as missing when no key", async () => {
