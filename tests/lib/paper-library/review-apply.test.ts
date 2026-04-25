@@ -870,7 +870,7 @@ describe("paper-library review and apply", () => {
 
     const pageSlug = repaired?.operations[0]?.appliedMetadata?.pageSlug;
     if (!pageSlug) throw new Error("expected applied metadata page slug");
-    const page = await getBrainStore({ root: brainRoot }).getPage(pageSlug);
+    const page = await getBrainStore({ root: path.join(dataRoot, "projects", "project-alpha", ".brain") }).getPage(pageSlug);
     expect(page?.title).toBe(capturedTitle);
     expect(page?.title).not.toBe("Retitled After Apply Failure");
   });

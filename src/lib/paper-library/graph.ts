@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import path from "node:path";
 
 import {
   PAPER_LIBRARY_STATE_VERSION,
@@ -25,6 +26,7 @@ import {
   upsertCacheEntry,
   writeEnrichmentCache,
 } from "./enrichment-cache";
+import { readApplyPlan, readManifestOperations } from "./apply";
 import { readPaperLibraryScan } from "./jobs";
 import { readAllPaperReviewItems } from "./review";
 import {
@@ -33,9 +35,13 @@ import {
   readPersistedState,
 } from "./state";
 import { readJsonFile, writeJsonFile } from "@/lib/state/atomic-json";
+import { extractPdfText } from "@/lib/pdf-text-extractor";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 const MAX_RELATIONS_PER_KIND = 25;
+const MAX_LOCAL_REFERENCES_PER_PAPER = 250;
+const REFERENCE_ENTRY_MIN_LENGTH = 20;
+const LOCAL_TITLE_MATCH_THRESHOLD = 0.72;
 
 interface PaperGraphSeed {
   item: PaperReviewItem;
@@ -117,6 +123,7 @@ function normalizeDoi(value: string | undefined): string | undefined {
     ?.trim()
     .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
     .replace(/^doi:\s*/i, "")
+    .replace(/[)\].,;:\s]+$/g, "")
     .toLowerCase();
   return normalized || undefined;
 }
@@ -127,6 +134,7 @@ function normalizeArxivId(value: string | undefined): string | undefined {
     .replace(/^https?:\/\/arxiv\.org\/(abs|pdf)\//i, "")
     .replace(/\.pdf$/i, "")
     .replace(/^arxiv:\s*/i, "")
+    .replace(/[)\].,;:\s]+$/g, "")
     .replace(/v\d+$/i, "")
     .toLowerCase();
   return normalized || undefined;
@@ -215,7 +223,12 @@ function upsertNode(nodes: Map<string, PaperLibraryGraphNode>, next: PaperLibrar
 }
 
 function addEdge(edges: Map<string, PaperLibraryGraphEdge>, edge: Omit<PaperLibraryGraphEdge, "id">): void {
-  const id = `edge:${stableHash(edge)}`;
+  const id = `edge:${stableHash({
+    sourceNodeId: edge.sourceNodeId,
+    targetNodeId: edge.targetNodeId,
+    kind: edge.kind,
+    source: edge.source,
+  })}`;
   const existing = edges.get(id);
   edges.set(id, existing ? { ...existing, evidence: mergeUnique(existing.evidence, edge.evidence) } : { id, ...edge });
 }
@@ -286,6 +299,437 @@ function nodeFromSeed(seed: PaperGraphSeed): PaperLibraryGraphNode {
 
 function hasStableIdentifier(identifiers: PaperIdentifier): boolean {
   return identifierAliases(identifiers).length > 0;
+}
+
+interface ParsedPdfReference extends PaperLibraryExternalPaper {
+  rawText: string;
+  index: number;
+}
+
+interface LocalGraphPaper {
+  nodeId: string;
+  title?: string;
+  normalizedTitle: string;
+  titleTokens: Set<string>;
+  aliases: string[];
+}
+
+const REFERENCE_DOI_RE = /\b10\.\d{4,9}\/[-._;()/:A-Z0-9]+/gi;
+const REFERENCE_ARXIV_RE = /\b(?:arXiv\s*:\s*)?(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?\/\d{7}(?:v\d+)?)\b/gi;
+const REFERENCE_PMID_RE = /\b(?:PMID\s*:?\s*)(\d{6,9})\b/gi;
+const REFERENCE_YEAR_RE = /\b(19\d{2}|20\d{2})\b/g;
+
+function cleanReferenceText(value: string): string {
+  return value
+    .replace(/\u00ad/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s+([,.;:)])/g, "$1")
+    .replace(/([(])\s+/g, "$1")
+    .trim();
+}
+
+function stripReferenceMarker(value: string): string {
+  return cleanReferenceText(value)
+    .replace(/^(?:\[\d{1,4}\]|\d{1,4}\.|\[[A-Za-z][A-Za-z0-9+.-]{1,16}\])\s*/, "")
+    .trim();
+}
+
+function findReferenceSection(text: string): string | null {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  let headingIndex = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (index < Math.floor(lines.length * 0.25)) continue;
+    if (/^(references|bibliography|works cited)$/i.test(lines[index].trim())) {
+      headingIndex = index;
+    }
+  }
+  if (headingIndex === -1) return null;
+
+  const sectionLines: string[] = [];
+  for (const line of lines.slice(headingIndex + 1)) {
+    if (
+      sectionLines.length > 8
+      && /^(appendix|supplementary material|acknowledg(e)?ments|author contributions)$/i.test(line.trim())
+    ) {
+      break;
+    }
+    sectionLines.push(line);
+  }
+
+  const section = sectionLines.join("\n").trim();
+  return section.length >= REFERENCE_ENTRY_MIN_LENGTH ? section : null;
+}
+
+function startsWithReferenceMarker(line: string): boolean {
+  return /^(?:\[\d{1,4}\]|\d{1,4}\.|\[[A-Za-z][A-Za-z0-9+.-]{1,16}\])\s+/.test(line.trim());
+}
+
+function likelyAuthorYearReferenceStart(line: string): boolean {
+  const trimmed = line.trim();
+  if (startsWithReferenceMarker(trimmed)) return true;
+  if (!/^[A-Z\p{Lu}]/u.test(trimmed)) return false;
+  if (!/\b(19\d{2}|20\d{2})\b/.test(trimmed)) return false;
+  if (/^(abstract|appendix|table|figure|theorem|proof|lemma)\b/i.test(trimmed)) return false;
+  return /[,\.]\s+/.test(trimmed.slice(0, 160));
+}
+
+function splitReferenceEntries(section: string): string[] {
+  const markerized = section
+    .replace(/\r\n?/g, "\n")
+    .replace(/\s+(?=(?:\[\d{1,4}\]|\d{1,4}\.|\[[A-Za-z][A-Za-z0-9+.-]{1,16}\])\s+)/g, "\n");
+  const markerEntries = markerized
+    .split(/\n+/)
+    .map(stripReferenceMarker)
+    .filter((entry) => entry.length >= REFERENCE_ENTRY_MIN_LENGTH);
+  if (markerEntries.length >= 3) return markerEntries;
+
+  const entries: string[] = [];
+  let current = "";
+  for (const rawLine of section.split(/\n+/)) {
+    const line = cleanReferenceText(rawLine);
+    if (!line) continue;
+    const startsEntry = likelyAuthorYearReferenceStart(line);
+    if (current && startsEntry && /[.!?)]$/.test(current)) {
+      entries.push(stripReferenceMarker(current));
+      current = line;
+    } else {
+      current = current ? `${current} ${line}` : line;
+    }
+  }
+  if (current) entries.push(stripReferenceMarker(current));
+
+  return entries
+    .map(stripReferenceMarker)
+    .filter((entry) => entry.length >= REFERENCE_ENTRY_MIN_LENGTH);
+}
+
+function allMatches(regex: RegExp, value: string): string[] {
+  regex.lastIndex = 0;
+  return Array.from(value.matchAll(regex), (match) => match[1] ?? match[0]);
+}
+
+function firstYear(value: string): number | undefined {
+  const years = allMatches(REFERENCE_YEAR_RE, value)
+    .map((year) => Number(year))
+    .filter((year) => Number.isInteger(year) && year >= 1000 && year <= 3000);
+  return years[years.length - 1];
+}
+
+function referenceSentences(value: string): string[] {
+  return stripReferenceMarker(value)
+    .replace(/\b(et al)\./gi, "$1")
+    .split(/(?<=[.!?])\s+(?=[A-Z0-9"“])/)
+    .map((segment) => cleanReferenceText(segment.replace(/\b(et al)\b/gi, "$1.")))
+    .filter(Boolean);
+}
+
+function isLikelyAuthorSegment(segment: string): boolean {
+  const commaCount = (segment.match(/,/g) ?? []).length;
+  const initials = (segment.match(/\b[A-Z]\./g) ?? []).length;
+  const words = segment.split(/\s+/).filter(Boolean).length;
+  return commaCount >= 1 || initials >= 2 || (/\band\b/i.test(segment) && words <= 12);
+}
+
+function cleanReferenceTitle(value: string): string | undefined {
+  const cleaned = cleanReferenceText(value)
+    .replace(/^["“”']+|["“”']+$/g, "")
+    .replace(/\b(arXiv preprint|preprint|Technical report|In:|In )\b.*$/i, "")
+    .replace(/\barXiv\s*:?\s*\d{4}\.\d{4,5}(?:v\d+)?.*$/i, "")
+    .replace(/\bdoi:\s*10\.\d{4,9}\/\S+.*$/i, "")
+    .replace(/\bURL\s+\S+.*$/i, "")
+    .replace(/[.,;:\s]+$/g, "")
+    .trim();
+  if (cleaned.length < 8) return undefined;
+  if (/^(in|doi|url|arxiv|available at|accessed)\b/i.test(cleaned)) return undefined;
+  if (!/\p{L}/u.test(cleaned)) return undefined;
+  return cleaned.slice(0, 220);
+}
+
+function titleFromReference(entry: string): string | undefined {
+  const quoted = /["“]([^"”]{8,220})["”]/.exec(entry)?.[1];
+  if (quoted) return cleanReferenceTitle(quoted);
+
+  const sentences = referenceSentences(entry);
+  for (let index = 0; index < sentences.length; index += 1) {
+    const sentence = sentences[index];
+    if (index === 0 && isLikelyAuthorSegment(sentence)) continue;
+    const title = cleanReferenceTitle(sentence);
+    if (title) return title;
+  }
+
+  return cleanReferenceTitle(sentences[0] ?? entry);
+}
+
+function authorsFromReference(entry: string): string[] {
+  const first = referenceSentences(entry)[0];
+  if (!first || !isLikelyAuthorSegment(first)) return [];
+  return first
+    .replace(/\bet al\.?$/i, "")
+    .split(/\s+(?:and|&)\s+|,\s*/)
+    .map((author) => author.trim())
+    .filter((author) => author.length > 1 && /\p{L}/u.test(author))
+    .slice(0, 12);
+}
+
+function parsePdfReference(entry: string, index: number): ParsedPdfReference | null {
+  const rawText = stripReferenceMarker(entry);
+  if (rawText.length < REFERENCE_ENTRY_MIN_LENGTH) return null;
+
+  const identifiers = normalizePaperIdentifiers({
+    doi: allMatches(REFERENCE_DOI_RE, rawText).map(normalizeDoi).find(Boolean),
+    arxivId: allMatches(REFERENCE_ARXIV_RE, rawText).map(normalizeArxivId).find(Boolean),
+    pmid: allMatches(REFERENCE_PMID_RE, rawText).map(normalizePmid).find(Boolean),
+  });
+  const title = titleFromReference(rawText);
+  if (!title && !hasStableIdentifier(identifiers)) return null;
+
+  return {
+    sourceId: hasStableIdentifier(identifiers)
+      ? identifierAliases(identifiers)[0]
+      : `local-ref:${stableHash({ title, year: firstYear(rawText), rawText: rawText.slice(0, 220) })}`,
+    title,
+    authors: authorsFromReference(rawText),
+    year: firstYear(rawText),
+    identifiers,
+    evidence: [`pdf_reference:${index + 1}:${rawText.slice(0, 260)}`],
+    rawText,
+    index,
+  };
+}
+
+function normalizeTitleForMatch(value: string | undefined): string {
+  return (value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(?:a|an|and|for|in|of|on|the|to|via|with)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function titleTokens(value: string): Set<string> {
+  return new Set(
+    normalizeTitleForMatch(value)
+      .split(/\s+/)
+      .filter((token) => token.length >= 4),
+  );
+}
+
+function tokenOverlap(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 || right.size === 0) return 0;
+  let shared = 0;
+  for (const token of left) {
+    if (right.has(token)) shared += 1;
+  }
+  return shared / Math.max(left.size, right.size);
+}
+
+function buildLocalGraphPapers(seeds: PaperGraphSeed[]): LocalGraphPaper[] {
+  return seeds.map((seed) => {
+    const title = correctionString(seed.item, "title") ?? seed.candidate.title;
+    return {
+      nodeId: seed.nodeId,
+      title,
+      normalizedTitle: normalizeTitleForMatch(title),
+      titleTokens: titleTokens(title ?? ""),
+      aliases: identifierAliases(seed.identifiers),
+    };
+  });
+}
+
+function findLocalReferenceMatch(
+  reference: ParsedPdfReference,
+  localPapers: LocalGraphPaper[],
+  localAliasToNodeId: Map<string, string>,
+  sourceNodeId: string,
+): string | null {
+  for (const alias of identifierAliases(reference.identifiers)) {
+    const nodeId = localAliasToNodeId.get(alias);
+    if (nodeId && nodeId !== sourceNodeId) return nodeId;
+  }
+
+  const referenceText = normalizeTitleForMatch(`${reference.title ?? ""} ${reference.rawText}`);
+  const referenceTokens = titleTokens(referenceText);
+  let best: { nodeId: string; score: number } | null = null;
+  for (const paper of localPapers) {
+    if (paper.nodeId === sourceNodeId || !paper.normalizedTitle) continue;
+    const containsTitle = paper.normalizedTitle.length >= 16 && referenceText.includes(paper.normalizedTitle);
+    const containsReferenceTitle = reference.title
+      ? paper.normalizedTitle.includes(normalizeTitleForMatch(reference.title))
+      : false;
+    const score = containsTitle || containsReferenceTitle
+      ? 1
+      : tokenOverlap(paper.titleTokens, referenceTokens);
+    if (score > (best?.score ?? 0)) best = { nodeId: paper.nodeId, score };
+  }
+
+  return best && best.score >= LOCAL_TITLE_MATCH_THRESHOLD ? best.nodeId : null;
+}
+
+async function readAppliedPaperPaths(
+  project: string,
+  scanId: string,
+  brainRoot: string,
+): Promise<Map<string, string>> {
+  const scan = await readPaperLibraryScan(project, scanId, brainRoot);
+  if (!scan?.applyPlanId) return new Map();
+  const plan = await readApplyPlan(project, scan.applyPlanId, brainRoot).catch(() => null);
+  if (!plan?.manifestId) return new Map();
+  const operations = await readManifestOperations(project, plan.manifestId, brainRoot).catch(() => []);
+  return new Map(
+    operations
+      .filter((operation) => operation.status === "verified" || operation.status === "applied")
+      .map((operation) => [operation.paperId, operation.destinationRelativePath]),
+  );
+}
+
+function pdfPathForSeed(
+  seed: PaperGraphSeed,
+  rootRealpath: string | undefined,
+  appliedPathsByPaperId: Map<string, string>,
+): string | null {
+  if (!rootRealpath) return null;
+  const relativePath = appliedPathsByPaperId.get(seed.item.paperId) ?? seed.item.source?.relativePath;
+  return relativePath ? path.join(rootRealpath, relativePath) : null;
+}
+
+async function enrichSeedsFromLocalPdfReferences(input: {
+  project: string;
+  scanId: string;
+  brainRoot: string;
+  rootRealpath?: string;
+  seeds: PaperGraphSeed[];
+  nodes: Map<string, PaperLibraryGraphNode>;
+  edges: Map<string, PaperLibraryGraphEdge>;
+  localAliasToNodeId: Map<string, string>;
+  sourceRuns: PaperLibraryGraphSourceRun[];
+  warnings: string[];
+}): Promise<void> {
+  const appliedPathsByPaperId = await readAppliedPaperPaths(input.project, input.scanId, input.brainRoot);
+  const hasReadablePdfPaths = Boolean(input.rootRealpath)
+    && input.seeds.some((seed) => seed.item.source?.relativePath || appliedPathsByPaperId.has(seed.item.paperId));
+  if (!hasReadablePdfPaths) return;
+
+  const localPapers = buildLocalGraphPapers(input.seeds);
+
+  for (const seed of input.seeds) {
+    const startedAt = nowIso();
+    const pdfPath = pdfPathForSeed(seed, input.rootRealpath, appliedPathsByPaperId);
+    if (!pdfPath) {
+      input.sourceRuns.push(sourceRun({
+        source: "pdf_text",
+        status: "negative",
+        paperId: seed.item.paperId,
+        attempts: 0,
+        fetchedCount: 0,
+        cacheHits: 0,
+        message: "No local PDF path is available for reference extraction.",
+        startedAt,
+        completedAt: nowIso(),
+      }));
+      continue;
+    }
+
+    try {
+      const extracted = await extractPdfText(pdfPath);
+      const section = findReferenceSection(extracted.text);
+      if (!section) {
+        input.sourceRuns.push(sourceRun({
+          source: "pdf_text",
+          status: "negative",
+          paperId: seed.item.paperId,
+          attempts: 1,
+          fetchedCount: 0,
+          cacheHits: 0,
+          message: "No references section found in local PDF text.",
+          startedAt,
+          completedAt: nowIso(),
+        }));
+        continue;
+      }
+
+      const entries = splitReferenceEntries(section);
+      const parsedReferences = entries
+        .slice(0, MAX_LOCAL_REFERENCES_PER_PAPER)
+        .map(parsePdfReference)
+        .filter((reference): reference is ParsedPdfReference => Boolean(reference));
+      if (entries.length > MAX_LOCAL_REFERENCES_PER_PAPER) {
+        input.warnings.push(`${seed.item.paperId}: local reference extraction capped at ${MAX_LOCAL_REFERENCES_PER_PAPER} references.`);
+      }
+
+      const relations: PaperLibraryGraphRelations = {
+        references: parsedReferences.map((reference) => {
+          const targetNodeId = findLocalReferenceMatch(reference, localPapers, input.localAliasToNodeId, seed.nodeId);
+          if (targetNodeId) {
+            return {
+              ...reference,
+              sourceId: targetNodeId,
+              evidence: mergeUnique(reference.evidence, [`local_match:${targetNodeId}`]),
+            };
+          }
+          return reference;
+        }),
+        citations: [],
+        bridgePapers: [],
+        referenceCount: parsedReferences.length,
+      };
+
+      for (const reference of relations.references) {
+        const localTarget = reference.sourceId?.startsWith("paper:")
+          ? reference.sourceId
+          : findLocalReferenceMatch(reference as ParsedPdfReference, localPapers, input.localAliasToNodeId, seed.nodeId);
+        if (localTarget) {
+          addEdge(input.edges, {
+            sourceNodeId: seed.nodeId,
+            targetNodeId: localTarget,
+            kind: "references",
+            source: "pdf_text",
+            evidence: reference.evidence ?? [`${seed.item.paperId} references ${localTarget}`],
+          });
+          continue;
+        }
+        applyRelations({
+          nodes: input.nodes,
+          edges: input.edges,
+          localAliasToNodeId: input.localAliasToNodeId,
+          sourceNodeId: seed.nodeId,
+          sourcePaperId: seed.item.paperId,
+          adapterSource: "pdf_text",
+          relations: { references: [reference], citations: [], bridgePapers: [] },
+        });
+      }
+
+      const node = input.nodes.get(seed.nodeId);
+      if (node) input.nodes.set(seed.nodeId, { ...node, referenceCount: parsedReferences.length });
+      input.sourceRuns.push(sourceRun({
+        source: "pdf_text",
+        status: parsedReferences.length > 0 ? "success" : "negative",
+        paperId: seed.item.paperId,
+        attempts: 1,
+        fetchedCount: parsedReferences.length,
+        cacheHits: 0,
+        message: `Extracted ${parsedReferences.length} local PDF references.`,
+        startedAt,
+        completedAt: nowIso(),
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Local PDF reference extraction failed.";
+      input.warnings.push(`${seed.item.paperId}:pdf_text:${message}`);
+      input.sourceRuns.push(sourceRun({
+        source: "pdf_text",
+        status: "metadata_unavailable",
+        paperId: seed.item.paperId,
+        attempts: 1,
+        fetchedCount: 0,
+        cacheHits: 0,
+        errorCode: "metadata_unavailable",
+        message,
+        startedAt,
+        completedAt: nowIso(),
+      }));
+    }
+  }
 }
 
 function cacheIdentifier(identifiers: PaperIdentifier): string | null {
@@ -639,6 +1083,19 @@ export async function buildPaperLibraryGraph(input: BuildPaperLibraryGraphInput)
       localAliasToNodeId.set(alias, existingNodeId ?? seed.nodeId);
     }
   }
+
+  await enrichSeedsFromLocalPdfReferences({
+    project: input.project,
+    scanId: input.scanId,
+    brainRoot: input.brainRoot,
+    rootRealpath: review.scan.rootRealpath ?? review.scan.rootPath,
+    seeds,
+    nodes,
+    edges,
+    localAliasToNodeId,
+    sourceRuns,
+    warnings,
+  });
 
   const adapters = input.adapters ?? [createSemanticScholarGraphAdapter()];
   for (const seed of seeds.filter((entry) => hasStableIdentifier(entry.identifiers))) {

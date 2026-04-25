@@ -207,6 +207,29 @@ function isScanInFlight(scan: PaperLibraryScan | null): boolean {
   );
 }
 
+function scanTimestamp(scan: Pick<PaperLibraryScan, "updatedAt" | "createdAt">): number {
+  const updatedAt = Date.parse(scan.updatedAt);
+  if (Number.isFinite(updatedAt)) return updatedAt;
+  const createdAt = Date.parse(scan.createdAt);
+  return Number.isFinite(createdAt) ? createdAt : 0;
+}
+
+function shouldPromoteLatestScan({
+  currentScan,
+  currentSession,
+  latestScan,
+}: {
+  currentScan: PaperLibraryScan | null;
+  currentSession: PaperLibrarySession;
+  latestScan: PaperLibraryScan;
+}): boolean {
+  if (!currentSession.scanId) return true;
+  if (currentSession.scanId === latestScan.id) return true;
+  if (!currentScan || isScanInFlight(currentScan)) return false;
+  if (currentSession.step !== "scan") return false;
+  return scanTimestamp(latestScan) > scanTimestamp(currentScan);
+}
+
 function reviewDraftForItem(item: PaperReviewItem, draft?: PaperLibrarySessionDraft): PaperLibrarySessionDraft {
   if (draft) return draft;
   const selected = item.candidates.find((candidate) => candidate.id === item.selectedCandidateId) ?? item.candidates[0];
@@ -347,6 +370,31 @@ function EmptyState({
   );
 }
 
+type GraphMapNode = PaperLibraryGraphResponse["nodes"][number];
+type GraphMapEdge = PaperLibraryGraphResponse["edges"][number];
+
+interface GraphMapPoint {
+  x: number;
+  y: number;
+  labelX: number;
+  labelY: number;
+  anchor: "start" | "middle" | "end";
+  radius: number;
+}
+
+function graphEdgeColor(edge: GraphMapEdge): string {
+  if (edge.source === "pdf_text") return "#0f766e";
+  if (edge.kind === "same_identity") return "#b45309";
+  if (edge.kind === "bridge_suggestion") return "#7c3aed";
+  return "#2563eb";
+}
+
+function graphEdgeDash(edge: GraphMapEdge): string | undefined {
+  if (edge.kind === "same_identity") return "2 5";
+  if (edge.kind === "bridge_suggestion") return "7 6";
+  return undefined;
+}
+
 function CitationGraphMap({
   graphPage,
 }: {
@@ -355,53 +403,92 @@ function CitationGraphMap({
   const layout = useMemo(() => {
     const nodes = graphPage?.nodes ?? [];
     const edges = graphPage?.edges ?? [];
-    const connectedIds = new Set(edges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]));
-    const connected = nodes.filter((node) => connectedIds.has(node.id));
-    const disconnected = nodes.filter((node) => !connectedIds.has(node.id));
-    const visibleNodes = (connected.length > 0 ? [...connected, ...disconnected] : nodes)
-      .slice(0, GRAPH_MAP_NODE_LIMIT);
+    const degreeByNodeId = new Map<string, number>();
+    for (const edge of edges) {
+      degreeByNodeId.set(edge.sourceNodeId, (degreeByNodeId.get(edge.sourceNodeId) ?? 0) + 1);
+      degreeByNodeId.set(edge.targetNodeId, (degreeByNodeId.get(edge.targetNodeId) ?? 0) + 1);
+    }
+    const sortedNodes = [...nodes].sort((left, right) => {
+      const degreeDelta = (degreeByNodeId.get(right.id) ?? 0) - (degreeByNodeId.get(left.id) ?? 0);
+      if (degreeDelta !== 0) return degreeDelta;
+      if (left.local !== right.local) return left.local ? -1 : 1;
+      return (left.title ?? left.id).localeCompare(right.title ?? right.id);
+    });
+    const connectedNodes = sortedNodes.filter((node) => (degreeByNodeId.get(node.id) ?? 0) > 0);
+    const visibleNodes = (connectedNodes.length ? connectedNodes : sortedNodes).slice(0, GRAPH_MAP_NODE_LIMIT);
     const visibleIds = new Set(visibleNodes.map((node) => node.id));
     const visibleEdges = edges.filter((edge) => visibleIds.has(edge.sourceNodeId) && visibleIds.has(edge.targetNodeId));
-    const positions = new Map<string, { x: number; y: number }>();
+    const positions = new Map<string, GraphMapPoint>();
+    const center = { x: 460, y: 245 };
 
-    if (visibleEdges.length === 0) {
+    if (!visibleEdges.length) {
       const columns = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(visibleNodes.length || 1))));
       const rows = Math.max(1, Math.ceil((visibleNodes.length || 1) / columns));
       visibleNodes.forEach((node, index) => {
         const column = index % columns;
         const row = Math.floor(index / columns);
+        const x = 170 + (column * (580 / Math.max(1, columns - 1 || 1)));
+        const y = 105 + (row * (260 / Math.max(1, rows - 1 || 1)));
         positions.set(node.id, {
-          x: 90 + (column * (540 / Math.max(1, columns - 1 || 1))),
-          y: 72 + (row * (210 / Math.max(1, rows - 1 || 1))),
+          x,
+          y,
+          labelX: x,
+          labelY: y + 24,
+          anchor: "middle",
+          radius: node.local ? 8 : 7,
         });
       });
     } else {
-      let left = visibleNodes.filter((node) => node.local);
-      let right = visibleNodes.filter((node) => !node.local);
-      if (right.length === 0) {
-        const midpoint = Math.ceil(visibleNodes.length / 2);
-        left = visibleNodes.slice(0, midpoint);
-        right = visibleNodes.slice(midpoint);
-      }
-      const placeColumn = (columnNodes: typeof visibleNodes, x: number) => {
-        const span = 230;
-        columnNodes.forEach((node, index) => {
+      const [hub, ...ringNodes] = visibleNodes;
+      positions.set(hub.id, {
+        x: center.x,
+        y: center.y,
+        labelX: center.x,
+        labelY: center.y - 22,
+        anchor: "middle",
+        radius: Math.min(17, 10 + (degreeByNodeId.get(hub.id) ?? 0)),
+      });
+
+      const localRing = ringNodes.filter((node) => node.local);
+      const externalRing = ringNodes.filter((node) => !node.local);
+      const placeRing = (
+        ring: GraphMapNode[],
+        radiusX: number,
+        radiusY: number,
+        offset: number,
+      ) => {
+        ring.forEach((node, index) => {
+          const angle = offset + ((Math.PI * 2 * index) / Math.max(1, ring.length));
+          const x = center.x + Math.cos(angle) * radiusX;
+          const y = center.y + Math.sin(angle) * radiusY;
+          const anchor = x < center.x - 70 ? "end" : x > center.x + 70 ? "start" : "middle";
+          const labelX = anchor === "end" ? x - 18 : anchor === "start" ? x + 18 : x;
+          const labelY = anchor === "middle" ? y + 28 : y + 4;
           positions.set(node.id, {
             x,
-            y: 58 + (index * (span / Math.max(1, columnNodes.length - 1))),
+            y,
+            labelX,
+            labelY,
+            anchor,
+            radius: Math.min(14, 7 + Math.sqrt(degreeByNodeId.get(node.id) ?? 1) * 1.8),
           });
         });
       };
-      placeColumn(left, 170);
-      placeColumn(right.length ? right : left, right.length ? 550 : 390);
+
+      if (externalRing.length) {
+        placeRing(localRing, 230, 145, -Math.PI / 2);
+        placeRing(externalRing, 360, 205, -Math.PI / 2 + (Math.PI / Math.max(4, externalRing.length)));
+      } else {
+        placeRing(ringNodes, 320, 190, -Math.PI / 2);
+      }
     }
 
-    return { nodes: visibleNodes, edges: visibleEdges, positions };
+    return { nodes: visibleNodes, edges: visibleEdges, positions, degreeByNodeId };
   }, [graphPage]);
 
   if (layout.nodes.length === 0) {
     return (
-      <div className="flex h-72 items-center justify-center rounded-lg border border-dashed border-border bg-surface text-sm text-muted">
+      <div className="flex h-[32rem] items-center justify-center rounded-lg border border-dashed border-border bg-surface text-sm text-muted">
         The citation map appears after graph data is available.
       </div>
     );
@@ -411,64 +498,119 @@ function CitationGraphMap({
     <div className="overflow-hidden rounded-lg border border-border bg-surface">
       <svg
         aria-label="Citation graph map"
-        className="h-72 w-full"
+        className="h-[32rem] w-full"
         role="img"
-        viewBox="0 0 720 340"
+        viewBox="0 0 920 520"
       >
-        <rect width="720" height="340" fill="var(--surface-sunk)" />
-        {layout.edges.map((edge) => {
+        <defs>
+          <radialGradient cx="50%" cy="48%" id="citation-map-bg" r="70%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="65%" stopColor="#f7fafc" />
+            <stop offset="100%" stopColor="#eef2f7" />
+          </radialGradient>
+          <filter id="node-shadow" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy="5" floodColor="#0f172a" floodOpacity="0.12" stdDeviation="5" />
+          </filter>
+        </defs>
+        <rect width="920" height="520" fill="url(#citation-map-bg)" />
+        <ellipse cx="460" cy="245" fill="none" rx="238" ry="151" stroke="#d7dee8" strokeDasharray="5 9" />
+        <ellipse cx="460" cy="245" fill="none" rx="368" ry="213" stroke="#e1e7ef" strokeDasharray="3 12" />
+        {layout.edges.map((edge, index) => {
           const source = layout.positions.get(edge.sourceNodeId);
           const target = layout.positions.get(edge.targetNodeId);
           if (!source || !target) return null;
+          const sweep = index % 2 === 0 ? 1 : -1;
+          const controlX = (source.x + target.x) / 2 + sweep * 52;
+          const controlY = (source.y + target.y) / 2 - sweep * 34;
           return (
-            <line
+            <path
+              d={`M ${source.x} ${source.y} Q ${controlX} ${controlY} ${target.x} ${target.y}`}
+              fill="none"
               key={edge.id}
-              stroke={edge.kind === "same_identity" ? "var(--warn)" : "var(--accent)"}
-              strokeDasharray={edge.kind === "bridge_suggestion" ? "4 5" : undefined}
-              strokeOpacity={0.46}
-              strokeWidth={1.8}
-              x1={source.x}
-              x2={target.x}
-              y1={source.y}
-              y2={target.y}
+              stroke={graphEdgeColor(edge)}
+              strokeDasharray={graphEdgeDash(edge)}
+              strokeLinecap="round"
+              strokeOpacity={edge.source === "pdf_text" ? 0.72 : 0.48}
+              strokeWidth={edge.source === "pdf_text" ? 2.8 : 2}
             />
           );
         })}
         {layout.nodes.map((node) => {
-          const point = layout.positions.get(node.id) ?? { x: 360, y: 170 };
+          const point = layout.positions.get(node.id) ?? {
+            x: 460,
+            y: 245,
+            labelX: 460,
+            labelY: 275,
+            anchor: "middle" as const,
+            radius: 8,
+          };
           const fill = node.local
-            ? "var(--accent)"
+            ? "#2563eb"
             : node.suggestion
-              ? "var(--warn)"
-              : "var(--surface-raised)";
-          const textAnchor = point.x > 420 ? "end" : "start";
-          const textX = point.x > 420 ? point.x - 14 : point.x + 14;
+              ? "#7c3aed"
+              : "#f59e0b";
+          const degree = layout.degreeByNodeId.get(node.id) ?? 0;
           return (
             <g key={node.id}>
               <title>{node.title ?? node.id}</title>
               <circle
                 cx={point.x}
                 cy={point.y}
-                fill={fill}
-                opacity={node.local ? 0.95 : 0.82}
-                r={node.local ? 7 : 6}
-                stroke="var(--surface-raised)"
-                strokeWidth={2}
+                fill="#ffffff"
+                filter="url(#node-shadow)"
+                r={point.radius + 5}
               />
+              <circle
+                cx={point.x}
+                cy={point.y}
+                fill={fill}
+                opacity={node.local ? 0.95 : 0.88}
+                r={point.radius}
+                stroke="#ffffff"
+                strokeWidth={3}
+              />
+              {degree > 1 && (
+                <text
+                  dominantBaseline="middle"
+                  fill="#ffffff"
+                  fontSize="9"
+                  fontWeight="700"
+                  textAnchor="middle"
+                  x={point.x}
+                  y={point.y}
+                >
+                  {degree}
+                </text>
+              )}
               <text
-                dominantBaseline="middle"
-                fill="var(--text-body)"
-                fontSize="11"
-                textAnchor={textAnchor}
-                x={textX}
-                y={point.y}
+                fill="#172033"
+                fontSize="12"
+                fontWeight={node.local ? 700 : 600}
+                textAnchor={point.anchor}
+                x={point.labelX}
+                y={point.labelY}
               >
-                {truncateGraphLabel(node.title, node.id, 30)}
+                {truncateGraphLabel(node.title, node.id, point.anchor === "middle" ? 30 : 34)}
+              </text>
+              <text
+                fill="#697587"
+                fontSize="10"
+                textAnchor={point.anchor}
+                x={point.labelX}
+                y={point.labelY + 15}
+              >
+                {node.local ? "local PDF" : node.suggestion ? "bridge" : "reference"}
+                {node.year ? ` • ${node.year}` : ""}
               </text>
             </g>
           );
         })}
       </svg>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-white px-4 py-3 text-xs text-muted">
+        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#2563eb]" />Local PDFs</span>
+        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#f59e0b]" />Referenced papers</span>
+        <span className="inline-flex items-center gap-2"><span className="h-0.5 w-7 rounded bg-[#0f766e]" />PDF reference links</span>
+      </div>
     </div>
   );
 }
@@ -485,6 +627,7 @@ export function PaperLibraryCommandCenter({
   const sessionRestored = restoredProjectSlug === projectSlug;
   const sessionRef = useRef(session);
   const [scan, setScan] = useState<PaperLibraryScan | null>(null);
+  const scanRef = useRef<PaperLibraryScan | null>(scan);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -573,6 +716,10 @@ export function PaperLibraryCommandCenter({
     sessionRef.current = session;
   }, [session]);
 
+  useEffect(() => {
+    scanRef.current = scan;
+  }, [scan]);
+
   const loadScan = useCallback(async (scanId: string) => {
     setScanLoading(true);
     setScanError(null);
@@ -619,10 +766,18 @@ export function PaperLibraryCommandCenter({
         return;
       }
       const currentSession = sessionRef.current;
-      if (currentSession.scanId || skipLatestRestoreRef.current) {
+      const currentScan = scanRef.current;
+      if (
+        skipLatestRestoreRef.current
+        || !shouldPromoteLatestScan({
+          currentScan,
+          currentSession,
+          latestScan: restoredScan,
+        })
+      ) {
         return;
       }
-      setSession((current) => current.scanId || skipLatestRestoreRef.current
+      setSession((current) => skipLatestRestoreRef.current
         ? current
         : {
             ...current,
@@ -892,9 +1047,10 @@ export function PaperLibraryCommandCenter({
 
   useEffect(() => {
     if (!sessionRestored) return;
-    if (session.scanId) return;
+    if (skipLatestRestoreRef.current) return;
+    if (session.scanId && session.step !== "scan") return;
     void loadLatestScan();
-  }, [loadLatestScan, session.scanId, sessionRestored]);
+  }, [loadLatestScan, scan?.createdAt, scan?.id, scan?.updatedAt, session.scanId, session.step, sessionRestored]);
 
   useEffect(() => {
     if (!sessionRestored) return;
@@ -1317,6 +1473,13 @@ export function PaperLibraryCommandCenter({
   const graphNoIdentifierRuns = graphPage?.sourceRuns.filter((run) => (
     run.status === "negative" && run.message?.toLowerCase().includes("no supported identifier")
   )).length ?? 0;
+  const graphPdfTextRuns = graphPage?.sourceRuns.filter((run) => run.source === "pdf_text").length ?? 0;
+  const graphPdfTextSuccessfulRuns = graphPage?.sourceRuns.filter((run) => (
+    run.source === "pdf_text" && run.status === "success"
+  )).length ?? 0;
+  const graphPdfTextReferenceCount = graphPage?.sourceRuns
+    .filter((run) => run.source === "pdf_text")
+    .reduce((total, run) => total + run.fetchedCount, 0) ?? 0;
   const approvalTokenExpired = approvalToken
     ? Date.parse(approvalToken.expiresAt) <= Date.now()
     : false;
@@ -1829,9 +1992,16 @@ export function PaperLibraryCommandCenter({
                   </div>
                   {graphPage && totalGraphEdgeCount === 0 && (
                     <div className="mt-3 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
-                      No citation edges yet. {graphNoIdentifierRuns > 0
-                        ? `${graphNoIdentifierRuns} papers need DOI, arXiv, PMID, or OpenAlex identifiers before external citation lookup can connect them.`
-                        : "Refresh graph after identifier enrichment, or review missing metadata so external citation lookup has stable IDs."}
+                      No citation edges yet. {graphPdfTextRuns > 0
+                        ? `Local PDF reference extraction checked ${graphPdfTextRuns} papers and found ${graphPdfTextReferenceCount} references; review missing titles or identifiers if none match the library.`
+                        : graphNoIdentifierRuns > 0
+                          ? `${graphNoIdentifierRuns} papers need DOI, arXiv, PMID, or OpenAlex identifiers before external citation lookup can connect them.`
+                          : "Refresh graph after identifier enrichment, or review missing metadata so external citation lookup has stable IDs."}
+                    </div>
+                  )}
+                  {graphPage && totalGraphEdgeCount > 0 && graphPdfTextRuns > 0 && (
+                    <div className="mt-3 rounded-lg border border-ok/30 bg-ok/10 px-3 py-2 text-sm text-ok">
+                      Local PDF extraction found {graphPdfTextReferenceCount} references across {graphPdfTextSuccessfulRuns} papers and connected the citation map.
                     </div>
                   )}
                   {graphPage?.warnings.length ? (

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createIdentityCandidateFromEvidence,
   deriveTitleHintFromPath,
+  deriveTitleHintFromText,
   extractPaperIdentityEvidence,
   normalizeArxivId,
   normalizeDoi,
@@ -30,6 +31,33 @@ describe("paper-library identity", () => {
     expect(evidence.textLayerTooThin).toBe(false);
   });
 
+  it("prefers the PDF title and ignores identifiers that only appear in references", () => {
+    const evidence = extractPaperIdentityEvidence({
+      relativePath: "Leonardo de Moura 2021 - The Lean 4 Theorem Prover.pdf",
+      text: [
+        "Seed-Prover 1.5: Mastering Undergraduate-Level",
+        "Theorem Proving via Learning from Experience",
+        "ByteDance Seed AI4Math",
+        "Abstract",
+        "We train a theorem proving model.",
+        "References",
+        "[1] Leonardo de Moura and Sebastian Ullrich. The Lean 4 Theorem Prover and Programming Language. doi: 10.1007/978-3-030-79876-5_37.",
+      ].join("\n"),
+      wordCount: 200,
+    });
+
+    expect(evidence.titleHint).toBe("Seed-Prover 1.5: Mastering Undergraduate-Level Theorem Proving via Learning from Experience");
+    expect(evidence.identifiers.doi).toBeUndefined();
+    expect(evidence.evidence).toContain("title_from_pdf_text");
+  });
+
+  it("derives a title from the front matter before falling back to the filename", () => {
+    expect(deriveTitleHintFromText("arXiv:2601.00001\n\nA Minimal Agent for Automated Theorem Proving\n\nAbstract")).toBe("A Minimal Agent for Automated Theorem Proving");
+    expect(deriveTitleHintFromText("Technical Report\nGOEDEL-PROVER-V2: SCALING FORMAL THEOREM\nPROVING WITH SCAFFOLDED DATA SYNTHESIS\nAuthors")).toBe(
+      "GOEDEL-PROVER-V2: SCALING FORMAL THEOREM PROVING WITH SCAFFOLDED DATA SYNTHESIS",
+    );
+  });
+
   it("marks low-text PDFs without identifiers for review", () => {
     const evidence = extractPaperIdentityEvidence({
       relativePath: "scan001.pdf",
@@ -46,4 +74,3 @@ describe("paper-library identity", () => {
     expect(deriveTitleHintFromPath("papers/final-copy_Gene-Editing-Review-v2.pdf")).toBe("Gene Editing Review");
   });
 });
-

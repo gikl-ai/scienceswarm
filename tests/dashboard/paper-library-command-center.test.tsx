@@ -616,6 +616,65 @@ describe("PaperLibraryCommandCenter", () => {
     expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"templateFormat\":\"papers/{year}/{title}.pdf\"");
   });
 
+  it("promotes a newer latest scan over a stale terminal browser session", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "scan",
+        rootPath: "/tmp/old-library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            status: "ready_for_apply",
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 0,
+              readyForApply: 3,
+              failed: 0,
+            },
+          }),
+        });
+      }
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            id: "scan-2",
+            rootPath: "/tmp/latest-library",
+            rootRealpath: "/tmp/latest-library",
+            status: "scanning",
+            createdAt: "2026-04-23T12:09:00.000Z",
+            updatedAt: "2026-04-23T12:10:00.000Z",
+          }),
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("/tmp/latest-library")).toBeInTheDocument();
+    });
+
+    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"scanId\":\"scan-2\"");
+  });
+
   it("supports accept, plan, apply, and undo through the command center", async () => {
     window.localStorage.setItem(
       "scienceswarm.paperLibrary.session.demo-project",
@@ -1077,12 +1136,13 @@ describe("PaperLibraryCommandCenter", () => {
     expect(await screen.findByText("Nothing in this review slice")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Scan/ }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeEnabled();
+    });
     fireEvent.click(screen.getByRole("button", { name: "Import PDF Folder" }));
 
     await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/scan?project=demo-project&id=scan-2"),
-      ).toBe(true);
+      expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"scanId\":\"scan-2\"");
     });
     fireEvent.click(screen.getByRole("button", { name: /Scan/ }));
     expect(await screen.findByText("ready for review")).toBeInTheDocument();
