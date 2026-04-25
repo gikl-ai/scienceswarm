@@ -355,11 +355,9 @@ export function getBrainStore(options: { root?: string } = {}): BrainStore {
     brainStoreState.activeBrainRoot = null;
   }
 
-  if (
-    brainStoreState.instance
-    && getCachedBrainInitFailure(brainRoot)
-  ) {
-    return brainStoreState.instance;
+  const cachedFailure = getCachedBrainInitFailure(brainRoot);
+  if (cachedFailure) {
+    throw cachedFailure;
   }
 
   if (!brainStoreState.instance) {

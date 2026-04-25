@@ -142,7 +142,7 @@ export function useRuntimeHosts(options: UseRuntimeHostsOptions = {}) {
     refreshImmediately = false,
   } = options;
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthResponse | null>(null);
-  const [loading, setLoading] = useState(!deferInitialRefresh);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const hasRequestedHealthRef = useRef(false);
 
@@ -172,28 +172,36 @@ export function useRuntimeHosts(options: UseRuntimeHostsOptions = {}) {
   }, []);
 
   useEffect(() => {
-    let timeoutId: number | null = null;
-    if (refreshImmediately || !deferInitialRefresh) {
+    if (!deferInitialRefresh) {
       void refresh();
-    } else if (!hasRequestedHealthRef.current) {
-      timeoutId = window.setTimeout(() => {
-        void refresh();
-      }, initialRefreshDelayMs);
+      return;
     }
 
+    if (hasRequestedHealthRef.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (!hasRequestedHealthRef.current) {
+        void refresh();
+      }
+    }, initialRefreshDelayMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [deferInitialRefresh, initialRefreshDelayMs, refresh]);
+
+  useEffect(() => {
+    if (refreshImmediately) {
+      void refresh();
+    }
+  }, [refresh, refreshImmediately]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       void refresh();
     }, 15_000);
-    return () => {
-      if (timeoutId) window.clearTimeout(timeoutId);
-      window.clearInterval(interval);
-    };
-  }, [
-    deferInitialRefresh,
-    initialRefreshDelayMs,
-    refresh,
-    refreshImmediately,
-  ]);
+    return () => window.clearInterval(interval);
+  }, [refresh]);
 
   const hosts = useMemo(() => runtimeHealth?.hosts ?? [], [runtimeHealth]);
   const defaultHostId = useMemo(

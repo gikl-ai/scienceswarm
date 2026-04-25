@@ -43,6 +43,19 @@ describe("BrainStore unavailable backend retry cache", () => {
     expect(mocks.createRuntimeEngine).toHaveBeenCalledTimes(1);
   });
 
+  it("throws the cached init failure for direct getBrainStore callers", async () => {
+    mocks.createRuntimeEngine.mockResolvedValue(failingEngine());
+    const store = await import("@/brain/store");
+    const root = "/tmp/scienceswarm-direct-failed-brain";
+
+    await expect(
+      store.ensureBrainStoreReady({ root }),
+    ).rejects.toThrow("Brain backend unavailable");
+
+    expect(() => store.getBrainStore({ root })).toThrow("Brain backend unavailable");
+    expect(mocks.createRuntimeEngine).toHaveBeenCalledTimes(1);
+  });
+
   it("retries after the unavailable-backend cache expires", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
