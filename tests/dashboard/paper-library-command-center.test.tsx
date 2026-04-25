@@ -616,7 +616,7 @@ describe("PaperLibraryCommandCenter", () => {
     expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"templateFormat\":\"papers/{year}/{title}.pdf\"");
   });
 
-  it("supports accept, plan, approve, apply, and undo through the command center", async () => {
+  it("supports accept, plan, apply, and undo through the command center", async () => {
     window.localStorage.setItem(
       "scienceswarm.paperLibrary.session.demo-project",
       JSON.stringify({
@@ -789,15 +789,12 @@ describe("PaperLibraryCommandCenter", () => {
     fireEvent.click(await screen.findByRole("button", { name: /preview/i }));
     expect(await screen.findByText("1 operations")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve plan" }));
-    expect(await screen.findByText(/Plan approved until/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Apply approved plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
     expect(await screen.findByText("Manifest and undo")).toBeInTheDocument();
     expect(await screen.findByText("applied")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Undo changes" }));
-    expect(await screen.findAllByText("undone")).toHaveLength(2);
+    expect(await screen.findAllByText("undone")).toHaveLength(3);
   });
 
   it("accepts unchanged author suggestions that contain commas", async () => {
@@ -1192,13 +1189,12 @@ describe("PaperLibraryCommandCenter", () => {
 
     expect(await screen.findByText("1 operations")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
 
-    const applyButton = await screen.findByRole("button", { name: "Apply approved plan" });
-    await waitFor(() => {
-      expect(applyButton).toBeDisabled();
-    });
-    expect(screen.getByText(/Approval expired at/i)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Approval expired at/i);
+    expect(
+      fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/apply"),
+    ).toBe(false);
   });
 
   it("regenerates an existing rename preview with the newly selected template", async () => {
@@ -1301,12 +1297,6 @@ describe("PaperLibraryCommandCenter", () => {
     expect(await screen.findByText(/2024 - Interesting Paper\.pdf/)).toBeInTheDocument();
     const initialPlanLoads = fetchMock.mock.calls.filter(([request]) => String(request).startsWith("/api/brain/paper-library/apply-plan?")).length;
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve plan" }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Apply approved plan" })).toBeEnabled();
-    });
-
     fireEvent.click(screen.getByRole("button", { name: /Author Year - Title/ }));
 
     await waitFor(() => {
@@ -1315,8 +1305,7 @@ describe("PaperLibraryCommandCenter", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "This preview uses {year} - {title}.pdf. Regenerate rename preview to inspect {first_author} {year} - {title}.pdf.",
     );
-    expect(screen.getByRole("button", { name: "Approve plan" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Apply approved plan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Apply 1 change" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Regenerate rename preview" }));
 
@@ -1468,24 +1457,9 @@ describe("PaperLibraryCommandCenter", () => {
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
     expect(await screen.findByText("1 operations")).toBeInTheDocument();
-    expect(screen.getByText(/this browser session no longer has the apply token/i)).toBeInTheDocument();
+    expect(screen.getByText(/Applying will refresh the browser token first/i)).toBeInTheDocument();
 
-    const refreshButton = screen.getByRole("button", { name: "Refresh approval" });
-    await waitFor(() => {
-      expect(refreshButton).toBeEnabled();
-    });
-
-    const applyButton = screen.getByRole("button", { name: "Apply approved plan" });
-    expect(applyButton).toBeDisabled();
-
-    fireEvent.click(refreshButton);
-    expect(await screen.findByText(/Plan approved until/i)).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Apply approved plan" })).toBeEnabled();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Apply approved plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
     expect(await screen.findByText("Manifest and undo")).toBeInTheDocument();
     expect(await screen.findByText("applied")).toBeInTheDocument();
   });
@@ -1575,7 +1549,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     expect(await screen.findByText("1 operations")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Approval failed.");
   });

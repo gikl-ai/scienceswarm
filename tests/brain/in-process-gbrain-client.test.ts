@@ -7,6 +7,7 @@ import { initBrain } from "@/brain/init";
 import {
   createInProcessGbrainClient,
 } from "@/brain/in-process-gbrain-client";
+import { GbrainEngineAdapter } from "@/brain/stores/gbrain-engine-adapter";
 import { getBrainStore, resetBrainStore } from "@/brain/store";
 
 let brainRoot = "";
@@ -77,5 +78,31 @@ describe("createInProcessGbrainClient", () => {
     expect(page?.title).toBe("Transactional Paper");
     expect(page?.content).toContain("Updated once");
     expect(page?.frontmatter.source_db).toEqual(["test", "second"]);
+  });
+
+  it("recovers a stale uninitialized store instance before writeback", async () => {
+    await resetBrainStore();
+    const state = (globalThis as typeof globalThis & {
+      __scienceswarmBrainStoreState: {
+        instance: unknown;
+        adapterInitPromise: Promise<void> | null;
+        activeBrainRoot: string | null;
+      };
+    }).__scienceswarmBrainStoreState;
+    state.instance = new GbrainEngineAdapter();
+    state.adapterInitPromise = null;
+    state.activeBrainRoot = null;
+
+    const client = createInProcessGbrainClient({ root: brainRoot });
+    await client.persistTransaction("paper-library-writeback-recovery", () => ({
+      page: {
+        type: "paper",
+        title: "Recovered Writeback",
+        compiledTruth: "Writeback succeeds after the store instance is reattached.",
+      },
+    }));
+
+    const page = await getBrainStore({ root: brainRoot }).getPage("paper-library-writeback-recovery");
+    expect(page?.title).toBe("Recovered Writeback");
   });
 });
