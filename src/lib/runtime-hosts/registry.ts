@@ -64,7 +64,7 @@ const BUILT_IN_PROFILES: RuntimeHostProfile[] = [
       supportsNativeSessionList: false,
     },
     mcpToolProfile: {
-      alwaysExposeTools: ["gbrain_read", "gbrain_write", "provenance_log"],
+      alwaysExposeTools: ["gbrain_read", "gbrain_write", "provenance_log", "openhands_delegate"],
       conditionalWorkspaceTools: ["project_workspace_read", "artifact_import"],
       suppressWhenNativeToolsSafe: ["project_workspace_write"],
     },

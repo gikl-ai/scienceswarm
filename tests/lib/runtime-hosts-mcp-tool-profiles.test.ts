@@ -25,7 +25,7 @@ describe("runtime MCP tool profiles", () => {
     ]);
   });
 
-  it("always exposes gbrain and provenance tools for runtime-capable hosts", () => {
+  it("always exposes baseline gbrain/provenance tools for runtime hosts", () => {
     const profile = resolveRuntimeMcpToolProfile("codex");
 
     expect(profile.always).toEqual([
@@ -45,14 +45,22 @@ describe("runtime MCP tool profiles", () => {
   });
 
   it("exposes workspace tools only when the host profile does not suppress them", () => {
+    const claudeCode = resolveRuntimeMcpToolProfile("claude-code");
     expect(
-      resolveRuntimeMcpToolProfile("codex").allowedTools,
+      claudeCode.allowedTools,
     ).toEqual(expect.arrayContaining(["project_workspace_read", "artifact_import"]));
 
     const openHands = resolveRuntimeMcpToolProfile("openhands");
     expect(openHands.allowedTools).toContain("artifact_import");
     expect(openHands.suppressed).toContain("project_workspace_read");
     expect(openHands.allowedTools).not.toContain("project_workspace_read");
+  });
+
+  it("adds claude-code always-exposed hosted tools in the always list", () => {
+    const profile = resolveRuntimeMcpToolProfile("claude-code");
+
+    expect(profile.always).toContain("openhands_delegate");
+    expect(profile.allowedTools).toContain("openhands_delegate");
   });
 
   it("uses the host profile as the server-side allowlist", () => {
@@ -71,4 +79,5 @@ describe("runtime MCP tool profiles", () => {
       }),
     ).toBe(true);
   });
+
 });
