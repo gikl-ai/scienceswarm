@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   RuntimeEvent,
   RuntimeProjectPolicy,
@@ -129,12 +129,25 @@ export function chooseRuntimeHostFallback(input: {
   )?.profile.id ?? "openclaw";
 }
 
-export function useRuntimeHosts() {
+export interface UseRuntimeHostsOptions {
+  deferInitialRefresh?: boolean;
+  initialRefreshDelayMs?: number;
+  refreshImmediately?: boolean;
+}
+
+export function useRuntimeHosts(options: UseRuntimeHostsOptions = {}) {
+  const {
+    deferInitialRefresh = false,
+    initialRefreshDelayMs = 3_000,
+    refreshImmediately = false,
+  } = options;
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasRequestedHealthRef = useRef(false);
 
   const refresh = useCallback(async () => {
+    hasRequestedHealthRef.current = true;
     setLoading(true);
     try {
       const response = await fetch("/api/runtime/health");
@@ -159,7 +172,31 @@ export function useRuntimeHosts() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    if (!deferInitialRefresh) {
+      void refresh();
+      return;
+    }
+
+    if (hasRequestedHealthRef.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (!hasRequestedHealthRef.current) {
+        void refresh();
+      }
+    }, initialRefreshDelayMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [deferInitialRefresh, initialRefreshDelayMs, refresh]);
+
+  useEffect(() => {
+    if (refreshImmediately) {
+      void refresh();
+    }
+  }, [refresh, refreshImmediately]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       void refresh();
     }, 15_000);

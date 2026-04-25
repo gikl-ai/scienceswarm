@@ -67,6 +67,27 @@ describe("ProjectList file tree", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renders the active project from the URL while the project list is still loading", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+
+    render(
+      <ProjectList
+        activeSlug="project-alpha"
+        files={[]}
+        onSelect={vi.fn()}
+        selectedPath={null}
+        onUpload={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Project Alpha")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-list-spinner")).not.toBeInTheDocument();
+    expect(screen.getByText(/No files yet/)).toBeInTheDocument();
+  });
+
   it("starts with folders collapsed and supports expanding or collapsing all folders", async () => {
     render(
       <ProjectList

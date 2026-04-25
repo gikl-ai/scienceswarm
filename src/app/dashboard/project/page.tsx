@@ -1743,7 +1743,11 @@ function ProjectPageContent() {
     runtimeCompareResult,
     clearRuntimeCompareResult,
   } = useUnifiedChat(projectName);
-  const runtimeHosts = useRuntimeHosts();
+  const [runtimeSwitcherOpen, setRuntimeSwitcherOpen] = useState(false);
+  const runtimeHosts = useRuntimeHosts({
+    deferInitialRefresh: true,
+    refreshImmediately: runtimeSwitcherOpen,
+  });
   const {
     projectPolicy: runtimeProjectPolicy,
     mode: runtimeMode,
@@ -1754,7 +1758,6 @@ function ProjectPageContent() {
     setSelectedHostId: setSelectedRuntimeHostId,
     setCompareHostIds: setRuntimeCompareHostIds,
   } = useProjectRuntimePreferences(activeProjectSlug, runtimeHosts.hosts);
-  const [runtimeSwitcherOpen, setRuntimeSwitcherOpen] = useState(false);
   const [pendingRuntimeSend, setPendingRuntimeSend] =
     useState<PendingRuntimeSend | null>(null);
   const [runtimePreviewBusy, setRuntimePreviewBusy] = useState(false);

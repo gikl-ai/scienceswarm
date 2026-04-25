@@ -25,6 +25,14 @@ type FetchStatus = "loading" | "ready" | "error";
 const EMPTY_EXPANDED_PATHS: string[] = [];
 const NO_ACTIVE_PROJECT_KEY = "__no_active_project__";
 
+function labelFromProjectSlug(slug: string): string {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((segment) => segment[0]?.toUpperCase() + segment.slice(1))
+    .join(" ") || slug;
+}
+
 export function ProjectList({
   activeSlug,
   files,
@@ -60,6 +68,26 @@ export function ProjectList({
   const directoryPaths = useMemo(() => collectDirectoryPaths(files), [files]);
   const hasDirectories = directoryPaths.length > 0;
   const activeExpansionKey = activeSlug ?? NO_ACTIVE_PROJECT_KEY;
+  const optimisticActiveProject = useMemo<ProjectMeta | null>(() => {
+    if (!activeSlug || status !== "loading") {
+      return null;
+    }
+    return {
+      id: activeSlug,
+      slug: activeSlug,
+      name: labelFromProjectSlug(activeSlug),
+      status: "active",
+    };
+  }, [activeSlug, status]);
+  const renderedProjects = useMemo(() => {
+    if (
+      optimisticActiveProject
+      && !projects.some((project) => project.slug === optimisticActiveProject.slug)
+    ) {
+      return [optimisticActiveProject, ...projects];
+    }
+    return projects;
+  }, [optimisticActiveProject, projects]);
   const expandedFilePaths = useMemo(
     () =>
       new Set(
@@ -228,7 +256,7 @@ export function ProjectList({
         </div>
       </div>
 
-      {status === "loading" && (
+      {status === "loading" && renderedProjects.length === 0 && (
         <div className="flex items-center gap-2 p-4 text-xs text-muted">
           <Spinner size="h-3.5 w-3.5" testId="project-list-spinner" />
           <span>Loading projects…</span>
@@ -237,7 +265,7 @@ export function ProjectList({
       {status === "error" && (
         <div className="p-4 text-xs text-danger">Could not load projects.</div>
       )}
-      {status === "ready" && projects.length === 0 && (
+      {status === "ready" && renderedProjects.length === 0 && (
         <div className="flex flex-col items-center gap-3 p-6 text-center">
           <p className="text-xs text-muted">No projects yet.</p>
           <Link
@@ -248,9 +276,9 @@ export function ProjectList({
           </Link>
         </div>
       )}
-      {status === "ready" && projects.length > 0 && (
+      {renderedProjects.length > 0 && (
         <div className="flex-1 overflow-y-auto py-1">
-          {projects.map((project) => {
+          {renderedProjects.map((project) => {
             const isActive = activeSlug !== null && project.slug === activeSlug;
             const isExpanded = isActive && collapsedProjectSlug !== project.slug;
             const handleArchive = async (e: React.MouseEvent) => {
