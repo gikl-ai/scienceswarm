@@ -219,6 +219,7 @@ describe("paper-library acquisition route", () => {
   });
 
   afterEach(async () => {
+    vi.doUnmock("@/lib/paper-library/library-enrichment");
     if (ORIGINAL_SCIENCESWARM_DIR) process.env.SCIENCESWARM_DIR = ORIGINAL_SCIENCESWARM_DIR;
     else delete process.env.SCIENCESWARM_DIR;
     if (ORIGINAL_SCIENCESWARM_USER_HANDLE) process.env.SCIENCESWARM_USER_HANDLE = ORIGINAL_SCIENCESWARM_USER_HANDLE;
@@ -496,6 +497,32 @@ describe("paper-library acquisition route", () => {
       error: {
         code: "job_already_running",
         message: "Acquisition plan is already running.",
+      },
+    });
+  });
+
+  it("returns a structured error when enrichment graph context fails", async () => {
+    vi.doMock("@/lib/paper-library/library-enrichment", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/lib/paper-library/library-enrichment")>();
+      return {
+        ...actual,
+        buildLibraryCitationGraphContext: vi.fn(async () => {
+          throw new Error("Malformed paper-library graph state.");
+        }),
+      };
+    });
+    const route = await import("@/app/api/brain/paper-library/enrichment/route");
+
+    const response = await route.GET(new Request(
+      "http://localhost/api/brain/paper-library/enrichment?project=project-alpha&scanId=scan-1",
+    ));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid_state",
+        message: "Malformed paper-library graph state.",
       },
     });
   });

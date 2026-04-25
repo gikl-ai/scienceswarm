@@ -34,25 +34,29 @@ export async function GET(request: Request) {
   });
   if (!parsed.success) return paperLibraryBadRequest(parsed.error);
 
-  const context = await buildLibraryCitationGraphContext({
-    project: parsed.data.project,
-    scanId: parsed.data.scanId,
-    question: parsed.data.question,
-    refresh: parsed.data.refresh,
-    suggestionLimit: parsed.data.limit,
-    brainRoot: guard.brainRoot,
-  });
-  if (!context) {
-    return Response.json(
-      paperLibraryError("job_not_found", "Paper library graph context not found."),
-      { status: 404 },
-    );
-  }
+  try {
+    const context = await buildLibraryCitationGraphContext({
+      project: parsed.data.project,
+      scanId: parsed.data.scanId,
+      question: parsed.data.question,
+      refresh: parsed.data.refresh,
+      suggestionLimit: parsed.data.limit,
+      brainRoot: guard.brainRoot,
+    });
+    if (!context) {
+      return Response.json(
+        paperLibraryError("job_not_found", "Paper library graph context not found."),
+        { status: 404 },
+      );
+    }
 
-  return Response.json({
-    ok: true,
-    graph: context,
-    suggestions: context.suggestions,
-    warnings: context.warnings,
-  });
+    return Response.json({
+      ok: true,
+      graph: context,
+      suggestions: context.suggestions,
+      warnings: context.warnings,
+    });
+  } catch (error) {
+    return paperLibraryBadRequest(error);
+  }
 }
