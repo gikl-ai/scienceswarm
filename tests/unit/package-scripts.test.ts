@@ -37,7 +37,7 @@ describe("package.json scripts", () => {
   });
 
   it("forces gbrain to reuse the hoisted PGLite package", () => {
-    expect(pkg.overrides?.gbrain?.["@electric-sql/pglite"]).toBe("0.4.4");
+    expect(pkg.overrides?.gbrain?.["@electric-sql/pglite"]).toBe("0.4.3");
   });
 
   it("keeps optional HTTPS dev server support on explicit ScienceSwarm certificate paths", () => {

@@ -47,7 +47,7 @@
     "@capacitor/core": "^8.3.0",
     "@capacitor/haptics": "^8.0.2",
     "@clerk/nextjs": "^7.2.3",
-    "@electric-sql/pglite": "^0.4.4",
+    "@electric-sql/pglite": "0.4.3",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@phosphor-icons/react": "^2.1.10",
     "@slack/bolt": "^4.7.0",
@@ -88,7 +88,7 @@
   },
   "overrides": {
     "gbrain": {
-      "@electric-sql/pglite": "0.4.4"
+      "@electric-sql/pglite": "0.4.3"
     }
   },
   "devDependencies": {

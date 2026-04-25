@@ -6,13 +6,22 @@ import { initBrain } from "@/brain/init";
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { getBrainStore, resetBrainStore } from "@/brain/store";
 import { persistAppliedPaperLocations } from "@/lib/paper-library/gbrain-writer";
+import { getScienceSwarmProjectBrainRoot } from "@/lib/scienceswarm-paths";
 
+const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
 const ORIGINAL_SCIENCESWARM_USER_HANDLE = process.env.SCIENCESWARM_USER_HANDLE;
+let dataRoot: string;
 let brainRoot: string;
+
+function projectBrainRoot(): string {
+  return getScienceSwarmProjectBrainRoot("project-alpha");
+}
 
 describe("paper-library gbrain writer", () => {
   beforeEach(async () => {
-    brainRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-paper-library-gbrain-writer-"));
+    dataRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-paper-library-gbrain-writer-"));
+    brainRoot = path.join(dataRoot, "brain");
+    process.env.SCIENCESWARM_DIR = dataRoot;
     process.env.SCIENCESWARM_USER_HANDLE = "@paper-library-gbrain-writer-test";
     await resetBrainStore();
     initBrain({ root: brainRoot, name: "Test Researcher" });
@@ -20,13 +29,15 @@ describe("paper-library gbrain writer", () => {
 
   afterEach(async () => {
     await resetBrainStore();
+    if (ORIGINAL_SCIENCESWARM_DIR) process.env.SCIENCESWARM_DIR = ORIGINAL_SCIENCESWARM_DIR;
+    else delete process.env.SCIENCESWARM_DIR;
     if (ORIGINAL_SCIENCESWARM_USER_HANDLE) process.env.SCIENCESWARM_USER_HANDLE = ORIGINAL_SCIENCESWARM_USER_HANDLE;
     else delete process.env.SCIENCESWARM_USER_HANDLE;
-    await rm(brainRoot, { recursive: true, force: true });
+    await rm(dataRoot, { recursive: true, force: true });
   });
 
   it("preserves existing paper notes while writing the applied PDF location", async () => {
-    const client = createInProcessGbrainClient({ root: brainRoot });
+    const client = createInProcessGbrainClient({ root: projectBrainRoot() });
     await client.persistTransaction("wiki/entities/papers/local-paper-1", () => ({
       page: {
         type: "paper",
@@ -111,7 +122,7 @@ describe("paper-library gbrain writer", () => {
       }],
     });
 
-    const page = await getBrainStore({ root: brainRoot }).getPage("wiki/entities/papers/local-paper-1");
+    const page = await getBrainStore({ root: projectBrainRoot() }).getPage("wiki/entities/papers/local-paper-1");
     expect(page?.content).toContain("Existing researcher note that must survive.");
     expect(page?.content).toContain("## Paper Library");
     expect(page?.content).toContain("2024 - Existing Paper.pdf");
@@ -175,12 +186,65 @@ describe("paper-library gbrain writer", () => {
     await persistAppliedPaperLocations(input);
     await persistAppliedPaperLocations(input);
 
-    const store = getBrainStore({ root: brainRoot }) as unknown as {
+    const store = getBrainStore({ root: projectBrainRoot() }) as unknown as {
       health(): Promise<unknown>;
       engine: { getPage(slug: string): Promise<{ timeline: string } | null> };
     };
     await store.health();
     const page = await store.engine.getPage("wiki/entities/papers/local-paper-1");
     expect(page?.timeline.match(/Applied local PDF path/g) ?? []).toHaveLength(1);
+  });
+
+  it("writes applied paper pages into the project-local brain when the request passes the global root", async () => {
+    await persistAppliedPaperLocations({
+      project: "project-alpha",
+      brainRoot,
+      manifestId: "manifest-1",
+      plan: {
+        version: 1,
+        id: "plan-1",
+        scanId: "scan-1",
+        project: "project-alpha",
+        status: "applied",
+        rootPath: "/Users/example/papers",
+        rootRealpath: "/Users/example/papers",
+        templateFormat: "{year} - {title}.pdf",
+        operationCount: 1,
+        conflictCount: 0,
+        operationShardIds: [],
+        createdAt: "2026-04-23T00:00:00.000Z",
+        updatedAt: "2026-04-23T00:00:00.000Z",
+      },
+      operations: [{
+        id: "operation-1",
+        paperId: "paper-1",
+        kind: "rename",
+        destinationRelativePath: "2024 - Existing Paper.pdf",
+        reason: "test",
+        confidence: 0.95,
+        conflictCodes: [],
+      }],
+      manifestOperations: [{
+        operationId: "operation-1",
+        paperId: "paper-1",
+        sourceRelativePath: "messy.pdf",
+        destinationRelativePath: "2024 - Existing Paper.pdf",
+        status: "verified",
+        appliedMetadata: {
+          pageSlug: "wiki/entities/papers/local-paper-1",
+          title: "Existing Paper",
+          identifiers: {},
+          authors: [],
+        },
+        appliedAt: "2026-04-23T00:00:00.000Z",
+      }],
+    });
+
+    const projectPage = await getBrainStore({ root: projectBrainRoot() }).getPage("wiki/entities/papers/local-paper-1");
+    expect(projectPage?.title).toBe("Existing Paper");
+    await resetBrainStore();
+    initBrain({ root: brainRoot, name: "Test Researcher" });
+    const globalPage = await getBrainStore({ root: brainRoot }).getPage("wiki/entities/papers/local-paper-1");
+    expect(globalPage).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getProjectBrainRootForBrainRoot } from "@/lib/state/project-storage";
 
 import type { PersistAppliedPaperLocationsInput } from "./apply";
 import type {
@@ -90,7 +91,8 @@ function mergeCompiledTruth(existingCompiledTruth: string | undefined, paperLibr
 
 export async function persistAppliedPaperLocations(input: PersistAppliedPaperLocationsInput): Promise<void> {
   const userHandle = getCurrentUserHandle();
-  const client = createInProcessGbrainClient({ root: input.brainRoot });
+  const resolvedBrainRoot = getProjectBrainRootForBrainRoot(input.project, input.brainRoot);
+  const client = createInProcessGbrainClient({ root: resolvedBrainRoot });
   const operationsById = new Map(input.operations.map((operation) => [operation.id, operation]));
   const reviewItemsByPaperId = new Map((input.reviewItems ?? []).map((item) => [item.paperId, item]));
   const nowIso = new Date().toISOString();

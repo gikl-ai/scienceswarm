@@ -2,6 +2,15 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockExtractPdfText } = vi.hoisted(() => ({
+  mockExtractPdfText: vi.fn(),
+}));
+
+vi.mock("@/lib/pdf-text-extractor", () => ({
+  extractPdfText: mockExtractPdfText,
+}));
+
 import { initBrain } from "@/brain/init";
 import {
   buildPaperLibraryGraph,
@@ -32,6 +41,7 @@ function reviewItem(input: {
   paperId: string;
   title: string;
   identifiers: PaperIdentifier;
+  relativePath?: string;
   state?: PaperReviewItem["state"];
 }): PaperReviewItem {
   const candidateId = `candidate-${input.paperId}`;
@@ -41,6 +51,15 @@ function reviewItem(input: {
     paperId: input.paperId,
     state: input.state ?? "accepted",
     reasonCodes: [],
+    source: input.relativePath ? {
+      relativePath: input.relativePath,
+      rootRealpath: "/tmp/paper-library",
+      size: 1024,
+      mtimeMs: 1,
+      fingerprint: `fingerprint-${input.paperId}`,
+      fingerprintStrength: "quick",
+      symlink: false,
+    } : undefined,
     candidates: [{
       id: candidateId,
       identifiers: input.identifiers,
@@ -94,6 +113,7 @@ async function seedReviewState(items: PaperReviewItem[], options: { scanUpdatedA
 describe("paper-library graph", () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
+    mockExtractPdfText.mockReset();
     dataRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-paper-library-graph-"));
     brainRoot = path.join(dataRoot, "brain");
     process.env.SCIENCESWARM_DIR = dataRoot;
@@ -109,6 +129,117 @@ describe("paper-library graph", () => {
     else delete process.env.SCIENCESWARM_USER_HANDLE;
     await import("@/brain/store").then((module) => module.resetBrainStore()).catch(() => {});
     await rm(dataRoot, { recursive: true, force: true });
+  });
+
+  it("extracts local PDF references and connects them to papers in the scanned library", async () => {
+    await seedReviewState([
+      reviewItem({
+        paperId: "godel-poetry",
+        title: "Gödel's Poetry: A Mechanized Analysis",
+        identifiers: { arxivId: "2512.00001" },
+        relativePath: "godel-poetry.pdf",
+      }),
+      reviewItem({
+        paperId: "lean",
+        title: "The Lean 4 Theorem Prover and Programming Language",
+        identifiers: { doi: "10.1007/978-3-030-79876-5_37" },
+        relativePath: "lean.pdf",
+      }),
+      reviewItem({
+        paperId: "goedel-prover",
+        title: "Goedel-Prover-V2: Scaling Formal Theorem Proving with Scaffolded Data Synthesis and Self-Correction",
+        identifiers: { arxivId: "2508.03613v2" },
+        relativePath: "goedel-prover.pdf",
+      }),
+    ]);
+    mockExtractPdfText.mockImplementation(async (pdfPath: string) => ({
+      text: pdfPath.endsWith("godel-poetry.pdf")
+        ? [
+            "Gödel's Poetry: A Mechanized Analysis",
+            "Abstract",
+            "We connect proof assistants to mechanized poetry.",
+            "References",
+            "[1] Leonardo de Moura and Sebastian Ullrich. The Lean 4 Theorem Prover and Programming Language. doi: 10.1007/978-3-030-79876-5_37.",
+            "[2] Goedel-Prover-V2: Scaling Formal Theorem Proving with Scaffolded Data Synthesis and Self-Correction. arXiv:2508.03613.",
+            "[3] External Benchmark for Neural Theorem Proving. arXiv:2601.12345.",
+          ].join("\n")
+        : "Local paper\n\nReferences\n",
+      pageCount: 8,
+      wordCount: 120,
+      firstSentence: "Local paper",
+    }));
+
+    const graph = await buildPaperLibraryGraph({
+      project: "project-alpha",
+      scanId: "scan-1",
+      brainRoot,
+      adapters: [],
+      useCache: false,
+    });
+
+    expect(graph).not.toBeNull();
+    const sourceNodeId = "paper:arxiv:2512.00001";
+    expect(graph!.sourceRuns.find((run) => run.paperId === "godel-poetry")).toMatchObject({
+      source: "pdf_text",
+      status: "success",
+      fetchedCount: 3,
+    });
+    for (const targetNodeId of [
+      "paper:doi:10.1007/978-3-030-79876-5_37",
+      "paper:arxiv:2508.03613",
+    ]) {
+      expect(graph!.edges).toContainEqual(expect.objectContaining({
+        sourceNodeId,
+        targetNodeId,
+        kind: "references",
+        source: "pdf_text",
+      }));
+    }
+    expect(graph!.nodes.find((node) => node.id === "paper:arxiv:2601.12345")).toMatchObject({
+      kind: "external_paper",
+      local: false,
+      title: "External Benchmark for Neural Theorem Proving",
+    });
+  });
+
+  it("uses the first references heading and does not split on four-digit years", async () => {
+    await seedReviewState([
+      reviewItem({
+        paperId: "source",
+        title: "Interesting Paper",
+        identifiers: { doi: "10.1000/source" },
+        relativePath: "interesting-paper.pdf",
+      }),
+    ]);
+    mockExtractPdfText.mockResolvedValue({
+      text: [
+        "Interesting Paper",
+        "Abstract",
+        "We cite one paper in the real bibliography.",
+        "References",
+        "[1] Stable Reference Parsing. 2024. doi: 10.2000/stable.",
+        "Works Cited",
+        "Closing remarks only.",
+      ].join("\n"),
+      pageCount: 6,
+      wordCount: 180,
+      firstSentence: "Interesting Paper",
+    });
+
+    const graph = await buildPaperLibraryGraph({
+      project: "project-alpha",
+      scanId: "scan-1",
+      brainRoot,
+      adapters: [],
+      useCache: false,
+    });
+
+    expect(graph?.sourceRuns.find((run) => run.source === "pdf_text")).toMatchObject({
+      status: "success",
+    });
+    expect(graph?.nodes.find((node) => node.id === "paper:doi:10.2000/stable")).toMatchObject({
+      title: "Stable Reference Parsing",
+    });
   });
 
   it("links local papers by DOI, arXiv, PMID, and OpenAlex identifiers while keeping external suggestions separate", async () => {
@@ -267,6 +398,11 @@ describe("paper-library graph", () => {
     expect(secondPage.loadedNodeCount).toBe(1);
     expect(secondPage.sourceRuns).toEqual([]);
     expect(secondPage.warnings).toEqual([]);
+
+    const fullGraph = windowPaperLibraryGraph(graph!, { all: true });
+    expect(fullGraph.loadedNodeCount).toBe(3);
+    expect(fullGraph.nextCursor).toBeUndefined();
+    expect(fullGraph.edges).toHaveLength(1);
   });
 
   it("rebuilds persisted graphs after review state changes", async () => {

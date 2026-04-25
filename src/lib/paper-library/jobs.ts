@@ -261,9 +261,10 @@ export async function startPaperLibraryScan(input: {
     await writeJsonFile(getPaperLibraryIdempotencyPath(input.project, input.idempotencyKey, stateRoot), { scanId: scan.id });
   }
 
-  setTimeout(() => {
-    void runPaperLibraryScanJob(input.project, scan.id, input.brainRoot);
-  }, 0);
+  // Route handlers can return before timer callbacks reliably fire in the
+  // current preview/runtime environment. Start the async worker immediately
+  // and let it continue in the background instead of bouncing through a timer.
+  void runPaperLibraryScanJob(input.project, scan.id, input.brainRoot);
 
   return scan;
 }
