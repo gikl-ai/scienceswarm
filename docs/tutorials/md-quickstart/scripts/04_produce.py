@@ -8,6 +8,10 @@ Usage:
 Each call writes `prod_seed{SEED}.dcd` and `prod_seed{SEED}.log`. Frames
 are saved every 1 ps (every 500 steps at 2 fs).
 
+The Monte-Carlo barostat is added here because `system.xml` was
+serialized in stage 2 before equilibration introduced it. Without this
+step the production run would be NVT, not NPT.
+
 If you have a CUDA GPU, set OPENMM_PLATFORM=CUDA before running:
     OPENMM_PLATFORM=CUDA python 04_produce.py --seed 11 --ns 5.0
 """
@@ -16,9 +20,14 @@ import os
 import time
 from pathlib import Path
 
-from openmm import LangevinMiddleIntegrator, Platform, XmlSerializer
+from openmm import (
+    LangevinMiddleIntegrator,
+    MonteCarloBarostat,
+    Platform,
+    XmlSerializer,
+)
 from openmm.app import DCDReporter, PDBFile, Simulation, StateDataReporter
-from openmm.unit import femtosecond, kelvin, picosecond
+from openmm.unit import bar, femtosecond, kelvin, picosecond
 
 HERE = Path(__file__).resolve().parent
 
@@ -38,6 +47,11 @@ def main() -> None:
     pdb = PDBFile(str(HERE / "solvated.pdb"))
     with open(HERE / "equilibrated.xml") as fh:
         state = XmlSerializer.deserialize(fh.read())
+
+    # Add the Monte-Carlo barostat. system.xml was serialized in stage 2
+    # before stage 3 added it in-memory, so without this line the
+    # production ensemble would be NVT instead of NPT.
+    system.addForce(MonteCarloBarostat(1 * bar, 300 * kelvin, 25))
 
     integrator = LangevinMiddleIntegrator(300 * kelvin, 1.0 / picosecond, 2 * femtosecond)
     integrator.setRandomNumberSeed(args.seed)

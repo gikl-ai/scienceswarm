@@ -125,15 +125,31 @@ def main() -> None:
     # Validation gate: end-of-NPT density must be physical for TIP3P at
     # 300 K, 1 atm. Densities far outside this band typically indicate
     # a barostat problem or an undersized box.
+    #
+    # StateDataReporter writes a quoted CSV with a leading "#"-prefixed
+    # header. Parse the header to locate the density column by name
+    # rather than relying on a fixed index, so this gate stays correct
+    # if the reporter's column set is reordered later.
     densities = []
+    density_idx: int | None = None
     with open(HERE / "eq_npt_free.log") as fh:
         for line in fh:
-            if line.startswith("#"):
+            line = line.strip()
+            if not line:
                 continue
-            parts = line.strip().split(",")
-            if len(parts) >= 3:
+            if line.startswith("#"):
+                header_cells = [c.strip().strip('"') for c in line.lstrip("#").split(",")]
+                for i, cell in enumerate(header_cells):
+                    if cell.lower().startswith("density"):
+                        density_idx = i
+                        break
+                continue
+            if density_idx is None:
+                continue
+            parts = line.split(",")
+            if len(parts) > density_idx:
                 try:
-                    densities.append(float(parts[2]))
+                    densities.append(float(parts[density_idx]))
                 except ValueError:
                     continue
     if densities:
@@ -144,6 +160,8 @@ def main() -> None:
             f"density {mean_density:.4f} g/mL is outside the 0.95–1.05 band; "
             "check thermostat/barostat coupling and box size"
         )
+    else:
+        print("warning: could not parse density column from eq_npt_free.log; skipping density gate")
 
 
 if __name__ == "__main__":
