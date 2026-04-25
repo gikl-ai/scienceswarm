@@ -237,7 +237,7 @@ export function ComposerRuntimeSwitcher({
       <button
         type="button"
         className="inline-flex h-9 max-w-[12rem] items-center gap-1.5 rounded-full border border-rule bg-sunk/75 px-3 text-left text-sm font-medium text-strong shadow-sm transition-colors hover:border-rule-soft hover:bg-raised focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-label="Change assistant"
         disabled={loading && hosts.length === 0}
