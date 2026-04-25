@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GET as listSlashCommands } from "@/app/api/openclaw/slash-commands/route";
 import * as skillRegistry from "@/lib/openclaw/skill-registry";
+import * as marketPlugins from "@/lib/plugins/market";
 
 describe("openclaw slash commands route", () => {
   afterEach(() => {
@@ -40,6 +41,7 @@ runtime: separate-node-process
 `,
     });
     vi.spyOn(process, "cwd").mockReturnValue(repoRoot);
+    vi.spyOn(marketPlugins, "listInstalledMarketPlugins").mockResolvedValue([]);
 
     const response = await listSlashCommands();
     const body = await response.json();

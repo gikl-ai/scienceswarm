@@ -234,10 +234,16 @@ interface BrainStoreState {
   instance: BrainStore | null;
   adapterInitPromise: Promise<void> | null;
   activeBrainRoot: string | null;
+  initFailure: {
+    brainRoot: string;
+    failedAtMs: number;
+    error: BrainBackendUnavailableError;
+  } | null;
   searchCache: SearchCache;
 }
 
 const GLOBAL_STATE_KEY = "__scienceswarmBrainStoreState";
+const BRAIN_BACKEND_INIT_RETRY_MS = 10_000;
 
 function getBrainStoreState(): BrainStoreState {
   const globalState = globalThis as typeof globalThis & {
@@ -247,6 +253,7 @@ function getBrainStoreState(): BrainStoreState {
     instance: null,
     adapterInitPromise: null,
     activeBrainRoot: null,
+    initFailure: null,
     searchCache: new SearchCache(),
   };
   return globalState[GLOBAL_STATE_KEY];
@@ -274,12 +281,6 @@ function initializeBrainStore(
     engine: "pglite",
     database_path: resolveBrainStorePglitePath(brainRoot),
   }).catch((error) => {
-    if (brainStoreState.instance === adapter) {
-      brainStoreState.instance = null;
-    }
-    if (brainStoreState.activeBrainRoot === brainRoot) {
-      brainStoreState.activeBrainRoot = null;
-    }
     // Surface the underlying init failure (PGLite native module load
     // failure, stale lock file, missing schema, permissions) as `detail`
     // so HTTP routes can render a one-line cause for operators instead
@@ -289,10 +290,16 @@ function initializeBrainStore(
     const detail = error instanceof Error && error.message
       ? error.message
       : String(error);
-    throw new BrainBackendUnavailableError("Brain backend unavailable", {
+    const backendError = new BrainBackendUnavailableError("Brain backend unavailable", {
       cause: error,
       detail: detail.length > 500 ? `${detail.slice(0, 497)}...` : detail,
     });
+    brainStoreState.initFailure = {
+      brainRoot,
+      failedAtMs: Date.now(),
+      error: backendError,
+    };
+    throw backendError;
   });
 
   const trackedPromise = initPromise.finally(() => {
@@ -306,20 +313,53 @@ function initializeBrainStore(
   return trackedPromise;
 }
 
+function getCachedBrainInitFailure(
+  brainRoot: string,
+): BrainBackendUnavailableError | null {
+  const failure = brainStoreState.initFailure;
+  if (!failure || failure.brainRoot !== brainRoot) {
+    return null;
+  }
+  if (Date.now() - failure.failedAtMs >= BRAIN_BACKEND_INIT_RETRY_MS) {
+    return null;
+  }
+  return failure.error;
+}
+
+function clearExpiredBrainInitFailure(brainRoot: string): boolean {
+  const failure = brainStoreState.initFailure;
+  if (!failure || failure.brainRoot !== brainRoot) {
+    return false;
+  }
+  if (Date.now() - failure.failedAtMs < BRAIN_BACKEND_INIT_RETRY_MS) {
+    return false;
+  }
+  brainStoreState.initFailure = null;
+  return true;
+}
+
 export function getBrainStore(options: { root?: string } = {}): BrainStore {
   const brainRoot =
     resolveConfiguredPath(options.root) ??
     brainStoreState.activeBrainRoot ??
     resolveBrainStoreRoot();
+  const hasExpiredFailure = clearExpiredBrainInitFailure(brainRoot);
   if (
     brainStoreState.instance
     && brainStoreState.activeBrainRoot
-    && brainStoreState.activeBrainRoot !== brainRoot
+    && (brainStoreState.activeBrainRoot !== brainRoot || hasExpiredFailure)
   ) {
     void brainStoreState.instance.dispose().catch(() => {});
     brainStoreState.instance = null;
     brainStoreState.adapterInitPromise = null;
     brainStoreState.activeBrainRoot = null;
+  }
+
+  if (
+    brainStoreState.instance
+    && getCachedBrainInitFailure(brainRoot)
+  ) {
+    return brainStoreState.instance;
   }
 
   if (!brainStoreState.instance) {
@@ -422,6 +462,14 @@ export async function searchStoreWithTimeout(
  * Call before using getBrainStore() methods directly (outside cachedSearch).
  */
 export async function ensureBrainStoreReady(options: { root?: string } = {}): Promise<void> {
+  const brainRoot =
+    resolveConfiguredPath(options.root) ??
+    brainStoreState.activeBrainRoot ??
+    resolveBrainStoreRoot();
+  const cachedFailure = getCachedBrainInitFailure(brainRoot);
+  if (cachedFailure) {
+    throw cachedFailure;
+  }
   getBrainStore(options); // ensure singleton created
   if (brainStoreState.adapterInitPromise) {
     await brainStoreState.adapterInitPromise;
@@ -439,6 +487,7 @@ export async function resetBrainStore(): Promise<void> {
   brainStoreState.instance = null;
   brainStoreState.adapterInitPromise = null;
   brainStoreState.activeBrainRoot = null;
+  brainStoreState.initFailure = null;
   _searchCache.clear();
 
   if (instance) {
