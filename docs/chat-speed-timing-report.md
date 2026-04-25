@@ -34,6 +34,24 @@ The helper defaults `--date` to today in UTC and `--environment` to
 `Local <origin>`, so only the PR label and changed area are required for the
 common local workflow.
 
+## Append Command
+
+Use the append helper when you want the benchmark to update this report file
+for you instead of copying the generated row by hand:
+
+```bash
+npx tsx scripts/append-chat-benchmark-report-row.ts \
+  --url http://localhost:3001 \
+  --project project-alpha \
+  --message Hi \
+  --timing-artifact \
+  --pr '#PR' \
+  --change-area 'change-area'
+```
+
+The append helper writes to `docs/chat-speed-timing-report.md` by default and
+inserts the new row directly above the `## Notes` section.
+
 ## Measurements
 
 | Date | PR | Change area | Environment | Headers ms | First chunk ms | Shared tick | Total ms | Progress events | Final text sample | Timing artifact |
@@ -54,6 +72,8 @@ common local workflow.
   timings were not captured.
 - Follow-up speed PRs should add the merged PR number, the changed phase, and
   the new benchmark row here.
+- Prefer the append helper above when you want the benchmark command to update
+  this report file directly.
 - Prefer the generated-row command above when the helper script is available.
 - Row template:
   ``| YYYY-MM-DD | #PR | change-area | Local `http://localhost:3001` | headers | first-chunk | yes/no | total | progress-events | `final text sample` | timing artifact |``
