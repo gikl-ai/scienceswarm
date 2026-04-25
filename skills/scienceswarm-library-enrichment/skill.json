@@ -1,0 +1,23 @@
+{
+  "slug": "scienceswarm-library-enrichment",
+  "name": "ScienceSwarm Library Enrichment",
+  "description": "Suggest and import legally available missing papers from the local paper graph while preserving gbrain provenance.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "research",
+    "paper",
+    "gbrain"
+  ],
+  "hosts": [
+    "openclaw"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Use the local citation graph to suggest missing papers for a research question, request per-session consent before legal downloads, and write downloaded or metadata-only papers to gbrain.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-24T00:00:00.000Z",
+  "updatedAt": "2026-04-24T00:00:00.000Z"
+}

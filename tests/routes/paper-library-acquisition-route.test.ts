@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initBrain } from "@/brain/init";
+import { getBrainStore } from "@/brain/store";
 import { getPaperLibraryClustersPath, getPaperLibraryGraphPath } from "@/lib/paper-library/state";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
@@ -21,6 +22,7 @@ vi.mock("@/lib/local-guard", () => ({
 
 let dataRoot: string;
 let brainRoot: string;
+const PDF_FIXTURE = path.join(process.cwd(), "tests/fixtures/audit-revise/mendel-1866-textlayer.pdf");
 
 function stateRoot(): string {
   return getProjectStateRootForBrainRoot("project-alpha", brainRoot);
@@ -204,7 +206,7 @@ describe("paper-library acquisition route", () => {
     mockDownloadArxivPdf.mockImplementation(async (arxivId: string, destDir: string) => {
       await mkdir(destDir, { recursive: true });
       const pdfPath = path.join(destDir, `${arxivId}.pdf`);
-      await writeFile(pdfPath, "%PDF-1.4\n", "utf-8");
+      await copyFile(PDF_FIXTURE, pdfPath);
       return pdfPath;
     });
     await seedState();
@@ -284,7 +286,14 @@ describe("paper-library acquisition route", () => {
       failedCount: number;
       plan: {
         metadataOnlyCount: number;
-        items: Array<{ title: string; status: string; localPath?: string }>;
+        items: Array<{
+          title: string;
+          status: string;
+          localPath?: string;
+          sourceUrl?: string;
+          gbrainSlug?: string;
+          checksum?: string;
+        }>;
       };
     };
     expect(executed.status).toBe("completed");
@@ -298,6 +307,33 @@ describe("paper-library acquisition route", () => {
     expect(executed.plan.items.find((item) => item.title === "Missing Open Access Paper")).toMatchObject({
       status: "acquired",
       localPath: expect.stringContaining("2401.01234.pdf"),
+      sourceUrl: "https://arxiv.org/pdf/2401.01234.pdf",
+      gbrainSlug: "wiki/entities/papers/arxiv-2401-01234",
+      checksum: expect.any(String),
+    });
+    expect(executed.plan.items.find((item) => item.title === "Missing Metadata Only Paper")).toMatchObject({
+      status: "metadata_only",
+      sourceUrl: "https://doi.org/10.3000/metadata",
+      gbrainSlug: "wiki/entities/papers/doi-10-3000-metadata",
+    });
+
+    const store = getBrainStore({ root: brainRoot });
+    const downloadedPage = await store.getPage("wiki/entities/papers/arxiv-2401-01234");
+    expect(downloadedPage?.content).toContain("## Research Library Enrichment");
+    expect(downloadedPage?.content).toContain("Source URL: https://arxiv.org/pdf/2401.01234.pdf");
+    expect(downloadedPage?.content).toContain("### Imported PDF Text");
+    expect(downloadedPage?.frontmatter.paper_library_enrichment).toMatchObject({
+      project: "project-alpha",
+      status: "downloaded",
+      tool: "arxiv",
+    });
+
+    const metadataOnlyPage = await store.getPage("wiki/entities/papers/doi-10-3000-metadata");
+    expect(metadataOnlyPage?.content).toContain("Download status: no legal open PDF was persisted");
+    expect(metadataOnlyPage?.frontmatter.paper_library_enrichment).toMatchObject({
+      project: "project-alpha",
+      status: "metadata_persisted",
+      source_url: "https://doi.org/10.3000/metadata",
     });
 
     const gapsRoute = await import("@/app/api/brain/paper-library/gaps/route");
@@ -309,6 +345,30 @@ describe("paper-library acquisition route", () => {
     };
     expect(gaps.suggestions.find((suggestion) => suggestion.title === "Missing Open Access Paper")).toMatchObject({
       state: "imported",
+    });
+
+    const enrichmentRoute = await import("@/app/api/brain/paper-library/enrichment/route");
+    const enrichmentResponse = await enrichmentRoute.GET(new Request(
+      "http://localhost/api/brain/paper-library/enrichment?project=project-alpha&question=Which%20papers%20improve%20this%20answer%3F",
+    ));
+    expect(enrichmentResponse.status).toBe(200);
+    const enrichment = await enrichmentResponse.json() as {
+      graph: {
+        question: string;
+        nodes: Array<{ title?: string; gbrainSlug?: string; localStatus: string }>;
+      };
+      suggestions: Array<{ title: string; downloadStatus: string; recommendedAction: string }>;
+    };
+    expect(enrichment.graph.question).toBe("Which papers improve this answer?");
+    expect(enrichment.graph.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        gbrainSlug: "wiki/entities/papers/arxiv-2401-01234",
+        localStatus: "gbrain_page",
+      }),
+    ]));
+    expect(enrichment.suggestions.find((suggestion) => suggestion.title === "Missing Open Access Paper")).toMatchObject({
+      downloadStatus: "already_local",
+      recommendedAction: "cite_only",
     });
   });
 });

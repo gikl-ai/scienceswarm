@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-24T05:44:26.657Z",
+  "generatedAt": "2026-04-25T01:34:38.178Z",
   "skills": [
     {
       "slug": "db-arxiv",
@@ -315,6 +315,23 @@
       "owner": "scienceswarm",
       "status": "ready",
       "summary": "A reusable cross-host skill for validating claims against multiple independent sources and surfacing disagreements clearly."
+    },
+    {
+      "slug": "scienceswarm-library-enrichment",
+      "name": "ScienceSwarm Library Enrichment",
+      "description": "Suggest and import legally available missing papers from the local paper graph while preserving gbrain provenance.",
+      "tags": [
+        "scienceswarm",
+        "research",
+        "paper",
+        "gbrain"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Use the local citation graph to suggest missing papers for a research question, request per-session consent before legal downloads, and write downloaded or metadata-only papers to gbrain."
     },
     {
       "slug": "scienceswarm-md-evidence-grounding",

@@ -15,6 +15,10 @@ import {
 } from "./contracts";
 import { getOrBuildPaperLibraryGaps, updatePaperLibraryGapSuggestion } from "./gaps";
 import {
+  acquisitionRecordFromItem,
+  persistPaperAcquisitionRecordToGbrain,
+} from "./library-enrichment";
+import {
   getPaperLibraryAcquisitionDownloadsDir,
   getPaperLibraryAcquisitionPlanPath,
   readPersistedState,
@@ -134,7 +138,24 @@ function acquisitionRationale(suggestion: GapSuggestion): string {
   return parts.join(" ");
 }
 
-function itemFromSuggestion(suggestion: GapSuggestion, updatedAt: string): PaperLibraryAcquisitionItem {
+function toolFromLocationSource(source: PaperLibraryAcquisitionLocation["source"] | undefined): PaperLibraryAcquisitionItem["tool"] {
+  switch (source) {
+    case "arxiv":
+      return "arxiv";
+    case "openalex":
+      return "openalex";
+    case "semantic_scholar":
+      return "semantic_scholar";
+    default:
+      return "manual";
+  }
+}
+
+function itemFromSuggestion(
+  suggestion: GapSuggestion,
+  updatedAt: string,
+  originatingQuestion?: string,
+): PaperLibraryAcquisitionItem {
   const locations = resolveAcquisitionLocations(suggestion);
   const mode = acquisitionMode(locations);
   const selectedLocation = locations.find((location) => location.canDownloadPdf) ?? locations[0];
@@ -160,6 +181,10 @@ function itemFromSuggestion(suggestion: GapSuggestion, updatedAt: string): Paper
     selectedLocation,
     mode,
     status: "planned",
+    originatingQuestion,
+    sourceUrl: selectedLocation?.url,
+    tool: toolFromLocationSource(selectedLocation?.source),
+    consentScope: "per_session",
     updatedAt,
   };
 }
@@ -254,7 +279,9 @@ export async function createAcquisitionPlan(
       .slice(0, input.limit);
 
   const createdAt = nowIso();
-  const items = selected.map((suggestion) => itemFromSuggestion(suggestion, createdAt));
+  const items = selected.map((suggestion) =>
+    itemFromSuggestion(suggestion, createdAt, input.originatingQuestion)
+  );
   const id = randomUUID();
   const plan = PaperLibraryAcquisitionPlanSchema.parse({
     version: PAPER_LIBRARY_STATE_VERSION,
@@ -304,7 +331,38 @@ async function executeItem(input: {
   updatedAt: string;
 }): Promise<PaperLibraryAcquisitionItem> {
   if (input.item.mode === "metadata_only") {
-    return { ...input.item, status: "metadata_only", error: undefined, updatedAt: input.updatedAt };
+    const candidate = { ...input.item, status: "metadata_only" as const, error: undefined, updatedAt: input.updatedAt };
+    try {
+      const record = await persistPaperAcquisitionRecordToGbrain({
+        brainRoot: input.brainRoot,
+        record: acquisitionRecordFromItem({
+          project: input.project,
+          item: candidate,
+          status: "metadata_persisted",
+          createdAt: input.updatedAt,
+        }),
+      });
+      await markGapAction({
+        project: input.project,
+        scanId: input.item.scanId,
+        brainRoot: input.brainRoot,
+        suggestionId: input.item.suggestionId,
+        action: "import",
+      });
+      return {
+        ...candidate,
+        sourceUrl: record.sourceUrl,
+        gbrainSlug: record.gbrainSlug,
+        checksum: record.checksum,
+      };
+    } catch (error) {
+      return {
+        ...input.item,
+        status: "failed",
+        error: error instanceof Error ? error.message : "Metadata-only persistence failed.",
+        updatedAt: input.updatedAt,
+      };
+    }
   }
   if (input.item.mode === "watch") {
     await markGapAction({
@@ -329,6 +387,16 @@ async function executeItem(input: {
       arxivId,
       getPaperLibraryAcquisitionDownloadsDir(input.project, input.planId, input.stateRoot),
     );
+    const candidate = { ...input.item, status: "acquired" as const, localPath, error: undefined, updatedAt: input.updatedAt };
+    const record = await persistPaperAcquisitionRecordToGbrain({
+      brainRoot: input.brainRoot,
+      record: acquisitionRecordFromItem({
+        project: input.project,
+        item: candidate,
+        status: "downloaded",
+        createdAt: input.updatedAt,
+      }),
+    });
     await markGapAction({
       project: input.project,
       scanId: input.item.scanId,
@@ -336,7 +404,12 @@ async function executeItem(input: {
       suggestionId: input.item.suggestionId,
       action: "import",
     });
-    return { ...input.item, status: "acquired", localPath, error: undefined, updatedAt: input.updatedAt };
+    return {
+      ...candidate,
+      sourceUrl: record.sourceUrl,
+      gbrainSlug: record.gbrainSlug,
+      checksum: record.checksum,
+    };
   } catch (error) {
     return {
       ...input.item,

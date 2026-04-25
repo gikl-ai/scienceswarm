@@ -698,6 +698,142 @@ export const PaperLibraryGapActionRequestSchema = z.object({
 });
 export type PaperLibraryGapActionRequest = z.infer<typeof PaperLibraryGapActionRequestSchema>;
 
+export const LibraryCitationGraphNodeSchema = PaperLibraryGraphNodeSchema.extend({
+  gbrainSlug: z.string().min(1).optional(),
+  localStatus: z.enum(["local_pdf", "gbrain_page", "external", "suggested"]),
+});
+export type LibraryCitationGraphNode = z.infer<typeof LibraryCitationGraphNodeSchema>;
+
+export const LibraryCitationGraphEdgeSchema = PaperLibraryGraphEdgeSchema.extend({
+  evidence: z.array(z.string().min(1)).min(1),
+  provenance: z.array(z.string().min(1)).min(1),
+  agentDerived: z.boolean().default(false),
+});
+export type LibraryCitationGraphEdge = z.infer<typeof LibraryCitationGraphEdgeSchema>;
+
+export const LibraryCitationGraphSourceSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(["paper_library_graph", "paper_library_gaps", "gbrain_pages", "agent"]),
+  generatedAt: IsoDateStringSchema.optional(),
+  digest: z.string().min(1).optional(),
+  itemCount: z.number().int().nonnegative().optional(),
+});
+export type LibraryCitationGraphSource = z.infer<typeof LibraryCitationGraphSourceSchema>;
+
+export const PaperSuggestionDownloadStatusSchema = z.enum([
+  "open_pdf_found",
+  "metadata_only",
+  "unknown",
+  "already_local",
+]);
+export type PaperSuggestionDownloadStatus = z.infer<typeof PaperSuggestionDownloadStatusSchema>;
+
+export const PaperSuggestionRecommendedActionSchema = z.enum([
+  "download_now",
+  "save_for_later",
+  "cite_only",
+  "ignore",
+]);
+export type PaperSuggestionRecommendedAction = z.infer<typeof PaperSuggestionRecommendedActionSchema>;
+
+export const PaperSuggestionSchema = z.object({
+  title: z.string().min(1),
+  identifiers: PaperIdentifierSchema.default({}),
+  sourceUrls: z.array(z.string().url()).default([]),
+  reasonForThisQuestion: z.string().min(1),
+  graphEvidence: z.array(z.string().min(1)).default([]),
+  localEvidencePaperIds: z.array(z.string().min(1)).default([]),
+  downloadStatus: PaperSuggestionDownloadStatusSchema,
+  recommendedAction: PaperSuggestionRecommendedActionSchema,
+  confidence: z.number().min(0).max(1),
+});
+export type PaperSuggestion = z.infer<typeof PaperSuggestionSchema>;
+
+export const LibraryCitationGraphSchema = z.object({
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1).optional(),
+  question: z.string().min(1).optional(),
+  generatedAt: IsoDateStringSchema,
+  nodes: z.array(LibraryCitationGraphNodeSchema).default([]),
+  edges: z.array(LibraryCitationGraphEdgeSchema).default([]),
+  sources: z.array(LibraryCitationGraphSourceSchema).default([]),
+  suggestions: z.array(PaperSuggestionSchema).default([]),
+  warnings: z.array(z.string()).default([]),
+});
+export type LibraryCitationGraph = z.infer<typeof LibraryCitationGraphSchema>;
+
+export const PaperAcquisitionToolSchema = z.enum([
+  "openhands",
+  "openclaw",
+  "claude_code",
+  "codex",
+  "openai",
+  "anthropic",
+  "gemini",
+  "arxiv",
+  "semantic_scholar",
+  "openalex",
+  "manual",
+]);
+export type PaperAcquisitionTool = z.infer<typeof PaperAcquisitionToolSchema>;
+
+export const PaperAcquisitionConsentScopeSchema = z.enum([
+  "per_session",
+  "single_paper",
+  "manual",
+]);
+export type PaperAcquisitionConsentScope = z.infer<typeof PaperAcquisitionConsentScopeSchema>;
+
+export const PaperAcquisitionRecordStatusSchema = z.enum([
+  "downloaded",
+  "metadata_persisted",
+  "already_local",
+  "skipped",
+  "failed",
+]);
+export type PaperAcquisitionRecordStatus = z.infer<typeof PaperAcquisitionRecordStatusSchema>;
+
+export const PaperAcquisitionRecordSchema = z.object({
+  project: ProjectSlugSchema,
+  originatingQuestion: z.string().min(1).optional(),
+  suggestion: PaperSuggestionSchema,
+  tool: PaperAcquisitionToolSchema,
+  sourceUrl: z.string().url().optional(),
+  downloadedPath: z.string().min(1).optional(),
+  gbrainSlug: z.string().min(1).optional(),
+  checksum: z.string().min(1).optional(),
+  consentScope: PaperAcquisitionConsentScopeSchema.default("per_session"),
+  status: PaperAcquisitionRecordStatusSchema,
+  createdAt: IsoDateStringSchema,
+  error: z.string().min(1).optional(),
+}).superRefine((record, ctx) => {
+  if (record.status === "downloaded") {
+    if (!record.sourceUrl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceUrl"],
+        message: "Downloaded paper records require a source URL.",
+      });
+    }
+    if (!record.downloadedPath) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["downloadedPath"],
+        message: "Downloaded paper records require a local file path.",
+      });
+    }
+  }
+
+  if (record.status === "metadata_persisted" && !record.sourceUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["sourceUrl"],
+      message: "Metadata-only paper records require a source URL.",
+    });
+  }
+});
+export type PaperAcquisitionRecord = z.infer<typeof PaperAcquisitionRecordSchema>;
+
 export const PaperLibraryAcquisitionLocationSourceSchema = z.enum([
   "arxiv",
   "doi",
@@ -764,7 +900,13 @@ export const PaperLibraryAcquisitionItemSchema = z.object({
   selectedLocation: PaperLibraryAcquisitionLocationSchema.optional(),
   mode: PaperLibraryAcquisitionModeSchema,
   status: PaperLibraryAcquisitionItemStatusSchema.default("planned"),
+  originatingQuestion: z.string().min(1).optional(),
+  sourceUrl: z.string().url().optional(),
   localPath: z.string().min(1).optional(),
+  gbrainSlug: z.string().min(1).optional(),
+  checksum: z.string().min(1).optional(),
+  tool: PaperAcquisitionToolSchema.optional(),
+  consentScope: PaperAcquisitionConsentScopeSchema.optional(),
   error: z.string().optional(),
   updatedAt: IsoDateStringSchema,
 });
@@ -805,6 +947,7 @@ export const PaperLibraryAcquisitionCreateRequestSchema = z.object({
   suggestionIds: z.array(z.string().min(1)).max(100).optional(),
   limit: z.number().int().min(1).max(100).default(10),
   includeStates: z.array(GapSuggestionStateSchema).default(["open", "watching", "saved"]),
+  originatingQuestion: z.string().trim().min(1).optional(),
 });
 export type PaperLibraryAcquisitionCreateRequest = z.infer<typeof PaperLibraryAcquisitionCreateRequestSchema>;
 
