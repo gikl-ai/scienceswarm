@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createApiKeyRuntimeHostAdapter, createApiKeyRuntimeHostProfile } from "@/lib/runtime-hosts/adapters/api-key";
@@ -584,6 +584,12 @@ describe("runtime host adapters", () => {
         .resolves.toContain("Read `SCIENCESWARM.md` first");
       await expect(readFile(path.join(launch?.cwd ?? "", "SCIENCESWARM.md"), "utf8"))
         .resolves.toContain("ScienceSwarm is a local-first research workspace");
+      await expect(stat(path.join(launch?.cwd ?? "", ".remember", "logs"))
+        .then((entry) => entry.isDirectory())).resolves.toBe(true);
+      await expect(stat(path.join(launch?.cwd ?? "", ".remember", "logs", "autonomous"))
+        .then((entry) => entry.isDirectory())).resolves.toBe(true);
+      await expect(stat(path.join(launch?.cwd ?? "", ".remember", "tmp"))
+        .then((entry) => entry.isDirectory())).resolves.toBe(true);
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }
@@ -761,6 +767,26 @@ describe("runtime host adapters", () => {
         requestFor(requireRuntimeHostProfile("gemini-cli"), "chat"),
       ),
     ).rejects.toThrow(RuntimeCliMalformedOutputError);
+  });
+
+  it("classifies provider authentication errors as auth challenges", () => {
+    const output = normalizeCliOutput({
+      stderr: [
+        "Failed to authenticate. API Error: 401 {\"type\":\"error\",",
+        "\"error\":{\"type\":\"authentication_error\",",
+        "\"message\":\"Invalid authentication credentials\"}}",
+      ].join(" "),
+    });
+
+    expect(output.authChallenge).toBe(true);
+  });
+
+  it("does not classify 401 suffix words as auth challenges", () => {
+    const output = normalizeCliOutput({
+      stderr: "Process exitstatus: 401 but the provider auth state is unknown",
+    });
+
+    expect(output.authChallenge).toBe(false);
   });
 
   it("strips provider API-key env vars before launching subscription-native CLIs", async () => {
