@@ -514,6 +514,7 @@ describe("runtime host adapters", () => {
         "mcp__scienceswarm__gbrain_read",
         "mcp__scienceswarm__gbrain_capture",
         "mcp__scienceswarm__provenance_log",
+        "mcp__scienceswarm__openhands_delegate",
         "mcp__scienceswarm__project_workspace_read",
         "mcp__scienceswarm__artifact_import",
       ].join(","));

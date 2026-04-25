@@ -46,6 +46,10 @@ describe("runtime MCP tool profiles", () => {
 
   it("exposes workspace tools only when the host profile does not suppress them", () => {
     expect(
+      resolveRuntimeMcpToolProfile("claude-code").allowedTools,
+    ).toContain("openhands_delegate");
+
+    expect(
       resolveRuntimeMcpToolProfile("codex").allowedTools,
     ).toEqual(expect.arrayContaining(["project_workspace_read", "artifact_import"]));
 
@@ -71,4 +75,5 @@ describe("runtime MCP tool profiles", () => {
       }),
     ).toBe(true);
   });
+
 });
