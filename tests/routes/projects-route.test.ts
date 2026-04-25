@@ -241,6 +241,9 @@ describe("POST /api/projects", () => {
       const data = await response.json();
       expect(data.persistence).toBe("disk-fallback");
       expect(data.persistenceWarning).toBe("Brain backend unavailable");
+      expect(data.persistenceRecoveryWarning).toContain(
+        "duplicate checks were limited to disk",
+      );
       expect(data.project).toEqual(
         expect.objectContaining({
           slug: "disk-fallback-project",
@@ -259,6 +262,83 @@ describe("POST /api/projects", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it("fails disk-fallback creation when the project cannot be saved to disk", async () => {
+    const { POST } = await import("@/app/api/projects/route");
+    const unavailable = new Error("Brain backend unavailable");
+    unavailable.name = "BrainBackendUnavailableError";
+    const fakeRepository: ProjectRepository = {
+      async list() {
+        throw unavailable;
+      },
+      async get() {
+        return null;
+      },
+      async create() {
+        throw unavailable;
+      },
+      async delete() {
+        return { ok: true, existed: true };
+      },
+      async touch() {},
+    };
+    __setProjectRepositoryOverride(fakeRepository);
+    await writeFile(path.join(dataRoot, "projects"), "not a directory");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const response = await POST(buildCreateRequest({
+        action: "create",
+        name: "Unwritable Disk Fallback",
+      }));
+
+      expect(response.status).toBe(500);
+      const data = await response.json();
+      expect(data.error).toBe(
+        "Project could not be saved to disk while gbrain was unavailable.",
+      );
+      expect(data.persistence).toBe("disk-fallback");
+      expect(data.materialized).toBe(false);
+      expect(data.materializationError).toContain("not a directory");
+      expect(data.path).toBe(
+        path.join(dataRoot, "projects", "unwritable-disk-fallback"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not recurse forever when repository errors have circular causes", async () => {
+    const { POST } = await import("@/app/api/projects/route");
+    const circular = new Error("wrapped unavailable");
+    (circular as Error & { cause?: unknown }).cause = circular;
+    const fakeRepository: ProjectRepository = {
+      async list() {
+        return [];
+      },
+      async get() {
+        return null;
+      },
+      async create() {
+        throw circular;
+      },
+      async delete() {
+        return { ok: true, existed: true };
+      },
+      async touch() {},
+    };
+    __setProjectRepositoryOverride(fakeRepository);
+
+    const response = await POST(buildCreateRequest({
+      action: "create",
+      name: "Circular Cause Project",
+    }));
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: "Error: wrapped unavailable",
+    });
   });
 
   it.each(["archive", "delete"] as const)(

@@ -30,13 +30,20 @@ interface ProjectMeta {
 }
 
 const PROJECTS_REPOSITORY_LIST_DEADLINE_MS = 1500;
+const REPOSITORY_UNAVAILABLE_CAUSE_DEPTH_LIMIT = 10;
+const DISK_FALLBACK_SAVE_ERROR =
+  "Project could not be saved to disk while gbrain was unavailable.";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function isRepositoryUnavailableError(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
+function isRepositoryUnavailableError(error: unknown, depth = 0): boolean {
+  if (
+    !error
+    || typeof error !== "object"
+    || depth > REPOSITORY_UNAVAILABLE_CAUSE_DEPTH_LIMIT
+  ) {
     return false;
   }
 
@@ -45,7 +52,10 @@ function isRepositoryUnavailableError(error: unknown): boolean {
   return candidate.name === "BrainBackendUnavailableError"
     || /brain backend unavailable/i.test(message)
     || /PGLite failed to initialize/i.test(message)
-    || (candidate.cause !== undefined && isRepositoryUnavailableError(candidate.cause));
+    || (
+      candidate.cause !== undefined
+      && isRepositoryUnavailableError(candidate.cause, depth + 1)
+    );
 }
 
 async function createDiskFallbackProject(input: {
@@ -169,6 +179,7 @@ export async function POST(request: Request) {
         : undefined;
       let persistence: "gbrain" | "disk-fallback" = "gbrain";
       let persistenceWarning: string | null = null;
+      let persistenceRecoveryWarning: string | null = null;
       let project: ProjectRecord;
       try {
         project = await getProjectsRouteRepository().create({
@@ -181,13 +192,39 @@ export async function POST(request: Request) {
           throw error;
         }
         console.warn("[projects] repository create failed; falling back to disk:", error);
-        project = await createDiskFallbackProject({
-          slug,
-          name: trimmedName,
-          description: trimmedDescription,
-        });
         persistence = "disk-fallback";
         persistenceWarning = errorMessage(error);
+        persistenceRecoveryWarning =
+          "gbrain was unavailable, so duplicate checks were limited to disk; "
+          + "reconcile this slug after gbrain recovers if the project already existed there.";
+        try {
+          project = await createDiskFallbackProject({
+            slug,
+            name: trimmedName,
+            description: trimmedDescription,
+          });
+        } catch (fallbackError) {
+          if (fallbackError instanceof DuplicateProjectError) {
+            throw fallbackError;
+          }
+          return Response.json(
+            {
+              error: DISK_FALLBACK_SAVE_ERROR,
+              path: path.join(getScienceSwarmProjectsRoot(), slug),
+              materialized: false,
+              materializationError: errorMessage(fallbackError),
+              normalization: {
+                requestedName: trimmedName,
+                slug,
+                changed: trimmedName !== slug,
+              },
+              persistence,
+              persistenceWarning,
+              persistenceRecoveryWarning,
+            },
+            { status: 500 },
+          );
+        }
       }
       let materializedPath: string | null = null;
       let materializationError: string | null = null;
@@ -198,9 +235,10 @@ export async function POST(request: Request) {
           error instanceof Error ? error.message : String(error);
       }
 
-      return Response.json({
+      const responseBody = {
         project: toLegacyProjectMeta(project),
-        path: materializedPath ?? path.join(getScienceSwarmProjectsRoot(), project.slug),
+        path: materializedPath
+          ?? path.join(getScienceSwarmProjectsRoot(), project.slug),
         materialized: materializedPath !== null,
         materializationError,
         normalization: {
@@ -210,7 +248,20 @@ export async function POST(request: Request) {
         },
         persistence,
         persistenceWarning,
-      });
+        persistenceRecoveryWarning,
+      };
+
+      if (persistence === "disk-fallback" && materializedPath === null) {
+        return Response.json(
+          {
+            ...responseBody,
+            error: DISK_FALLBACK_SAVE_ERROR,
+          },
+          { status: 500 },
+        );
+      }
+
+      return Response.json(responseBody);
     }
 
     if (body.action === "archive" || body.action === "delete") {
