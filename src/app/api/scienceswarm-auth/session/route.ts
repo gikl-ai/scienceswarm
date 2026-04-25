@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   getScienceSwarmLocalRequestOrigin,
+  isSupportedScienceSwarmLocalOrigin,
   SCIENCESWARM_LOCAL_AUTH_ERROR_MESSAGE_TYPE,
   SCIENCESWARM_LOCAL_AUTH_TOKEN_MESSAGE_TYPE,
 } from "@/lib/scienceswarm-auth";
@@ -101,6 +102,101 @@ function buildHtmlResponse(
   });
 }
 
+function buildWindowNameCompletionHtml(): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ScienceSwarm Sign-In</title>
+    <style>
+      body { margin: 0; background: rgb(249 250 251); color: rgb(17 24 39); font-family: ui-sans-serif, system-ui, sans-serif; }
+      main { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+      section { max-width: 420px; border: 1px solid rgb(229 231 235); border-radius: 20px; background: white; padding: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
+      p { margin: 0; font-size: 14px; line-height: 1.6; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <p id="status">Completing ScienceSwarm sign-in...</p>
+      </section>
+    </main>
+    <script>
+      (() => {
+        const fallbackPath = "/dashboard/reasoning";
+        const tokenMessageType = ${JSON.stringify(SCIENCESWARM_LOCAL_AUTH_TOKEN_MESSAGE_TYPE)};
+        const status = document.getElementById("status");
+        const fail = (message) => {
+          window.name = "";
+          if (status) status.textContent = message;
+        };
+
+        const complete = async () => {
+          let payload;
+          try {
+            payload = JSON.parse(window.name || "{}");
+          } catch {
+            fail("ScienceSwarm sign-in handoff is missing or invalid.");
+            return;
+          }
+
+          window.name = "";
+          if (
+            !payload ||
+            payload.type !== tokenMessageType ||
+            typeof payload.state !== "string" ||
+            typeof payload.token !== "string"
+          ) {
+            fail("ScienceSwarm sign-in handoff is missing or invalid.");
+            return;
+          }
+
+          try {
+            const response = await fetch("/api/scienceswarm-auth/session", {
+              body: JSON.stringify({
+                expiresAt:
+                  typeof payload.expiresAt === "string"
+                    ? payload.expiresAt
+                    : undefined,
+                state: payload.state,
+                token: payload.token,
+              }),
+              headers: { "Content-Type": "application/json" },
+              method: "POST",
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(
+                typeof result.error === "string"
+                  ? result.error
+                  : "ScienceSwarm sign-in could not be completed.",
+              );
+            }
+
+            const returnPath =
+              typeof result.returnPath === "string" &&
+              result.returnPath.startsWith("/") &&
+              !result.returnPath.startsWith("//")
+                ? result.returnPath
+                : fallbackPath;
+            window.location.replace(returnPath);
+          } catch (error) {
+            fail(
+              error instanceof Error
+                ? error.message
+                : "ScienceSwarm sign-in could not be completed.",
+            );
+          }
+        };
+
+        void complete();
+      })();
+    </script>
+  </body>
+</html>`;
+}
+
 function isNavigationSessionRequest(request: Request): boolean {
   const destination = request.headers.get("sec-fetch-dest");
   if (destination === "document" || destination === "iframe") {
@@ -159,6 +255,14 @@ async function readSessionRequest(request: Request): Promise<SessionRequest | nu
   }
 
   return null;
+}
+
+export async function GET(request: Request) {
+  if (!isSupportedScienceSwarmLocalOrigin(new URL(request.url).origin)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  return buildHtmlResponse(buildWindowNameCompletionHtml(), 200);
 }
 
 export async function POST(request: Request) {
@@ -235,7 +339,11 @@ export async function POST(request: Request) {
     return response;
   }
 
-  const response = NextResponse.json({ expiresAt, signedIn: true });
+  const response = NextResponse.json({
+    expiresAt,
+    returnPath: authState.returnPath || "/dashboard/reasoning",
+    signedIn: true,
+  });
   response.cookies.set(
     SCIENCESWARM_LOCAL_AUTH_COOKIE,
     cookieValue,
