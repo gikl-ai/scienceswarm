@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createCodexRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/codex";
@@ -102,7 +103,7 @@ describe("Codex runtime MCP launch", () => {
       "src/lib/runtime-hosts/mcp/runtime-stdio-server.ts",
     );
     expect(args).toContain(
-      'mcp_servers.scienceswarm.env_vars=["SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN","BRAIN_ROOT","SCIENCESWARM_DIR","NODE_ENV","PATH"]',
+      'mcp_servers.scienceswarm.env_vars=["SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN","BRAIN_ROOT","SCIENCESWARM_DIR","NODE_ENV","PATH","SCIENCESWARM_REPO_ROOT","SCIENCESWARM_GBRAIN_BIN","GBRAIN_BIN"]',
     );
     expect(args).toContain(
       `mcp_servers.scienceswarm.enabled_tools=${JSON.stringify(allowedTools)}`,
@@ -113,6 +114,14 @@ describe("Codex runtime MCP launch", () => {
     expect(token).toEqual(expect.any(String));
     expect(launch?.env?.BRAIN_ROOT).toBe("/tmp/scienceswarm-brain");
     expect(launch?.env?.SCIENCESWARM_DIR).toBe("/tmp/scienceswarm-data");
+    expect(launch?.env?.SCIENCESWARM_REPO_ROOT).toBe("/tmp/scienceswarm-repo");
+    expect(launch?.env?.SCIENCESWARM_GBRAIN_BIN).toBe(
+      `/tmp/scienceswarm-repo/node_modules/.bin/${process.platform === "win32" ? "gbrain.cmd" : "gbrain"}`,
+    );
+    expect(launch?.env?.GBRAIN_BIN).toBe(launch?.env?.SCIENCESWARM_GBRAIN_BIN);
+    expect((launch?.env?.PATH ?? "").split(path.delimiter)[0]).toBe(
+      "/tmp/scienceswarm-repo/node_modules/.bin",
+    );
 
     const prompt = launch?.args?.at(-1) ?? "";
     expect(prompt).toContain("runtime-scoped MCP server named `scienceswarm`");

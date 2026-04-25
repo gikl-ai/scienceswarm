@@ -235,7 +235,7 @@ export function createBrainCaptureHandler(
       const wrapped = err as GbrainPutError;
       if (wrapped?.code === "ENOENT") {
         return errorResponse(
-          "Error: gbrain CLI not found on PATH. Install gbrain (https://github.com/garrytan/gbrain) and run 'gbrain init'.",
+          "Error: ScienceSwarm's repo-local gbrain CLI was not found. Run `npm ci` from the ScienceSwarm checkout so node_modules matches package-lock.json, then rerun setup if the brain has not been initialized.",
         );
       }
       const detail = wrapped?.stderr?.trim() || wrapped?.message || String(err);

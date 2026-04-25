@@ -5,6 +5,7 @@ import {
   runtimeAdapterForApi,
   runtimeErrorResponse,
 } from "../_shared";
+import { readScienceSwarmGbrainPackageState } from "@/lib/gbrain/source-of-truth";
 import { resolveRuntimeMcpToolProfile } from "@/lib/runtime-hosts/mcp/tool-profiles";
 
 export async function GET(request: Request): Promise<Response> {
@@ -59,6 +60,9 @@ export async function GET(request: Request): Promise<Response> {
 
     return Response.json({
       hosts,
+      gbrain: {
+        package: readScienceSwarmGbrainPackageState(),
+      },
       checkedAt: services.now().toISOString(),
     });
   } catch (error) {

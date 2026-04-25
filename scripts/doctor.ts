@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { runOpenClawSync } from "@/lib/openclaw/runner";
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
+import { readScienceSwarmGbrainPackageState } from "@/lib/gbrain/source-of-truth";
 import { isMountedWindowsPath, isWslEnvironment } from "@/lib/wsl";
 import {
   buildRuntimeCapabilityContract,
@@ -143,18 +144,45 @@ function checkNode(): Check {
 }
 
 function checkDependencies(): Check {
-  if (existsSync("node_modules/.package-lock.json")) {
+  if (!existsSync("node_modules/.package-lock.json")) {
     return {
       name: "npm dependencies",
-      status: "ok",
-      detail: "node_modules exists",
+      status: "fail",
+      detail: "node_modules is missing",
+      fix: "Run ./install.sh or npm ci.",
     };
   }
+
+  const gbrain = readScienceSwarmGbrainPackageState(process.cwd());
+  if (!gbrain.expectedVersion) {
+    return {
+      name: "npm dependencies",
+      status: "fail",
+      detail: "package-lock.json does not contain the ScienceSwarm gbrain pin",
+      fix: "Restore package-lock.json from the repo and rerun npm ci.",
+    };
+  }
+  if (!gbrain.installedVersion || !gbrain.binExists) {
+    return {
+      name: "npm dependencies",
+      status: "fail",
+      detail: `node_modules exists but the repo-local gbrain package/bin is missing; lockfile expects ${gbrain.expectedVersion}`,
+      fix: "Run npm ci so ScienceSwarm installs the gbrain version pinned in package-lock.json.",
+    };
+  }
+  if (!gbrain.inSync) {
+    return {
+      name: "npm dependencies",
+      status: "fail",
+      detail: `repo-local gbrain is out of sync: package-lock expects ${gbrain.expectedVersion}, installed ${gbrain.installedVersion}`,
+      fix: "Run npm ci so ScienceSwarm's node_modules matches package-lock.json. Do not rely on a global gbrain binary for ScienceSwarm.",
+    };
+  }
+
   return {
     name: "npm dependencies",
-    status: "fail",
-    detail: "node_modules is missing",
-    fix: "Run ./install.sh or npm install.",
+    status: "ok",
+    detail: `node_modules exists; repo-local gbrain ${gbrain.installedVersion} matches package-lock.json`,
   };
 }
 

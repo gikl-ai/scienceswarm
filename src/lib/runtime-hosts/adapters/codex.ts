@@ -35,6 +35,7 @@ import {
 } from "../transport/cli";
 import { buildSubscriptionNativeCliEnv } from "../transport/subscription-env";
 import { assertSafeProjectSlug } from "../../state/project-manifests";
+import { buildScienceSwarmGbrainEnv } from "@/lib/gbrain/source-of-truth";
 
 // Codex task turns can span several MCP calls; keep the token alive longer
 // than the shared 5 minute default without changing other runtime hosts.
@@ -42,7 +43,7 @@ const CODEX_RUNTIME_MCP_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 export interface CodexRuntimeMcpContext {
   configArgs: string[];
-  env: Record<string, string>;
+  env: NodeJS.ProcessEnv;
   prompt: string;
   allowedTools: RuntimeMcpToolName[];
 }
@@ -328,6 +329,7 @@ export function buildCodexRuntimeMcpContext(input: {
   }
 
   const repoRoot = path.resolve(input.repoRoot ?? process.cwd());
+  const runtimeEnv = buildScienceSwarmGbrainEnv(input.env, repoRoot);
   const projectId = assertSafeProjectSlug(input.request.projectId);
   const runtimeSessionId = assertSingleLineRuntimeMcpField(
     "runtimeSessionId",
@@ -374,6 +376,9 @@ export function buildCodexRuntimeMcpContext(input: {
         "SCIENCESWARM_DIR",
         "NODE_ENV",
         "PATH",
+        "SCIENCESWARM_REPO_ROOT",
+        "SCIENCESWARM_GBRAIN_BIN",
+        "GBRAIN_BIN",
       ])}`,
       "-c",
       `mcp_servers.scienceswarm.enabled_tools=${tomlStringArray(allowedTools)}`,
@@ -381,6 +386,7 @@ export function buildCodexRuntimeMcpContext(input: {
       "mcp_servers.scienceswarm.enabled=true",
     ],
     env: {
+      ...runtimeEnv,
       SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN: token,
     },
     prompt: [instructions, "", "User prompt:", input.request.prompt].join("\n"),

@@ -9,6 +9,7 @@ import {
   getScienceSwarmDataRoot,
   getScienceSwarmProjectRoot,
 } from "@/lib/scienceswarm-paths";
+import { buildScienceSwarmGbrainEnv } from "@/lib/gbrain/source-of-truth";
 import { buildScienceSwarmPromptContextText } from "@/lib/scienceswarm-prompt-config";
 import type {
   RuntimeDataIncluded,
@@ -27,7 +28,7 @@ export interface ClaudeCodeInvocationContext {
   cwd?: string;
   appendSystemPrompt?: string;
   addDirs?: string[];
-  env?: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
   mcpConfigPath?: string;
   allowedTools?: string[];
   cleanup?: () => Promise<void>;
@@ -81,6 +82,7 @@ export async function buildClaudeCodeRuntimeContext(
     ? assertSafeProjectSlug(input.request.projectId)
     : "global";
   const repoRoot = path.resolve(input.repoRoot ?? process.cwd());
+  const runtimeEnv = buildScienceSwarmGbrainEnv(input.env, repoRoot);
   const sessionRoot = path.resolve(
     input.sessionRoot
       ?? path.join(getScienceSwarmDataRoot(), "runtime", "claude-code"),
@@ -112,7 +114,7 @@ export async function buildClaudeCodeRuntimeContext(
           || input.request.approvalState === "not-required",
         repoRoot,
         sessionDir,
-        env: input.env,
+        env: runtimeEnv,
         tokenTtlMs: input.tokenTtlMs ?? DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS,
       });
 
@@ -147,7 +149,7 @@ export async function buildClaudeCodeRuntimeContext(
     cwd: sessionDir,
     appendSystemPrompt: scienceswarmMd,
     addDirs,
-    env: runtimeMcp?.env,
+    env: runtimeEnv,
     mcpConfigPath: runtimeMcp?.configPath,
     allowedTools: runtimeMcp?.allowedTools,
     cleanup: runtimeMcp?.cleanup,
@@ -314,6 +316,9 @@ async function buildRuntimeMcpContext(input: {
             "SCIENCESWARM_DIR",
             "NODE_ENV",
             "PATH",
+            "SCIENCESWARM_REPO_ROOT",
+            "SCIENCESWARM_GBRAIN_BIN",
+            "GBRAIN_BIN",
           ]),
           SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN: token,
         },
