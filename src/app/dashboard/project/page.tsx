@@ -5022,7 +5022,7 @@ function ProjectPageContent() {
                             placeholder={isChatBusy ? "Processing..." : ""}
                             disabled={isChatBusy}
                             rows={2}
-                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[22px] border-0 bg-transparent px-0 py-1 pr-10 text-[15px] leading-6 text-strong placeholder:text-quiet focus:outline-none focus:ring-0 disabled:opacity-50`}
+                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[22px] border-0 bg-transparent py-2 pl-2 pr-12 text-[15px] leading-6 text-strong placeholder:text-quiet focus:outline-none focus:ring-0 disabled:opacity-50`}
                           />
                           <button
                             type="button"

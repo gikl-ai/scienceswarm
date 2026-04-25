@@ -331,6 +331,11 @@ describe("Project dashboard smoke test", () => {
     const input = within(composer).getByLabelText("Chat with your project");
 
     expect(input).toHaveAttribute("placeholder", "");
+    expect(input).toHaveClass("py-2");
+    expect(input).toHaveClass("pl-2");
+    expect(input).toHaveClass("pr-12");
+    expect(input).not.toHaveClass("px-0");
+    expect(input).not.toHaveClass("py-1");
     expect(within(composer).queryByText("Project Chat")).not.toBeInTheDocument();
     expect(
       within(composer).queryByText("Enter to send. Shift+Enter for a new line."),

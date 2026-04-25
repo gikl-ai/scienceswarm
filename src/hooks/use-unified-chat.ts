@@ -4170,10 +4170,6 @@ export function useUnifiedChat(
               message.id === assistantId
                 ? {
                     ...message,
-                    activityLog: appendActivityLog(
-                      message.activityLog,
-                      waitingEntries.map((entry) => entry.text),
-                    ),
                     progressLog: appendProgressLog(message.progressLog, waitingEntries),
                   }
                 : message,
@@ -4430,10 +4426,6 @@ export function useUnifiedChat(
               ? {
                   ...message,
                   content: "",
-                  activityLog: appendActivityLog(
-                    message.activityLog,
-                    dispatchEntries.map((entry) => entry.text),
-                  ),
                   progressLog: appendProgressLog(
                     message.progressLog,
                     dispatchEntries,
@@ -4493,10 +4485,6 @@ export function useUnifiedChat(
                   message.id === queued.assistantId
                     ? {
                         ...message,
-                        activityLog: appendActivityLog(
-                          message.activityLog,
-                          [SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE],
-                        ),
                         progressLog: appendProgressLog(
                           message.progressLog,
                           buildActivityProgressEntries([SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE]),

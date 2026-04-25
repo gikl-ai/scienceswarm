@@ -204,8 +204,9 @@ export function verifyRuntimeMcpAccessToken(
     return reject("malformed-token", "Runtime MCP access token is malformed.");
   }
 
-  const tokenIsTrustedEnvValue = input.trustedToken !== undefined
-    && safeStringEqual(token, input.trustedToken);
+  const trustedToken = input.trustedToken?.trim();
+  const tokenIsTrustedEnvValue = trustedToken !== undefined
+    && safeStringEqual(token, trustedToken);
   if (!tokenIsTrustedEnvValue) {
     const expectedSignature = signPayload(encodedPayload, input.secret);
     if (!safeEqual(signature, expectedSignature)) {

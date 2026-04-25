@@ -10,6 +10,7 @@ import { createGeminiCliRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/
 import { createOpenClawRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/openclaw";
 import {
   RuntimeHostCapabilityUnsupported,
+  RuntimeHostError,
   RuntimePreviewApprovalRequired,
   RuntimePrivacyBlocked,
   computeTurnPreview,
@@ -179,12 +180,13 @@ describe("runtime host adapters", () => {
   });
 
   it("starts fresh Claude Code sessions without resume args when no native session exists", async () => {
+    const generatedSessionId = "11111111-1111-4111-8111-111111111111";
     const transport = new FakeCliTransport((request) =>
-      fakeResult(request, "{\"type\":\"result\",\"result\":\"Fresh answer\",\"session_id\":\"fresh-claude-session\"}")
+      fakeResult(request, `{"type":"result","result":"Fresh answer","session_id":"${generatedSessionId}"}`)
     );
     const adapter = createTestClaudeCodeRuntimeHostAdapter({
       transport,
-      sessionIdGenerator: () => "wrapper-session",
+      sessionIdGenerator: () => generatedSessionId,
     });
     const request = {
       ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
@@ -192,19 +194,24 @@ describe("runtime host adapters", () => {
     };
 
     await expect(adapter.sendTurn(request)).resolves.toMatchObject({
-      sessionId: "fresh-claude-session",
+      sessionId: generatedSessionId,
       message: "Fresh answer",
     });
     expect(transport.requests.at(-1)?.args).not.toContain("--resume");
+    expect(transport.requests.at(-1)?.args).toEqual(expect.arrayContaining([
+      "--session-id",
+      generatedSessionId,
+    ]));
   });
 
   it("does not resume Claude Code with synthetic wrapper session ids", async () => {
+    const generatedSessionId = "22222222-2222-4222-8222-222222222222";
     const transport = new FakeCliTransport((request) =>
-      fakeResult(request, "{\"type\":\"result\",\"result\":\"Wrapper answer\",\"session_id\":\"native-after-wrapper\"}")
+      fakeResult(request, `{"type":"result","result":"Wrapper answer","session_id":"${generatedSessionId}"}`)
     );
     const adapter = createTestClaudeCodeRuntimeHostAdapter({
       transport,
-      sessionIdGenerator: () => "wrapper-session",
+      sessionIdGenerator: () => generatedSessionId,
     });
     const request = {
       ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
@@ -212,10 +219,14 @@ describe("runtime host adapters", () => {
     };
 
     await expect(adapter.sendTurn(request)).resolves.toMatchObject({
-      sessionId: "native-after-wrapper",
+      sessionId: generatedSessionId,
       message: "Wrapper answer",
     });
     expect(transport.requests.at(-1)?.args).not.toContain("--resume");
+    expect(transport.requests.at(-1)?.args).toEqual(expect.arrayContaining([
+      "--session-id",
+      generatedSessionId,
+    ]));
   });
 
   it("tracks the ScienceSwarm runtime session id while resuming Claude Code native sessions", async () => {
@@ -224,7 +235,7 @@ describe("runtime host adapters", () => {
     );
     const adapter = createTestClaudeCodeRuntimeHostAdapter({
       transport,
-      sessionIdGenerator: () => "wrapper-session",
+      sessionIdGenerator: () => "66666666-6666-4666-8666-666666666666",
     });
 
     await expect(
@@ -241,6 +252,134 @@ describe("runtime host adapters", () => {
       sessionId: "rt-session-cancel-target",
       args: expect.arrayContaining(["--resume", "claude-native-existing"]),
     });
+    expect(transport.requests.at(-1)?.args).not.toContain("--session-id");
+  });
+
+  it("uses the native Claude Code session id as the reusable capsule directory", async () => {
+    const generatedSessionId = "33333333-3333-4333-8333-333333333333";
+    const contextLaunches: Array<{
+      wrapperSessionId: string;
+      capsuleSessionId?: string;
+    }> = [];
+    const transport = new FakeCliTransport((request) => {
+      const sessionIdIndex = request.args?.indexOf("--session-id") ?? -1;
+      const resumeIndex = request.args?.indexOf("--resume") ?? -1;
+      const sessionIdArg = sessionIdIndex >= 0 ? request.args?.[sessionIdIndex + 1] : undefined;
+      const resumeArg = resumeIndex >= 0 ? request.args?.[resumeIndex + 1] : undefined;
+      return fakeResult(
+        request,
+        JSON.stringify({
+          type: "result",
+          result: resumeArg ? "Resumed answer" : "Fresh answer",
+          session_id: resumeArg ?? sessionIdArg,
+        }),
+      );
+    });
+    const adapter = createClaudeCodeRuntimeHostAdapter({
+      transport,
+      sessionIdGenerator: () => generatedSessionId,
+      contextBuilder: async (input) => {
+        contextLaunches.push({
+          wrapperSessionId: input.wrapperSessionId,
+          capsuleSessionId: input.capsuleSessionId,
+        });
+        return {
+          cwd: `/tmp/scienceswarm/${input.capsuleSessionId ?? input.wrapperSessionId}`,
+        };
+      },
+    });
+
+    await expect(
+      adapter.sendTurn({
+        ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+        runtimeSessionId: "rt-session-first",
+        conversationId: null,
+      }),
+    ).resolves.toMatchObject({
+      sessionId: generatedSessionId,
+      message: "Fresh answer",
+    });
+    await expect(
+      adapter.sendTurn({
+        ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+        runtimeSessionId: "rt-session-second",
+        conversationId: generatedSessionId,
+      }),
+    ).resolves.toMatchObject({
+      sessionId: generatedSessionId,
+      message: "Resumed answer",
+    });
+
+    expect(contextLaunches).toEqual([
+      {
+        wrapperSessionId: "rt-session-first",
+        capsuleSessionId: generatedSessionId,
+      },
+      {
+        wrapperSessionId: "rt-session-second",
+        capsuleSessionId: generatedSessionId,
+      },
+    ]);
+    expect(transport.requests[0]?.cwd).toBe(`/tmp/scienceswarm/${generatedSessionId}`);
+    expect(transport.requests[0]?.args).toEqual(expect.arrayContaining([
+      "--session-id",
+      generatedSessionId,
+    ]));
+    expect(transport.requests[1]?.cwd).toBe(`/tmp/scienceswarm/${generatedSessionId}`);
+    expect(transport.requests[1]?.args).toEqual(expect.arrayContaining([
+      "--resume",
+      generatedSessionId,
+    ]));
+    expect(transport.requests[1]?.args).not.toContain("--session-id");
+  });
+
+  it("starts a fresh Claude Code session when an old resume id is missing", async () => {
+    const recoveredSessionId = "44444444-4444-4444-8444-444444444444";
+    const transport = new FakeCliTransport((request) => {
+      if (request.args?.includes("--resume")) {
+        throw new RuntimeHostError({
+          code: "RUNTIME_TRANSPORT_ERROR",
+          status: 502,
+          message: "Runtime CLI exited with code 1: claude",
+          userMessage: "Claude Code command failed. Detail: No conversation found with session ID: stale-native-session",
+          recoverable: true,
+          context: {
+            hostId: "claude-code",
+            stderr: "No conversation found with session ID: stale-native-session",
+          },
+        });
+      }
+      return fakeResult(
+        request,
+        `{"type":"result","result":"Recovered answer","session_id":"${recoveredSessionId}"}`,
+      );
+    });
+    const adapter = createTestClaudeCodeRuntimeHostAdapter({
+      transport,
+      sessionIdGenerator: () => recoveredSessionId,
+    });
+
+    await expect(
+      adapter.sendTurn({
+        ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+        runtimeSessionId: "rt-session-retry",
+        conversationId: "stale-native-session",
+      }),
+    ).resolves.toMatchObject({
+      sessionId: recoveredSessionId,
+      message: "Recovered answer",
+    });
+
+    expect(transport.requests).toHaveLength(2);
+    expect(transport.requests[0]?.args).toEqual(expect.arrayContaining([
+      "--resume",
+      "stale-native-session",
+    ]));
+    expect(transport.requests[1]?.args).toEqual(expect.arrayContaining([
+      "--session-id",
+      recoveredSessionId,
+    ]));
+    expect(transport.requests[1]?.args).not.toContain("--resume");
   });
 
   it("preserves Claude Code native sessions and output events for task turns", async () => {
@@ -293,6 +432,7 @@ describe("runtime host adapters", () => {
       const brainRoot = path.join(dataRoot, "brain");
       const projectRoot = path.join(dataRoot, "projects", "project-alpha");
       const sessionRoot = path.join(tempRoot, "sessions");
+      const nativeSessionId = "55555555-5555-4555-8555-555555555555";
       await mkdir(projectRoot, { recursive: true });
       await mkdir(brainRoot, { recursive: true });
       await writeFile(
@@ -332,13 +472,14 @@ describe("runtime host adapters", () => {
         mcpConfigAtLaunch = JSON.parse(await readFile(mcpConfigPath, "utf8"));
         return fakeResult(
           request,
-          "{\"type\":\"result\",\"result\":\"Capsule answer\",\"session_id\":\"claude-native-capsule\"}",
+          `{"type":"result","result":"Capsule answer","session_id":"${nativeSessionId}"}`,
         );
       });
       const adapter = createClaudeCodeRuntimeHostAdapter({
         transport,
         sessionRoot,
         repoRoot: process.cwd(),
+        sessionIdGenerator: () => nativeSessionId,
         env: {
           ...process.env,
           SCIENCESWARM_DIR: dataRoot,
@@ -353,13 +494,15 @@ describe("runtime host adapters", () => {
           conversationId: null,
         }),
       ).resolves.toMatchObject({
-        sessionId: "claude-native-capsule",
+        sessionId: nativeSessionId,
         message: "Capsule answer",
       });
 
       const launch = transport.requests.at(-1);
-      expect(launch?.cwd).toBe(path.join(sessionRoot, "project-alpha", "rt-session-claude"));
+      expect(launch?.cwd).toBe(path.join(sessionRoot, "project-alpha", nativeSessionId));
       expect(launch?.args).toEqual(expect.arrayContaining([
+        "--session-id",
+        nativeSessionId,
         "--add-dir",
         projectRoot,
         "--strict-mcp-config",
