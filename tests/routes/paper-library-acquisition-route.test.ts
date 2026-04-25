@@ -526,4 +526,24 @@ describe("paper-library acquisition route", () => {
       },
     });
   });
+
+  it("rejects malformed enrichment refresh values before building context", async () => {
+    const route = await import("@/app/api/brain/paper-library/enrichment/route");
+    const response = await route.GET(new Request(
+      "http://localhost/api/brain/paper-library/enrichment?project=project-alpha&question=Which%20papers%3F&refresh=maybe",
+    ));
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: { code: "invalid_state" },
+    });
+  });
+
+  it("accepts case-insensitive true-like enrichment refresh values", async () => {
+    const route = await import("@/app/api/brain/paper-library/enrichment/route");
+    const response = await route.GET(new Request(
+      "http://localhost/api/brain/paper-library/enrichment?project=project-alpha&question=Which%20papers%3F&refresh=TRUE",
+    ));
+    expect(response.status).toBe(200);
+  });
 });
