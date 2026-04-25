@@ -504,6 +504,8 @@ export type PaperLibraryGraph = z.infer<typeof PaperLibraryGraphSchema>;
 export const PaperLibraryGraphResponseSchema = CursorWindowResponseSchema.extend({
   nodes: z.array(PaperLibraryGraphNodeSchema),
   edges: z.array(PaperLibraryGraphEdgeSchema),
+  loadedNodeCount: z.number().int().nonnegative().optional(),
+  totalEdgeCount: z.number().int().nonnegative().optional(),
   sourceRuns: z.array(PaperLibraryGraphSourceRunSchema),
   warnings: z.array(z.string()).default([]),
 });

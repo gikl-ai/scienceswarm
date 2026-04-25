@@ -104,6 +104,10 @@ describe("PaperLibraryCommandCenter", () => {
         );
       }
 
+      if (url === "/api/local-folder-picker" && method === "POST") {
+        return Response.json({ path: "/tmp/library" });
+      }
+
       if (url === "/api/brain/paper-library/scan" && method === "POST") {
         return Response.json({ ok: true, scanId: "scan-1" });
       }
@@ -137,17 +141,11 @@ describe("PaperLibraryCommandCenter", () => {
       ).toBe(true);
     });
 
-    fireEvent.change(screen.getByPlaceholderText("/Users/you/Research Papers"), {
-      target: { value: "/tmp/library" },
-    });
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Start dry-run scan" })).toBeEnabled();
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Start dry-run scan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import PDF Folder" }));
 
     expect(await screen.findByText("ready for review")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open review queue" }));
-    expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+    expect(await screen.findByText("2024 - Smith - Interesting Paper.pdf")).toBeInTheDocument();
   });
 
   it("hydrates the latest persisted scan when local storage is empty", async () => {
@@ -201,7 +199,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
-    expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+    expect(await screen.findByText("2024 - Smith - Interesting Paper.pdf")).toBeInTheDocument();
     expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"rootPath\":\"/tmp/library\"");
     expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"scanId\":\"scan-1\"");
   });
@@ -347,7 +345,7 @@ describe("PaperLibraryCommandCenter", () => {
     container.remove();
   });
 
-  it("does not override a manual root-path edit while latest-scan restore is in flight", async () => {
+  it("does not open the folder picker while latest-scan restore is in flight", async () => {
     let resolveLatestScan: ((response: Response) => void) | undefined;
     const latestScanResponse = new Promise<Response>((resolve) => {
       resolveLatestScan = resolve;
@@ -361,6 +359,10 @@ describe("PaperLibraryCommandCenter", () => {
         return latestScanResponse;
       }
 
+      if (url === "/api/local-folder-picker" && method === "POST") {
+        throw new Error("Folder picker should not open while restore is loading.");
+      }
+
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
 
@@ -368,24 +370,105 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
-    fireEvent.change(screen.getByPlaceholderText("/Users/you/Research Papers"), {
-      target: { value: "/tmp/manual-library" },
-    });
+    expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Import PDF Folder" }));
 
     resolveLatestScan?.(Response.json({
       ok: true,
-      scan: baseScan(),
+      scan: baseScan({
+        rootPath: "/tmp/latest-library",
+        rootRealpath: "/tmp/latest-library",
+        status: "scanning",
+      }),
     }));
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("/Users/you/Research Papers")).toHaveValue("/tmp/manual-library");
+      expect(screen.getByText("/tmp/latest-library")).toBeInTheDocument();
     });
 
     expect(
-      fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/scan?project=demo-project&id=scan-1"),
+      fetchMock.mock.calls.some(([request]) => String(request) === "/api/local-folder-picker"),
     ).toBe(false);
-    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"rootPath\":\"/tmp/manual-library\"");
-    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).not.toContain("\"scanId\"");
+  });
+
+  it("does not start a scan when the folder picker is cancelled", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "scan",
+        rootPath: "",
+        templateFormat: "{year} - {title}.pdf",
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json(
+          { error: { message: "Paper library scan not found." } },
+          { status: 404 },
+        );
+      }
+
+      if (url === "/api/local-folder-picker" && method === "POST") {
+        return Response.json({ cancelled: true });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Import PDF Folder" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/local-folder-picker", { method: "POST" });
+    });
+
+    expect(
+      fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/scan"),
+    ).toBe(false);
+  });
+
+  it("disables folder import while a scan is already running", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "scan",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({ status: "scanning" }),
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByText("scanning")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeDisabled();
   });
 
   it("ignores malformed latest-scan payloads without breaking the scan view", async () => {
@@ -404,8 +487,8 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
-    expect(await screen.findByRole("heading", { name: "Scan a local paper library without mutating disk" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("/Users/you/Research Papers")).toHaveValue("");
+    expect(await screen.findByRole("heading", { name: "Import a local PDF folder without mutating disk" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeInTheDocument();
   });
 
   it("restores manifest history from the latest persisted scan", async () => {
@@ -695,9 +778,9 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
-    expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+    expect(await screen.findByText("2024 - Smith - Interesting Paper.pdf")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Accept selected" }));
+    fireEvent.click(screen.getByRole("button", { name: /Save metadata/i }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Apply/i })).toBeInTheDocument();
     });
@@ -715,6 +798,69 @@ describe("PaperLibraryCommandCenter", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Undo changes" }));
     expect(await screen.findAllByText("undone")).toHaveLength(2);
+  });
+
+  it("accepts unchanged author suggestions that contain commas", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "review",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+      }),
+    );
+
+    const commaAuthorItem = {
+      ...baseReviewItem(),
+      candidates: [
+        {
+          ...baseReviewItem().candidates[0],
+          authors: ["Smith, Jr.", "Jones"],
+        },
+      ],
+    };
+    let reviewBody: Record<string, unknown> | undefined;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan(),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/review?")) {
+        return Response.json({
+          ok: true,
+          items: [commaAuthorItem],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      if (url === "/api/brain/paper-library/review" && method === "POST") {
+        reviewBody = JSON.parse(String(init?.body));
+        return Response.json({ ok: true, remainingCount: 0 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByDisplayValue("Smith, Jr., Jones")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Save metadata/i }));
+
+    await waitFor(() => {
+      expect(reviewBody).toMatchObject({ action: "accept" });
+    });
+    expect(reviewBody?.correction).toBeUndefined();
   });
 
   it("repairs a manifest that still needs gbrain writeback", async () => {
@@ -889,6 +1035,10 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
+      if (url === "/api/local-folder-picker" && method === "POST") {
+        return Response.json({ path: "/tmp/library-2" });
+      }
+
       if (url === "/api/brain/paper-library/scan" && method === "POST") {
         activeScanId = "scan-2";
         return Response.json({ ok: true, scanId: "scan-2" });
@@ -924,18 +1074,24 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
-    expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+    expect(await screen.findByText("2024 - Smith - Interesting Paper.pdf")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "accepted" }));
     expect(await screen.findByText("Nothing in this review slice")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Scan/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Start dry-run scan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import PDF Folder" }));
 
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/scan?project=demo-project&id=scan-2"),
+      ).toBe(true);
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Scan/ }));
     expect(await screen.findByText("ready for review")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open review queue" }));
-    expect(await screen.findByText("Fresh Library Scan (2025)")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Fresh Library Scan")).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([request]) => {
         const url = String(request);
@@ -1341,6 +1497,16 @@ describe("PaperLibraryCommandCenter", () => {
                   suggestion: true,
                   sources: ["semantic_scholar"],
                 },
+                {
+                  id: "node-1",
+                  kind: "local_paper",
+                  paperIds: ["paper-1"],
+                  title: "Interesting Paper",
+                  authors: ["Smith"],
+                  local: true,
+                  suggestion: false,
+                  sources: ["filename"],
+                },
               ]
             : [
                 {
@@ -1353,9 +1519,30 @@ describe("PaperLibraryCommandCenter", () => {
                   suggestion: false,
                   sources: ["filename"],
                 },
+                {
+                  id: "node-2",
+                  kind: "external_paper",
+                  paperIds: [],
+                  title: "Bridge Paper",
+                  authors: ["Lee"],
+                  local: false,
+                  suggestion: true,
+                  sources: ["semantic_scholar"],
+                },
               ],
-          edges: [],
-          sourceRuns: [
+          edges: [
+            {
+              id: "edge-1",
+              sourceNodeId: "node-1",
+              targetNodeId: "node-2",
+              kind: "references",
+              source: "semantic_scholar",
+              evidence: [],
+            },
+          ],
+          loadedNodeCount: 1,
+          totalEdgeCount: 1,
+          sourceRuns: cursor ? [] : [
             {
               id: "run-1",
               source: "semantic_scholar",
@@ -1368,7 +1555,7 @@ describe("PaperLibraryCommandCenter", () => {
               message: "Retry after quota reset.",
             },
           ],
-          warnings: ["Semantic Scholar paused for this scan."],
+          warnings: cursor ? [] : ["Semantic Scholar paused for this scan."],
           totalCount: 2,
           filteredCount: 2,
           nextCursor: cursor ? undefined : "MQ",
@@ -1507,14 +1694,19 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
-    expect(await screen.findByText("Interesting Paper")).toBeInTheDocument();
+    expect(await screen.findByText("Citation map")).toBeInTheDocument();
+    expect((await screen.findAllByText("Interesting Paper")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Semantic Scholar paused for this scan.")).toBeInTheDocument();
+    expect(await screen.findByText("1 of 2 papers loaded")).toBeInTheDocument();
     expect(await screen.findByText("model unavailable")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Load more nodes" }));
     fireEvent.click(screen.getByRole("button", { name: "Load more clusters" }));
 
-    expect(await screen.findByText("Bridge Paper")).toBeInTheDocument();
+    expect((await screen.findAllByText("Bridge Paper")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("2 of 2 papers loaded")).toBeInTheDocument();
+    expect(screen.getByText("2 visible nodes")).toBeInTheDocument();
+    expect(screen.getByText("Semantic Scholar paused for this scan.")).toBeInTheDocument();
     expect(await screen.findByText("Protein folding")).toBeInTheDocument();
     expect(screen.getByText("Gap suggestions")).toBeInTheDocument();
     expect(screen.getByText("Missing Seminal Paper (2025)")).toBeInTheDocument();
