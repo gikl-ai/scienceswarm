@@ -49,8 +49,10 @@ npx tsx scripts/append-chat-benchmark-report-row.ts \
   --change-area 'change-area'
 ```
 
-The append helper writes to `docs/chat-speed-timing-report.md` by default and
-inserts the new row directly above the `## Notes` section.
+The append helper writes to `docs/chat-speed-timing-report.md` by default,
+inserts the new row directly above the `## Notes` section, and, like the row
+helper, defaults `--date` to today in UTC and `--environment` to
+`Local <origin>`.
 
 ## Measurements
 
@@ -74,6 +76,7 @@ inserts the new row directly above the `## Notes` section.
   the new benchmark row here.
 - Prefer the append helper above when you want the benchmark command to update
   this report file directly.
-- Prefer the generated-row command above when the helper script is available.
+- Prefer the generated-row command above when you want a paste-ready row
+  without modifying the report file.
 - Row template:
   ``| YYYY-MM-DD | #PR | change-area | Local `http://localhost:3001` | headers | first-chunk | yes/no | total | progress-events | `final text sample` | timing artifact |``
