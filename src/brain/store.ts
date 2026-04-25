@@ -313,8 +313,7 @@ export function getBrainStore(options: { root?: string } = {}): BrainStore {
     resolveBrainStoreRoot();
   if (
     brainStoreState.instance
-    && brainStoreState.activeBrainRoot
-    && brainStoreState.activeBrainRoot !== brainRoot
+    && (!brainStoreState.activeBrainRoot || brainStoreState.activeBrainRoot !== brainRoot)
   ) {
     void brainStoreState.instance.dispose().catch(() => {});
     brainStoreState.instance = null;

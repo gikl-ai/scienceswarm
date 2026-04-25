@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowSquareOut,
+  CheckCircle,
+  ClockCounterClockwise,
   FolderOpen,
   Graph,
   SpinnerGap,
@@ -500,6 +502,7 @@ export function PaperLibraryCommandCenter({
   const [applyPlanError, setApplyPlanError] = useState<string | null>(null);
   const [applyPlanPage, setApplyPlanPage] = useState<ApplyPlanPage | null>(null);
   const [approvalToken, setApprovalToken] = useState<{ token: string; expiresAt: string } | null>(null);
+  const [applyActionLoading, setApplyActionLoading] = useState(false);
 
   const [manifestLoading, setManifestLoading] = useState(false);
   const [manifestLoadingMore, setManifestLoadingMore] = useState(false);
@@ -545,6 +548,7 @@ export function PaperLibraryCommandCenter({
     setGapsError(null);
     setGapFilter("all");
     setApprovalToken(null);
+    setApplyActionLoading(false);
     setReviewFilter(DEFAULT_REVIEW_FILTER);
     setDraftsByItemId({});
   }, []);
@@ -1131,34 +1135,38 @@ export function PaperLibraryCommandCenter({
     patchSession({ templateFormat });
   }, [patchSession, session.templateFormat]);
 
-  const handleApprovePlan = useCallback(async () => {
-    if (!session.applyPlanId) return;
+  const requestApprovalToken = useCallback(async (applyPlanId: string) => {
     setCommandError(null);
-    try {
-      const payload = await paperLibraryFetchJson<{ ok: true; approvalToken: string; expiresAt: string }>(
-        "/api/brain/paper-library/apply-plan/approve",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            project: projectSlug,
-            applyPlanId: session.applyPlanId,
-            userConfirmation: true,
-          }),
-        },
-      );
-      setApprovalToken({ token: payload.approvalToken, expiresAt: payload.expiresAt });
-      await loadApplyPlan({ applyPlanId: session.applyPlanId });
-    } catch (error) {
-      setCommandError(error instanceof Error ? error.message : "Could not approve the apply plan.");
+    const payload = await paperLibraryFetchJson<{ ok: true; approvalToken: string; expiresAt: string }>(
+      "/api/brain/paper-library/apply-plan/approve",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project: projectSlug,
+          applyPlanId,
+          userConfirmation: true,
+        }),
+      },
+    );
+    setApprovalToken({ token: payload.approvalToken, expiresAt: payload.expiresAt });
+    await loadApplyPlan({ applyPlanId });
+    if (Date.parse(payload.expiresAt) <= Date.now()) {
+      setApprovalToken(null);
+      throw new Error(`Approval expired at ${new Date(payload.expiresAt).toLocaleString()}. Applying will refresh approval first.`);
     }
-  }, [loadApplyPlan, projectSlug, session.applyPlanId]);
+    return payload.approvalToken;
+  }, [loadApplyPlan, projectSlug]);
 
-  const handleApplyPlan = useCallback(async () => {
+  const handleApproveAndApplyPlan = useCallback(async () => {
     const planMatchesSelectedTemplate = applyPlanPage?.plan.templateFormat === session.templateFormat;
-    if (!session.applyPlanId || !approvalToken || !planMatchesSelectedTemplate) return;
+    if (!session.applyPlanId || !planMatchesSelectedTemplate || applyActionLoading) return;
+    setApplyActionLoading(true);
     setCommandError(null);
     try {
+      const freshToken = approvalToken && Date.parse(approvalToken.expiresAt) > Date.now()
+        ? approvalToken.token
+        : await requestApprovalToken(session.applyPlanId);
       const payload = await paperLibraryFetchJson<{ ok: true; manifestId: string }>(
         "/api/brain/paper-library/apply",
         {
@@ -1167,7 +1175,7 @@ export function PaperLibraryCommandCenter({
           body: JSON.stringify({
             project: projectSlug,
             applyPlanId: session.applyPlanId,
-            approvalToken: approvalToken.token,
+            approvalToken: freshToken,
             idempotencyKey: makeIdempotencyKey("paper-library-apply"),
           }),
         },
@@ -1186,16 +1194,20 @@ export function PaperLibraryCommandCenter({
       if (error instanceof PaperLibraryApiError && error.code === "approval_token_expired") {
         setApprovalToken(null);
       }
-      setCommandError(error instanceof Error ? error.message : "Could not apply the approved plan.");
+      setCommandError(error instanceof Error ? error.message : "Could not apply the plan.");
+    } finally {
+      setApplyActionLoading(false);
     }
   }, [
     applyPlanPage?.plan.templateFormat,
+    applyActionLoading,
     approvalToken,
-    loadApplyPlan,
     loadManifest,
+    loadApplyPlan,
     loadScan,
     patchSession,
     projectSlug,
+    requestApprovalToken,
     session.applyPlanId,
     session.scanId,
     session.templateFormat,
@@ -1312,34 +1324,31 @@ export function PaperLibraryCommandCenter({
   const persistedApprovalExpired = persistedApprovalExpiresAt
     ? Date.parse(persistedApprovalExpiresAt) <= Date.now()
     : false;
-  const approvalNeedsRefresh = Boolean(
-    activePlan
-    && activePlanMatchesTemplate
-    && activePlan.status === "approved"
-    && !activePlan.manifestId
-    && (!approvalToken || approvalTokenExpired),
-  );
-  const canApprovePlan = Boolean(
+  const canApplyPlan = Boolean(
     activePlan
     && activePlanMatchesTemplate
     && activePlan.conflictCount === 0
     && !activePlan.manifestId
-    && (activePlan.status === "validated" || approvalNeedsRefresh),
+    && (activePlan.status === "validated" || activePlan.status === "approved")
   );
-  const approveButtonLabel = approvalNeedsRefresh ? "Refresh approval" : "Approve plan";
+  const applyButtonLabel = applyActionLoading
+    ? "Applying..."
+    : activePlan
+      ? `Apply ${activePlan.operationCount} ${activePlan.operationCount === 1 ? "change" : "changes"}`
+      : "Apply changes";
   const approvalStatusMessage = approvalToken
     ? (
         approvalTokenExpired
-          ? `Approval expired at ${new Date(approvalToken.expiresAt).toLocaleString()}. Refresh approval to continue.`
+          ? `Approval expired at ${new Date(approvalToken.expiresAt).toLocaleString()}. Applying will refresh approval first.`
           : `Plan approved until ${new Date(approvalToken.expiresAt).toLocaleString()}.`
       )
     : activePlan?.status === "approved"
       ? (
           persistedApprovalExpiresAt
             ? persistedApprovalExpired
-              ? `Approval expired at ${new Date(persistedApprovalExpiresAt).toLocaleString()}. Refresh approval to continue.`
-              : `Plan approved until ${new Date(persistedApprovalExpiresAt).toLocaleString()}, but this browser session no longer has the apply token. Refresh approval to continue.`
-            : "Plan is already approved, but this browser session needs a fresh apply token. Refresh approval to continue."
+              ? `Approval expired at ${new Date(persistedApprovalExpiresAt).toLocaleString()}. Applying will refresh approval first.`
+              : `Plan approved until ${new Date(persistedApprovalExpiresAt).toLocaleString()}. Applying will refresh the browser token first.`
+            : "Plan is already approved. Applying will refresh the browser token first."
         )
       : null;
   const approvalStatusTone = (approvalToken && !approvalTokenExpired)
@@ -1631,6 +1640,63 @@ export function PaperLibraryCommandCenter({
                 </div>
               )}
 
+              <div className={`rounded-xl border p-4 ${
+                canApplyPlan && !applyPlanTemplateStale
+                  ? "border-accent/40 bg-accent-faint"
+                  : "border-border bg-surface"
+              }`}>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">
+                      {activePlan.manifestId
+                        ? "Plan applied"
+                        : canApplyPlan
+                          ? "Ready to write this library"
+                          : "Plan needs attention"}
+                    </p>
+                    <p className="mt-1 max-w-2xl text-xs leading-5 text-muted">
+                      {activePlan.manifestId
+                        ? "The manifest records every file move and gbrain paper record written from this plan."
+                        : canApplyPlan
+                          ? "Applies this exact preview: renames PDFs, writes gbrain paper records, and opens the undoable manifest."
+                          : applyPlanTemplateStale
+                            ? "Regenerate the preview for the selected format before applying changes."
+                            : activePlan.conflictCount > 0
+                              ? "Resolve review items or path conflicts before applying changes."
+                              : "Create a validated preview before applying changes."}
+                    </p>
+                  </div>
+                  {activePlan.manifestId ? (
+                    <button
+                      type="button"
+                      onClick={() => patchSession({ step: "history" })}
+                      className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-border bg-white px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+                    >
+                      <ClockCounterClockwise size={15} />
+                      Open history
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleApproveAndApplyPlan()}
+                      disabled={!canApplyPlan || applyActionLoading || applyPlanTemplateStale}
+                      className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {applyActionLoading ? <SpinnerGap className="animate-spin" size={16} /> : <CheckCircle size={16} />}
+                      {applyButtonLabel}
+                    </button>
+                  )}
+                </div>
+
+                {approvalStatusMessage && !activePlan.manifestId && (
+                  <div
+                    className={`mt-3 rounded-lg border px-3 py-2 text-sm ${approvalStatusTone}`}
+                  >
+                    {approvalStatusMessage}
+                  </div>
+                )}
+              </div>
+
               <div className="divide-y divide-border rounded-xl border border-border bg-white">
                 {applyPlanPage?.operations.map((operation) => (
                   <div key={operation.id} className="px-4 py-3">
@@ -1660,42 +1726,6 @@ export function PaperLibraryCommandCenter({
                   </div>
                 ))}
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleApprovePlan()}
-                  disabled={!canApprovePlan}
-                  className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-                >
-                  {approveButtonLabel}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleApplyPlan()}
-                  disabled={!approvalToken || approvalTokenExpired || !activePlanMatchesTemplate}
-                  className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
-                >
-                  Apply approved plan
-                </button>
-                {activePlan.manifestId && (
-                  <button
-                    type="button"
-                    onClick={() => patchSession({ step: "history" })}
-                    className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
-                  >
-                    Open history
-                  </button>
-                )}
-              </div>
-
-              {approvalStatusMessage && (
-                <div
-                  className={`rounded-lg border px-3 py-2 text-sm ${approvalStatusTone}`}
-                >
-                  {approvalStatusMessage}
-                </div>
-              )}
 
               {applyPlanPage?.nextCursor && (
                 <button
@@ -2165,6 +2195,15 @@ export function PaperLibraryCommandCenter({
               )}
               <button
                 type="button"
+                onClick={() => patchSession({ step: "graph" })}
+                disabled={!session.scanId}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+              >
+                <Graph size={14} />
+                Open graph
+              </button>
+              <button
+                type="button"
                 onClick={() => void handleUndo()}
                 disabled={undoing || repairingManifest || activeManifest.undoneCount === activeManifest.operationCount}
                 className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
@@ -2196,6 +2235,32 @@ export function PaperLibraryCommandCenter({
                 <span className="text-sm text-muted">{activeManifest.appliedCount} applied</span>
                 <span className="text-sm text-muted">{activeManifest.failedCount} failed</span>
                 <span className="text-sm text-muted">{activeManifest.undoneCount} undone</span>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-border bg-surface px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Filesystem</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">
+                    {activeManifest.appliedCount} PDFs processed
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border bg-surface px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">gbrain index</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">
+                    {activeManifest.status === "applied"
+                      ? `${activeManifest.appliedCount} paper records updated`
+                      : activeManifest.status === "applied_with_repair_required"
+                        ? "Repair required"
+                        : formatStatus(activeManifest.status)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 rounded-lg border border-border bg-surface px-3 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Graph context</p>
+                <p className="mt-1 text-sm text-muted">
+                  {graphPage
+                    ? `${graphPage.filteredCount} papers and ${totalGraphEdgeCount} citation edges loaded.`
+                    : "Open graph to build citation context, clusters, and gap suggestions from this scan."}
+                </p>
               </div>
               {activeManifest.status === "applied_with_repair_required" && (
                 <p className="mt-3 text-sm text-muted">
@@ -2405,18 +2470,16 @@ export function PaperLibraryCommandCenter({
   }, [
     activeManifest,
     activePlan,
-    activePlanMatchesTemplate,
     approvalStatusMessage,
     approvalStatusTone,
-    approvalToken,
-    approvalTokenExpired,
+    applyActionLoading,
+    applyButtonLabel,
     applyPlanError,
     applyPlanTemplateStale,
     applyPlanLoading,
     applyPlanLoadingMore,
     applyPlanPage,
-    approveButtonLabel,
-    canApprovePlan,
+    canApplyPlan,
     clustersError,
     clustersLoading,
     clustersLoadingMore,
@@ -2435,8 +2498,7 @@ export function PaperLibraryCommandCenter({
     graphPage,
     graphSourceRunCount,
     graphSuccessfulRuns,
-    handleApplyPlan,
-    handleApprovePlan,
+    handleApproveAndApplyPlan,
     handleCancelScan,
     handleCreateApplyPlan,
     handleGapAction,
