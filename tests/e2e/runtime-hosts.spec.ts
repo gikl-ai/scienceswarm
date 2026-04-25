@@ -924,7 +924,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
     const detail = page.getByTestId("runtime-session-detail");
     await expect(detail).toContainText("results/summary.md");
     await expect(detail).toContainText("gbrain-writeback-failed");
-    await expect(detail).toContainText("Retry from the composer after changing host or policy.");
+    await expect(detail).toContainText("Retry from the composer after changing destination or policy.");
   });
 
   test("shows compare partial failures without hiding synthesis provenance", async ({

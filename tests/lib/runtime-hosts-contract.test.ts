@@ -245,7 +245,7 @@ describe("runtime host contracts and registry", () => {
     expect(apiError).toEqual({
       status: 422,
       body: {
-        error: "This runtime does not support the requested action.",
+        error: "This destination does not support the requested action.",
         code: "RUNTIME_HOST_CAPABILITY_UNSUPPORTED",
         recoverable: true,
       },
