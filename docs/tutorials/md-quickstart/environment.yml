@@ -1,0 +1,11 @@
+name: scienceswarm-md-quickstart
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - openmm=8.*
+  - pdbfixer>=1.9
+  - mdtraj=1.*
+  - matplotlib
+  - numpy
+  - pip
