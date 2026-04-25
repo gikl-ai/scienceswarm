@@ -1245,7 +1245,7 @@ describe("SettingsPage runtime settings", () => {
     expect(codexOption).toBeDisabled();
   });
 
-  it("still renders the frontier watch composer below the runtime settings", async () => {
+  it("keeps recurring work controls out of Settings", async () => {
     vi.stubGlobal("fetch", buildFetchStub());
 
     render(
@@ -1254,7 +1254,8 @@ describe("SettingsPage runtime settings", () => {
       </ThemeProvider>,
     );
 
-    expect(await screen.findByText("What should ScienceSwarm watch for this project?")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Generate Specific Search Prompt" })).toBeInTheDocument();
+    expect(await screen.findByTestId("runtime-host-matrix")).toBeInTheDocument();
+    expect(screen.queryByText("What should ScienceSwarm watch for this project?")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Generate Specific Search Prompt" })).not.toBeInTheDocument();
   });
 });

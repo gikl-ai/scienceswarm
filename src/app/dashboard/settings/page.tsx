@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ProjectWatchConfig } from "@/lib/watch/types";
 import { OpenClawSection } from "@/components/setup/openclaw-section";
 import { DEFAULT_OPENAI_MODEL } from "@/lib/openai-models";
 import { OLLAMA_RECOMMENDED_MODEL } from "@/lib/ollama-constants";
@@ -17,8 +16,6 @@ import { SetupAndConfigurationSection } from "./sections/setup-and-configuration
 import { ApiKeysAndModelSection } from "./sections/api-keys-and-model";
 import { LocalModelSection } from "./sections/local-model";
 import { TelegramOpenClawSection } from "./sections/telegram-openclaw";
-import { FrontierWatchSection } from "./sections/frontier-watch";
-import { ResearchRadarSection } from "./sections/research-radar";
 import { WorkspaceDisplaySection } from "./sections/workspace-display";
 import { ProjectRuntimeSection } from "./sections/project-runtime";
 import { useFilePreviewLocation } from "@/hooks/use-file-preview-location";
@@ -132,22 +129,6 @@ type PendingTelegramPairing =
 
 const OLLAMA_PULL_STORAGE_KEY = "scienceswarm.settings.activeOllamaPull";
 
-function createDefaultWatchConfig(): ProjectWatchConfig {
-  return {
-    version: 1,
-    keywords: [],
-    promotionThreshold: 5,
-    stagingThreshold: 2,
-    schedule: {
-      enabled: false,
-      cadence: "daily",
-      time: "08:00",
-      timezone: "local",
-    },
-    sources: [],
-  };
-}
-
 function parseStringList(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
@@ -201,11 +182,6 @@ export default function SettingsPage() {
   const [openAiKeyDraft, setOpenAiKeyDraft] = useState("");
   const [runtimeProject, setRuntimeProject] = useState("");
   const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
-  const [watchProject, setWatchProject] = useState("");
-  const [watchConfig, setWatchConfig] = useState<ProjectWatchConfig>(createDefaultWatchConfig());
-  const [watchLoading, setWatchLoading] = useState(false);
-  const [watchSaving, setWatchSaving] = useState(false);
-  const [watchError, setWatchError] = useState<string | null>(null);
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
@@ -367,7 +343,6 @@ export default function SettingsPage() {
         : projects[0]?.id ?? "";
       setProjectOptions(projects);
       setRuntimeProject((current) => current || initialProject);
-      setWatchProject((current) => current || initialProject);
     } catch {
       // ignore
     }
@@ -379,43 +354,6 @@ export default function SettingsPage() {
     );
     if (project) {
       setRuntimeProject(project);
-      setWatchProject(project);
-    }
-  }, []);
-
-  const fetchWatchConfig = useCallback(async (project: string, signal?: AbortSignal) => {
-    if (!project.trim()) {
-      setWatchConfig(createDefaultWatchConfig());
-      setWatchError(null);
-      return;
-    }
-
-    setWatchLoading(true);
-    setWatchError(null);
-    try {
-      const res = await fetch(`/api/brain/watch-config?project=${encodeURIComponent(project)}`, {
-        signal,
-      });
-      const data = (await res.json()) as {
-        config?: ProjectWatchConfig;
-        error?: string;
-      };
-      if (!res.ok || !data.config) {
-        setWatchConfig(createDefaultWatchConfig());
-        setWatchError(data.error || "Failed to load watch config");
-        return;
-      }
-      setWatchConfig(data.config);
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-      setWatchConfig(createDefaultWatchConfig());
-      setWatchError("Failed to load watch config");
-    } finally {
-      if (!signal?.aborted) {
-        setWatchLoading(false);
-      }
     }
   }, []);
 
@@ -443,18 +381,6 @@ export default function SettingsPage() {
     fetchProjects,
     fetchLocalHealth,
   ]);
-
-  useEffect(() => {
-    if (!watchProject.trim()) {
-      setWatchLoading(false);
-      fetchWatchConfig(watchProject);
-      return;
-    }
-
-    const controller = new AbortController();
-    fetchWatchConfig(watchProject, controller.signal);
-    return () => controller.abort();
-  }, [fetchWatchConfig, watchProject]);
 
   /* ---------- actions ---------- */
 
@@ -775,44 +701,6 @@ export default function SettingsPage() {
     }
   }, [projectOptions, runtimeProject]);
 
-  async function saveWatchConfig() {
-    if (!watchProject.trim()) {
-      showToast("Choose a project slug before saving watch config", "error");
-      return;
-    }
-
-    setWatchSaving(true);
-    setWatchError(null);
-    try {
-      const res = await fetch("/api/brain/watch-config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project: watchProject.trim(),
-          config: watchConfig,
-        }),
-      });
-      const data = (await res.json()) as {
-        config?: ProjectWatchConfig;
-        error?: string;
-      };
-      if (!res.ok || !data.config) {
-        const message = data.error || "Failed to save watch config";
-        setWatchError(message);
-        showToast(message, "error");
-        return;
-      }
-
-      setWatchConfig(data.config);
-      showToast(`Saved watch config for ${watchProject.trim()}`, "success");
-    } catch {
-      setWatchError("Failed to save watch config");
-      showToast("Failed to save watch config", "error");
-    } finally {
-      setWatchSaving(false);
-    }
-  }
-
   /* ---------- render ---------- */
 
   const inputCls =
@@ -1041,25 +929,6 @@ export default function SettingsPage() {
         <RuntimeSetupCallouts hosts={runtimeHealth.hosts} />
       )}
 
-      <FrontierWatchSection
-        projectOptions={projectOptions}
-        watchProject={watchProject}
-        onWatchProjectChange={setWatchProject}
-        watchConfig={watchConfig}
-        setWatchConfig={setWatchConfig}
-        watchLoading={watchLoading}
-        watchSaving={watchSaving}
-        watchError={watchError}
-        onSave={saveWatchConfig}
-        inputClassName={inputCls}
-        primaryButtonClassName={btnPrimary}
-        secondaryButtonClassName={btnSecondary}
-      />
-
-      <ResearchRadarSection
-        inputClassName={inputCls}
-        primaryButtonClassName={btnPrimary}
-      />
     </div>
   );
 }

@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowSquareOut, Brain, Database, SpinnerGap } from "@phosphor-icons/react";
+import { ArrowSquareOut, Brain, CalendarCheck, Database, SpinnerGap } from "@phosphor-icons/react";
 import { OpenClawSkillsBrowser } from "@/components/openclaw/skills-browser";
 import { InstalledMarketPluginsBrowser } from "@/components/skills/installed-market-browser";
 import { WorkspaceSkillsBrowser } from "@/components/skills/workspace-browser";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { DreamCycleCard } from "@/components/research/dream-cycle-card";
 import { BrainSearchPanel } from "@/components/research/brain-search-panel";
 import { PaperLibraryCommandCenter } from "@/components/research/paper-library/command-center";
 import {
@@ -19,29 +18,12 @@ import {
 import { Spinner } from "@/components/spinner";
 import {
   buildGbrainHrefForSlug,
+  buildRoutinesHrefForSlug,
   buildWorkspaceHrefForSlug,
   persistLastProjectSlug,
   readLastProjectSlug,
   safeProjectSlugOrNull,
 } from "@/lib/project-navigation";
-
-interface DashboardProjectBrief {
-  project: string;
-  nextMove?: {
-    recommendation?: string;
-  };
-  dueTasks?: Array<{
-    path: string;
-    title: string;
-    status: string;
-  }>;
-  frontier?: Array<{
-    path: string;
-    title: string;
-    status: string;
-    whyItMatters: string;
-  }>;
-}
 
 type BrainRadarStatus = {
   last_run: string;
@@ -90,7 +72,6 @@ function GbrainPageContent() {
     [requestedBrainSlug],
   );
   const [brainBootstrapState, setBrainBootstrapState] = useState<BrainBootstrapState>({ status: "loading" });
-  const [projectBrief, setProjectBrief] = useState<DashboardProjectBrief | null>(null);
   const [selectedArtifact, setSelectedArtifact] = useState<BrainArtifactState>({ status: "idle" });
 
   useEffect(() => {
@@ -166,23 +147,6 @@ function GbrainPageContent() {
         status: "error",
         message: error instanceof Error ? error.message : "Brain status check failed",
       });
-    }
-  }, []);
-
-  const loadProjectBrief = useCallback(async (projectSlug: string, signal?: AbortSignal) => {
-    try {
-      const response = await fetch(`/api/brain/brief?project=${encodeURIComponent(projectSlug)}`, {
-        signal,
-      });
-      if (!response.ok) {
-        setProjectBrief(null);
-        return;
-      }
-      setProjectBrief(await response.json() as DashboardProjectBrief);
-    } catch (error) {
-      if (!(error instanceof Error && error.name === "AbortError")) {
-        setProjectBrief(null);
-      }
     }
   }, []);
 
@@ -274,16 +238,6 @@ function GbrainPageContent() {
   }, [activeView, brainBootstrapState.status, router]);
 
   useEffect(() => {
-    if (!activeProjectSlug || activeView !== "pages") {
-      setProjectBrief(null);
-      return;
-    }
-    const controller = new AbortController();
-    void loadProjectBrief(activeProjectSlug, controller.signal);
-    return () => controller.abort();
-  }, [activeProjectSlug, activeView, loadProjectBrief]);
-
-  useEffect(() => {
     if (activeView !== "pages") {
       setSelectedArtifact({ status: "idle" });
       return;
@@ -313,7 +267,7 @@ function GbrainPageContent() {
             <h1 className="mt-1 text-xl font-semibold text-foreground">Research brain</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted">
               {activeView === "pages"
-                ? "Dream Cycle, search, and page inspection for your current project's gbrain."
+                ? "Search and page inspection for your current project's gbrain."
                 : activeView === "paper-library"
                   ? "Turn a local PDF archive into a reviewed, reversible, graph-aware research library."
                   : activeSkillsCatalog === "workspace"
@@ -370,13 +324,22 @@ function GbrainPageContent() {
               )}
             </div>
             {(activeView === "pages" || activeView === "paper-library") && activeProjectSlug && (
-              <Link
-                href={buildWorkspaceHrefForSlug(activeProjectSlug)}
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-white px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
-              >
-                <ArrowSquareOut size={14} />
-                Open workspace
-              </Link>
+              <>
+                <Link
+                  href={buildRoutinesHrefForSlug(activeProjectSlug)}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-white px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+                >
+                  <CalendarCheck size={14} />
+                  Routines
+                </Link>
+                <Link
+                  href={buildWorkspaceHrefForSlug(activeProjectSlug)}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-white px-3 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+                >
+                  <ArrowSquareOut size={14} />
+                  Open workspace
+                </Link>
+              </>
             )}
           </div>
         </div>
@@ -486,14 +449,6 @@ function GbrainPageContent() {
 
       {activeView === "pages" && (activeProjectSlug || requestedBrainPageSlug) && (
         <>
-          {activeProjectSlug && (
-            <DreamCycleCard
-              enabled={brainBootstrapState.status === "ready"}
-              projectBrief={projectBrief}
-              onNavigateBrainPage={handleNavigateBrainPage}
-            />
-          )}
-
           {brainBootstrapState.status === "error" && (
             <section
               role="alert"
@@ -618,7 +573,7 @@ function BrainArtifactPanel({
         <div className="max-w-lg text-center">
           <p className="text-sm font-semibold text-foreground">Open a gbrain page</p>
           <p className="mt-2 text-sm text-muted">
-            Search gbrain or click a Dream Cycle insight to inspect the page here.
+            Search gbrain or open a linked routine insight to inspect the page here.
           </p>
         </div>
       </div>
