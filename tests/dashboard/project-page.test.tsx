@@ -350,6 +350,25 @@ describe("Project dashboard smoke test", () => {
     expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
   });
 
+  it("renders footer guidance copy and a prominent send button", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    const composer = await screen.findByTestId("project-chat-composer");
+    const sendButton = within(composer).getByRole("button", { name: "Send" });
+
+    expect(
+      within(composer).getByText("Drop files here,", { exact: false }),
+    ).toBeInTheDocument();
+    expect(within(composer).getByText("@")).toHaveClass("font-mono");
+    expect(within(composer).getByText("/")).toHaveClass("font-mono");
+    expect(sendButton).toHaveClass("bg-slate-950");
+    expect(sendButton).toHaveClass("text-white");
+    expect(sendButton).not.toHaveClass("border-accent/30");
+  });
+
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
     const fetchMock = stubDashboardFetch({
       latestPaperLibraryScan: {

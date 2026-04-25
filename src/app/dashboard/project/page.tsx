@@ -5046,35 +5046,48 @@ function ProjectPageContent() {
                         </div>
                       </div>
                       <div className="flex flex-col gap-3 border-t border-rule/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex flex-wrap items-center gap-2.5">
-                          <ComposerRuntimeSwitcher
-                            hosts={runtimeHosts.hosts}
-                            selectedHostId={selectedRuntimeHostId}
-                            projectPolicy={runtimeProjectPolicy}
-                            mode={runtimeMode}
-                            compareHostIds={compareHostIds}
-                            loading={runtimeHosts.loading}
-                            error={runtimeHosts.error}
-                            open={runtimeSwitcherOpen}
-                            onOpenChange={setRuntimeSwitcherOpen}
-                            onSelectedHostIdChange={setSelectedRuntimeHostId}
-                            onProjectPolicyChange={setRuntimeProjectPolicy}
-                            onModeChange={setRuntimeMode}
-                            onCompareHostIdsChange={setRuntimeCompareHostIds}
-                          />
-                          {voiceSupported && (
-                            <VoiceButton
-                              voiceState={voiceState}
-                              voiceError={voiceError}
-                              onClearError={clearVoiceError}
-                              disabled={isChatBusy}
-                              onStart={startRecording}
-                              onStop={() => {
-                                if (voiceState === "recording") stopRecording();
-                                else if (voiceState === "speaking") stopPlayback();
-                              }}
+                        <div className="flex min-w-0 flex-col gap-2">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <ComposerRuntimeSwitcher
+                              hosts={runtimeHosts.hosts}
+                              selectedHostId={selectedRuntimeHostId}
+                              projectPolicy={runtimeProjectPolicy}
+                              mode={runtimeMode}
+                              compareHostIds={compareHostIds}
+                              loading={runtimeHosts.loading}
+                              error={runtimeHosts.error}
+                              open={runtimeSwitcherOpen}
+                              onOpenChange={setRuntimeSwitcherOpen}
+                              onSelectedHostIdChange={setSelectedRuntimeHostId}
+                              onProjectPolicyChange={setRuntimeProjectPolicy}
+                              onModeChange={setRuntimeMode}
+                              onCompareHostIdsChange={setRuntimeCompareHostIds}
                             />
-                          )}
+                            {voiceSupported && (
+                              <VoiceButton
+                                voiceState={voiceState}
+                                voiceError={voiceError}
+                                onClearError={clearVoiceError}
+                                disabled={isChatBusy}
+                                onStart={startRecording}
+                                onStop={() => {
+                                  if (voiceState === "recording") stopRecording();
+                                  else if (voiceState === "speaking") stopPlayback();
+                                }}
+                              />
+                            )}
+                          </div>
+                          <p className="text-[11px] leading-5 text-slate-500">
+                            Drop files here, type{" "}
+                            <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[10px] text-slate-700">
+                              @
+                            </code>{" "}
+                            to mention workspace files, or{" "}
+                            <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[10px] text-slate-700">
+                              /
+                            </code>{" "}
+                            for commands.
+                          </p>
                         </div>
                         <button
                           onClick={isStreaming && canCancelActiveTurn
@@ -5087,7 +5100,11 @@ function ProjectPageContent() {
                               ? !canCancelActiveTurn
                               : isChatBusy || !input.trim()
                           }
-                          className="inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/10 px-5 text-sm font-semibold text-accent transition-colors hover:bg-accent/15 hover:border-accent/45 disabled:opacity-40"
+                          className={`inline-flex h-11 shrink-0 items-center justify-center rounded-full px-5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                            isStreaming
+                              ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                              : "bg-slate-950 text-white shadow-[0_10px_24px_rgba(15,23,42,0.18)] hover:bg-slate-900"
+                          }`}
                         >
                           {isStreaming ? "Stop" : "Send"}
                         </button>
