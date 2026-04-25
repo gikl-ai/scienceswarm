@@ -108,6 +108,27 @@ export function getPaperLibraryGapsPath(project: string, scanId: string, stateRo
   return path.join(getPaperLibraryStateDir(project, stateRoot), "gaps", `${encodeURIComponent(scanId)}.json`);
 }
 
+export function getPaperLibraryAcquisitionPlanPath(project: string, acquisitionPlanId: string, stateRoot?: string): string {
+  return path.join(
+    getPaperLibraryStateDir(project, stateRoot),
+    "acquisitions",
+    `${encodeURIComponent(acquisitionPlanId)}.json`,
+  );
+}
+
+export function getPaperLibraryAcquisitionDownloadsDir(
+  project: string,
+  acquisitionPlanId: string,
+  stateRoot?: string,
+): string {
+  return path.join(
+    getPaperLibraryStateDir(project, stateRoot),
+    "acquisitions",
+    encodeURIComponent(acquisitionPlanId),
+    "downloads",
+  );
+}
+
 export function parsePersistedState<T>(
   value: unknown,
   schema: z.ZodType<T>,

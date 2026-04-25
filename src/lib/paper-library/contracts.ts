@@ -698,6 +698,130 @@ export const PaperLibraryGapActionRequestSchema = z.object({
 });
 export type PaperLibraryGapActionRequest = z.infer<typeof PaperLibraryGapActionRequestSchema>;
 
+export const PaperLibraryAcquisitionLocationSourceSchema = z.enum([
+  "arxiv",
+  "doi",
+  "openalex",
+  "pubmed",
+  "semantic_scholar",
+]);
+export type PaperLibraryAcquisitionLocationSource = z.infer<typeof PaperLibraryAcquisitionLocationSourceSchema>;
+
+export const PaperLibraryAcquisitionLocationKindSchema = z.enum([
+  "pdf",
+  "landing",
+  "metadata",
+]);
+export type PaperLibraryAcquisitionLocationKind = z.infer<typeof PaperLibraryAcquisitionLocationKindSchema>;
+
+export const PaperLibraryAcquisitionLocationSchema = z.object({
+  source: PaperLibraryAcquisitionLocationSourceSchema,
+  kind: PaperLibraryAcquisitionLocationKindSchema,
+  identifier: z.string().min(1).optional(),
+  url: z.string().url().optional(),
+  openAccess: z.boolean().default(false),
+  canDownloadPdf: z.boolean().default(false),
+  confidence: z.number().min(0).max(1),
+});
+export type PaperLibraryAcquisitionLocation = z.infer<typeof PaperLibraryAcquisitionLocationSchema>;
+
+export const PaperLibraryAcquisitionModeSchema = z.enum([
+  "download_pdf",
+  "metadata_only",
+  "watch",
+]);
+export type PaperLibraryAcquisitionMode = z.infer<typeof PaperLibraryAcquisitionModeSchema>;
+
+export const PaperLibraryAcquisitionItemStatusSchema = z.enum([
+  "planned",
+  "acquired",
+  "metadata_only",
+  "watching",
+  "failed",
+  "skipped",
+]);
+export type PaperLibraryAcquisitionItemStatus = z.infer<typeof PaperLibraryAcquisitionItemStatusSchema>;
+
+export const PaperLibraryAcquisitionItemSchema = z.object({
+  id: z.string().min(1),
+  suggestionId: z.string().min(1),
+  scanId: z.string().min(1),
+  nodeId: z.string().min(1),
+  title: z.string().min(1),
+  authors: z.array(z.string()).default([]),
+  year: z.number().int().min(1000).max(3000).optional(),
+  venue: z.string().optional(),
+  identifiers: PaperIdentifierSchema.default({}),
+  sources: z.array(PaperMetadataSourceSchema).default([]),
+  reasonCodes: z.array(GapSuggestionReasonCodeSchema).default([]),
+  score: GapSuggestionScoreSchema,
+  localConnectionCount: z.number().int().nonnegative().default(0),
+  evidencePaperIds: z.array(z.string().min(1)).default([]),
+  evidenceClusterIds: z.array(z.string().min(1)).default([]),
+  evidenceNodeIds: z.array(z.string().min(1)).default([]),
+  rationale: z.string().min(1),
+  locations: z.array(PaperLibraryAcquisitionLocationSchema).default([]),
+  selectedLocation: PaperLibraryAcquisitionLocationSchema.optional(),
+  mode: PaperLibraryAcquisitionModeSchema,
+  status: PaperLibraryAcquisitionItemStatusSchema.default("planned"),
+  localPath: z.string().min(1).optional(),
+  error: z.string().optional(),
+  updatedAt: IsoDateStringSchema,
+});
+export type PaperLibraryAcquisitionItem = z.infer<typeof PaperLibraryAcquisitionItemSchema>;
+
+export const PaperLibraryAcquisitionPlanStatusSchema = z.enum([
+  "planned",
+  "running",
+  "completed",
+  "partial",
+  "failed",
+]);
+export type PaperLibraryAcquisitionPlanStatus = z.infer<typeof PaperLibraryAcquisitionPlanStatusSchema>;
+
+export const PaperLibraryAcquisitionPlanSchema = z.object({
+  version: z.literal(PAPER_LIBRARY_STATE_VERSION),
+  id: z.string().min(1),
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1),
+  status: PaperLibraryAcquisitionPlanStatusSchema,
+  itemCount: z.number().int().nonnegative(),
+  downloadableCount: z.number().int().nonnegative(),
+  acquiredCount: z.number().int().nonnegative().default(0),
+  metadataOnlyCount: z.number().int().nonnegative().default(0),
+  watchCount: z.number().int().nonnegative().default(0),
+  failedCount: z.number().int().nonnegative().default(0),
+  items: z.array(PaperLibraryAcquisitionItemSchema).default([]),
+  warnings: z.array(z.string()).default([]),
+  createdAt: IsoDateStringSchema,
+  updatedAt: IsoDateStringSchema,
+});
+export type PaperLibraryAcquisitionPlan = z.infer<typeof PaperLibraryAcquisitionPlanSchema>;
+
+export const PaperLibraryAcquisitionCreateRequestSchema = z.object({
+  action: z.literal("create"),
+  project: ProjectSlugSchema,
+  scanId: z.string().min(1),
+  suggestionIds: z.array(z.string().min(1)).max(100).optional(),
+  limit: z.number().int().min(1).max(100).default(10),
+  includeStates: z.array(GapSuggestionStateSchema).default(["open", "watching", "saved"]),
+});
+export type PaperLibraryAcquisitionCreateRequest = z.infer<typeof PaperLibraryAcquisitionCreateRequestSchema>;
+
+export const PaperLibraryAcquisitionExecuteRequestSchema = z.object({
+  action: z.literal("execute"),
+  project: ProjectSlugSchema,
+  acquisitionPlanId: z.string().min(1),
+  userConfirmation: z.literal(true),
+});
+export type PaperLibraryAcquisitionExecuteRequest = z.infer<typeof PaperLibraryAcquisitionExecuteRequestSchema>;
+
+export const PaperLibraryAcquisitionRequestSchema = z.discriminatedUnion("action", [
+  PaperLibraryAcquisitionCreateRequestSchema,
+  PaperLibraryAcquisitionExecuteRequestSchema,
+]);
+export type PaperLibraryAcquisitionRequest = z.infer<typeof PaperLibraryAcquisitionRequestSchema>;
+
 export const RepairableStateSchema = z.object({
   ok: z.literal(false),
   code: z.enum(["missing", "malformed", "unsupported_version"]),
