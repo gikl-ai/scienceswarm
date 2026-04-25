@@ -1776,9 +1776,9 @@ export function ChatMessage({
     minute: "2-digit",
   })}`;
   const footerTextClass =
-    role === "user" ? "text-white/75" : isAssistantTurn ? ASSISTANT_METADATA_CLASS : "text-muted/55";
+    role === "user" ? "text-quiet" : isAssistantTurn ? ASSISTANT_METADATA_CLASS : "text-muted/55";
   const selectionClass = role === "user"
-    ? "selection:bg-white/45 selection:text-strong"
+    ? "selection:bg-accent/30 selection:text-strong"
     : "selection:bg-accent/25 selection:text-strong";
   const CopyStatusIcon =
     copyState === "copied"
@@ -1795,10 +1795,10 @@ export function ChatMessage({
   const copyButtonClass =
     role === "user"
       ? copyState === "copied"
-        ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/15 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
+        ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-accent/30 bg-accent/15 text-accent transition-colors hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         : copyState === "error"
-          ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/15 text-danger/30 transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
-          : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-white/70 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45"
+          ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-danger/30 bg-danger/10 text-danger transition-colors hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+          : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-quiet transition-colors hover:border-accent/25 hover:bg-accent/10 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       : copyState === "copied"
         ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-ok/30 bg-ok/10 text-ok transition-all hover:bg-ok/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/30"
         : copyState === "error"
@@ -1808,10 +1808,10 @@ export function ChatMessage({
           : "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-sunk hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
   const bubbleClass =
     role === "user"
-      ? `max-w-2xl rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text ${
+      ? `max-w-2xl rounded-xl px-5 py-4 text-sm leading-relaxed select-text cursor-text ${
           isOpenClawToolsTurn
-            ? "bg-ok text-strong border-2 border-ok"
-            : "bg-accent text-white border-2 border-accent"
+            ? "bg-ok/10 text-ok border border-ok/30"
+            : "bg-accent/10 text-accent border border-accent/30"
         }`
       : role === "system"
         ? "w-full max-w-[min(92vw,72rem)] rounded-xl px-5 py-4 text-sm leading-relaxed shadow-sm select-text cursor-text bg-white border-2 border-border text-muted text-xs font-mono"
@@ -1865,7 +1865,7 @@ export function ChatMessage({
       {isOpenClawToolsTurn && (
         <div className={`mb-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
           role === "user"
-            ? "border-white/30 bg-white/10 text-white"
+            ? "border-ok/30 bg-ok/10 text-ok"
             : "border-ok/30 bg-raised text-ok"
         }`}>
           Run with OpenClaw tools

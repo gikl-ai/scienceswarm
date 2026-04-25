@@ -5087,7 +5087,7 @@ function ProjectPageContent() {
                               ? !canCancelActiveTurn
                               : isChatBusy || !input.trim()
                           }
-                          className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-accent-hover disabled:opacity-40"
+                          className="inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/10 px-5 text-sm font-semibold text-accent transition-colors hover:bg-accent/15 hover:border-accent/45 disabled:opacity-40"
                         >
                           {isStreaming ? "Stop" : "Send"}
                         </button>
