@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type Dispatch, type KeyboardEvent, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type KeyboardEvent, type SetStateAction } from "react";
 import type { ProjectWatchConfig, ProjectWatchSource, WatchSourceType } from "@/lib/watch/types";
 import {
   formatWatchScheduleSummary,
@@ -130,6 +130,7 @@ export function FrontierWatchComposer({
 }: FrontierWatchComposerProps) {
   const [watchObjectiveDraft, setWatchObjectiveDraft] = useState<string | null>(null);
   const [keywordDraft, setKeywordDraft] = useState("");
+  const [projectDraft, setProjectDraft] = useState(watchProject);
   const [composing, setComposing] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const projectLabel = projectOptions.find((project) => project.id === watchProject)?.name ?? watchProject;
@@ -140,6 +141,10 @@ export function FrontierWatchComposer({
     time: "08:00",
     timezone: "local",
   };
+
+  useEffect(() => {
+    setProjectDraft(watchProject);
+  }, [watchProject]);
 
   const presets: WatchPreset[] = [
     {
@@ -352,6 +357,19 @@ export function FrontierWatchComposer({
     setWatchConfig((current) => preset.apply(current, projectLabel));
   }
 
+  function commitProjectDraft() {
+    const nextProject = projectDraft.trim();
+    if (!nextProject || nextProject === watchProject) {
+      setProjectDraft(watchProject);
+      return;
+    }
+    if (!/^[a-z0-9-]+$/.test(nextProject)) {
+      setProjectDraft(watchProject);
+      return;
+    }
+    onWatchProjectChange(nextProject);
+  }
+
   const liveSummary = summarizeWatchConfig(watchConfig, projectLabel);
   const activeSearchLabel = watchConfig.sources.some((source) => source.type === "web_search")
     ? "Live web search"
@@ -443,8 +461,17 @@ export function FrontierWatchComposer({
             <input
               id="watch-project"
               list="watch-project-options"
-              value={watchProject}
-              onChange={(event) => onWatchProjectChange(event.target.value)}
+              value={projectDraft}
+              onChange={(event) => setProjectDraft(event.target.value)}
+              onBlur={commitProjectDraft}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitProjectDraft();
+                } else if (event.key === "Escape") {
+                  setProjectDraft(watchProject);
+                }
+              }}
               placeholder="alpha-project"
               className={inputClassName}
             />

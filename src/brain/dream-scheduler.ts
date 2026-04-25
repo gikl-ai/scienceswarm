@@ -89,50 +89,96 @@ interface CronFields {
   dayOfMonth: number | null;
   month: number | null;
   dayOfWeek: number | null;
+  minuteValues: number[] | null;
+  hourValues: number[] | null;
+  dayOfMonthValues: number[] | null;
+  monthValues: number[] | null;
+  dayOfWeekValues: number[] | null;
 }
 
 /**
  * Parse a simple cron expression: "M H DOM MON DOW"
- * Supports numeric values and "*" wildcards.
+ * Supports numeric values, comma-separated lists, ranges, and "*" wildcards.
  * Returns null if the expression is invalid.
  */
 export function parseCron(expression: string): CronFields | null {
   const parts = expression.trim().split(/\s+/);
   if (parts.length !== 5) return null;
 
-  function parseField(field: string): number | null {
-    if (field === "*") return null;
-    const num = parseInt(field, 10);
-    if (Number.isNaN(num)) return null;
-    return num;
+  function parseField(
+    field: string,
+    min: number,
+    max: number,
+  ): { display: number | null; values: number[] | null } | null {
+    if (field === "*") return { display: null, values: null };
+
+    const values = new Set<number>();
+    for (const part of field.split(",")) {
+      if (/^\d+$/.test(part)) {
+        const value = Number.parseInt(part, 10);
+        if (value < min || value > max) return null;
+        values.add(value);
+        continue;
+      }
+
+      const range = part.match(/^(\d+)-(\d+)$/);
+      if (range) {
+        const start = Number.parseInt(range[1] as string, 10);
+        const end = Number.parseInt(range[2] as string, 10);
+        if (start < min || end > max || start > end) return null;
+        for (let value = start; value <= end; value += 1) {
+          values.add(value);
+        }
+        continue;
+      }
+
+      return null;
+    }
+
+    const sortedValues = [...values].sort((left, right) => left - right);
+    if (sortedValues.length === 0) return null;
+    return {
+      display: sortedValues.length === 1 ? sortedValues[0] as number : null,
+      values: sortedValues,
+    };
   }
 
-  const minute = parseField(parts[0]);
-  const hour = parseField(parts[1]);
-  const dayOfMonth = parseField(parts[2]);
-  const month = parseField(parts[3]);
-  const dayOfWeek = parseField(parts[4]);
+  const minute = parseField(parts[0] as string, 0, 59);
+  const hour = parseField(parts[1] as string, 0, 23);
+  const dayOfMonth = parseField(parts[2] as string, 1, 31);
+  const month = parseField(parts[3] as string, 1, 12);
+  const dayOfWeek = parseField(parts[4] as string, 0, 6);
 
-  // Validate ranges
-  if (minute !== null && (minute < 0 || minute > 59)) return null;
-  if (hour !== null && (hour < 0 || hour > 23)) return null;
-  if (dayOfMonth !== null && (dayOfMonth < 1 || dayOfMonth > 31)) return null;
-  if (month !== null && (month < 1 || month > 12)) return null;
-  if (dayOfWeek !== null && (dayOfWeek < 0 || dayOfWeek > 6)) return null;
+  if (!minute || !hour || !dayOfMonth || !month || !dayOfWeek) return null;
 
-  return { minute, hour, dayOfMonth, month, dayOfWeek };
+  return {
+    minute: minute.display,
+    hour: hour.display,
+    dayOfMonth: dayOfMonth.display,
+    month: month.display,
+    dayOfWeek: dayOfWeek.display,
+    minuteValues: minute.values,
+    hourValues: hour.values,
+    dayOfMonthValues: dayOfMonth.values,
+    monthValues: month.values,
+    dayOfWeekValues: dayOfWeek.values,
+  };
 }
 
 /**
  * Check whether a Date matches a cron expression.
  */
 export function matchesCron(cron: CronFields, date: Date): boolean {
-  if (cron.minute !== null && date.getMinutes() !== cron.minute) return false;
-  if (cron.hour !== null && date.getHours() !== cron.hour) return false;
-  if (cron.dayOfMonth !== null && date.getDate() !== cron.dayOfMonth) return false;
-  if (cron.month !== null && date.getMonth() + 1 !== cron.month) return false;
-  if (cron.dayOfWeek !== null && date.getDay() !== cron.dayOfWeek) return false;
+  if (!fieldMatches(cron.minuteValues, date.getMinutes())) return false;
+  if (!fieldMatches(cron.hourValues, date.getHours())) return false;
+  if (!fieldMatches(cron.dayOfMonthValues, date.getDate())) return false;
+  if (!fieldMatches(cron.monthValues, date.getMonth() + 1)) return false;
+  if (!fieldMatches(cron.dayOfWeekValues, date.getDay())) return false;
   return true;
+}
+
+function fieldMatches(values: number[] | null, value: number): boolean {
+  return values === null || values.includes(value);
 }
 
 // ── Quiet Hours ──────────────────────────────────────

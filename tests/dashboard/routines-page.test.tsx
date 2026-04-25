@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let searchParamsValue = "name=alpha-project";
@@ -118,5 +118,23 @@ describe("RoutinesPage", () => {
       "/api/brain/watch-config?project=alpha-project",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it("does not navigate while typing in the Frontier Watch project input", async () => {
+    const fetchMock = buildFetchStub();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<RoutinesPage />);
+
+    const projectInput = await screen.findByLabelText("Project slug");
+    replaceMock.mockClear();
+
+    fireEvent.change(projectInput, { target: { value: "beta-project" } });
+
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    fireEvent.blur(projectInput);
+
+    expect(replaceMock).toHaveBeenCalledWith("/dashboard/routines?name=beta-project");
   });
 });
