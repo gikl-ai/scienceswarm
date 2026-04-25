@@ -62,9 +62,17 @@ export interface ChatTaskPhase {
   status: "pending" | "active" | "completed" | "failed";
 }
 
+export type MessageProgressSource = "gateway" | "agent" | "server" | "client";
+export type MessageProgressStatus = "started" | "running" | "complete" | "failed";
+
 export interface MessageProgressEntry {
   kind: "thinking" | "activity";
   text: string;
+  source?: MessageProgressSource;
+  phase?: string;
+  timestampMs?: number;
+  status?: MessageProgressStatus;
+  label?: string;
 }
 
 export interface GeneratedArtifact {
@@ -165,6 +173,7 @@ export interface RuntimeSendOptions {
   selectedHostIds?: string[];
   synthesisHostId?: string;
   dataIncluded?: RuntimeDataIncluded[];
+  rejectOnError?: boolean;
 }
 
 export interface UseUnifiedChat {
@@ -1033,6 +1042,18 @@ const PERSISTABLE_NOISE_PREFIXES = [
   "__FILE_PREVIEW__:",
   "__FILE_STATIC__:",
 ];
+const VALID_PROGRESS_SOURCES = new Set<MessageProgressSource>([
+  "gateway",
+  "agent",
+  "server",
+  "client",
+]);
+const VALID_PROGRESS_STATUSES = new Set<MessageProgressStatus>([
+  "started",
+  "running",
+  "complete",
+  "failed",
+]);
 
 function isLowSignalLifecycleEntryText(text: string): boolean {
   return (
@@ -1078,12 +1099,14 @@ function appendProgressLog(
     const normalizedEntry: MessageProgressEntry = {
       kind: entry.kind,
       text,
+      ...normalizeProgressEntryMeta(entry, text),
     };
     const last = merged.at(-1);
     if (shouldSuppressProgressEntry(last, normalizedEntry)) {
       continue;
     }
     if (last && last.kind === normalizedEntry.kind && last.text === normalizedEntry.text) {
+      merged[merged.length - 1] = mergeProgressEntryMetadata(last, normalizedEntry);
       continue;
     }
     merged.push(normalizedEntry);
@@ -1120,10 +1143,11 @@ function normalizeProgressEntryText(value: string): string {
 }
 
 function buildThinkingProgressEntries(value: string): MessageProgressEntry[] {
-  return splitProgressText(value).map((text) => ({
-    kind: "thinking" as const,
-    text,
-  }));
+  return buildProgressEntries("thinking", splitProgressText(value), {
+    source: "gateway",
+    phase: "thinking",
+    status: "running",
+  });
 }
 
 function buildThinkingProgressDeltaEntries(
@@ -1156,21 +1180,21 @@ function buildThinkingProgressDeltaEntries(
 }
 
 function buildActivityProgressEntries(lines: string[]): MessageProgressEntry[] {
-  return lines
-    .map((line) => normalizeProgressEntryText(line))
-    .filter((line) => line.length > 0)
-    .map((text) => ({
-      kind: "activity" as const,
-      text,
-    }));
+  return buildProgressEntries("activity", lines);
 }
 
 function buildOptionalActivityProgressEntries(
   lines: Array<string | null | undefined>,
+  meta: Partial<Omit<MessageProgressEntry, "kind" | "text">> = {},
 ): MessageProgressEntry[] {
-  return buildActivityProgressEntries(
+  return buildProgressEntries(
+    "activity",
     lines.filter((line): line is string => typeof line === "string" && line.trim().length > 0),
-  );
+    meta,
+  ).map((entry) => ({
+    ...entry,
+    label: entry.label ?? inferProgressEntryLabel(entry.text),
+  }));
 }
 
 function buildOpenClawSendPhaseEntries(
@@ -1181,11 +1205,134 @@ function buildOpenClawSendPhaseEntries(
     return [];
   }
 
-  return buildActivityProgressEntries([
-    phase === "dispatch"
-      ? "Sending request to OpenClaw"
-      : "Waiting for OpenClaw to respond",
-  ]);
+  return buildProgressEntries(
+    "activity",
+    [
+      phase === "dispatch"
+        ? "Sending request to OpenClaw"
+        : "Waiting for OpenClaw to respond",
+    ],
+    {
+      source: "server",
+      phase: phase === "dispatch" ? "send" : "waiting",
+      status: phase === "dispatch" ? "started" : "running",
+    },
+  );
+}
+
+function inferProgressEntryLabel(text: string): string | undefined {
+  const normalized = normalizeProgressEntryText(text);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const directMatch = normalized.match(/^(Read|Search|Write|Edit|Run|List|Plan)\b/i);
+  if (directMatch?.[1]) {
+    return directMatch[1][0].toUpperCase() + directMatch[1].slice(1).toLowerCase();
+  }
+  if (/^Sending request to OpenClaw$/i.test(normalized)) {
+    return "Send";
+  }
+  if (/^Waiting for OpenClaw to respond$/i.test(normalized)) {
+    return "Wait";
+  }
+  if (/^Generate image\b/i.test(normalized)) {
+    return "Generate image";
+  }
+  if (/^Chat failed\b/i.test(normalized)) {
+    return "Failed";
+  }
+  if (/^Chat aborted\b/i.test(normalized)) {
+    return "Aborted";
+  }
+  return undefined;
+}
+
+function normalizeProgressEntryMeta(
+  meta: Partial<Omit<MessageProgressEntry, "kind" | "text">>,
+  text: string,
+): Omit<MessageProgressEntry, "kind" | "text"> {
+  const source =
+    typeof meta.source === "string" && VALID_PROGRESS_SOURCES.has(meta.source)
+      ? meta.source
+      : undefined;
+  const phase =
+    typeof meta.phase === "string" && meta.phase.trim().length > 0
+      ? meta.phase.trim()
+      : undefined;
+  const status =
+    typeof meta.status === "string" && VALID_PROGRESS_STATUSES.has(meta.status)
+      ? meta.status
+      : undefined;
+  const timestampMs =
+    typeof meta.timestampMs === "number"
+    && Number.isFinite(meta.timestampMs)
+    && meta.timestampMs >= 0
+      ? Math.floor(meta.timestampMs)
+      : undefined;
+  const label =
+    typeof meta.label === "string" && meta.label.trim().length > 0
+      ? meta.label.trim()
+      : inferProgressEntryLabel(text);
+
+  return {
+    source,
+    phase,
+    status,
+    timestampMs,
+    label,
+  };
+}
+
+function buildProgressEntries(
+  kind: MessageProgressEntry["kind"],
+  rawLines: string[],
+  meta: Partial<Omit<MessageProgressEntry, "kind" | "text">> = {},
+): MessageProgressEntry[] {
+  const timestampMs = meta.timestampMs ?? Date.now();
+
+  return rawLines
+    .map((line) => normalizeProgressEntryText(line))
+    .filter((line) => line.length > 0)
+    .map((text) => ({
+      kind,
+      text,
+      ...normalizeProgressEntryMeta({ ...meta, timestampMs }, text),
+    }));
+}
+
+function mergeProgressEntryMetadata(
+  existing: MessageProgressEntry,
+  incoming: MessageProgressEntry,
+): MessageProgressEntry {
+  return {
+    ...existing,
+    source: incoming.source ?? existing.source,
+    phase: incoming.phase ?? existing.phase,
+    timestampMs: incoming.timestampMs ?? existing.timestampMs,
+    status: incoming.status ?? existing.status,
+    label: incoming.label ?? existing.label,
+  };
+}
+
+function progressStatusForPhase(
+  phase: string | undefined,
+  fallback: MessageProgressStatus = "running",
+): MessageProgressStatus {
+  const normalized = phase?.trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  if (["start", "started", "begin", "dispatch"].includes(normalized)) {
+    return "started";
+  }
+  if (["result", "done", "end", "complete", "completed"].includes(normalized)) {
+    return "complete";
+  }
+  if (["error", "failed", "abort", "aborted"].includes(normalized)) {
+    return "failed";
+  }
+  return "running";
 }
 
 function isConcreteActionWithPrefix(text: string, prefix: string, generic: string): boolean {
@@ -1482,10 +1629,7 @@ function extractGatewayChatProgressUpdate(
   eventName: string,
   payload: Record<string, unknown>,
 ): OpenClawProgressUpdate {
-  const update: OpenClawProgressUpdate = {
-    activityLines: [],
-    progressEntries: [],
-  };
+  const update = createOpenClawProgressUpdate();
 
   switch (eventName) {
     case "chat.delta": {
@@ -1508,8 +1652,11 @@ function extractGatewayChatProgressUpdate(
     case "chat.abort": {
       const statusLine = formatGatewayChatStatusLine(eventName, payload);
       if (statusLine) {
-        update.activityLines.push(statusLine);
-        update.progressEntries.push(...buildActivityProgressEntries([statusLine]));
+        update.progressEntries.push(...buildProgressEntries("activity", [statusLine], {
+          source: "gateway",
+          phase: "waiting",
+          status: "failed",
+        }));
       }
       break;
     }
@@ -1523,7 +1670,11 @@ function extractGatewayChatProgressUpdate(
       if (sideResultText) {
         const line = `Side result: ${summarizeProgressText(sideResultText)}`;
         update.activityLines.push(line);
-        update.progressEntries.push(...buildActivityProgressEntries([line]));
+        update.progressEntries.push(...buildProgressEntries("activity", [line], {
+          source: "gateway",
+          phase: "waiting",
+          status: "running",
+        }));
       }
       break;
     }
@@ -1538,10 +1689,7 @@ function extractAgentEventProgressUpdate(
   eventName: string,
   payload: Record<string, unknown>,
 ): OpenClawProgressUpdate {
-  const update: OpenClawProgressUpdate = {
-    activityLines: [],
-    progressEntries: [],
-  };
+  const update = createOpenClawProgressUpdate();
   const data = asRecord(payload.data) ?? payload;
 
   if (eventName.startsWith("agent.tool")) {
@@ -1563,12 +1711,20 @@ function extractAgentEventProgressUpdate(
         ? (data.output ?? data.result ?? data.text ?? data.content)
         : (data.args ?? data.arguments ?? data.input ?? data.text ?? data.content);
 
-    update.activityLines.push(formatToolActivityLine(toolPhase, toolName, toolDetail));
-    update.progressEntries.push(
-      ...buildOptionalActivityProgressEntries([
-        formatToolProgressEntry(toolPhase, toolName, toolDetail),
-      ]),
-    );
+    const activityLine = formatToolActivityLine(toolPhase, toolName, toolDetail);
+    const progressEntries = buildOptionalActivityProgressEntries([
+      formatToolProgressEntry(toolPhase, toolName, toolDetail),
+    ], {
+      source: "agent",
+      phase: toolPhase ?? "tool",
+      status: progressStatusForPhase(toolPhase),
+    });
+    update.activityLines.push(activityLine);
+    if (progressEntries.length > 0) {
+      update.progressEntries.push(...progressEntries);
+    } else {
+      update.legacyOnlyActivityLines.push(activityLine);
+    }
     return update;
   }
 
@@ -1597,7 +1753,11 @@ function extractAgentEventProgressUpdate(
       lifecycleDetail,
     );
     if (lifecycleProgressLine) {
-      update.progressEntries.push(...buildActivityProgressEntries([lifecycleProgressLine]));
+      update.progressEntries.push(...buildProgressEntries("activity", [lifecycleProgressLine], {
+        source: "agent",
+        phase: lifecyclePhase ?? "lifecycle",
+        status: progressStatusForPhase(lifecyclePhase),
+      }));
     }
   }
 
@@ -1609,8 +1769,17 @@ type OpenClawProgressUpdate = {
   assistantText?: string;
   assistantTextMode?: "append" | "replace";
   activityLines: string[];
+  legacyOnlyActivityLines: string[];
   progressEntries: MessageProgressEntry[];
 };
+
+function createOpenClawProgressUpdate(): OpenClawProgressUpdate {
+  return {
+    activityLines: [],
+    legacyOnlyActivityLines: [],
+    progressEntries: [],
+  };
+}
 
 function mergeOpenClawProgressUpdate(
   left: OpenClawProgressUpdate,
@@ -1631,6 +1800,10 @@ function mergeOpenClawProgressUpdate(
         ? "replace"
         : left.assistantTextMode,
     activityLines: [...left.activityLines, ...right.activityLines],
+    legacyOnlyActivityLines: [
+      ...left.legacyOnlyActivityLines,
+      ...right.legacyOnlyActivityLines,
+    ],
     progressEntries: [...left.progressEntries, ...right.progressEntries],
   };
 }
@@ -1642,10 +1815,10 @@ function extractSessionMessageProgressUpdate(
   const content = Array.isArray(message?.content) ? message.content : null;
   const messageRole = typeof message?.role === "string" ? message.role.toLowerCase() : "";
   if (!content || messageRole === "user" || messageRole === "system") {
-    return { activityLines: [], progressEntries: [] };
+    return createOpenClawProgressUpdate();
   }
 
-  const update: OpenClawProgressUpdate = { activityLines: [], progressEntries: [] };
+  const update = createOpenClawProgressUpdate();
 
   if (messageRole === "toolresult" || messageRole === "tool_result") {
     const toolName = firstNonEmptyString(message?.toolName, message?.tool_name, message?.name);
@@ -1658,14 +1831,20 @@ function extractSessionMessageProgressUpdate(
     const detail = textParts.length > 0 ? textParts.join("\n") : (message?.details ?? undefined);
 
     if (detail || toolName) {
-      update.activityLines.push(
-        formatToolActivityLine("result", toolName, detail),
-      );
-      update.progressEntries.push(
-        ...buildOptionalActivityProgressEntries([
-          formatToolProgressEntry("result", toolName, detail),
-        ]),
-      );
+      const activityLine = formatToolActivityLine("result", toolName, detail);
+      const progressEntries = buildOptionalActivityProgressEntries([
+        formatToolProgressEntry("result", toolName, detail),
+      ], {
+        source: "agent",
+        phase: "result",
+        status: "complete",
+      });
+      update.activityLines.push(activityLine);
+      if (progressEntries.length > 0) {
+        update.progressEntries.push(...progressEntries);
+      } else {
+        update.legacyOnlyActivityLines.push(activityLine);
+      }
     }
 
     return update;
@@ -1697,18 +1876,24 @@ function extractSessionMessageProgressUpdate(
         /result|output/i.test(type)
           ? (part.output ?? part.result ?? part.content ?? part.text)
           : (part.input ?? part.args ?? part.arguments ?? part.text ?? part.content);
-      update.activityLines.push(
-        formatToolActivityLine(
-          toolPhase,
-          toolName,
-          detail,
-        ),
+      const activityLine = formatToolActivityLine(
+        toolPhase,
+        toolName,
+        detail,
       );
-      update.progressEntries.push(
-        ...buildOptionalActivityProgressEntries([
-          formatToolProgressEntry(toolPhase, toolName, detail),
-        ]),
-      );
+      const progressEntries = buildOptionalActivityProgressEntries([
+        formatToolProgressEntry(toolPhase, toolName, detail),
+      ], {
+        source: "agent",
+        phase: toolPhase ?? "tool",
+        status: progressStatusForPhase(toolPhase),
+      });
+      update.activityLines.push(activityLine);
+      if (progressEntries.length > 0) {
+        update.progressEntries.push(...progressEntries);
+      } else {
+        update.legacyOnlyActivityLines.push(activityLine);
+      }
       continue;
     }
 
@@ -1716,7 +1901,11 @@ function extractSessionMessageProgressUpdate(
     if (genericText) {
       const activityLine = type ? `${type}: ${genericText}` : genericText;
       update.activityLines.push(activityLine);
-      update.progressEntries.push(...buildActivityProgressEntries([activityLine]));
+      update.progressEntries.push(...buildProgressEntries("activity", [activityLine], {
+        source: "gateway",
+        phase: type || "activity",
+        status: "running",
+      }));
     }
   }
 
@@ -1731,13 +1920,10 @@ function extractOpenClawProgressUpdate(progress: {
 }): OpenClawProgressUpdate {
   const payload = asRecord(progress.payload);
   if (!payload) {
-    return { activityLines: [], progressEntries: [] };
+    return createOpenClawProgressUpdate();
   }
 
-  let update: OpenClawProgressUpdate = {
-    activityLines: [],
-    progressEntries: [],
-  };
+  let update = createOpenClawProgressUpdate();
 
   const eventName = normalizeGatewayProgressEventName(progress);
 
@@ -1790,12 +1976,19 @@ function extractOpenClawProgressUpdate(progress: {
       toolName,
       toolDetail,
     );
+    const progressEntries = buildOptionalActivityProgressEntries([
+      formatToolProgressEntry(toolPhase, toolName, toolDetail),
+    ], {
+      source: "agent",
+      phase: toolPhase ?? "tool",
+      status: progressStatusForPhase(toolPhase),
+    });
     update.activityLines.push(activityLine);
-    update.progressEntries.push(
-      ...buildOptionalActivityProgressEntries([
-        formatToolProgressEntry(toolPhase, toolName, toolDetail),
-      ]),
-    );
+    if (progressEntries.length > 0) {
+      update.progressEntries.push(...progressEntries);
+    } else {
+      update.legacyOnlyActivityLines.push(activityLine);
+    }
   } else if (stream === "lifecycle") {
     const lifecyclePhase = firstNonEmptyString(data?.phase, payload.phase);
     const lifecycleDetail = firstNonEmptyTextContent(data?.text, data?.message, payload.text, payload.content);
@@ -1811,7 +2004,11 @@ function extractOpenClawProgressUpdate(progress: {
       lifecycleDetail,
     );
     if (lifecycleProgressLine) {
-      update.progressEntries.push(...buildActivityProgressEntries([lifecycleProgressLine]));
+      update.progressEntries.push(...buildProgressEntries("activity", [lifecycleProgressLine], {
+        source: "agent",
+        phase: lifecyclePhase ?? "lifecycle",
+        status: progressStatusForPhase(lifecyclePhase),
+      }));
     }
   }
 
@@ -1826,7 +2023,11 @@ function extractOpenClawProgressUpdate(progress: {
     payloadNarration
   ) {
     update.activityLines.push(payloadNarration);
-    update.progressEntries.push(...buildActivityProgressEntries([payloadNarration]));
+    update.progressEntries.push(...buildProgressEntries("activity", [payloadNarration], {
+      source: "gateway",
+      phase: stream || "activity",
+      status: "running",
+    }));
   }
 
   return update;
@@ -1852,6 +2053,7 @@ type SendContext = {
   selectedHostIds: string[];
   synthesisHostId: string | null;
   dataIncluded?: RuntimeDataIncluded[];
+  rejectOnError: boolean;
 };
 
 type QueuedSend = {
@@ -1860,6 +2062,7 @@ type QueuedSend = {
   assistantId: string;
   context: SendContext;
   resolve: () => void;
+  reject: (error: unknown) => void;
 };
 
 function buildInitialMessages(projectName: string): Message[] {
@@ -2160,6 +2363,7 @@ function restoreProgressLog(value: unknown): MessageProgressEntry[] | undefined 
       return {
         kind: entry.kind,
         text: normalizeProgressEntryText(text),
+        ...normalizeProgressEntryMeta(entry, text),
       } satisfies MessageProgressEntry;
     })
     .filter((entry): entry is MessageProgressEntry => entry !== null);
@@ -2493,6 +2697,7 @@ function isRuntimeSendOptions(
     || "selectedHostIds" in value
     || "synthesisHostId" in value
     || "dataIncluded" in value
+    || "rejectOnError" in value
     || "activeFile" in value;
 }
 
@@ -3449,8 +3654,11 @@ export function useUnifiedChat(
                             ? progressUpdate.assistantText
                             : mergeStreamingText(m.content, progressUpdate.assistantText)
                           : m.content,
-                        activityLog: progressUpdate.activityLines.length > 0
-                          ? appendActivityLog(m.activityLog, progressUpdate.activityLines)
+                        activityLog: progressUpdate.legacyOnlyActivityLines.length > 0
+                          ? appendActivityLog(
+                            m.activityLog,
+                            progressUpdate.legacyOnlyActivityLines,
+                          )
                           : m.activityLog,
                         progressLog: progressUpdate.progressEntries.length > 0
                           ? appendProgressLog(m.progressLog, progressUpdate.progressEntries)
@@ -3965,10 +4173,6 @@ export function useUnifiedChat(
               message.id === assistantId
                 ? {
                     ...message,
-                    activityLog: appendActivityLog(
-                      message.activityLog,
-                      waitingEntries.map((entry) => entry.text),
-                    ),
                     progressLog: appendProgressLog(message.progressLog, waitingEntries),
                   }
                 : message,
@@ -4225,10 +4429,6 @@ export function useUnifiedChat(
               ? {
                   ...message,
                   content: "",
-                  activityLog: appendActivityLog(
-                    message.activityLog,
-                    dispatchEntries.map((entry) => entry.text),
-                  ),
                   progressLog: appendProgressLog(
                     message.progressLog,
                     dispatchEntries,
@@ -4238,6 +4438,7 @@ export function useUnifiedChat(
           ),
         );
 
+        let sendError: unknown = null;
         try {
           const shouldUseRuntimeApi =
             queued.context.backend !== "openclaw"
@@ -4276,6 +4477,7 @@ export function useUnifiedChat(
             );
           }
         } catch (err) {
+          sendError = err;
           if (err instanceof Error && err.name === "AbortError") {
             // A newer project/backend context superseded this request.
           } else if (isSendContextCurrent(queued.context)) {
@@ -4288,10 +4490,6 @@ export function useUnifiedChat(
                   message.id === queued.assistantId
                     ? {
                         ...message,
-                        activityLog: appendActivityLog(
-                          message.activityLog,
-                          [SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE],
-                        ),
                         progressLog: appendProgressLog(
                           message.progressLog,
                           buildActivityProgressEntries([SLASH_COMMAND_TIMEOUT_ACTIVITY_LINE]),
@@ -4311,7 +4509,11 @@ export function useUnifiedChat(
           if (isSendProjectCurrent(queued.context)) {
             applyMessagesUpdate((prev) => removeEmptyAssistantPlaceholder(prev, queued.assistantId));
           }
-          queued.resolve();
+          if (sendError && queued.context.rejectOnError) {
+            queued.reject(sendError);
+          } else {
+            queued.resolve();
+          }
         }
       }
     } finally {
@@ -4349,6 +4551,9 @@ export function useUnifiedChat(
         const openClawReady = await refreshOpenClawHealth();
         if (!openClawReady) {
           setError(OPENCLAW_UNREACHABLE_ERROR);
+          if (runtimeOptions.rejectOnError === true) {
+            throw new Error(OPENCLAW_UNREACHABLE_ERROR);
+          }
           return;
         }
       }
@@ -4383,6 +4588,7 @@ export function useUnifiedChat(
         selectedHostIds: runtimeOptions.selectedHostIds ?? [],
         synthesisHostId: runtimeOptions.synthesisHostId ?? null,
         dataIncluded: runtimeOptions.dataIncluded,
+        rejectOnError: runtimeOptions.rejectOnError === true,
       };
 
       liveBackendRef.current = requestedBackend;
@@ -4395,12 +4601,13 @@ export function useUnifiedChat(
       applyMessagesUpdate((prev) => [...prev, userMsg, assistantMsg]);
       setError(null);
 
-      const completion = new Promise<void>((resolve) => {
+      const completion = new Promise<void>((resolve, reject) => {
         const queued: QueuedSend = {
           content: requestContent,
           assistantId,
           context,
           resolve,
+          reject,
         };
         if (runtimeOptions.activeFile) {
           queued.activeFile = runtimeOptions.activeFile;

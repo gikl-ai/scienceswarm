@@ -257,6 +257,9 @@ export interface ArtifactImportRequest {
 
 export interface ResearchRuntimeHost {
   profile(): RuntimeHostProfile;
+  runtimeContextDataIncluded?(input: {
+    projectId?: string | null;
+  }): RuntimeDataIncluded[];
   health(): Promise<RuntimeHostHealth>;
   authStatus(): Promise<RuntimeHostAuthStatus>;
   privacyProfile(): Promise<RuntimePrivacyClass | RuntimeHostPrivacyProof>;

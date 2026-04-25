@@ -71,6 +71,7 @@ describe("benchmark-chat-hi", () => {
       conversationId: "bench-1",
       headersMs: 13,
       firstChunkMs: 25,
+      firstChunkSharedHeadersTick: false,
       totalMs: 1234,
       bytes: 321,
       eventCount: 3,
@@ -108,6 +109,29 @@ describe("benchmark-chat-hi", () => {
       progressEventCount: 2,
       finalEventCount: 1,
       finalTextSample: "Hello there.",
+      firstChunkSharedHeadersTick: false,
+    });
+  });
+
+  it("flags when the first stream chunk shares the same rounded timing tick as headers", () => {
+    expect(
+      summarizeChatBenchmarkResponse({
+        status: 200,
+        ok: true,
+        backend: "openclaw",
+        contentType: "text/event-stream; charset=utf-8",
+        conversationId: "bench-shared-tick",
+        rawBody: 'data: {"type":"final","text":"Done."}\n\n',
+        headersMs: 58.2,
+        firstChunkMs: 58.4,
+        totalMs: 120.4,
+        bytes: 64,
+      }),
+    ).toMatchObject({
+      headersMs: 58,
+      firstChunkMs: 58,
+      firstChunkSharedHeadersTick: true,
+      finalTextSample: "Done.",
     });
   });
 
@@ -212,6 +236,7 @@ describe("benchmark-chat-hi", () => {
       conversationId: "bench-fixed",
       headersMs: 5,
       firstChunkMs: 10,
+      firstChunkSharedHeadersTick: false,
       totalMs: 100,
       bytes: 200,
       eventCount: 3,
@@ -239,6 +264,7 @@ describe("benchmark-chat-hi", () => {
       },
     });
     expect(formattedWithTiming).toContain("Total: 100 ms");
+    expect(formattedWithTiming).toContain("Shared timing tick: no");
     expect(formattedWithTiming).toContain(
       "Timing phases: project_materialization skipped, chat_readiness 7 ms (inferred)",
     );
@@ -261,6 +287,7 @@ describe("benchmark-chat-hi", () => {
         conversationId: "bench-fixed",
         headersMs: 5,
         firstChunkMs: 10,
+        firstChunkSharedHeadersTick: false,
         totalMs: 100,
         bytes: 200,
         eventCount: 3,
@@ -279,8 +306,27 @@ describe("benchmark-chat-hi", () => {
         },
       }),
     ).toContain(
-      "Timing phases: none\nPrompt chars: none\nPrompt highlights: none",
+      "Timing phases: none\nSkipped phases: none\nPrompt chars: none\nPrompt highlights: none",
     );
+    expect(
+      formatBenchmarkSummary({
+        status: 200,
+        ok: true,
+        backend: "openclaw",
+        contentType: "text/event-stream",
+        conversationId: "bench-fixed",
+        headersMs: 58,
+        firstChunkMs: 58,
+        firstChunkSharedHeadersTick: true,
+        totalMs: 100,
+        bytes: 200,
+        eventCount: 3,
+        progressEventCount: 1,
+        finalEventCount: 1,
+        finalTextSample: "Hello.",
+        timingArtifact: null,
+      }),
+    ).toContain("Shared timing tick: yes");
     expect(
       formatBenchmarkSummary({
         status: 200,
@@ -290,6 +336,7 @@ describe("benchmark-chat-hi", () => {
         conversationId: "bench-fixed",
         headersMs: 5,
         firstChunkMs: 10,
+        firstChunkSharedHeadersTick: false,
         totalMs: 100,
         bytes: 200,
         eventCount: 3,

@@ -60,6 +60,7 @@ function createRuntimeStreamResponse(events: unknown[]): Response {
 function createDeferredSseResponse(): {
   response: Response;
   send: (event: unknown) => void;
+  error: (error: unknown) => void;
   close: () => void;
 } {
   const encoder = new TextEncoder();
@@ -78,6 +79,9 @@ function createDeferredSseResponse(): {
     }),
     send(event: unknown) {
       controllerRef?.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+    },
+    error(error: unknown) {
+      controllerRef?.error(error);
     },
     close() {
       controllerRef?.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -321,19 +325,29 @@ describe("Project dashboard smoke test", () => {
     expect(column).toHaveClass("gap-6");
   });
 
-  it("renders the refreshed composer surface with guidance and runtime context", async () => {
+  it("renders a compact composer surface without guidance copy or status pills", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ProjectPage />);
 
     const composer = await screen.findByTestId("project-chat-composer");
-    expect(within(composer).getByText("Project Chat")).toBeInTheDocument();
+    const input = within(composer).getByLabelText("Chat with your project");
+
+    expect(input).toHaveAttribute("placeholder", "");
+    expect(input).toHaveClass("py-2");
+    expect(input).toHaveClass("pl-2");
+    expect(input).toHaveClass("pr-12");
+    expect(input).not.toHaveClass("px-0");
+    expect(input).not.toHaveClass("py-1");
+    expect(within(composer).queryByText("Project Chat")).not.toBeInTheDocument();
     expect(
-      within(composer).getByText("Enter to send. Shift+Enter for a new line."),
-    ).toBeInTheDocument();
-    expect(within(composer).getByText(/Drop files, type/i)).toBeInTheDocument();
-    expect(within(composer).getByText("Chat mode")).toBeInTheDocument();
+      within(composer).queryByText("Enter to send. Shift+Enter for a new line."),
+    ).not.toBeInTheDocument();
+    expect(within(composer).queryByText(/Drop files, type/i)).not.toBeInTheDocument();
+    expect(within(composer).queryByText("Chat mode")).not.toBeInTheDocument();
+    expect(within(composer).queryByText("Local only")).not.toBeInTheDocument();
+    expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
   });
 
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
@@ -1164,6 +1178,7 @@ describe("Project dashboard smoke test", () => {
     const runtimePreviewBodies: Record<string, unknown>[] = [];
     const runtimeSessionBodies: Record<string, unknown>[] = [];
     const runtimeStream = createDeferredSseResponse();
+    let directCodexAttempts = 0;
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -1367,7 +1382,25 @@ describe("Project dashboard smoke test", () => {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
         runtimeSessionBodies.push(body);
         if (body.prompt === "Talk to Codex directly") {
-          return runtimeStream.response;
+          directCodexAttempts += 1;
+          if (directCodexAttempts === 1) {
+            return runtimeStream.response;
+          }
+          return createRuntimeStreamResponse([
+            {
+              event: {
+                type: "message",
+                payload: { text: "Codex direct answer" },
+              },
+            },
+            {
+              session: {
+                id: "runtime-session-codex-retry",
+                conversationId: "codex-native-session",
+                status: "completed",
+              },
+            },
+          ]);
         }
         return createRuntimeStreamResponse([
           {
@@ -1454,37 +1487,18 @@ describe("Project dashboard smoke test", () => {
       })).not.toBeInTheDocument();
     });
     expect(screen.queryByText("Codex direct answer")).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(
+      "scienceswarm.runtimePreview.chatAcknowledged.v1:demo-project:cloud-ok:chat:hosted:codex:hosted",
+    )).toBe("true");
 
     act(() => {
-      runtimeStream.send({
-        event: {
-          type: "message",
-          payload: { text: "Codex direct answer" },
-        },
-      });
-      runtimeStream.send({
-        session: {
-          id: "runtime-session-codex",
-          conversationId: "codex-native-session",
-          status: "completed",
-        },
-      });
-      runtimeStream.close();
+      runtimeStream.error(new Error("Codex transport crashed"));
     });
 
-    expect(await screen.findByText("Codex direct answer")).toBeInTheDocument();
-    expect(input).toHaveValue("");
-    expect(runtimeSessionBodies).toEqual([
-      expect.objectContaining({
-        hostId: "codex",
-        mode: "chat",
-        projectId: "demo-project",
-        projectPolicy: "cloud-ok",
-        approvalState: "approved",
-        prompt: "Talk to Codex directly",
-      }),
-    ]);
-    fireEvent.change(input, { target: { value: "Follow up without interruption" } });
+    await waitFor(() => {
+      expect(input).toHaveValue("Talk to Codex directly");
+    });
+
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => {
@@ -1494,7 +1508,29 @@ describe("Project dashboard smoke test", () => {
     expect(screen.queryByRole("dialog", {
       name: "Reminder: your data will be sent to a third party",
     })).not.toBeInTheDocument();
-    expect(runtimeSessionBodies[1]).toEqual(expect.objectContaining({
+    expect(await screen.findByText("Codex direct answer")).toBeInTheDocument();
+    expect(input).toHaveValue("");
+    expect(runtimeSessionBodies).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        hostId: "codex",
+        mode: "chat",
+        projectId: "demo-project",
+        projectPolicy: "cloud-ok",
+        approvalState: "approved",
+        prompt: "Talk to Codex directly",
+      }),
+    ]));
+    fireEvent.change(input, { target: { value: "Follow up without interruption" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(runtimePreviewBodies).toHaveLength(3);
+      expect(runtimeSessionBodies).toHaveLength(3);
+    });
+    expect(screen.queryByRole("dialog", {
+      name: "Reminder: your data will be sent to a third party",
+    })).not.toBeInTheDocument();
+    expect(runtimeSessionBodies[2]).toEqual(expect.objectContaining({
       approvalState: "approved",
       prompt: "Follow up without interruption",
     }));

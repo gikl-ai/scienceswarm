@@ -94,7 +94,7 @@ import {
   semanticScholarSearch,
 } from "@/lib/skills/db-semantic-scholar";
 import { uniprotFetch, uniprotSearch } from "@/lib/skills/db-uniprot";
-import { getBrainStore } from "./store";
+import { getBrainStore, type BrainPage } from "./store";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 import { registerRuntimeMcpTools } from "@/lib/runtime-hosts/mcp/server";
 
@@ -183,7 +183,8 @@ export async function handleBrainRead(
   config: BrainConfig,
   params: { path: string }
 ): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
-  if (!params.path || params.path.trim() === "") {
+  const requestedPath = params.path?.trim() ?? "";
+  if (!requestedPath) {
     return {
       content: [{ type: "text", text: "Error: path is required and cannot be empty." }],
       isError: true,
@@ -192,7 +193,7 @@ export async function handleBrainRead(
 
   // Path traversal protection: resolve and verify within brain root
   const resolvedRoot = resolve(config.root);
-  const resolvedPath = resolve(resolvedRoot, params.path);
+  const resolvedPath = resolve(resolvedRoot, requestedPath);
 
   if (!resolvedPath.startsWith(resolvedRoot + "/") && resolvedPath !== resolvedRoot) {
     return {
@@ -201,24 +202,61 @@ export async function handleBrainRead(
     };
   }
 
-  if (!existsSync(resolvedPath)) {
+  if (existsSync(resolvedPath)) {
+    if (!statSync(resolvedPath).isFile()) {
+      return {
+        content: [{ type: "text", text: `Error: path is a directory, not a file: ${requestedPath}` }],
+        isError: true,
+      };
+    }
+
+    const fileContent = await readBrainFile(resolvedPath);
     return {
-      content: [{ type: "text", text: `Error: file not found: ${params.path}` }],
-      isError: true,
+      content: [{ type: "text", text: fileContent }],
     };
   }
 
-  if (!statSync(resolvedPath).isFile()) {
+  const storeRead = await readGbrainPageForMcp(config, requestedPath);
+  if (storeRead.page) {
     return {
-      content: [{ type: "text", text: `Error: path is a directory, not a file: ${params.path}` }],
-      isError: true,
+      content: [{ type: "text", text: formatBrainPageForMcpRead(storeRead.page) }],
     };
   }
 
-  const fileContent = await readBrainFile(resolvedPath);
+  const lookupHint = storeRead.error
+    ? ` gbrain lookup also failed: ${storeRead.error}`
+    : " Use gbrain_search first and pass the returned path exactly, such as wiki/entities/papers/example.md or example.md.";
   return {
-    content: [{ type: "text", text: fileContent }],
+    content: [{ type: "text", text: `Error: file not found and gbrain page not found: ${requestedPath}.${lookupHint}` }],
+    isError: true,
   };
+}
+
+async function readGbrainPageForMcp(
+  config: BrainConfig,
+  requestedPath: string,
+): Promise<{ page: BrainPage | null; error: string | null }> {
+  try {
+    const page = await getBrainStore({ root: resolve(config.root) }).getPage(requestedPath);
+    return { page, error: null };
+  } catch (error) {
+    return {
+      page: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function formatBrainPageForMcpRead(page: BrainPage): string {
+  const frontmatter = {
+    ...page.frontmatter,
+    type: page.frontmatter.type ?? page.type,
+    title: page.frontmatter.title ?? page.title,
+  };
+  return [
+    `<!-- gbrain page: ${page.path} -->`,
+    matter.stringify(page.content, frontmatter).trim(),
+  ].join("\n");
 }
 
 export async function handleBrainStatus(

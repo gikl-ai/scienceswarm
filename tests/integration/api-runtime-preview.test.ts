@@ -10,6 +10,7 @@ import type {
   RuntimeHostProfile,
   RuntimeTurnRequest,
 } from "@/lib/runtime-hosts/contracts";
+import { claudeCodeRuntimeContextDataIncluded } from "@/lib/runtime-hosts/adapters/claude-code-context";
 import { requireRuntimeHostProfile } from "@/lib/runtime-hosts/registry";
 
 function request(body: unknown): Request {
@@ -22,6 +23,12 @@ function request(body: unknown): Request {
 function adapter(profile: RuntimeHostProfile): ResearchRuntimeHost {
   return {
     profile: () => profile,
+    runtimeContextDataIncluded: profile.id === "claude-code"
+      ? (input) => claudeCodeRuntimeContextDataIncluded({
+          ...input,
+          includeRuntimeMcp: true,
+        })
+      : undefined,
     health: async () => ({ status: "ready", checkedAt: "2026-04-22T12:00:00Z" }),
     authStatus: async () => ({
       status: "authenticated",
@@ -56,6 +63,7 @@ beforeEach(() => {
   __setRuntimeApiServicesForTests({
     adapters: [
       adapter(requireRuntimeHostProfile("openclaw")),
+      adapter(requireRuntimeHostProfile("claude-code")),
       adapter(requireRuntimeHostProfile("codex")),
     ],
   });
@@ -107,5 +115,64 @@ describe("POST /api/runtime/preview", () => {
       kind: "prompt",
       label: "User prompt",
     });
+  });
+
+  it("discloses generated ScienceSwarm and scoped gbrain context for Claude Code", async () => {
+    const response = await POST(request({
+      hostId: "claude-code",
+      projectId: "project-alpha",
+      projectPolicy: "cloud-ok",
+      mode: "chat",
+      prompt: "What should we do next?",
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.preview.dataIncluded).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "workspace-file",
+        label: "ScienceSwarm runtime guidance (SCIENCESWARM.md)",
+      }),
+      expect.objectContaining({
+        kind: "gbrain-excerpt",
+        label: "Compact gbrain project brief",
+      }),
+      expect.objectContaining({
+        kind: "mcp-tool-call",
+        label: "Scoped gbrain MCP tools",
+      }),
+    ]));
+  });
+
+  it("does not disclose scoped gbrain tools when the Claude adapter disables runtime MCP", async () => {
+    const claude = adapter(requireRuntimeHostProfile("claude-code"));
+    claude.runtimeContextDataIncluded = (input) =>
+      claudeCodeRuntimeContextDataIncluded({
+        ...input,
+        includeRuntimeMcp: false,
+      });
+    __setRuntimeApiServicesForTests({
+      adapters: [
+        adapter(requireRuntimeHostProfile("openclaw")),
+        claude,
+        adapter(requireRuntimeHostProfile("codex")),
+      ],
+    });
+
+    const response = await POST(request({
+      hostId: "claude-code",
+      projectId: "project-alpha",
+      projectPolicy: "cloud-ok",
+      mode: "chat",
+      prompt: "What should we do next?",
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.preview.dataIncluded).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        label: "Scoped gbrain MCP tools",
+      }),
+    ]));
   });
 });

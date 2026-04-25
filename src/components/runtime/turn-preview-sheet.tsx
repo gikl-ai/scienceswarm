@@ -14,9 +14,8 @@ function accountSourceLabel(source: TurnPreview["accountDisclosure"]["accountSou
   }
 }
 
-function destinationLabel(preview: TurnPreview): string {
-  return preview.destinations.map((destination) => destination.label).join(", ")
-    || "the selected third party";
+function destinationLabel(preview: TurnPreview): string | null {
+  return preview.destinations.map((destination) => destination.label).join(", ") || null;
 }
 
 function privacyReminderCopy(preview: TurnPreview): string | null {
@@ -27,6 +26,12 @@ function privacyReminderCopy(preview: TurnPreview): string | null {
   }
 
   const destination = destinationLabel(preview);
+  if (!destination) {
+    return [
+      "Your prompt and the data listed below will be sent to a third party.",
+      "ScienceSwarm will remember this choice for future chat turns to this destination.",
+    ].join(" ");
+  }
   return [
     `Your prompt and the data listed below will be sent to ${destination}, a third party.`,
     `ScienceSwarm will remember this choice for future chat turns to ${destination}.`,

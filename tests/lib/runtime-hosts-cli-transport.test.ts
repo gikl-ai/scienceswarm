@@ -166,6 +166,24 @@ describe("runtime host CLI transport", () => {
     });
   });
 
+  it("surfaces Claude Code gbrain MCP failures with actionable detail", async () => {
+    const transport = new LocalCliTransport();
+
+    await expect(
+      transport.run({
+        hostId: "claude-code",
+        command: process.execPath,
+        args: [
+          "-e",
+          "process.stderr.write('Runtime MCP access token is required.'); process.exit(1)",
+        ],
+        timeoutMs: 2_000,
+      }),
+    ).rejects.toMatchObject({
+      userMessage: expect.stringContaining("scoped gbrain tools"),
+    });
+  });
+
   it("maps signal-terminated subprocesses to transport errors", async () => {
     const transport = new LocalCliTransport();
 

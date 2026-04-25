@@ -87,17 +87,6 @@ function summaryLabel(input: {
   return `${MODE_LABELS[input.mode]} · ${input.host?.profile.label ?? "Destination"}`;
 }
 
-function triggerSubtitle(input: {
-  mode: RuntimeComposerMode;
-  projectPolicy: RuntimeProjectPolicy;
-  compareHostIds: string[];
-}): string {
-  if (input.mode === "compare") {
-    return `Compare ${Math.max(1, input.compareHostIds.length)} destinations · ${POLICY_LABELS[input.projectPolicy]}`;
-  }
-  return `${MODE_LABELS[input.mode]} mode · ${POLICY_LABELS[input.projectPolicy]}`;
-}
-
 function statusTone(reason: string | null): "ok" | "warn" | "neutral" {
   if (!reason) return "ok";
   return policyBlockedReason(reason) ? "neutral" : "warn";
@@ -138,7 +127,6 @@ export function ComposerRuntimeSwitcher({
     ? runtimeHostDisabledReason({ host: selectedHost, policy: projectPolicy, mode })
     : "Destination unavailable";
   const currentSummary = summaryLabel({ host: selectedHost, mode, compareHostIds });
-  const triggerCopy = triggerSubtitle({ mode, projectPolicy, compareHostIds });
   const visibleHosts = useMemo(
     () =>
       [...hosts].sort((left, right) => {
@@ -203,9 +191,6 @@ export function ComposerRuntimeSwitcher({
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-strong">
             {selectedHost?.profile.label ?? "Destination"}
-          </span>
-          <span className="block truncate text-[11px] font-medium text-dim">
-            {triggerCopy}
           </span>
         </span>
         <CaretDown size={13} className="flex-shrink-0 text-muted" />

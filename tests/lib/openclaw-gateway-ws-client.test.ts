@@ -140,6 +140,12 @@ async function waitUntil(predicate: () => boolean, timeoutMs = 500): Promise<voi
   throw new Error("Timed out waiting for condition");
 }
 
+async function flushMicrotasks(count = 8): Promise<void> {
+  for (let index = 0; index < count; index += 1) {
+    await Promise.resolve();
+  }
+}
+
 describe("gateway-ws-client", () => {
   let tempRoot = "";
 
@@ -158,6 +164,7 @@ describe("gateway-ws-client", () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     try {
       const { closeGatewayConnection } = await import("@/lib/openclaw/gateway-ws-client");
       closeGatewayConnection();
@@ -460,6 +467,73 @@ describe("gateway-ws-client", () => {
     );
   });
 
+  it("refreshes the chat.send timeout while matched progress events keep arriving", async () => {
+    vi.useFakeTimers();
+    const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const turn = sendChatViaGateway("session-alpha", "hello", {
+      timeoutMs: 1_000,
+      idempotencyKey: "run-alpha",
+    });
+
+    await flushMicrotasks();
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+    expect(socket?.sentFrames.some((frame) => frame.method === "chat.send")).toBe(true);
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          sessionKey: "agent:main:session-alpha",
+          runId: "run-alpha",
+          stream: "tool",
+          data: { phase: "start", name: "read" },
+        },
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(900);
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          sessionKey: "agent:main:session-alpha",
+          runId: "run-alpha",
+          stream: "tool",
+          data: { phase: "update", name: "read" },
+        },
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(900);
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionKey: "agent:main:session-alpha",
+          runId: "run-alpha",
+          state: "final",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "done" }],
+          },
+        },
+      }),
+    );
+
+    await expect(turn).resolves.toMatchObject({ text: "done" });
+  });
+
   it("ignores run-scoped chat.send events without the active run id", async () => {
     const { sendChatViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
     const onEvent = vi.fn();
@@ -679,6 +753,66 @@ describe("gateway-ws-client", () => {
         },
       }),
     );
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          key: "agent:main:session-alpha",
+          stream: "lifecycle",
+          data: { phase: "end" },
+        },
+      }),
+    );
+
+    await expect(turn).resolves.toMatchObject({ text: "legacy reply" });
+  });
+
+  it("refreshes the sessions.send timeout while matched progress events keep arriving", async () => {
+    vi.useFakeTimers();
+    const { sendMessageViaGateway } = await import("@/lib/openclaw/gateway-ws-client");
+
+    const turn = sendMessageViaGateway("session-alpha", "hello", {
+      timeoutMs: 1_000,
+    });
+
+    await flushMicrotasks(16);
+
+    const socket = mockWebSockets.instances.at(-1);
+    expect(socket).toBeTruthy();
+    expect(socket?.sentFrames.some((frame) => frame.method === "sessions.send")).toBe(true);
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          key: "agent:main:session-alpha",
+          stream: "tool",
+          data: { phase: "start", name: "read" },
+        },
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(900);
+
+    socket?.emit(
+      "message",
+      JSON.stringify({
+        type: "event",
+        event: "agent",
+        payload: {
+          key: "agent:main:session-alpha",
+          stream: "assistant",
+          data: { text: "legacy reply" },
+        },
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(900);
+
     socket?.emit(
       "message",
       JSON.stringify({

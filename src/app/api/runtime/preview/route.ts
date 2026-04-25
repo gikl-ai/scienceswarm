@@ -2,7 +2,7 @@ import {
   assertPreviewAllowed,
   assertRuntimeApiLocalRequest,
   computeRuntimeApiPreview,
-  dataIncludedFromBody,
+  dataIncludedFromBodyWithRuntimeContext,
   getRuntimeApiServices,
   optionalSafeProjectId,
   parseJsonObject,
@@ -35,7 +35,13 @@ export async function POST(request: Request): Promise<Response> {
       hostId,
       projectPolicy: projectPolicyFromBody(body),
       mode,
-      dataIncluded: dataIncludedFromBody(body),
+      dataIncluded: dataIncludedFromBodyWithRuntimeContext({
+        services,
+        body,
+        projectId,
+        hostId,
+        selectedHostIds,
+      }),
       selectedHostIds,
     });
 

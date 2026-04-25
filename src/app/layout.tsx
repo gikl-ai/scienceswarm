@@ -35,9 +35,9 @@ const themeInitScript = `
 (function(){
   try {
     var stored = localStorage.getItem('scienceswarm.theme');
-    var theme = stored === 'light' || stored === 'dark'
-      ? stored
-      : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    // ScienceSwarm design system v1 is dark-first. Light is opt-in
+    // via Settings > Appearance, not inferred from OS preference.
+    var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
     document.documentElement.setAttribute('data-theme', theme);
   } catch (e) {
     document.documentElement.setAttribute('data-theme', 'dark');

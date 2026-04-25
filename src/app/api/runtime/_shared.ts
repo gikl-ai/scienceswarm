@@ -370,6 +370,33 @@ export function dataIncludedFromBody(
     : [];
 }
 
+export function dataIncludedFromBodyWithRuntimeContext(input: {
+  services?: RuntimeApiServices;
+  body: Record<string, unknown>;
+  projectId?: string | null;
+  hostId?: string | null;
+  selectedHostIds?: readonly string[];
+}): RuntimeDataIncluded[] {
+  const dataIncluded = dataIncludedFromBody(input.body);
+  const services = input.services ?? getRuntimeApiServices();
+  const runtimeHostIds = new Set<string>();
+  if (input.hostId) runtimeHostIds.add(input.hostId);
+  for (const hostId of input.selectedHostIds ?? []) {
+    runtimeHostIds.add(hostId);
+  }
+  const existingLabels = new Set(dataIncluded.map((item) => item.label));
+  const contextData = Array.from(runtimeHostIds).flatMap((hostId) =>
+    runtimeAdapterForApi(hostId, services)
+      ?.runtimeContextDataIncluded?.({ projectId: input.projectId }) ?? []
+  ).filter((item) => {
+    if (existingLabels.has(item.label)) return false;
+    existingLabels.add(item.label);
+    return true;
+  });
+
+  return [...dataIncluded, ...contextData];
+}
+
 export function adapterMapForServices(
   services: RuntimeApiServices = getRuntimeApiServices(),
 ): Map<string, ResearchRuntimeHost> {

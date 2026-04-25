@@ -67,6 +67,7 @@ export interface VerifyRuntimeMcpAccessTokenInput {
   toolName?: RuntimeMcpToolName;
   now?: () => Date;
   secret?: string;
+  trustedToken?: string;
 }
 
 const DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS = 5 * 60 * 1000;
@@ -97,6 +98,16 @@ function signPayload(encodedPayload: string, secret?: string): string {
 function safeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left, "base64url");
   const rightBuffer = Buffer.from(right, "base64url");
+  if (leftBuffer.length !== rightBuffer.length) {
+    timingSafeEqual(rightBuffer, rightBuffer);
+    return false;
+  }
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function safeStringEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left, "utf8");
+  const rightBuffer = Buffer.from(right, "utf8");
   if (leftBuffer.length !== rightBuffer.length) {
     timingSafeEqual(rightBuffer, rightBuffer);
     return false;
@@ -193,9 +204,14 @@ export function verifyRuntimeMcpAccessToken(
     return reject("malformed-token", "Runtime MCP access token is malformed.");
   }
 
-  const expectedSignature = signPayload(encodedPayload, input.secret);
-  if (!safeEqual(signature, expectedSignature)) {
-    return reject("invalid-signature", "Runtime MCP access token signature is invalid.");
+  const trustedToken = input.trustedToken?.trim();
+  const tokenIsTrustedEnvValue = trustedToken !== undefined
+    && safeStringEqual(token, trustedToken);
+  if (!tokenIsTrustedEnvValue) {
+    const expectedSignature = signPayload(encodedPayload, input.secret);
+    if (!safeEqual(signature, expectedSignature)) {
+      return reject("invalid-signature", "Runtime MCP access token signature is invalid.");
+    }
   }
 
   let claims: RuntimeMcpAccessTokenClaims | null = null;

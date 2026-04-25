@@ -246,14 +246,6 @@ const COMPOSER_HEIGHT_OPTIONS = [
   { px: 192, className: "h-48" },
 ] as const;
 const COMPOSER_DEFAULT_HEIGHT_INDEX = 1;
-const CHAT_PLACEHOLDER_PROMPTS = [
-  "Summarize the latest paper I uploaded",
-  "What's the status of my experiments?",
-  "What's still open from last week?",
-  "Show me unfinished tasks",
-  "Run the failing test and tell me why",
-] as const;
-const CHAT_PLACEHOLDER_ROTATE_MS = 4000;
 const PROJECT_TREE_VISIBILITY_STORAGE_KEY =
   "scienceswarm:project-tree-visibility";
 type ProjectTreeVisibilityMode = "auto" | "open" | "closed";
@@ -1498,12 +1490,10 @@ function ProjectPageContent() {
   const [slashCommands, setSlashCommands] = useState<SlashCommandOption[]>(
     DEFAULT_CHAT_SLASH_COMMANDS,
   );
-  const [chatInputFocused, setChatInputFocused] = useState(false);
   const [chatInputDragOver, setChatInputDragOver] = useState(false);
   const [composerHeightIndex, setComposerHeightIndex] = useState(
     COMPOSER_DEFAULT_HEIGHT_INDEX,
   );
-  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const composerHeightOption = getComposerHeightOption(composerHeightIndex);
   const [projectTreeVisibilityMode, setProjectTreeVisibilityMode] =
     useState<ProjectTreeVisibilityMode>("auto");
@@ -1769,23 +1759,6 @@ function ProjectPageContent() {
     useState<PendingRuntimeSend | null>(null);
   const [runtimePreviewBusy, setRuntimePreviewBusy] = useState(false);
   const [runtimePreviewError, setRuntimePreviewError] = useState<string | null>(null);
-  const selectedComposerRuntimeHost = useMemo(
-    () =>
-      runtimeHosts.hosts.find((host) => host.profile.id === selectedRuntimeHostId)
-      ?? null,
-    [runtimeHosts.hosts, selectedRuntimeHostId],
-  );
-  const composerModeCopy = useMemo(() => {
-    if (runtimeMode === "compare") {
-      return `Compare ${Math.max(1, compareHostIds.length)} hosts`;
-    }
-    return runtimeMode === "task" ? "Task mode" : "Chat mode";
-  }, [compareHostIds.length, runtimeMode]);
-  const composerPolicyCopy = useMemo(() => {
-    if (runtimeProjectPolicy === "execution-ok") return "Execution ok";
-    if (runtimeProjectPolicy === "cloud-ok") return "Cloud ok";
-    return "Local only";
-  }, [runtimeProjectPolicy]);
   useEffect(() => {
     if (runtimeMode !== "compare") {
       clearRuntimeCompareResult();
@@ -3809,7 +3782,7 @@ function ProjectPageContent() {
         setInput("");
       }
       try {
-        await sendMessage(prompt, options);
+        await sendMessage(prompt, { ...options, rejectOnError: true });
       } catch (error) {
         if (clearInputAfterSend) {
           setInput((current) => (current.length === 0 ? prompt : current));
@@ -3921,14 +3894,14 @@ function ProjectPageContent() {
     setRuntimePreviewBusy(true);
     setRuntimePreviewError(null);
     setPendingRuntimeSend(null);
+    if (shouldRememberRuntimePreview(pendingSend.preview)) {
+      rememberRuntimePreviewAcknowledgement({
+        projectId: activeProjectSlug,
+        preview: pendingSend.preview,
+      });
+    }
     try {
       await sendRuntimePrompt(pendingSend.prompt, pendingSend.options);
-      if (shouldRememberRuntimePreview(pendingSend.preview)) {
-        rememberRuntimePreviewAcknowledgement({
-          projectId: activeProjectSlug,
-          preview: pendingSend.preview,
-        });
-      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Send failed.";
       setError(message);
@@ -4061,15 +4034,6 @@ function ProjectPageContent() {
     };
   }, []);
 
-  // Rotate chat placeholder every ~4s when input is empty + unfocused.
-  useEffect(() => {
-    if (chatInputFocused || input.length > 0) return;
-    const id = setInterval(() => {
-      setPlaceholderIndex((i) => (i + 1) % CHAT_PLACEHOLDER_PROMPTS.length);
-    }, CHAT_PLACEHOLDER_ROTATE_MS);
-    return () => clearInterval(id);
-  }, [chatInputFocused, input]);
-
   // ── Feature 4: Quick Chart Command Detection ──
   const handleSendWithChartDetection = useCallback(
     (text: string) => {
@@ -4098,7 +4062,9 @@ function ProjectPageContent() {
       // The preview pane is part of the visible scientist workflow. If a user
       // opens a report item and asks "what next?", attach that current view as
       // active-file context without requiring a separate context-chip action.
-      void prepareRuntimePreviewAndSend(trimmed, activePreviewFile ?? undefined);
+      void prepareRuntimePreviewAndSend(trimmed, activePreviewFile ?? undefined).catch((err) => {
+        setError(err instanceof Error ? err.message : "Send failed.");
+      });
     },
     [
       activePreviewFile,
@@ -4109,6 +4075,7 @@ function ProjectPageContent() {
       isChatBusy,
       prepareRuntimePreviewAndSend,
       recordPromptHistory,
+      setError,
     ],
   );
 
@@ -4960,38 +4927,12 @@ function ProjectPageContent() {
                   <div className="mx-auto w-full max-w-[60rem]">
                     <div
                       data-testid="project-chat-composer"
-                      className={`rounded-[28px] border bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)] transition-colors ${
+                      className={`rounded-[28px] border bg-white shadow-[0_12px_36px_rgba(15,23,42,0.07)] transition-colors ${
                         chatInputDragOver
                           ? "border-accent ring-4 ring-accent/10"
                           : "border-rule focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
                       }`}
                     >
-                      <div className="flex flex-col gap-3 border-b border-rule/80 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                            Project Chat
-                          </p>
-                          <p className="mt-1 text-sm font-medium text-foreground">
-                            Ask about the project, run a task, or compare runtimes without leaving the thread.
-                          </p>
-                          <p className="mt-1 text-xs text-muted">
-                            Enter to send. Shift+Enter for a new line.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
-                          {activeProjectSlug && (
-                            <span className="inline-flex items-center rounded-full border border-rule bg-sunk px-3 py-1 text-body">
-                              {activeProjectSlug}
-                            </span>
-                          )}
-                          <span className="inline-flex items-center rounded-full border border-rule bg-sunk px-3 py-1 text-body">
-                            {composerModeCopy}
-                          </span>
-                          <span className="inline-flex items-center rounded-full border border-rule bg-sunk px-3 py-1 text-body">
-                            {composerPolicyCopy}
-                          </span>
-                        </div>
-                      </div>
                       {chatContextItems.length > 0 && (
                         <div className="flex items-center justify-between gap-3 border-b border-rule/80 px-4 py-3 text-xs">
                           <div className="flex min-w-0 items-center gap-2">
@@ -5042,8 +4983,6 @@ function ProjectPageContent() {
                             value={input}
                             onValueChange={handleChatInputChange}
                             onKeyDown={handleChatInputKeyDown}
-                            onFocus={() => setChatInputFocused(true)}
-                            onBlur={() => setChatInputFocused(false)}
                             onDragEnter={(e) => {
                               if (isChatBusy) return;
                               if (!e.dataTransfer.types.includes("Files")) return;
@@ -5085,14 +5024,10 @@ function ProjectPageContent() {
                             slashCommandsLoading={slashCommandsStatus === "loading"}
                             onMentionSelect={handleMentionSelect}
                             data-testid="chat-input"
-                            placeholder={
-                              isChatBusy
-                                ? "Processing..."
-                                : CHAT_PLACEHOLDER_PROMPTS[placeholderIndex]
-                            }
+                            placeholder={isChatBusy ? "Processing..." : ""}
                             disabled={isChatBusy}
                             rows={2}
-                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[22px] border-0 bg-transparent px-0 py-1 pr-10 text-[15px] leading-6 text-strong placeholder:text-quiet focus:outline-none focus:ring-0 disabled:opacity-50`}
+                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[22px] border-0 bg-transparent py-2 pl-2 pr-12 text-[15px] leading-6 text-strong placeholder:text-quiet focus:outline-none focus:ring-0 disabled:opacity-50`}
                           />
                           <button
                             type="button"
@@ -5140,12 +5075,6 @@ function ProjectPageContent() {
                               }}
                             />
                           )}
-                          <div className="min-w-0 text-[11px] leading-5 text-muted">
-                            <span className="font-semibold text-body">
-                              {selectedComposerRuntimeHost?.profile.label ?? "Runtime"}
-                            </span>{" "}
-                            is ready. Drop files, type <span className="font-semibold">@</span> to mention context, or use <span className="font-semibold">/</span> for commands.
-                          </div>
                         </div>
                         <button
                           onClick={isStreaming && canCancelActiveTurn

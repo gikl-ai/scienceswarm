@@ -104,9 +104,9 @@ describe("ComposerRuntimeSwitcher", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "Change destination" });
-    expect(trigger).toHaveTextContent("Chat");
     expect(trigger).toHaveTextContent("Claude Code");
-    expect(trigger).toHaveTextContent("Cloud ok");
+    expect(trigger).not.toHaveTextContent("Chat");
+    expect(trigger).not.toHaveTextContent("Cloud ok");
 
     fireEvent.click(trigger);
     expect(onOpenChange).toHaveBeenCalledWith(true);

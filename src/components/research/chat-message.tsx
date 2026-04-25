@@ -159,7 +159,9 @@ type ProgressTranscriptBlock =
     }
   | {
       type: "explored";
+      stableKey: string;
       lines: string[];
+      rawCount: number;
       section: "activity";
     };
 
@@ -188,6 +190,8 @@ const PROGRESS_SECTION_META: Record<
     rowClassName: "text-muted",
   },
 };
+
+const EXPLORED_INLINE_LINE_LIMIT = 3;
 const EXPLORE_COMMAND_PREFIXES = [
   "Read ",
   "Write ",
@@ -238,6 +242,7 @@ const ASSISTANT_INLINE_CODE_CLASS =
   "rounded-md border border-rule bg-sunk/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-strong";
 const ASSISTANT_CODE_BLOCK_CLASS =
   "my-6 overflow-x-auto rounded-3xl border border-rule bg-ink px-5 py-4 text-[13px] leading-6 text-quiet shadow-[0_12px_30px_rgba(15,23,42,0.12)]";
+const ASSISTANT_RULE_CLASS = "my-8 border-0 border-t border-rule";
 const ASSISTANT_MEDIA_CARD_CLASS =
   "overflow-hidden rounded-[1.35rem] border border-rule/90 bg-raised shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]";
 const ASSISTANT_MEDIA_FRAME_CLASS =
@@ -282,6 +287,7 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   ),
   li: ({ children }) => <li className={ASSISTANT_LIST_ITEM_CLASS}>{children}</li>,
   blockquote: ({ children }) => <blockquote className={ASSISTANT_BLOCKQUOTE_CLASS}>{children}</blockquote>,
+  hr: () => <hr className={ASSISTANT_RULE_CLASS} />,
   pre: ({ children }) => <pre className={ASSISTANT_CODE_BLOCK_CLASS}>{children}</pre>,
   code: ({ className, children }) => {
     const languageClass = typeof className === "string" ? className : "";
@@ -648,12 +654,19 @@ function normalizeProgressTextForDisplay(text: string): string | null {
 function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTranscriptBlock[] {
   const blocks: ProgressTranscriptBlock[] = [];
   let exploredLines: string[] = [];
+  const exploredBlockCounts = new Map<string, number>();
 
   const flushExploredLines = () => {
     if (exploredLines.length === 0) return;
+    const coalescedLines = coalesceExploredLines(exploredLines);
+    const firstLine = coalescedLines[0] ?? "explored";
+    const occurrence = exploredBlockCounts.get(firstLine) ?? 0;
+    exploredBlockCounts.set(firstLine, occurrence + 1);
     blocks.push({
       type: "explored",
-      lines: exploredLines,
+      stableKey: `${firstLine}::${occurrence}`,
+      lines: coalescedLines,
+      rawCount: exploredLines.length,
       section: "activity",
     });
     exploredLines = [];
@@ -678,6 +691,65 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
 
   flushExploredLines();
   return blocks;
+}
+
+function parseCoalescibleExploredLine(
+  line: string,
+): { verb: "Read" | "Write" | "Edit" | "List"; target: string } | null {
+  const match = line.match(/^(Read|Write|Edit|List)\s+(.+)$/);
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+
+  const verb = match[1] as "Read" | "Write" | "Edit" | "List";
+  const target = match[2].trim();
+  if (!target) {
+    return null;
+  }
+
+  return { verb, target };
+}
+
+function coalesceExploredLines(lines: string[]): string[] {
+  const grouped: string[] = [];
+  let pending:
+    | { verb: "Read" | "Write" | "Edit" | "List"; targets: string[] }
+    | null = null;
+
+  const flushPending = () => {
+    if (!pending) {
+      return;
+    }
+    grouped.push(
+      pending.targets.length > 1
+        ? `${pending.verb} ${pending.targets.join(" · ")}`
+        : `${pending.verb} ${pending.targets[0]}`,
+    );
+    pending = null;
+  };
+
+  for (const line of lines) {
+    const parsed = parseCoalescibleExploredLine(line);
+    if (!parsed) {
+      flushPending();
+      grouped.push(line);
+      continue;
+    }
+
+    if (pending && pending.verb === parsed.verb) {
+      pending.targets.push(parsed.target);
+      continue;
+    }
+
+    flushPending();
+    pending = {
+      verb: parsed.verb,
+      targets: [parsed.target],
+    };
+  }
+
+  flushPending();
+  return grouped;
 }
 
 function summarizeCompactPhaseStatus(phases: ChatTaskPhase[]): string[] {
@@ -751,6 +823,62 @@ function summarizeCompactSteps(steps: Step[]): string[] {
   return [];
 }
 
+function ExploredTranscriptBlock({
+  blockIndex,
+  lines,
+  compact,
+}: {
+  blockIndex: number;
+  lines: string[];
+  compact: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hiddenCount = Math.max(0, lines.length - EXPLORED_INLINE_LINE_LIMIT);
+  const visibleLines =
+    expanded || hiddenCount === 0
+      ? lines
+      : lines.slice(0, EXPLORED_INLINE_LINE_LIMIT);
+
+  return (
+    <div className={compact ? "space-y-1.5" : "space-y-1"}>
+      <div className={`flex items-start gap-2 ${PROGRESS_SECTION_META.activity.rowClassName}`}>
+        <span aria-hidden="true" className="pt-0.5 text-quiet">• </span>
+        <span className="font-medium">Explored</span>
+      </div>
+      <div className={`${compact ? "space-y-1 pl-4" : "space-y-1 pl-5"} text-muted`}>
+        {visibleLines.map((line, lineIndex) => (
+          <div
+            key={`${blockIndex}-${lineIndex}-${line}`}
+            className="flex items-start gap-2 whitespace-pre-wrap"
+          >
+            <span aria-hidden="true" className="text-quiet">
+              {lineIndex === 0 ? "└ " : "· "}
+            </span>
+            <span className="min-w-0 flex-1">
+              {renderInlineMarkdownLite(
+                line,
+                `progress-explored-${blockIndex}-${lineIndex}`,
+              )}
+            </span>
+          </div>
+        ))}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            data-testid={`assistant-explored-toggle-${blockIndex}`}
+            className="inline-flex items-center gap-2 rounded-full border border-rule bg-raised px-2.5 py-1 text-[11px] font-medium text-body transition hover:bg-sunk"
+            onClick={() => setExpanded((current) => !current)}
+          >
+            {expanded
+              ? "Hide extra actions"
+              : `Show ${hiddenCount} more action${hiddenCount === 1 ? "" : "s"}`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function buildProgressSectionChanges(
   blocks: ProgressTranscriptBlock[],
   options: { compact?: boolean } = {},
@@ -788,33 +916,12 @@ function buildProgressSectionChanges(
 
     if (block.type === "explored") {
       elements.push(
-        <div
-          key={`${index}-explored`}
-          className={compact ? "space-y-1.5" : "space-y-1"}
-        >
-          <div className={`flex items-start gap-2 ${PROGRESS_SECTION_META.activity.rowClassName}`}>
-            <span aria-hidden="true" className="pt-0.5 text-quiet">• </span>
-            <span className="font-medium">Explored</span>
-          </div>
-          <div className={`${compact ? "space-y-1 pl-4" : "space-y-1 pl-5"} text-muted`}>
-            {block.lines.map((line, lineIndex) => (
-              <div
-                key={`${index}-${lineIndex}-${line}`}
-                className="flex items-start gap-2 whitespace-pre-wrap"
-              >
-                <span aria-hidden="true" className="text-quiet">
-                  {lineIndex === 0 ? "└ " : "· "}
-                </span>
-                <span className="min-w-0 flex-1">
-                  {renderInlineMarkdownLite(
-                    line,
-                    `progress-explored-${index}-${lineIndex}`,
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>,
+        <ExploredTranscriptBlock
+          key={block.stableKey}
+          blockIndex={index}
+          lines={block.lines}
+          compact={compact}
+        />,
       );
       return;
     }
@@ -845,6 +952,79 @@ function buildProgressSectionChanges(
 
   return elements;
 }
+
+function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): string | null {
+  const compactDetail = (value: string): string | null => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (shouldRenderProgressMarkdownBlock(trimmed) || trimmed.includes("\n")) {
+      return null;
+    }
+    return trimmed;
+  };
+
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (block.type === "narrative") {
+      const detail = compactDetail(block.entry.text);
+      if (detail) {
+        return detail;
+      }
+      continue;
+    }
+    if (block.lines.length > 0) {
+      if (block.rawCount > 1) {
+        return `Explored ${block.rawCount} actions`;
+      }
+      const detail = compactDetail(block.lines[block.lines.length - 1]);
+      if (detail) {
+        return detail;
+      }
+    }
+  }
+
+  return null;
+}
+
+function ActiveRunStateSurface({
+  workingElapsed,
+  summaries,
+  detail,
+}: {
+  workingElapsed: string | null;
+  summaries: string[];
+  detail: string | null;
+}) {
+  return (
+    <div
+      data-testid="assistant-run-state"
+      className="mb-3 rounded-xl border border-rule bg-sunk/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
+    >
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-dim">
+        <span className="inline-flex items-center gap-1.5 font-medium text-body">
+          <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
+          <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
+        </span>
+        {summaries.map((summary, index) => (
+          <span
+            key={`${summary}-${index}`}
+            className="inline-flex items-center rounded-full border border-rule bg-raised px-2 py-0.5 text-[10px] font-medium text-body"
+          >
+            {summary}
+          </span>
+        ))}
+      </div>
+      {detail && (
+        <div className="mt-2 text-[12px] leading-6 text-dim">
+          {detail}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatElapsedCompact(elapsedMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
   const seconds = totalSeconds % 60;
@@ -1567,6 +1747,9 @@ export function ChatMessage({
         ...summarizeCompactSteps(visibleSteps),
       ]
     : [];
+  const liveRunStateDetail = isLiveAssistantTurn
+    ? summarizeLatestRunStateDetail(progressTranscript)
+    : null;
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
@@ -1718,35 +1901,27 @@ export function ChatMessage({
 
       {/* Streaming indicator */}
       {role === "assistant" && content === "" && isStreaming && !showCompactLiveTranscript && visibleProgressLog.length === 0 && (
-        <div className="flex items-center gap-2 text-accent/60">
-          <Spinner size="h-4 w-4" testId="chat-streaming-spinner" />
-          <span className="text-xs">Thinking…</span>
-        </div>
+        <ActiveRunStateSurface
+          workingElapsed={workingElapsed}
+          summaries={compactLiveRunSummary}
+          detail={null}
+        />
       )}
 
       {showCompactLiveTranscript && (
         <div
           aria-live="polite"
-          className="mb-3 rounded-xl border border-rule bg-sunk/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
+          className="mb-3 space-y-0"
           role="log"
         >
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-dim">
-            <span className="inline-flex items-center gap-1.5 font-medium text-body">
-              <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
-              <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
-            </span>
-            {compactLiveRunSummary.map((summary, index) => (
-              <span
-                key={`${summary}-${index}`}
-                className="inline-flex items-center rounded-full border border-rule bg-raised px-2 py-0.5 text-[10px] font-medium text-body"
-              >
-                {summary}
-              </span>
-            ))}
-          </div>
+          <ActiveRunStateSurface
+            workingElapsed={workingElapsed}
+            summaries={compactLiveRunSummary}
+            detail={liveRunStateDetail}
+          />
 
           {progressTranscript.length > 0 && (
-            <div className="mt-2 space-y-2">
+            <div className="space-y-2" data-testid="assistant-progress-transcript">
               {buildProgressSectionChanges(progressTranscript, { compact: true })}
             </div>
           )}
@@ -1757,6 +1932,7 @@ export function ChatMessage({
         <div
           aria-live="polite"
           className="mb-3 space-y-3 text-[13px] leading-6 text-foreground/95"
+          data-testid="assistant-progress-transcript"
           role="log"
         >
           {buildProgressSectionChanges(progressTranscript)}

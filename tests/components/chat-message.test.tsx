@@ -159,6 +159,22 @@ describe("ChatMessage", () => {
     expect(screen.getByText("const total = 2;").closest("pre")).toHaveClass("px-5");
   });
 
+  it("renders markdown section dividers with the assistant reading rhythm", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        content={"## Findings\n\n- First result\n\n---\n\n## Next step\n\nFollow up on the benchmark."}
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    const divider = container.querySelector("hr");
+    expect(divider).toBeTruthy();
+    expect(divider).toHaveClass("my-8");
+    expect(divider).toHaveClass("border-t");
+    expect(screen.getByRole("heading", { level: 2, name: "Next step" })).toHaveClass("mt-10");
+  });
+
   it("keeps language-less fenced code blocks on the block-code surface", () => {
     render(
       <ChatMessage
@@ -409,6 +425,25 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("log")).toHaveTextContent("Read docs/results_table.csv");
   });
 
+  it("renders a dedicated run-state surface before transcript progress arrives", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Working (5s • esc to interrupt)",
+    );
+    expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+  });
+
   it("renders assistant progress as a single inline transcript", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
@@ -440,6 +475,130 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
   });
 
+  it("surfaces the latest compact progress detail under the live run-state header", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "thinking", text: "Plan: compare the timing artifact" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Plan: compare the timing artifact",
+    );
+  });
+
+  it("summarizes dense explored activity in the live run-state detail", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "activity", text: "Write docs/results_summary.md" },
+          { kind: "activity", text: "Search docs/ for timing notes" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Explored 3 actions",
+    );
+    expect(screen.getByTestId("assistant-run-state")).not.toHaveTextContent(
+      "Search docs/ for timing notes",
+    );
+  });
+
+  it("counts raw explored activity entries even when the transcript coalesces them", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/a.md" },
+          { kind: "activity", text: "Read docs/b.md" },
+          { kind: "activity", text: "Read docs/c.md" },
+          { kind: "activity", text: "Write docs/summary.md" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Explored 4 actions",
+    );
+    expect(screen.getByRole("log")).toHaveTextContent(
+      "Read docs/a.md · docs/b.md · docs/c.md",
+    );
+  });
+
+  it("keeps the compact live run-state wrapper on a single spacing system", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "thinking", text: "Plan: compare the timing artifact" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByRole("log")).toHaveClass("space-y-0");
+  });
+
+  it("falls back to the previous non-empty compact detail when the latest narrative is blank", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "thinking", text: "   " },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Read docs/results_table.csv",
+    );
+  });
+
+  it("coalesces consecutive explored file actions into compact summaries", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read src/a.ts" },
+          { kind: "activity", text: "Read src/b.ts" },
+          { kind: "activity", text: "Write docs/summary.md" },
+          { kind: "activity", text: "Write docs/chart.md" },
+          { kind: "activity", text: "Search gateway in src/hooks/use-unified-chat.ts" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent("Read src/a.ts · src/b.ts");
+    expect(progressLog).toHaveTextContent("Write docs/summary.md · docs/chart.md");
+    expect(progressLog).toHaveTextContent("Search gateway in src/hooks/use-unified-chat.ts");
+  });
   it("renders thinking and activity sections in chronological order", () => {
     render(
       <ChatMessage
@@ -456,8 +615,8 @@ describe("ChatMessage", () => {
       />,
     );
 
-    const progressLog = screen.getByRole("log");
-    const text = progressLog.textContent ?? "";
+    const progressTranscript = screen.getByTestId("assistant-progress-transcript");
+    const text = progressTranscript.textContent ?? "";
     const firstPlan = text.indexOf("Plan: inspect files");
     const firstRead = text.indexOf("Read docs/results_table.csv");
     const secondThought = text.indexOf("Now summarize findings");
@@ -586,12 +745,13 @@ describe("ChatMessage", () => {
       />,
     );
 
-    const progressLog = screen.getByRole("log");
+    const progressLog = screen.getByTestId("assistant-progress-transcript");
     expect(screen.getByRole("heading", { level: 2, name: "Current plan" })).toBeInTheDocument();
     expect(progressLog).toHaveTextContent("Inspect the saved chart");
     expect(progressLog).toHaveTextContent("Compare the timing artifact");
     expect(screen.getByText("const ready = true;").closest("pre")).toHaveClass("bg-ink");
     expect(progressLog).not.toHaveTextContent("## Current plan");
+    expect(screen.getByTestId("assistant-run-state")).not.toHaveTextContent("## Current plan");
   });
 
   it("renders mixed inline formatting inside visible explored transcript rows", () => {
@@ -614,6 +774,84 @@ describe("ChatMessage", () => {
     expect(codeTexts).toContain("docs/results_chart.png");
     expect(progressLog.querySelector("em")).toHaveTextContent("carefully");
     expect(progressLog.querySelector("strong")).toHaveTextContent("summarizing");
+  });
+
+  it("collapses long explored blocks behind a toggle until expanded", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/a.md" },
+          { kind: "activity", text: "Write docs/b.md" },
+          { kind: "activity", text: "Edit docs/c.md" },
+          { kind: "activity", text: "Search docs/ for metrics" },
+          { kind: "activity", text: "Run python3 scripts/report.py" },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const transcript = screen.getByTestId("assistant-progress-transcript");
+    expect(transcript).toHaveTextContent("Read docs/a.md");
+    expect(transcript).toHaveTextContent("Write docs/b.md");
+    expect(transcript).toHaveTextContent("Edit docs/c.md");
+    expect(within(transcript).queryByText("Search docs/ for metrics")).not.toBeInTheDocument();
+    expect(within(transcript).queryByText("Run python3 scripts/report.py")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("assistant-explored-toggle-0"));
+
+    expect(within(transcript).getByText("Search docs/ for metrics")).toBeInTheDocument();
+    expect(within(transcript).getByText("Run python3 scripts/report.py")).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-explored-toggle-0")).toHaveTextContent(
+      "Hide extra actions",
+    );
+  });
+
+  it("keeps an expanded explored block open when earlier transcript rows are inserted", () => {
+    const timestamp = new Date("2026-04-21T10:00:00.000Z");
+    const initialProgressLog = [
+      { kind: "activity", text: "Read docs/a.md" },
+      { kind: "activity", text: "Write docs/b.md" },
+      { kind: "activity", text: "Edit docs/c.md" },
+      { kind: "activity", text: "Search docs/ for metrics" },
+      { kind: "activity", text: "Run python3 scripts/report.py" },
+    ] as const;
+    const { rerender } = render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[...initialProgressLog]}
+        timestamp={timestamp}
+        isStreaming
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("assistant-explored-toggle-0"));
+
+    const transcript = screen.getByTestId("assistant-progress-transcript");
+    expect(within(transcript).getByText("Search docs/ for metrics")).toBeInTheDocument();
+
+    rerender(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "thinking", text: "Checking the workspace first." },
+          ...initialProgressLog,
+        ]}
+        timestamp={timestamp}
+        isStreaming
+      />,
+    );
+
+    expect(within(screen.getByTestId("assistant-progress-transcript")).getByText(
+      "Search docs/ for metrics",
+    )).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-explored-toggle-1")).toHaveTextContent(
+      "Hide extra actions",
+    );
   });
 
   it("normalizes legacy raw tool JSON lines in the visible transcript", () => {

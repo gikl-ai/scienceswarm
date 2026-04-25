@@ -38,6 +38,7 @@ export interface ChatBenchmarkSummary {
   conversationId: string;
   headersMs: number;
   firstChunkMs: number | null;
+  firstChunkSharedHeadersTick: boolean;
   totalMs: number;
   bytes: number;
   eventCount: number;
@@ -211,6 +212,11 @@ export function summarizeChatBenchmarkResponse(params: {
   const fallbackText = isRecord(fallbackJson)
     ? asString(fallbackJson.response) ?? asString(fallbackJson.text) ?? ""
     : "";
+  const roundedHeadersMs = Math.round(params.headersMs);
+  const roundedFirstChunkMs =
+    typeof params.firstChunkMs === "number"
+      ? Math.round(params.firstChunkMs)
+      : null;
 
   return {
     status: params.status,
@@ -218,11 +224,10 @@ export function summarizeChatBenchmarkResponse(params: {
     backend: params.backend,
     contentType: params.contentType,
     conversationId: params.conversationId,
-    headersMs: Math.round(params.headersMs),
-    firstChunkMs:
-      typeof params.firstChunkMs === "number"
-        ? Math.round(params.firstChunkMs)
-        : null,
+    headersMs: roundedHeadersMs,
+    firstChunkMs: roundedFirstChunkMs,
+    firstChunkSharedHeadersTick:
+      roundedFirstChunkMs !== null && roundedFirstChunkMs === roundedHeadersMs,
     totalMs: Math.round(params.totalMs),
     bytes: params.bytes,
     eventCount: events.length,
@@ -307,11 +312,11 @@ function formatPromptCharCountsForSummary(
 
 function formatSkippedTimingPhasesForSummary(
   phases: ChatBenchmarkTimingPhaseSummary[],
-): string | null {
+): string {
   const skipped = phases
     .filter((phase) => phase.skipped)
     .map((phase) => phase.name);
-  return skipped.length === 0 ? null : skipped.join(", ");
+  return skipped.length === 0 ? "none" : skipped.join(", ");
 }
 
 function formatPromptBudgetHighlights(
@@ -356,7 +361,7 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
   const skippedTimingPhases =
     timingArtifact && !isTimingArtifactUnavailable(timingArtifact)
       ? formatSkippedTimingPhasesForSummary(timingArtifact.phases)
-      : null;
+      : "none";
   return [
     "Chat Hi Benchmark",
     `Status: ${summary.status} ${summary.ok ? "ok" : "failed"}`,
@@ -366,6 +371,7 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
     `First chunk: ${
       summary.firstChunkMs === null ? "n/a" : `${summary.firstChunkMs} ms`
     }`,
+    `Shared timing tick: ${summary.firstChunkSharedHeadersTick ? "yes" : "no"}`,
     `Total: ${summary.totalMs} ms`,
     `Bytes: ${summary.bytes}`,
     `Events: ${summary.eventCount} (${summary.progressEventCount} progress, ${summary.finalEventCount} final)`,
@@ -386,9 +392,7 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
               timingArtifact.outcome ?? "unknown"
             }, status ${timingArtifact.status ?? "unknown"}`,
             `Timing phases: ${formatTimingPhasesForSummary(timingArtifact.phases)}`,
-            ...(skippedTimingPhases
-              ? [`Skipped phases: ${skippedTimingPhases}`]
-              : []),
+            `Skipped phases: ${skippedTimingPhases}`,
             `Prompt chars: ${formatPromptCharCountsForSummary(
               timingArtifact.promptCharCounts,
             )}`,

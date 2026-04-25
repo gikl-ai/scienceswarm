@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 
 import { RuntimeHostError } from "../errors";
 import {
+  buildRuntimeCliFailureUserMessage,
   normalizeCliOutput,
   type NormalizedCliOutput,
 } from "./output-normalizer";
@@ -203,7 +204,11 @@ export class PtyCliTransport implements CliTransport {
               code: "RUNTIME_TRANSPORT_ERROR",
               status: 502,
               message: `PTY runtime command exited with code ${event.exitCode}.`,
-              userMessage: "The AI destination command failed.",
+              userMessage: buildRuntimeCliFailureUserMessage({
+                hostId: request.hostId,
+                command: request.command,
+                output,
+              }),
               recoverable: true,
               context: {
                 hostId: request.hostId,

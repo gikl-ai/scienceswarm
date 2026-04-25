@@ -180,6 +180,15 @@ Claude Code, Codex, or Gemini subscription tokens; those destinations use your l
 CLI login. API-key adapters read keys from `.env` only when configured
 and do not echo secret values back through the UI.
 
+Claude Code launches from a generated ScienceSwarm session capsule rather than
+the ScienceSwarm source checkout. The capsule includes `SCIENCESWARM.md` for
+product and project orientation, a thin `CLAUDE.md` that points Claude back to
+that guidance, a compact gbrain project brief, and a destination-scoped MCP config
+for selective gbrain search/read/write tools. MCP bearer credentials are injected
+through the spawned process environment rather than the prompt text, and the
+temporary MCP config is deleted after each invocation. The preview lists this
+generated guidance and scoped brain access before the prompt is sent.
+
 AI sessions stay visible from Settings after destination sends. Session
 history keeps destination, mode, status, events, and artifact/writeback state so
 failed artifact imports can be retried from the composer after changing destination or
@@ -189,7 +198,7 @@ deleting them.
 
 To connect a subscription-backed CLI, sign in with the provider's own command.
 ScienceSwarm does not collect Claude, Codex, or Gemini credentials. When it
-launches a subscription-native runtime, it removes provider API-key environment
+launches a subscription-native destination, it removes provider API-key environment
 variables from that child process so the native CLI login stays in charge of
 billing and auth.
 

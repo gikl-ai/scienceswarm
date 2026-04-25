@@ -1,0 +1,79 @@
+/*
+ * legacy-bridge.css — class-name compatibility for pre-v1 code.
+ * ────────────────────────────────────────────────────────────────
+ * Code authored before the design-system overhaul used a compact
+ * pseudo-semantic vocabulary:
+ *
+ *   text-muted, text-foreground, text-accent-hover
+ *   bg-background, bg-surface, bg-accent-hover
+ *   border-border
+ *
+ * Most aren't in Tailwind's built-in palette, and one (--muted)
+ * collides with shadcn's convention where --color-muted is a *BG*
+ * color, not dim text. That collision caused every text-muted
+ * callsite — including alpha modifiers like `text-muted/70` — to
+ * render in the muted-background color (near-invisible labels in
+ * sidebars, composer hints, and many chrome surfaces).
+ *
+ * The old app also used Tailwind's literal `bg-white` as a generic
+ * panel surface. In the dark-first v1 system, that class must behave
+ * like a raised surface for legacy code; true white foregrounds
+ * (`text-white`) still remain real white for accent buttons.
+ *
+ * The fix: re-register these names in Tailwind v4's @theme inline
+ * with the scienceswarm interpretation. Because Tailwind generates
+ * all variants (hover, focus, alpha, data-state) from the color
+ * tokens declared in @theme, this restores variant behavior for the
+ * entire legacy class-name surface in one place. Import order: this
+ * file loads LAST in globals.css so these bindings outrank the
+ * shadcn bridge for any overlapping name.
+ *
+ * A follow-up will migrate the class names to the v1 vocabulary
+ * (text-dim, bg-raised, border-rule, etc.) and remove this bridge.
+ * ────────────────────────────────────────────────────────────────
+ */
+
+@theme inline {
+  /* Legacy scienceswarm names → v1 semantic tokens. Overrides the
+     shadcn-bridge @theme where these keys overlap. */
+  --color-muted:         var(--text-dim);
+  --color-foreground:    var(--text-strong);
+  --color-surface:       var(--surface-raised);
+  --color-background:    var(--surface-ink);
+  --color-surface-hover: var(--surface-hover);
+  --color-accent-hover:  var(--accent-dim);
+
+  /* border-border routes through --color-border already mapped in
+     shadcn-bridge to var(--rule); no re-registration needed here. */
+}
+
+/* bg-muted stays meaningful for raw shadcn primitives (Select, Sheet,
+   Skeleton, Dialog) that compose a muted *background* rather than
+   muted text. These authored rules beat Tailwind's @theme-generated
+   utility because they live outside @layer utilities.
+   Alpha variants must be authored explicitly: Tailwind generates
+   bg-muted/N directly from --color-muted (now a text token), so the
+   alphas in active use are re-routed onto --surface-sunk here. */
+.bg-muted                    { background-color: var(--surface-sunk); }
+.hover\:bg-muted:hover       { background-color: var(--surface-sunk); }
+.bg-muted\/5                 { background-color: color-mix(in srgb, var(--surface-sunk) 5%, transparent); }
+.hover\:bg-muted\/10:hover   { background-color: color-mix(in srgb, var(--surface-sunk) 10%, transparent); }
+.data-\[state\=active\]\:bg-muted[data-state="active"] {
+  background-color: var(--surface-sunk);
+}
+
+/* Legacy white surface utilities. These intentionally do not remap
+   Tailwind's --color-white token, because text-white should stay white
+   on accent and danger buttons. */
+.bg-white { background-color: var(--surface-raised); }
+.bg-white\/10 { background-color: color-mix(in srgb, var(--surface-raised) 10%, transparent); }
+.bg-white\/15 { background-color: color-mix(in srgb, var(--surface-raised) 15%, transparent); }
+.bg-white\/50 { background-color: color-mix(in srgb, var(--surface-raised) 50%, transparent); }
+.bg-white\/70 { background-color: color-mix(in srgb, var(--surface-raised) 70%, transparent); }
+.bg-white\/80 { background-color: color-mix(in srgb, var(--surface-raised) 80%, transparent); }
+.bg-white\/95 { background-color: color-mix(in srgb, var(--surface-raised) 95%, transparent); }
+.hover\:bg-white:hover { background-color: var(--surface-raised); }
+.hover\:bg-white\/10:hover { background-color: color-mix(in srgb, var(--surface-raised) 10%, transparent); }
+.hover\:bg-white\/20:hover { background-color: color-mix(in srgb, var(--surface-raised) 20%, transparent); }
+.focus\:bg-white:focus { background-color: var(--surface-raised); }
+.odd\:bg-white:nth-child(odd) { background-color: var(--surface-raised); }

@@ -110,4 +110,22 @@ describe("TurnPreviewSheet", () => {
     expect(screen.queryByText(/will be sent to Codex, a third party/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve and send" })).toBeEnabled();
   });
+
+  it("keeps empty-destination reminder copy plain", () => {
+    render(
+      <TurnPreviewSheet
+        open
+        preview={preview({ destinations: [] })}
+        pendingLabel="chat via selected destination"
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+        onChangeHost={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(
+      "Your prompt and the data listed below will be sent to a third party. ScienceSwarm will remember this choice for future chat turns to this destination.",
+    )).toBeInTheDocument();
+    expect(screen.queryByText(/third party, a third party/)).not.toBeInTheDocument();
+  });
 });

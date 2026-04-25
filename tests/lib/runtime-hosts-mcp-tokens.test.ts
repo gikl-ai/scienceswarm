@@ -69,6 +69,43 @@ describe("RuntimeMcpAccessToken", () => {
     ).toMatchObject({ ok: false, reason: "invalid-signature" });
   });
 
+  it("accepts the exact trusted env token without serializing the signing secret", () => {
+    const trustedToken = token();
+
+    expect(
+      verifyRuntimeMcpAccessToken({
+        token: trustedToken,
+        trustedToken: `${trustedToken}\n`,
+        projectId: "project-alpha",
+        runtimeSessionId: "session-1",
+        hostId: "codex",
+        toolName: "gbrain_read",
+        now: () => NOW,
+      }),
+    ).toMatchObject({ ok: true });
+
+    expect(
+      verifyRuntimeMcpAccessToken({
+        token: trustedToken,
+        trustedToken,
+        projectId: "project-beta",
+        runtimeSessionId: "session-1",
+        hostId: "codex",
+        toolName: "gbrain_read",
+        now: () => NOW,
+      }),
+    ).toMatchObject({ ok: false, reason: "wrong-project" });
+
+    expect(
+      verifyRuntimeMcpAccessToken({
+        token: trustedToken.replace(/\.[^.]+$/, ".bad-signature"),
+        trustedToken,
+        toolName: "gbrain_read",
+        now: () => NOW,
+      }),
+    ).toMatchObject({ ok: false, reason: "invalid-signature" });
+  });
+
   it("rejects expired tokens", () => {
     expect(
       verifyRuntimeMcpAccessToken({
