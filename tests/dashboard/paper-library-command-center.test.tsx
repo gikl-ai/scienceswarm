@@ -345,7 +345,7 @@ describe("PaperLibraryCommandCenter", () => {
     container.remove();
   });
 
-  it("does not override an imported folder while latest-scan restore is in flight", async () => {
+  it("does not open the folder picker while latest-scan restore is in flight", async () => {
     let resolveLatestScan: ((response: Response) => void) | undefined;
     const latestScanResponse = new Promise<Response>((resolve) => {
       resolveLatestScan = resolve;
@@ -360,21 +360,103 @@ describe("PaperLibraryCommandCenter", () => {
       }
 
       if (url === "/api/local-folder-picker" && method === "POST") {
-        return Response.json({ path: "/tmp/manual-library" });
+        throw new Error("Folder picker should not open while restore is loading.");
       }
 
-      if (url === "/api/brain/paper-library/scan" && method === "POST") {
-        return Response.json({ ok: true, scanId: "scan-2" });
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Import PDF Folder" }));
+
+    resolveLatestScan?.(Response.json({
+      ok: true,
+      scan: baseScan({
+        rootPath: "/tmp/latest-library",
+        rootRealpath: "/tmp/latest-library",
+        status: "scanning",
+      }),
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByText("/tmp/latest-library")).toBeInTheDocument();
+    });
+
+    expect(
+      fetchMock.mock.calls.some(([request]) => String(request) === "/api/local-folder-picker"),
+    ).toBe(false);
+  });
+
+  it("does not start a scan when the folder picker is cancelled", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "scan",
+        rootPath: "",
+        templateFormat: "{year} - {title}.pdf",
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json(
+          { error: { message: "Paper library scan not found." } },
+          { status: 404 },
+        );
       }
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-2") {
+      if (url === "/api/local-folder-picker" && method === "POST") {
+        return Response.json({ cancelled: true });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Import PDF Folder" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/local-folder-picker", { method: "POST" });
+    });
+
+    expect(
+      fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/scan"),
+    ).toBe(false);
+  });
+
+  it("disables folder import while a scan is already running", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "scan",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+      }),
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
-          scan: baseScan({
-            id: "scan-2",
-            rootPath: "/tmp/manual-library",
-            rootRealpath: "/tmp/manual-library",
-          }),
+          scan: baseScan({ status: "scanning" }),
         });
       }
 
@@ -385,22 +467,8 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Import PDF Folder" }));
-
-    resolveLatestScan?.(Response.json({
-      ok: true,
-      scan: baseScan(),
-    }));
-
-    await waitFor(() => {
-      expect(screen.getByText("/tmp/manual-library")).toBeInTheDocument();
-    });
-
-    expect(
-      fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/scan?project=demo-project&id=scan-1"),
-    ).toBe(false);
-    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"rootPath\":\"/tmp/manual-library\"");
-    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"scanId\":\"scan-2\"");
+    expect(await screen.findByText("scanning")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeDisabled();
   });
 
   it("ignores malformed latest-scan payloads without breaking the scan view", async () => {
@@ -1366,6 +1434,16 @@ describe("PaperLibraryCommandCenter", () => {
                   suggestion: true,
                   sources: ["semantic_scholar"],
                 },
+                {
+                  id: "node-1",
+                  kind: "local_paper",
+                  paperIds: ["paper-1"],
+                  title: "Interesting Paper",
+                  authors: ["Smith"],
+                  local: true,
+                  suggestion: false,
+                  sources: ["filename"],
+                },
               ]
             : [
                 {
@@ -1378,9 +1456,30 @@ describe("PaperLibraryCommandCenter", () => {
                   suggestion: false,
                   sources: ["filename"],
                 },
+                {
+                  id: "node-2",
+                  kind: "external_paper",
+                  paperIds: [],
+                  title: "Bridge Paper",
+                  authors: ["Lee"],
+                  local: false,
+                  suggestion: true,
+                  sources: ["semantic_scholar"],
+                },
               ],
-          edges: [],
-          sourceRuns: [
+          edges: [
+            {
+              id: "edge-1",
+              sourceNodeId: "node-1",
+              targetNodeId: "node-2",
+              kind: "references",
+              source: "semantic_scholar",
+              evidence: [],
+            },
+          ],
+          loadedNodeCount: 1,
+          totalEdgeCount: 1,
+          sourceRuns: cursor ? [] : [
             {
               id: "run-1",
               source: "semantic_scholar",
@@ -1393,7 +1492,7 @@ describe("PaperLibraryCommandCenter", () => {
               message: "Retry after quota reset.",
             },
           ],
-          warnings: ["Semantic Scholar paused for this scan."],
+          warnings: cursor ? [] : ["Semantic Scholar paused for this scan."],
           totalCount: 2,
           filteredCount: 2,
           nextCursor: cursor ? undefined : "MQ",
@@ -1535,12 +1634,16 @@ describe("PaperLibraryCommandCenter", () => {
     expect(await screen.findByText("Citation map")).toBeInTheDocument();
     expect((await screen.findAllByText("Interesting Paper")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Semantic Scholar paused for this scan.")).toBeInTheDocument();
+    expect(await screen.findByText("1 of 2 papers loaded")).toBeInTheDocument();
     expect(await screen.findByText("model unavailable")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Load more nodes" }));
     fireEvent.click(screen.getByRole("button", { name: "Load more clusters" }));
 
     expect((await screen.findAllByText("Bridge Paper")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("2 of 2 papers loaded")).toBeInTheDocument();
+    expect(screen.getByText("2 visible nodes")).toBeInTheDocument();
+    expect(screen.getByText("Semantic Scholar paused for this scan.")).toBeInTheDocument();
     expect(await screen.findByText("Protein folding")).toBeInTheDocument();
     expect(screen.getByText("Gap suggestions")).toBeInTheDocument();
     expect(screen.getByText("Missing Seminal Paper (2025)")).toBeInTheDocument();

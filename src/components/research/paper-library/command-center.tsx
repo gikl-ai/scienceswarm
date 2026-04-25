@@ -231,13 +231,19 @@ function splitAuthors(value: string): string[] {
 function metadataMatchesSuggestion(draft: PaperLibrarySessionDraft, candidate: ReturnType<typeof selectedCandidateForItem>): boolean {
   if (!candidate) return false;
   const draftAuthors = splitAuthors(draft.authors);
-  const candidateAuthors = candidate.authors.map((author) => author.trim()).filter(Boolean);
+  const candidateAuthors = (candidate.authors ?? []).map((author) => author.trim()).filter(Boolean);
   return (
     draft.title.trim() === (candidate.title ?? "").trim()
     && draft.year.trim() === (candidate.year ? String(candidate.year) : "")
     && draftAuthors.length === candidateAuthors.length
     && draftAuthors.every((author, index) => author === candidateAuthors[index])
   );
+}
+
+function mergeUniqueById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
+  const byId = new Map(existing.map((item) => [item.id, item]));
+  for (const item of incoming) byId.set(item.id, item);
+  return Array.from(byId.values());
 }
 
 function formatStatus(status: string): string {
@@ -751,15 +757,28 @@ export function PaperLibraryCommandCenter({
       const payload = await paperLibraryFetchJson<
         { ok: true } & PaperLibraryGraphResponse
       >(`/api/brain/paper-library/graph?${params.toString()}`);
-      setGraphPage((current) => ({
-        nodes: append && current ? [...current.nodes, ...payload.nodes] : payload.nodes,
-        edges: append && current ? [...current.edges, ...payload.edges] : payload.edges,
-        sourceRuns: payload.sourceRuns,
-        warnings: payload.warnings,
-        nextCursor: payload.nextCursor,
-        totalCount: payload.totalCount,
-        filteredCount: payload.filteredCount,
-      }));
+      setGraphPage((current) => {
+        const incomingLoadedCount = payload.loadedNodeCount ?? payload.nodes.length;
+        if (!append || !current) {
+          return {
+            ...payload,
+            loadedNodeCount: Math.min(incomingLoadedCount, payload.filteredCount),
+          };
+        }
+
+        return {
+          ...payload,
+          nodes: mergeUniqueById(current.nodes, payload.nodes),
+          edges: mergeUniqueById(current.edges, payload.edges),
+          sourceRuns: payload.sourceRuns.length ? payload.sourceRuns : current.sourceRuns,
+          warnings: payload.warnings.length ? payload.warnings : current.warnings,
+          loadedNodeCount: Math.min(
+            payload.filteredCount,
+            (current.loadedNodeCount ?? current.nodes.length) + incomingLoadedCount,
+          ),
+          totalEdgeCount: payload.totalEdgeCount ?? current.totalEdgeCount,
+        };
+      });
     } catch (error) {
       setGraphError(error instanceof Error ? error.message : "Could not load the citation graph.");
     } finally {
@@ -961,7 +980,6 @@ export function PaperLibraryCommandCenter({
     setFolderPickerLoading(true);
     setCommandError(null);
     setScanError(null);
-    skipLatestRestoreRef.current = true;
     try {
       const payload = await paperLibraryFetchJson<{ path?: string; cancelled?: boolean }>(
         "/api/local-folder-picker",
@@ -970,6 +988,7 @@ export function PaperLibraryCommandCenter({
       if (payload.cancelled) return;
       const rootPath = payload.path?.trim();
       if (!rootPath) throw new Error("Folder picker returned no path.");
+      skipLatestRestoreRef.current = true;
       await startScanForRoot(rootPath);
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : "Could not choose a PDF folder.");
@@ -1757,7 +1776,7 @@ export function PaperLibraryCommandCenter({
                       </div>
                       {graphPage && (
                         <span className="text-xs text-muted">
-                          {graphPage.nodes.length} of {graphPage.filteredCount} papers loaded
+                          {graphPage.loadedNodeCount ?? graphPage.nodes.length} of {graphPage.filteredCount} papers loaded
                         </span>
                       )}
                     </div>
@@ -2204,7 +2223,7 @@ export function PaperLibraryCommandCenter({
             <button
               type="button"
               onClick={() => void handleImportPdfFolder()}
-              disabled={folderPickerLoading}
+              disabled={folderPickerLoading || scanLoading || isScanInFlight(scan)}
               className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
             >
               {folderPickerLoading ? <SpinnerGap className="animate-spin" size={16} /> : <FolderOpen size={16} />}

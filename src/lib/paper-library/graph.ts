@@ -747,7 +747,8 @@ export function windowPaperLibraryGraph(
   const includeMetadata = !options.cursor;
   return {
     nodes,
-    edges: visibleEdges.filter((edge) => included.has(edge.sourceNodeId) && included.has(edge.targetNodeId)),
+    edges: visibleEdges,
+    loadedNodeCount: page.items.length,
     totalEdgeCount: graph.edges.length,
     sourceRuns: includeMetadata ? graph.sourceRuns : [],
     warnings: includeMetadata ? graph.warnings : [],

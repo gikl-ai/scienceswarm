@@ -250,6 +250,7 @@ describe("paper-library graph", () => {
       "paper:doi:10.2000/target",
     ]);
     expect(firstPage.edges).toHaveLength(1);
+    expect(firstPage.loadedNodeCount).toBe(2);
     expect(firstPage.totalEdgeCount).toBe(1);
     expect(firstPage.nextCursor).toBeDefined();
     expect(firstPage.sourceRuns.length).toBeGreaterThan(0);
@@ -263,6 +264,7 @@ describe("paper-library graph", () => {
     expect(focused.edges).toHaveLength(1);
 
     const secondPage = windowPaperLibraryGraph(graph!, { cursor: firstPage.nextCursor, limit: 2 });
+    expect(secondPage.loadedNodeCount).toBe(1);
     expect(secondPage.sourceRuns).toEqual([]);
     expect(secondPage.warnings).toEqual([]);
   });
