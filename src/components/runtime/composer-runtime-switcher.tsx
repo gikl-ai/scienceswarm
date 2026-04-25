@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { CaretDown, Check, CircleNotch } from "@phosphor-icons/react";
 import type { RuntimeProjectPolicy } from "@/lib/runtime-hosts/contracts";
@@ -14,6 +14,9 @@ const ASSISTANT_ORDER = ["openclaw", "claude-code", "codex", "gemini-cli"];
 const MENU_WIDTH = 292;
 const VIEWPORT_MARGIN = 12;
 const MENU_GAP = 8;
+const subscribeToPortalTarget = () => () => undefined;
+const getPortalTarget = () => document.body;
+const getServerPortalTarget = () => null;
 
 function hostById(hosts: RuntimeHealthHost[], hostId: string): RuntimeHealthHost | null {
   return hosts.find((host) => host.profile.id === hostId) ?? null;
@@ -61,8 +64,8 @@ export function ComposerRuntimeSwitcher({
   hosts: RuntimeHealthHost[];
   selectedHostId: string;
   projectPolicy: RuntimeProjectPolicy;
-  mode: RuntimeComposerMode;
-  compareHostIds: string[];
+  mode?: RuntimeComposerMode;
+  compareHostIds?: string[];
   loading?: boolean;
   error?: string | null;
   open: boolean;
@@ -70,16 +73,20 @@ export function ComposerRuntimeSwitcher({
   onSelectedHostIdChange: (hostId: string) => void;
   onProjectPolicyChange: (policy: RuntimeProjectPolicy) => void;
   onModeChange: (mode: RuntimeComposerMode) => void;
-  onCompareHostIdsChange: (hostIds: string[]) => void;
+  onCompareHostIdsChange?: (hostIds: string[]) => void;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const portalTarget = useSyncExternalStore(
+    subscribeToPortalTarget,
+    getPortalTarget,
+    getServerPortalTarget,
+  );
   const [panelPosition, setPanelPosition] = useState({
     bottom: 96,
     left: VIEWPORT_MARGIN,
     width: MENU_WIDTH,
   });
-  const portalTarget = typeof document === "undefined" ? null : document.body;
   const selectedHost = hostById(hosts, selectedHostId);
   const visibleHosts = useMemo(() => {
     const selected = selectedHost ? [selectedHost] : [];
@@ -149,8 +156,15 @@ export function ComposerRuntimeSwitcher({
         onOpenChange(false);
       }
     }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onOpenChange(false);
+    }
     document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [onOpenChange, open]);
 
   const selectAssistant = (host: RuntimeHealthHost) => {
@@ -166,14 +180,11 @@ export function ComposerRuntimeSwitcher({
   const runtimePanel = (
     <div
       ref={panelRef}
-      role="menu"
+      role="dialog"
       aria-label="Assistant"
       data-testid="runtime-switcher-panel"
       className="fixed z-50 max-h-[min(22rem,calc(100vh-7rem))] overflow-y-auto rounded-xl border border-rule bg-raised py-1.5 text-[15px] shadow-[0_18px_50px_rgba(0,0,0,0.18)]"
       style={panelPosition}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onOpenChange(false);
-      }}
     >
       <p className="px-3 pb-1.5 pt-1 text-[13px] font-normal text-muted">
         Assistant
@@ -191,8 +202,7 @@ export function ComposerRuntimeSwitcher({
             <button
               key={host.profile.id}
               type="button"
-              role="menuitemradio"
-              aria-checked={isSelected}
+              aria-pressed={isSelected}
               className={`flex h-10 w-full items-center justify-between gap-3 rounded-lg px-3 text-left transition-colors ${
                 isSelected
                   ? "bg-surface-hover text-strong"
@@ -214,7 +224,7 @@ export function ComposerRuntimeSwitcher({
         <p className="mx-2 mt-1 rounded-md border border-danger/30 bg-danger/10 px-2.5 py-2 text-xs text-danger">
           {error}
         </p>
-        )}
+      )}
     </div>
   );
 
