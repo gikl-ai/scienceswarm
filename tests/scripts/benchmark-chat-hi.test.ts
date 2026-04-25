@@ -307,8 +307,36 @@ describe("benchmark-chat-hi", () => {
         },
       }),
     ).toContain(
-      "Timing phases: none\nSkipped phases: none\nPrompt chars: none\nPrompt highlights: none",
+      "Timing phases: none\nPrompt chars: none\nPrompt highlights: none",
     );
+    expect(
+      formatBenchmarkSummary({
+        status: 200,
+        ok: true,
+        backend: "openclaw",
+        contentType: "text/event-stream",
+        conversationId: "bench-fixed",
+        headersMs: 5,
+        firstChunkMs: 10,
+        firstChunkSharedHeadersTick: false,
+        totalMs: 100,
+        bytes: 200,
+        eventCount: 3,
+        progressEventCount: 1,
+        finalEventCount: 1,
+        finalTextSample: "Hello.",
+        timingArtifact: {
+          turnId: "turn-1",
+          startedAtMs: 1000,
+          totalDurationMs: 100,
+          outcome: "streamed",
+          status: 200,
+          phaseCount: 0,
+          phases: [],
+          promptCharCounts: {},
+        },
+      }),
+    ).not.toContain("Skipped phases:");
     expect(
       formatBenchmarkSummary({
         status: 200,
