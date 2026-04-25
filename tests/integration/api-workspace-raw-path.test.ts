@@ -34,6 +34,10 @@ async function importRawPathRoute() {
   return await import("@/app/api/workspace/raw/[projectId]/[...file]/route");
 }
 
+function rawParams(projectId: string, file: string[]) {
+  return { params: Promise.resolve({ projectId, file }) };
+}
+
 describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
   it("serves sandboxed html previews with sibling JS and CSS assets", async () => {
     const projectId = "test-project";
@@ -49,7 +53,7 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
     const { GET } = await importRawPathRoute();
     const htmlRes = await GET(
       new Request(`http://localhost/api/workspace/raw/${projectId}/figures/snake-game/index.html`),
-      { params: { projectId, file: ["figures", "snake-game", "index.html"] } },
+      rawParams(projectId, ["figures", "snake-game", "index.html"]),
     );
 
     expect(htmlRes.status).toBe(200);
@@ -64,7 +68,7 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
 
     const scriptRes = await GET(
       new Request(`http://localhost/api/workspace/raw/${projectId}/figures/snake-game/game.js`),
-      { params: { projectId, file: ["figures", "snake-game", "game.js"] } },
+      rawParams(projectId, ["figures", "snake-game", "game.js"]),
     );
 
     expect(scriptRes.status).toBe(200);
@@ -73,7 +77,7 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
 
     const styleRes = await GET(
       new Request(`http://localhost/api/workspace/raw/${projectId}/figures/snake-game/style.css`),
-      { params: { projectId, file: ["figures", "snake-game", "style.css"] } },
+      rawParams(projectId, ["figures", "snake-game", "style.css"]),
     );
 
     expect(styleRes.status).toBe(200);
@@ -85,7 +89,7 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
     const { GET } = await importRawPathRoute();
     const res = await GET(
       new Request("http://localhost/api/workspace/raw/test-project/../../etc/passwd"),
-      { params: { projectId: "test-project", file: ["..", "..", "etc", "passwd"] } },
+      rawParams("test-project", ["..", "..", "etc", "passwd"]),
     );
 
     expect(res.status).toBe(400);
