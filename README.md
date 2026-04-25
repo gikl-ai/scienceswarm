@@ -262,6 +262,19 @@ npx tsx scripts/benchmark-chat-hi-row.ts \
   --change-area 'change-area'
 ```
 
+To benchmark and append the new row to `docs/chat-speed-timing-report.md`
+directly, use:
+
+```bash
+npx tsx scripts/append-chat-benchmark-report-row.ts \
+  --url http://localhost:3001 \
+  --project project-alpha \
+  --message Hi \
+  --timing-artifact \
+  --pr '#PR' \
+  --change-area 'change-area'
+```
+
 ### Private Market Plugins
 
 ScienceSwarm keeps two distinct skill/plugin surfaces:
