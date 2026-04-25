@@ -35,3 +35,5 @@ npx tsx scripts/benchmark-chat-hi.ts \
   timings were not captured.
 - Follow-up speed PRs should add the merged PR number, the changed phase, and
   the new benchmark row here.
+- Row template:
+  `| YYYY-MM-DD | #PR | change-area | Local \`http://localhost:3001\` | headers | first-chunk | yes/no | total | progress-events | \`final text sample\` | timing artifact |`
