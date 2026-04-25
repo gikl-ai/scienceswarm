@@ -87,15 +87,18 @@ function isRecoverableGbrainSubpathImportError(error, packageSubpath) {
   const message = "message" in error ? String(error.message) : "";
   const exportName = `gbrain/${packageSubpath}`;
   const packageExportName = `./${packageSubpath}`;
+  const namesRequestedSubpath = (
+    message.includes(exportName)
+    || message.includes(packageExportName)
+  );
   return (
     code === "ERR_PACKAGE_PATH_NOT_EXPORTED"
-    || code === "ERR_MODULE_NOT_FOUND"
-    || code === "MODULE_NOT_FOUND"
     || (
-      (
-        message.includes(exportName)
-        || message.includes(packageExportName)
-      )
+      (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND")
+      && namesRequestedSubpath
+    )
+    || (
+      namesRequestedSubpath
       && (
         message.includes("is not exported under the conditions")
         || message.includes(`Package subpath '${packageExportName}' is not defined by "exports"`)
