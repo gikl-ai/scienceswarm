@@ -160,6 +160,7 @@ type ProgressTranscriptBlock =
   | {
       type: "explored";
       lines: string[];
+      rawCount: number;
       section: "activity";
     };
 
@@ -656,6 +657,7 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
     blocks.push({
       type: "explored",
       lines: coalesceExploredLines(exploredLines),
+      rawCount: exploredLines.length,
       section: "activity",
     });
     exploredLines = [];
@@ -929,8 +931,8 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): strin
       continue;
     }
     if (block.lines.length > 0) {
-      if (block.lines.length > 1) {
-        return `Explored ${block.lines.length} actions`;
+      if (block.rawCount > 1) {
+        return `Explored ${block.rawCount} actions`;
       }
       const detail = compactDetail(block.lines[block.lines.length - 1]);
       if (detail) {
