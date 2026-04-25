@@ -24,6 +24,7 @@ describe("package.json scripts", () => {
   it("npm run dev delegates port resolution to the central config module", () => {
     const dev = pkg.scripts.dev ?? "";
     expect(dev).toContain("next dev");
+    expect(dev).toContain("--webpack");
     expect(dev).toContain("-p ");
     expect(dev).toMatch(/scripts\/print-port\.ts\s+frontend/);
     // Must NOT hardcode a literal port number — that would drift from

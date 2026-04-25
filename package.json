@@ -16,7 +16,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "FRONTEND_HOST=${FRONTEND_HOST:-127.0.0.1} next dev -H ${FRONTEND_HOST:-127.0.0.1} -p $(npx tsx scripts/print-port.ts frontend)",
+    "dev": "FRONTEND_HOST=${FRONTEND_HOST:-127.0.0.1} next dev --webpack -H ${FRONTEND_HOST:-127.0.0.1} -p $(npx tsx scripts/print-port.ts frontend)",
     "build": "next build",
     "start": "./start.sh",
     "lint": "eslint",
