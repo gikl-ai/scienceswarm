@@ -517,6 +517,30 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("counts raw explored activity entries even when the transcript coalesces them", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/a.md" },
+          { kind: "activity", text: "Read docs/b.md" },
+          { kind: "activity", text: "Read docs/c.md" },
+          { kind: "activity", text: "Write docs/summary.md" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Explored 4 actions",
+    );
+    expect(screen.getByRole("log")).toHaveTextContent(
+      "Read docs/a.md · docs/b.md · docs/c.md",
+    );
+  });
+
   it("keeps the compact live run-state wrapper on a single spacing system", () => {
     render(
       <ChatMessage
