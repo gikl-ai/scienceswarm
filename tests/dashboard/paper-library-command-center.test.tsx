@@ -145,7 +145,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     expect(await screen.findByText("ready for review")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open review queue" }));
-    expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+    expect(await screen.findByText("2024 - Smith - Interesting Paper.pdf")).toBeInTheDocument();
   });
 
   it("hydrates the latest persisted scan when local storage is empty", async () => {
@@ -199,7 +199,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
-    expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+    expect(await screen.findByText("2024 - Smith - Interesting Paper.pdf")).toBeInTheDocument();
     expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"rootPath\":\"/tmp/library\"");
     expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"scanId\":\"scan-1\"");
   });
@@ -710,9 +710,9 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
-    expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+    expect(await screen.findByText("2024 - Smith - Interesting Paper.pdf")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Accept identity/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Save metadata/i }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Apply/i })).toBeInTheDocument();
     });
@@ -943,7 +943,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
-    expect(await screen.findByText("Interesting Paper (2024)")).toBeInTheDocument();
+    expect(await screen.findByText("2024 - Smith - Interesting Paper.pdf")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "accepted" }));
     expect(await screen.findByText("Nothing in this review slice")).toBeInTheDocument();
@@ -960,7 +960,7 @@ describe("PaperLibraryCommandCenter", () => {
     expect(await screen.findByText("ready for review")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open review queue" }));
-    expect(await screen.findByText("Fresh Library Scan (2025)")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Fresh Library Scan")).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([request]) => {
         const url = String(request);

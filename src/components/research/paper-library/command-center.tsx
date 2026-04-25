@@ -74,7 +74,6 @@ interface PaperLibrarySessionDraft {
   title: string;
   year: string;
   authors: string;
-  venue: string;
 }
 
 class PaperLibraryApiError extends Error {
@@ -213,16 +212,6 @@ function isScanInFlight(scan: PaperLibraryScan | null): boolean {
   );
 }
 
-function summarizePrimaryCandidate(item: PaperReviewItem): string {
-  const selected = item.candidates.find((candidate) => candidate.id === item.selectedCandidateId) ?? item.candidates[0];
-  if (!selected) return item.paperId;
-  const title = selected.title?.trim() || item.paperId;
-  if (selected.year) {
-    return `${title} (${selected.year})`;
-  }
-  return title;
-}
-
 function reviewDraftForItem(item: PaperReviewItem, draft?: PaperLibrarySessionDraft): PaperLibrarySessionDraft {
   if (draft) return draft;
   const selected = item.candidates.find((candidate) => candidate.id === item.selectedCandidateId) ?? item.candidates[0];
@@ -230,7 +219,6 @@ function reviewDraftForItem(item: PaperReviewItem, draft?: PaperLibrarySessionDr
     title: selected?.title ?? "",
     year: selected?.year ? String(selected.year) : "",
     authors: selected?.authors?.join(", ") ?? "",
-    venue: selected?.venue ?? "",
   };
 }
 
@@ -240,44 +228,27 @@ function selectedCandidateForItem(item: PaperReviewItem, selectedCandidateId?: s
     ?? item.candidates[0];
 }
 
+function splitAuthors(value: string): string[] {
+  return value
+    .split(",")
+    .map((author) => author.trim())
+    .filter(Boolean);
+}
+
+function metadataMatchesSuggestion(draft: PaperLibrarySessionDraft, candidate: ReturnType<typeof selectedCandidateForItem>): boolean {
+  if (!candidate) return false;
+  const draftAuthors = splitAuthors(draft.authors);
+  const candidateAuthors = candidate.authors.map((author) => author.trim()).filter(Boolean);
+  return (
+    draft.title.trim() === (candidate.title ?? "").trim()
+    && draft.year.trim() === (candidate.year ? String(candidate.year) : "")
+    && draftAuthors.length === candidateAuthors.length
+    && draftAuthors.every((author, index) => author === candidateAuthors[index])
+  );
+}
+
 function formatStatus(status: string): string {
   return status.replaceAll("_", " ");
-}
-
-function formatReasonLabel(reason: string): string {
-  if (reason.startsWith("missing:")) return `Missing ${reason.slice("missing:".length)}`;
-  return reason.replaceAll("_", " ");
-}
-
-function reviewReasonCopy(reason: string): { label: string; body: string } {
-  if (reason === "low_confidence") {
-    return {
-      label: "Low confidence",
-      body: "The best match is plausible, but not strong enough to rename automatically.",
-    };
-  }
-  if (reason === "text_layer_too_thin") {
-    return {
-      label: "Thin PDF text",
-      body: "ScienceSwarm had too little readable PDF text, so the filename carried more weight.",
-    };
-  }
-  if (reason === "metadata_conflict") {
-    return {
-      label: "Metadata conflict",
-      body: "Two sources disagree. Pick the right identity or save corrected fields.",
-    };
-  }
-  if (reason.startsWith("missing:")) {
-    return {
-      label: `Missing ${reason.slice("missing:".length)}`,
-      body: "A rename template needs this field before the file can be planned safely.",
-    };
-  }
-  return {
-    label: formatReasonLabel(reason),
-    body: "This item needs a human decision before it can be included in the rename plan.",
-  };
 }
 
 function truncateGraphLabel(value: string | undefined, fallback: string, maxLength = 34): string {
@@ -358,38 +329,6 @@ function EmptyState({
         <p className="mt-2 text-sm text-muted">{body}</p>
       </div>
     </div>
-  );
-}
-
-function ReviewActionButton({
-  body,
-  disabled,
-  label,
-  onClick,
-  primary = false,
-}: {
-  body: string;
-  disabled: boolean;
-  label: string;
-  onClick: () => void;
-  primary?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`min-h-16 rounded-lg border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-        primary
-          ? "border-accent bg-accent text-white hover:bg-accent-hover"
-          : "border-border bg-white text-foreground hover:border-accent hover:text-accent"
-      }`}
-    >
-      <span className="block text-xs font-semibold">{label}</span>
-      <span className={`mt-1 block text-[11px] leading-snug ${primary ? "text-white/85" : "text-muted"}`}>
-        {body}
-      </span>
-    </button>
   );
 }
 
@@ -572,7 +511,6 @@ export function PaperLibraryCommandCenter({
   const [gapActionSuggestionId, setGapActionSuggestionId] = useState<string | null>(null);
 
   const [draftsByItemId, setDraftsByItemId] = useState<Record<string, PaperLibrarySessionDraft>>({});
-  const [selectedCandidatesByItemId, setSelectedCandidatesByItemId] = useState<Record<string, string>>({});
 
   const patchSession = useCallback((patch: Partial<PaperLibrarySession>) => {
     setSession((current) => ({ ...current, ...patch }));
@@ -595,7 +533,6 @@ export function PaperLibraryCommandCenter({
     setApprovalToken(null);
     setReviewFilter(DEFAULT_REVIEW_FILTER);
     setDraftsByItemId({});
-    setSelectedCandidatesByItemId({});
   }, []);
 
   useEffect(() => {
@@ -1079,6 +1016,11 @@ export function PaperLibraryCommandCenter({
     setReviewActionItemId(item.id);
     try {
       const draft = reviewDraftForItem(item, draftsByItemId[item.id]);
+      const selectedCandidateId = item.selectedCandidateId ?? item.candidates[0]?.id;
+      const selectedCandidate = selectedCandidateForItem(item, selectedCandidateId);
+      const resolvedAction = action === "correct" && metadataMatchesSuggestion(draft, selectedCandidate)
+        ? "accept"
+        : action;
       await paperLibraryFetchJson<{ ok: true; remainingCount: number }>(
         "/api/brain/paper-library/review",
         {
@@ -1088,17 +1030,14 @@ export function PaperLibraryCommandCenter({
             project: projectSlug,
             scanId: session.scanId,
             itemId: item.id,
-            action,
-            selectedCandidateId: selectedCandidatesByItemId[item.id]
-              ?? item.selectedCandidateId
-              ?? item.candidates[0]?.id,
+            action: resolvedAction,
+            selectedCandidateId,
             correction:
-              action === "correct"
+              resolvedAction === "correct"
                 ? {
                     title: draft.title.trim(),
                     year: draft.year.trim(),
                     authors: draft.authors.trim(),
-                    venue: draft.venue.trim(),
                   }
                 : undefined,
           }),
@@ -1121,7 +1060,6 @@ export function PaperLibraryCommandCenter({
     loadScan,
     patchSession,
     projectSlug,
-    selectedCandidatesByItemId,
     session.scanId,
   ]);
 
@@ -1372,9 +1310,9 @@ export function PaperLibraryCommandCenter({
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Review</p>
-              <h3 className="mt-1 text-lg font-semibold text-foreground">Review papers that need a human call</h3>
+              <h3 className="mt-1 text-lg font-semibold text-foreground">Check extracted PDF metadata</h3>
               <p className="mt-1 max-w-2xl text-sm text-muted">
-                Confirm the detected identity, edit bad metadata, skip a file, or keep it in review so it cannot enter the rename plan yet.
+                Review the title, year, and authors ScienceSwarm found for each PDF. Save the suggestion as-is or correct the fields first.
               </p>
             </div>
             <div className="inline-flex items-center gap-2">
@@ -1410,84 +1348,33 @@ export function PaperLibraryCommandCenter({
             <div className="divide-y divide-border">
               {reviewPage.items.map((item) => {
                 const draft = reviewDraftForItem(item, draftsByItemId[item.id]);
-                const selectedCandidateId = selectedCandidatesByItemId[item.id]
-                  ?? item.selectedCandidateId
-                  ?? item.candidates[0]?.id;
-                const selectedCandidate = selectedCandidateForItem(item, selectedCandidateId);
                 return (
                   <article key={item.id} className="py-4">
-                    <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-[minmax(0,1fr)_auto]">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Reviewing PDF</p>
-                        <h4 className="mt-1 text-base font-semibold text-foreground">{summarizePrimaryCandidate(item)}</h4>
-                        <p className="mt-1 break-words text-xs text-muted">{item.source?.relativePath ?? item.paperId}</p>
-                      </div>
-                      <StatusBadge
-                        tone={item.state === "accepted" || item.state === "corrected" ? "success" : item.state === "ignored" ? "neutral" : "warning"}
-                        value={item.state}
-                      />
-                      <div className="md:col-span-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Flagged because</p>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          {(item.reasonCodes.length ? item.reasonCodes : ["needs_review"]).map((reason) => {
-                            const copy = reviewReasonCopy(reason);
-                            return (
-                              <div key={reason} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2">
-                                <p className="text-xs font-semibold text-warn">{copy.label}</p>
-                                <p className="mt-1 text-[11px] leading-snug text-muted">{copy.body}</p>
-                              </div>
-                            );
-                          })}
+                    <div className="rounded-xl border border-border bg-surface p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">PDF</p>
+                          <h4 className="mt-1 break-words text-base font-semibold text-foreground">
+                            {item.source?.relativePath ?? item.paperId}
+                          </h4>
+                          <p className="mt-1 text-xs text-muted">
+                            Check the extracted title, year, and authors. These fields will be used to rename and organize the PDF.
+                          </p>
                         </div>
+                        <StatusBadge
+                          tone={item.state === "accepted" || item.state === "corrected" ? "success" : item.state === "ignored" ? "neutral" : "warning"}
+                          value={item.state}
+                        />
                       </div>
-                    </div>
 
-                    <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-                      <div>
+                      <div className="mt-4">
                         <div className="flex flex-wrap items-end justify-between gap-2">
                           <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Detected identity</p>
-                            <p className="mt-1 text-xs text-muted">Accepting uses this paper identity for the rename plan and paper record.</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Suggested metadata</p>
+                            <p className="mt-1 text-xs text-muted">Save it as-is, or edit any field before saving.</p>
                           </div>
-                          {selectedCandidate && (
-                            <span className="text-[11px] font-semibold text-muted">
-                              {Math.round(selectedCandidate.confidence * 100)}% confidence
-                            </span>
-                          )}
                         </div>
-                        <div className="mt-2 space-y-2">
-                          {item.candidates.map((candidate) => (
-                            <label key={candidate.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2 text-sm">
-                              <input
-                                type="radio"
-                                name={`candidate-${item.id}`}
-                                checked={selectedCandidateId === candidate.id}
-                                onChange={() => {
-                                  setSelectedCandidatesByItemId((current) => ({
-                                    ...current,
-                                    [item.id]: candidate.id,
-                                  }));
-                                }}
-                              />
-                              <span>
-                                <span className="block font-semibold text-foreground">
-                                  {candidate.title ?? candidate.id}
-                                </span>
-                                <span className="mt-1 block text-xs text-muted">
-                                  confidence {Math.round(candidate.confidence * 100)}%
-                                  {candidate.year ? ` • ${candidate.year}` : ""}
-                                  {candidate.venue ? ` • ${candidate.venue}` : ""}
-                                </span>
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Correction</p>
-                        <p className="mt-1 text-xs text-muted">Edit only what looks wrong before saving corrected metadata.</p>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
                           <label className="min-w-0 text-[11px] font-semibold text-muted">
                             Title
                             <input
@@ -1500,7 +1387,7 @@ export function PaperLibraryCommandCenter({
                                 }));
                               }}
                               className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground"
-                              placeholder="Corrected title"
+                              placeholder="Title"
                             />
                           </label>
                           <label className="min-w-0 text-[11px] font-semibold text-muted">
@@ -1530,56 +1417,37 @@ export function PaperLibraryCommandCenter({
                                 }));
                               }}
                               className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground"
-                              placeholder="Authors"
-                            />
-                          </label>
-                          <label className="min-w-0 text-[11px] font-semibold text-muted sm:col-span-2">
-                            Venue
-                            <input
-                              value={draft.venue}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setDraftsByItemId((current) => ({
-                                  ...current,
-                                  [item.id]: { ...draft, venue: value },
-                                }));
-                              }}
-                              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground"
-                              placeholder="Venue"
+                              placeholder="Authors, separated by commas"
                             />
                           </label>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="mt-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Decision</p>
-                      <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                        <ReviewActionButton
-                          body="Use the selected identity in the rename plan."
-                          disabled={reviewActionItemId === item.id}
-                          label="Accept identity"
-                          onClick={() => void handleReviewAction(item, "accept")}
-                          primary
-                        />
-                        <ReviewActionButton
-                          body="Use the edited title, year, authors, or venue."
-                          disabled={reviewActionItemId === item.id}
-                          label="Save edits"
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
                           onClick={() => void handleReviewAction(item, "correct")}
-                        />
-                        <ReviewActionButton
-                          body="Skip this PDF; it will not be renamed or graphed."
                           disabled={reviewActionItemId === item.id}
-                          label="Ignore file"
+                          className="rounded-lg border border-accent bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Save metadata
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => void handleReviewAction(item, "ignore")}
-                        />
-                        <ReviewActionButton
-                          body="Keep it blocking apply until you decide later."
                           disabled={reviewActionItemId === item.id}
-                          label="Keep in review"
+                          className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Skip file
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => void handleReviewAction(item, "unresolve")}
-                        />
+                          disabled={reviewActionItemId === item.id}
+                          className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Review later
+                        </button>
                       </div>
                     </div>
                   </article>
@@ -2534,7 +2402,6 @@ export function PaperLibraryCommandCenter({
     scan,
     scanError,
     scanLoading,
-    selectedCandidatesByItemId,
     session,
     totalGraphEdgeCount,
     undoing,
