@@ -132,20 +132,22 @@ describe("ComposerRuntimeSwitcher", () => {
       />,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Choose assistant" });
-    expect(dialog).toHaveClass("fixed");
-    expect(within(dialog).getByText("Choose assistant")).toBeInTheDocument();
-    expect(within(dialog).getByText("OpenClaw")).toBeInTheDocument();
-    expect(within(dialog).getByText("Claude Code")).toBeInTheDocument();
-    expect(within(dialog).getByText("Codex")).toBeInTheDocument();
-    expect(within(dialog).getByText("Gemini CLI")).toBeInTheDocument();
+    const menu = screen.getByRole("menu", { name: "Assistant" });
+    expect(menu).toHaveClass("fixed");
+    expect(within(menu).getByText("Assistant")).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitemradio", { name: "OpenClaw" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitemradio", { name: "Claude Code" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitemradio", { name: "Codex" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitemradio", { name: "Gemini CLI" })).toBeInTheDocument();
 
-    expect(within(dialog).queryByText("Task")).not.toBeInTheDocument();
-    expect(within(dialog).queryByText("Compare")).not.toBeInTheDocument();
-    expect(within(dialog).queryByText("Data boundary")).not.toBeInTheDocument();
-    expect(within(dialog).queryByText("Hosted")).not.toBeInTheDocument();
-    expect(within(dialog).queryByText("Execution ok")).not.toBeInTheDocument();
-    expect(within(dialog).queryByText("Cloud ok")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Task")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Compare")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Data boundary")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Hosted")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Execution ok")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Cloud ok")).not.toBeInTheDocument();
+    expect(within(menu).queryByText(/Uses your signed-in/)).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Private local assistant for ScienceSwarm.")).not.toBeInTheDocument();
   });
 
   it("selects Claude Code as a plain assistant choice and hides policy details", () => {
@@ -170,8 +172,8 @@ describe("ComposerRuntimeSwitcher", () => {
       />,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Choose assistant" });
-    fireEvent.click(within(dialog).getByRole("button", { name: /Claude Code/ }));
+    const menu = screen.getByRole("menu", { name: "Assistant" });
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: "Claude Code" }));
 
     expect(onProjectPolicyChange).toHaveBeenCalledWith("cloud-ok");
     expect(onModeChange).toHaveBeenCalledWith("chat");
@@ -201,8 +203,8 @@ describe("ComposerRuntimeSwitcher", () => {
       />,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Choose assistant" });
-    fireEvent.click(within(dialog).getByRole("button", { name: /OpenClaw/ }));
+    const menu = screen.getByRole("menu", { name: "Assistant" });
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: "OpenClaw" }));
 
     expect(onProjectPolicyChange).toHaveBeenCalledWith("local-only");
     expect(onModeChange).toHaveBeenCalledWith("chat");
