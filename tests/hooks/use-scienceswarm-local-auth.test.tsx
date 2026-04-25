@@ -117,6 +117,74 @@ describe("useScienceSwarmLocalAuth", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
+  it("falls back to same-tab sign-in when the browser blocks popups", async () => {
+    const openSpy = vi
+      .spyOn(window, "open")
+      .mockImplementation((url?: string | URL, target?: string) => {
+        if (target === "_self") {
+          return window;
+        }
+
+        return null;
+      });
+
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const url = typeof input === "string" ? input : input.toString();
+
+        if (url === "/api/scienceswarm-auth/status") {
+          return new Response(
+            JSON.stringify({
+              detail: "",
+              expiresAt: null,
+              signedIn: false,
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+            },
+          );
+        }
+
+        if (url === "/api/scienceswarm-auth/start") {
+          expect(init).toEqual({ method: "POST" });
+          return new Response(
+            JSON.stringify({
+              authUrl:
+                "https://scienceswarm.ai/sign-in?redirect_url=https%3A%2F%2Fscienceswarm.ai%2Fauth%2Flocal-bridge",
+              state: "state-123",
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+            },
+          );
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      },
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ScienceSwarmLocalAuthProbe />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("loaded").textContent).toBe("loaded");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith(
+        "https://scienceswarm.ai/sign-in?redirect_url=https%3A%2F%2Fscienceswarm.ai%2Fauth%2Flocal-bridge",
+        "_self",
+      );
+    });
+
+    expect(screen.getByTestId("detail").textContent).toBe("");
+  });
+
   it("finalizes the local session from a hosted token message", async () => {
     const replace = vi.fn();
     const close = vi.fn();

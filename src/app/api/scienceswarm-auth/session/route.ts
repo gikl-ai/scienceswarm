@@ -32,9 +32,11 @@ function escapeHtml(value: string): string {
 
 function buildCompletionHtml(input: {
   message: string;
+  returnPath?: string;
   state: string;
   success: boolean;
 }): string {
+  const returnPath = input.returnPath || "/dashboard/reasoning";
   const payload = input.success
     ? {
         state: input.state,
@@ -57,21 +59,30 @@ function buildCompletionHtml(input: {
       main { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
       section { max-width: 420px; border: 1px solid rgb(229 231 235); border-radius: 20px; background: white; padding: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
       p { margin: 0; font-size: 14px; line-height: 1.6; }
+      a { display: inline-block; margin-top: 16px; color: rgb(37 99 235); font-size: 14px; font-weight: 600; text-decoration: none; }
     </style>
   </head>
   <body>
     <main>
       <section>
         <p>${escapeHtml(input.message)}</p>
+        ${
+          input.success
+            ? `<a href="${escapeHtml(returnPath)}">Return to ScienceSwarm</a>`
+            : ""
+        }
       </section>
     </main>
     <script>
       (() => {
         const payload = ${JSON.stringify(payload)};
+        const returnPath = ${JSON.stringify(returnPath)};
         if (window.opener) {
           window.opener.postMessage(payload, window.location.origin);
+          window.setTimeout(() => window.close(), 50);
+        } else if (${JSON.stringify(input.success)}) {
+          window.setTimeout(() => window.location.replace(returnPath), 800);
         }
-        window.setTimeout(() => window.close(), 50);
       })();
     </script>
   </body>
@@ -205,6 +216,7 @@ export async function POST(request: Request) {
     const response = buildHtmlResponse(
       buildCompletionHtml({
         message: "ScienceSwarm account connected. You can return to the app.",
+        returnPath: authState.returnPath,
         state,
         success: true,
       }),

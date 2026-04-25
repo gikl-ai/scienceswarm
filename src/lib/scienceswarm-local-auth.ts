@@ -27,6 +27,7 @@ type ScienceSwarmLocalAuthStatePayload = {
   issuedAt: string;
   localOrigin: string;
   nonce: string;
+  returnPath?: string;
 };
 
 type SignedCookiePayload =
@@ -164,6 +165,7 @@ function readExpiresAt(expiresAt: string): number {
 
 export async function createScienceSwarmLocalAuthState(input: {
   localOrigin: string;
+  returnPath?: string | null;
 }): Promise<string> {
   if (!isSupportedScienceSwarmLocalOrigin(input.localOrigin)) {
     throw new Error("ScienceSwarm local sign-in only supports localhost origins.");
@@ -176,6 +178,7 @@ export async function createScienceSwarmLocalAuthState(input: {
     issuedAt: new Date().toISOString(),
     localOrigin: input.localOrigin,
     nonce: randomBytes(24).toString("base64url"),
+    ...(input.returnPath ? { returnPath: input.returnPath } : {}),
   });
 }
 
