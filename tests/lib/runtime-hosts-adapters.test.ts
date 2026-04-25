@@ -781,6 +781,14 @@ describe("runtime host adapters", () => {
     expect(output.authChallenge).toBe(true);
   });
 
+  it("does not classify 401 suffix words as auth challenges", () => {
+    const output = normalizeCliOutput({
+      stderr: "Process exitstatus: 401 but the provider auth state is unknown",
+    });
+
+    expect(output.authChallenge).toBe(false);
+  });
+
   it("strips provider API-key env vars before launching subscription-native CLIs", async () => {
     const transport = new FakeCliTransport((request) => fakeResult(request, "ok"));
     const env = {
