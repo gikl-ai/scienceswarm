@@ -176,12 +176,6 @@ export function useScienceSwarmLocalAuth(): UseScienceSwarmLocalAuthResult {
       "_blank",
       "popup=yes,width=520,height=720,resizable=yes,scrollbars=yes",
     );
-    if (!popup) {
-      setAuthDetail("Allow popups to sign in with ScienceSwarm.");
-      setIsSigningIn(false);
-      return;
-    }
-
     popupRef.current = popup;
 
     try {
@@ -197,9 +191,16 @@ export function useScienceSwarmLocalAuth(): UseScienceSwarmLocalAuthResult {
         throw new Error(payload.error || "ScienceSwarm sign-in could not start.");
       }
       pendingStateRef.current = payload.state;
-      popup.location.replace(payload.authUrl);
+      if (popup) {
+        popup.location.replace(payload.authUrl);
+      } else {
+        const sameTab = window.open(payload.authUrl, "_self");
+        if (!sameTab) {
+          window.location.assign(payload.authUrl);
+        }
+      }
     } catch (error) {
-      popup.close();
+      popup?.close();
       popupRef.current = null;
       pendingStateRef.current = null;
       setAuthDetail(

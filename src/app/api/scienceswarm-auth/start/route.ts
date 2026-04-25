@@ -7,6 +7,19 @@ import {
   createScienceSwarmLocalAuthState,
 } from "@/lib/scienceswarm-local-auth";
 
+function getLocalReturnPath(request: Request, localOrigin: string): string {
+  const referer = request.headers.get("referer")?.trim();
+  if (!referer) return "/dashboard/reasoning";
+
+  try {
+    const url = new URL(referer);
+    if (url.origin !== localOrigin) return "/dashboard/reasoning";
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return "/dashboard/reasoning";
+  }
+}
+
 export async function POST(request: Request) {
   if (!(await isLocalRequest(request))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -14,7 +27,10 @@ export async function POST(request: Request) {
 
   try {
     const localOrigin = getScienceSwarmLocalRequestOrigin(request);
-    const state = await createScienceSwarmLocalAuthState({ localOrigin });
+    const state = await createScienceSwarmLocalAuthState({
+      localOrigin,
+      returnPath: getLocalReturnPath(request, localOrigin),
+    });
     const authUrl = buildScienceSwarmLocalSignInUrl({
       localOrigin,
       state,

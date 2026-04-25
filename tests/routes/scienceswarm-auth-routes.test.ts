@@ -80,6 +80,37 @@ describe("/api/scienceswarm-auth/*", () => {
     expect(redirectUrl.searchParams.get("origin")).toBe("http://127.0.0.1:3022");
   });
 
+  it("preserves the local return path for same-tab sign-in fallback", async () => {
+    const startResponse = await postStart(
+      new Request("http://127.0.0.1:3022/api/scienceswarm-auth/start", {
+        method: "POST",
+        headers: {
+          referer: "http://127.0.0.1:3022/dashboard/reasoning?brain_slug=paper-critique",
+        },
+      }),
+    );
+    const startPayload = (await startResponse.json()) as { state: string };
+
+    const token = makeJwt(Math.floor(Date.now() / 1000) + 3600);
+    const formData = new FormData();
+    formData.set("state", startPayload.state);
+    formData.set("token", token);
+    const sessionResponse = await postSession(
+      new Request("http://127.0.0.1:3022/api/scienceswarm-auth/session", {
+        method: "POST",
+        headers: {
+          "sec-fetch-dest": "document",
+        },
+        body: formData,
+      }),
+    );
+
+    expect(sessionResponse.status).toBe(200);
+    const html = await sessionResponse.text();
+    expect(html).toContain("/dashboard/reasoning?brain_slug=paper-critique");
+    expect(html).toContain("Return to ScienceSwarm");
+  });
+
   it("stores a local auth cookie from a valid hosted token handoff", async () => {
     const startResponse = await postStart(
       new Request("http://127.0.0.1:3022/api/scienceswarm-auth/start", {
