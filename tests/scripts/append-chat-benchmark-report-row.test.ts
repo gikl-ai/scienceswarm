@@ -55,6 +55,12 @@ describe("append-chat-benchmark-report-row", () => {
     });
   });
 
+  it("rejects --report without a path argument", () => {
+    expect(() =>
+      parseAppendBenchmarkReportArgs(["--report"]),
+    ).toThrow("--report requires a path argument");
+  });
+
   it("inserts a new row before the notes section", () => {
     const row =
       "| 2026-04-25 | #277 | append helper | Local `http://localhost:3001` | 40 | 55 | no | 120 | 2 | `Hi there.` | unavailable |";
@@ -119,6 +125,50 @@ describe("append-chat-benchmark-report-row", () => {
     expect(result.row).toContain("| 2026-04-25 | #277 | append helper |");
     expect(reportText).toContain(result.row);
     expect(reportText).toContain("\n\n## Notes");
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not write the report when the benchmark fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
+        Promise.resolve(
+          new Response('data: {"type":"final","text":"Failed."}\n\n', {
+            status: 503,
+            headers: {
+              "content-type": "text/event-stream; charset=utf-8",
+              "x-chat-backend": "openclaw",
+            },
+          }),
+        )
+      ),
+    );
+
+    const directory = await mkdtemp(join(tmpdir(), "benchmark-report-append-"));
+    const reportPath = join(directory, "chat-speed-report.md");
+    await writeFile(reportPath, BASE_REPORT);
+
+    const result = await appendBenchmarkReportRow(
+      parseAppendBenchmarkReportArgs([
+        "--report",
+        reportPath,
+        "--url",
+        "http://127.0.0.1:3001",
+        "--project",
+        "project-alpha",
+        "--message",
+        "Hi",
+        "--pr",
+        "#289",
+        "--change-area",
+        "append helper",
+        "--date",
+        "2026-04-25",
+      ]),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(await readFile(reportPath, "utf8")).toBe(BASE_REPORT);
   });
 
   it("documents the append flag in help text", () => {
