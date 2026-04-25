@@ -36,6 +36,14 @@ export interface ImportResult {
 export interface BrainStoreHealth {
   ok: boolean;
   pageCount: number;
+  /**
+   * One-line cause string when `ok === false`. Surfaced by the adapter's
+   * `health()` so /api/brain/status and /api/health can render an
+   * honest error to operators (e.g. "stale .gbrain-lock", "PGLite
+   * native module failed to load") instead of a silent
+   * `{ok: false, pageCount: 0}` shrug.
+   */
+  error?: string;
   lastSync?: string;
   brainScore?: number;
   embedCoverage?: number;
@@ -80,7 +88,20 @@ export interface BrainStore {
 }
 
 export class BrainBackendUnavailableError extends Error {
-  constructor(message = "Brain backend unavailable", options?: { cause?: unknown }) {
+  /**
+   * Human-readable detail describing the underlying init failure (e.g.
+   * "ENOENT: brain.pglite/0001 missing", "PGlite native module failed to
+   * load"). Carried alongside the generic `message` so HTTP routes can
+   * surface a one-line cause to operators without spelunking through
+   * `cause` chains. Set by `initializeBrainStore` when the underlying
+   * `createRuntimeEngine` / `connect` / `initSchema` call rejects.
+   */
+  readonly detail?: string;
+
+  constructor(
+    message = "Brain backend unavailable",
+    options?: { cause?: unknown; detail?: string },
+  ) {
     super(message);
     this.name = "BrainBackendUnavailableError";
     if (options && "cause" in options) {
@@ -91,7 +112,26 @@ export class BrainBackendUnavailableError extends Error {
         writable: true,
       });
     }
+    if (options?.detail !== undefined) {
+      this.detail = options.detail;
+    }
   }
+}
+
+/**
+ * Extract a one-line "why" string from an unknown error. Used by HTTP
+ * routes that need to surface init failures to operators without
+ * leaking a full stack trace. Prefers `BrainBackendUnavailableError.detail`,
+ * then `Error.message`, then `String(error)`.
+ */
+export function describeBrainBackendError(error: unknown): string {
+  if (error instanceof BrainBackendUnavailableError && error.detail) {
+    return error.detail;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return String(error);
 }
 
 export class BrainSearchTimeoutError extends Error {
@@ -240,8 +280,18 @@ function initializeBrainStore(
     if (brainStoreState.activeBrainRoot === brainRoot) {
       brainStoreState.activeBrainRoot = null;
     }
+    // Surface the underlying init failure (PGLite native module load
+    // failure, stale lock file, missing schema, permissions) as `detail`
+    // so HTTP routes can render a one-line cause for operators instead
+    // of the opaque "Brain backend unavailable" string. Truncate to a
+    // reasonable length so a multi-line stack does not bloat JSON
+    // responses.
+    const detail = error instanceof Error && error.message
+      ? error.message
+      : String(error);
     throw new BrainBackendUnavailableError("Brain backend unavailable", {
       cause: error,
+      detail: detail.length > 500 ? `${detail.slice(0, 497)}...` : detail,
     });
   });
 

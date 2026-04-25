@@ -6,6 +6,10 @@ import type {
 import {
   isCaptureKind,
 } from "@/brain/types";
+import {
+  BrainBackendUnavailableError,
+  describeBrainBackendError,
+} from "@/brain/store";
 import { isCaptureChannel, processCapture } from "@/lib/capture";
 import { isLocalRequest } from "@/lib/local-guard";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
@@ -139,6 +143,20 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Capture failed";
     const status = message === "Invalid capture channel" || message === "Invalid project slug" ? 400 : 500;
+    // When the brain backend itself is unavailable, surface the
+    // underlying init failure as a `detail` field. The bare
+    // "Brain backend unavailable" message used to be the entire 500
+    // body, leaving operators unable to tell whether it was a stale
+    // PGLite lock, a missing native module, a permission error, or a
+    // schema-init failure. The disk-fallback in /api/projects is
+    // intentional and preserved (commit ae621df); the capture path
+    // does not have a safe fallback so we lean on diagnostics.
+    if (status === 500 && error instanceof BrainBackendUnavailableError) {
+      return Response.json(
+        { error: message, detail: describeBrainBackendError(error) },
+        { status },
+      );
+    }
     return Response.json({ error: message }, { status });
   }
 }

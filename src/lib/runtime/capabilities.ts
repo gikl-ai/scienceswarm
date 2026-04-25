@@ -43,6 +43,12 @@ interface GbrainSnapshot {
   maintenance?: boolean;
   uploadFiles?: boolean;
   localFolder?: boolean;
+  /**
+   * One-line cause string surfaced when any capability flag is `false`.
+   * Sourced from `probeGbrainEngineHealth` so dashboards can render an
+   * honest error instead of `unavailable` with no detail.
+   */
+  cause?: string;
 }
 
 interface StructuredCritiqueSnapshot {
@@ -89,22 +95,31 @@ function gbrainCapability(
   label: string,
   value: boolean | undefined,
   nextAction: string,
+  cause?: string,
 ): RuntimeCapability {
+  const evidenceItems: RuntimeCapabilityEvidence[] = [
+    evidence(
+      "gbrain state",
+      value === undefined ? "not probed" : value ? "available" : "unavailable",
+      "probe",
+      value ? "ready" : "unavailable",
+    ),
+  ];
+  if (!value && cause) {
+    evidenceItems.push(
+      evidence("Cause", cause, "probe", "unavailable"),
+    );
+  }
   return {
     capabilityId,
     label,
     status: value ? "ready" : "unavailable",
     privacy: "local-only",
     requiredForLocalGuarantee: true,
-    evidence: [
-      evidence(
-        "gbrain state",
-        value === undefined ? "not probed" : value ? "available" : "unavailable",
-        "probe",
-        value ? "ready" : "unavailable",
-      ),
-    ],
-    nextAction: value ? undefined : nextAction,
+    evidence: evidenceItems,
+    // Prefer the live cause when we have one; the static next-action
+    // hint applies when the brain has simply never been initialized.
+    nextAction: value ? undefined : (cause ?? nextAction),
   };
 }
 
@@ -319,36 +334,42 @@ export function buildRuntimeCapabilityContract(
       "gbrain read",
       snapshot.gbrain?.read,
       "Run setup to initialize gbrain read/search.",
+      snapshot.gbrain?.cause,
     ),
     gbrainCapability(
       "brain.write",
       "gbrain write",
       snapshot.gbrain?.write,
       "Run setup to initialize gbrain writes.",
+      snapshot.gbrain?.cause,
     ),
     gbrainCapability(
       "brain.capture",
       "gbrain capture",
       snapshot.gbrain?.capture,
       "Run setup to initialize gbrain capture.",
+      snapshot.gbrain?.cause,
     ),
     gbrainCapability(
       "brain.maintenance",
       "gbrain maintenance",
       snapshot.gbrain?.maintenance,
       "Run setup to initialize local maintenance.",
+      snapshot.gbrain?.cause,
     ),
     gbrainCapability(
       "imports.uploadFiles",
       "Upload files import",
       snapshot.gbrain?.uploadFiles,
       "Run setup to initialize gbrain ingest.",
+      snapshot.gbrain?.cause,
     ),
     gbrainCapability(
       "imports.localFolder",
       "Local folder import",
       snapshot.gbrain?.localFolder,
       "Run setup to initialize gbrain ingest.",
+      snapshot.gbrain?.cause,
     ),
     {
       capabilityId: "execution.openhands.local",

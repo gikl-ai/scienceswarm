@@ -14,8 +14,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { getMonthCost, getRecentEvents } from "@/brain/cost";
-import { countPagesFromDisk } from "@/brain/search";
 import {
+  describeBrainBackendError,
   getBrainStore,
   ensureBrainStoreReady,
   type BrainStoreHealth,
@@ -110,23 +110,30 @@ export async function GET() {
     const recentEvents = getRecentEvents(config, undefined, 10);
 
     // Backend health from the active BrainStore (PGLite). This is the
-    // single source of truth for page count in the happy path; we only
-    // fall through to a filesystem walk when the store is unavailable.
+    // single source of truth for page count in the happy path. When the
+    // engine fails to initialize we surface that honestly instead of
+    // silently falling back to a filesystem page count — the disk
+    // fallback was painting `pageCount: 4` (markdown count) over a
+    // `store.ok:false` shrug, hiding the real failure from operators.
     let storeHealth: BrainStoreHealth | undefined;
     try {
       await ensureBrainStoreReady();
       const store = getBrainStore();
       storeHealth = await store.health();
-    } catch {
-      storeHealth = { ok: false, pageCount: 0 };
+    } catch (error) {
+      storeHealth = {
+        ok: false,
+        pageCount: 0,
+        error: describeBrainBackendError(error),
+      };
     }
 
-    // Prefer store page count when available, fall back to filesystem count.
-    // `countPagesFromDisk` is sync + filesystem-only so the healthy path
-    // does not pay for a second `store.health()` round-trip.
-    const responsePageCount = storeHealth?.ok
-      ? storeHealth.pageCount
-      : countPagesFromDisk(config);
+    // When the store is unavailable we report `pageCount: null` and
+    // mirror `store.ok` / `store.error` at the top level so dashboard
+    // consumers can render a real "brain is dead" banner instead of a
+    // green count.
+    const ok = Boolean(storeHealth?.ok);
+    const responsePageCount = ok ? (storeHealth?.pageCount ?? null) : null;
 
     // Radar visibility (TODO #2). Best-effort: any failure resolves
     // to `null` so a missing pointer file never breaks the status
@@ -137,6 +144,8 @@ export async function GET() {
       monthCost,
       budgetExceeded,
       recentEvents,
+      ok,
+      error: ok ? undefined : storeHealth?.error,
       pageCount: responsePageCount,
       backend: "pglite",
       store: storeHealth,
