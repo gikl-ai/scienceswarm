@@ -31,7 +31,7 @@ import matter from "gray-matter";
 import { createHash } from "node:crypto";
 
 import type { GbrainClient, GbrainLinkOptions, GbrainPutResult } from "./gbrain-client";
-import { ensureBrainStoreReady, getBrainStore } from "./store";
+import { BrainBackendUnavailableError, ensureBrainStoreReady, getBrainStore } from "./store";
 import type { GbrainEngineAdapter } from "./stores/gbrain-engine-adapter";
 import { chunkText } from "./stores/gbrain-chunker";
 import { enqueueGbrainWrite } from "@/lib/gbrain/write-queue";
@@ -292,7 +292,9 @@ export function createInProcessGbrainClient(
     const store = getBrainStore({ root: options.root }) as GbrainEngineAdapter;
     const health = await store.health();
     if (!health.ok) {
-      throw new Error(health.error ?? "Brain backend unavailable.");
+      throw new BrainBackendUnavailableError("Brain backend unavailable", {
+        detail: health.error ?? "Brain backend unavailable.",
+      });
     }
     return store.engine as unknown as InProcessEngine;
   }

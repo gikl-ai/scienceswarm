@@ -8,7 +8,7 @@ import {
   createInProcessGbrainClient,
 } from "@/brain/in-process-gbrain-client";
 import { GbrainEngineAdapter } from "@/brain/stores/gbrain-engine-adapter";
-import { getBrainStore, resetBrainStore } from "@/brain/store";
+import { BrainBackendUnavailableError, getBrainStore, resetBrainStore } from "@/brain/store";
 
 let brainRoot = "";
 let previousBrainRoot: string | undefined;
@@ -104,5 +104,43 @@ describe("createInProcessGbrainClient", () => {
 
     const page = await getBrainStore({ root: brainRoot }).getPage("paper-library-writeback-recovery");
     expect(page?.title).toBe("Recovered Writeback");
+  });
+
+  it("preserves typed brain backend failures from the shared store", async () => {
+    await resetBrainStore();
+    const state = (globalThis as typeof globalThis & {
+      __scienceswarmBrainStoreState: {
+        instance: unknown;
+        adapterInitPromise: Promise<void> | null;
+        activeBrainRoot: string | null;
+      };
+    }).__scienceswarmBrainStoreState;
+    state.instance = {
+      health: async () => ({
+        ok: false,
+        pageCount: 0,
+        error: "PGLite failed to initialize",
+      }),
+      dispose: async () => {},
+    };
+    state.adapterInitPromise = null;
+    state.activeBrainRoot = brainRoot;
+
+    const client = createInProcessGbrainClient({ root: brainRoot });
+    let caughtError: unknown;
+    try {
+      await client.persistTransaction("paper-library-backend-failure", () => ({
+        page: {
+          type: "paper",
+          title: "Unreachable",
+          compiledTruth: "This write should never reach the engine.",
+        },
+      }));
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toBeInstanceOf(BrainBackendUnavailableError);
+    expect(caughtError).toMatchObject({ detail: "PGLite failed to initialize" });
   });
 });
