@@ -17,9 +17,9 @@ npx tsx scripts/benchmark-chat-hi.ts \
 
 ## Measurements
 
-| Date | Environment | Headers ms | First chunk ms | Shared tick | Total ms | Progress events | Final text sample | Timing artifact |
-| --- | --- | ---: | ---: | :---: | ---: | ---: | --- | --- |
-| 2026-04-24 | Local `http://localhost:3001` | 58 | 58 | yes | 6677 | 14 | `Hi! What would you like help with?` | unavailable (`SCIENCESWARM_CHAT_TIMING` disabled, endpoint returned `404`) |
+| Date | PR | Change area | Environment | Headers ms | First chunk ms | Shared tick | Total ms | Progress events | Final text sample | Timing artifact |
+| --- | --- | --- | --- | ---: | ---: | :---: | ---: | ---: | --- | --- |
+| 2026-04-24 | baseline | initial local benchmark | Local `http://localhost:3001` | 58 | 58 | yes | 6677 | 14 | `Hi! What would you like help with?` | unavailable (`SCIENCESWARM_CHAT_TIMING` disabled, endpoint returned `404`) |
 
 ## Notes
 
