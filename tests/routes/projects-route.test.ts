@@ -208,6 +208,59 @@ describe("POST /api/projects", () => {
     expect(data.materializationError).toContain("not a directory");
   });
 
+  it("creates a disk-backed project when the gbrain repository is unavailable", async () => {
+    const { POST } = await import("@/app/api/projects/route");
+    const unavailable = new Error("Brain backend unavailable");
+    unavailable.name = "BrainBackendUnavailableError";
+    const fakeRepository: ProjectRepository = {
+      async list() {
+        throw unavailable;
+      },
+      async get() {
+        return null;
+      },
+      async create() {
+        throw unavailable;
+      },
+      async delete() {
+        return { ok: true, existed: true };
+      },
+      async touch() {},
+    };
+    __setProjectRepositoryOverride(fakeRepository);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const response = await POST(buildCreateRequest({
+        action: "create",
+        name: "Disk Fallback Project",
+        description: "Keep onboarding usable when gbrain is degraded.",
+      }));
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.persistence).toBe("disk-fallback");
+      expect(data.persistenceWarning).toBe("Brain backend unavailable");
+      expect(data.project).toEqual(
+        expect.objectContaining({
+          slug: "disk-fallback-project",
+          name: "Disk Fallback Project",
+          description: "Keep onboarding usable when gbrain is degraded.",
+        }),
+      );
+      expect(await readFile(
+        path.join(dataRoot, "projects", "disk-fallback-project", "project.json"),
+        "utf-8",
+      )).toContain("Keep onboarding usable when gbrain is degraded.");
+      expect(warn).toHaveBeenCalledWith(
+        "[projects] repository create failed; falling back to disk:",
+        unavailable,
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it.each(["archive", "delete"] as const)(
     "archives the project record and preserves local files for %s requests",
     async (action) => {

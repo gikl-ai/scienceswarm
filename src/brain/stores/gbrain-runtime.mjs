@@ -106,8 +106,10 @@ function isRecoverableEngineFactoryImportError(error) {
 
 async function loadCreateEngine() {
   try {
-    const engineFactorySpecifier = "gbrain/engine-factory";
-    const engineFactoryModule = await import(/* @vite-ignore */ engineFactorySpecifier);
+    // Keep this import literal so Next can apply `transpilePackages: ["gbrain"]`.
+    // A variable import is left for Node to load at runtime, and Node 24 refuses
+    // to type-strip TypeScript files under node_modules.
+    const engineFactoryModule = await import("gbrain/engine-factory");
     if (typeof engineFactoryModule.createEngine === "function") {
       return engineFactoryModule.createEngine;
     }

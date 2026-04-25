@@ -31,6 +31,47 @@ interface ProjectMeta {
 
 const PROJECTS_REPOSITORY_LIST_DEADLINE_MS = 1500;
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isRepositoryUnavailableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as Error & { cause?: unknown };
+  const message = errorMessage(candidate);
+  return candidate.name === "BrainBackendUnavailableError"
+    || /brain backend unavailable/i.test(message)
+    || /PGLite failed to initialize/i.test(message)
+    || (candidate.cause !== undefined && isRepositoryUnavailableError(candidate.cause));
+}
+
+async function createDiskFallbackProject(input: {
+  slug: string;
+  name: string;
+  description?: string;
+}): Promise<ProjectRecord> {
+  const existing = (await listProjectRecordsFromDisk()).find(
+    (record) => record.slug === input.slug && record.status !== "archived",
+  );
+  if (existing) {
+    throw new DuplicateProjectError(input.slug);
+  }
+
+  const createdAt = new Date().toISOString();
+  return {
+    slug: input.slug,
+    name: input.name,
+    description: input.description?.trim() || "New project",
+    createdAt,
+    lastActive: createdAt,
+    status: "active",
+    projectPageSlug: input.slug,
+  };
+}
+
 function toLegacyProjectMeta(record: {
   slug: string;
   name: string;
@@ -123,11 +164,31 @@ export async function POST(request: Request) {
         );
       }
 
-      const project = await getProjectsRouteRepository().create({
-        name: trimmedName,
-        description: typeof description === "string" ? description : undefined,
-        createdBy,
-      });
+      const trimmedDescription = typeof description === "string"
+        ? description
+        : undefined;
+      let persistence: "gbrain" | "disk-fallback" = "gbrain";
+      let persistenceWarning: string | null = null;
+      let project: ProjectRecord;
+      try {
+        project = await getProjectsRouteRepository().create({
+          name: trimmedName,
+          description: trimmedDescription,
+          createdBy,
+        });
+      } catch (error) {
+        if (!isRepositoryUnavailableError(error)) {
+          throw error;
+        }
+        console.warn("[projects] repository create failed; falling back to disk:", error);
+        project = await createDiskFallbackProject({
+          slug,
+          name: trimmedName,
+          description: trimmedDescription,
+        });
+        persistence = "disk-fallback";
+        persistenceWarning = errorMessage(error);
+      }
       let materializedPath: string | null = null;
       let materializationError: string | null = null;
       try {
@@ -147,6 +208,8 @@ export async function POST(request: Request) {
           slug: project.slug,
           changed: trimmedName !== project.slug,
         },
+        persistence,
+        persistenceWarning,
       });
     }
 

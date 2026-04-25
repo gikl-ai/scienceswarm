@@ -1,15 +1,10 @@
 import { GET as workspaceRouteGet } from "../../../route";
 
 type WorkspaceRawRouteContext = {
-  params:
-    | {
-        projectId?: string;
-        file?: string[];
-      }
-    | Promise<{
-        projectId?: string;
-        file?: string[];
-      }>;
+  params: Promise<{
+    projectId: string;
+    file: string[];
+  }>;
 };
 
 export async function GET(request: Request, context: WorkspaceRawRouteContext) {
