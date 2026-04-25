@@ -800,6 +800,69 @@ describe("PaperLibraryCommandCenter", () => {
     expect(await screen.findAllByText("undone")).toHaveLength(2);
   });
 
+  it("accepts unchanged author suggestions that contain commas", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "review",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+      }),
+    );
+
+    const commaAuthorItem = {
+      ...baseReviewItem(),
+      candidates: [
+        {
+          ...baseReviewItem().candidates[0],
+          authors: ["Smith, Jr.", "Jones"],
+        },
+      ],
+    };
+    let reviewBody: Record<string, unknown> | undefined;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan(),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/review?")) {
+        return Response.json({
+          ok: true,
+          items: [commaAuthorItem],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      if (url === "/api/brain/paper-library/review" && method === "POST") {
+        reviewBody = JSON.parse(String(init?.body));
+        return Response.json({ ok: true, remainingCount: 0 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByDisplayValue("Smith, Jr., Jones")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Save metadata/i }));
+
+    await waitFor(() => {
+      expect(reviewBody).toMatchObject({ action: "accept" });
+    });
+    expect(reviewBody?.correction).toBeUndefined();
+  });
+
   it("repairs a manifest that still needs gbrain writeback", async () => {
     window.localStorage.setItem(
       "scienceswarm.paperLibrary.session.demo-project",

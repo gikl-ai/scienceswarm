@@ -228,16 +228,30 @@ function splitAuthors(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeAuthorsText(value: string): string {
+  return value.trim().replace(/\s*,\s*/g, ", ").replace(/\s+/g, " ");
+}
+
+function candidateAuthorsForReview(candidate: ReturnType<typeof selectedCandidateForItem>): string[] {
+  return (candidate?.authors ?? []).map((author) => author.trim()).filter(Boolean);
+}
+
 function metadataMatchesSuggestion(draft: PaperLibrarySessionDraft, candidate: ReturnType<typeof selectedCandidateForItem>): boolean {
   if (!candidate) return false;
-  const draftAuthors = splitAuthors(draft.authors);
-  const candidateAuthors = (candidate.authors ?? []).map((author) => author.trim()).filter(Boolean);
+  const candidateAuthors = candidateAuthorsForReview(candidate);
   return (
     draft.title.trim() === (candidate.title ?? "").trim()
     && draft.year.trim() === (candidate.year ? String(candidate.year) : "")
-    && draftAuthors.length === candidateAuthors.length
-    && draftAuthors.every((author, index) => author === candidateAuthors[index])
+    && normalizeAuthorsText(draft.authors) === normalizeAuthorsText(candidateAuthors.join(", "))
   );
+}
+
+function authorsForCorrection(draft: PaperLibrarySessionDraft, candidate: ReturnType<typeof selectedCandidateForItem>): string[] {
+  const candidateAuthors = candidateAuthorsForReview(candidate);
+  if (normalizeAuthorsText(draft.authors) === normalizeAuthorsText(candidateAuthors.join(", "))) {
+    return candidateAuthors;
+  }
+  return splitAuthors(draft.authors);
 }
 
 function mergeUniqueById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
@@ -1049,7 +1063,7 @@ export function PaperLibraryCommandCenter({
                 ? {
                     title: draft.title.trim(),
                     year: draft.year.trim(),
-                    authors: draft.authors.trim(),
+                    authors: authorsForCorrection(draft, selectedCandidate),
                   }
                 : undefined,
           }),
