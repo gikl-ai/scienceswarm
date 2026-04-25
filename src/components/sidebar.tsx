@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type SVGProps } from "react";
 import {
-  Atom,
   Brain,
-  Flask,
+  Chats,
   GearSix,
   House,
   type Icon,
@@ -17,6 +16,41 @@ type IconLikeProps = {
   color?: string;
   weight?: string;
 } & Omit<SVGProps<SVGSVGElement>, "color">;
+
+// ScienceSwarm brand mark: a stylized "S" formed by a swarm of connected
+// network nodes, echoing the company logo on scienceswarm.ai.
+const ScienceSwarmLogo: Icon = (({ size = 24, color, weight: _weight, ...rest }: IconLikeProps) => {
+  const sz = typeof size === "number" ? size : Number.parseFloat(String(size)) || 24;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={sz}
+      height={sz}
+      fill="none"
+      stroke={color ?? "currentColor"}
+      strokeWidth={1.25}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...rest}
+    >
+      <line x1="17" y1="4" x2="9" y2="5" />
+      <line x1="9" y1="5" x2="5" y2="9" />
+      <line x1="5" y1="9" x2="12" y2="12" />
+      <line x1="12" y1="12" x2="19" y2="15" />
+      <line x1="19" y1="15" x2="15" y2="19" />
+      <line x1="15" y1="19" x2="7" y2="20" />
+      <line x1="9" y1="5" x2="12" y2="12" />
+      <line x1="12" y1="12" x2="15" y2="19" />
+      <circle cx="17" cy="4" r="1.6" fill="currentColor" />
+      <circle cx="9" cy="5" r="2" fill="currentColor" />
+      <circle cx="5" cy="9" r="1.4" fill="currentColor" />
+      <circle cx="12" cy="12" r="2.2" fill="currentColor" />
+      <circle cx="19" cy="15" r="1.4" fill="currentColor" />
+      <circle cx="15" cy="19" r="2" fill="currentColor" />
+      <circle cx="7" cy="20" r="1.6" fill="currentColor" />
+    </svg>
+  );
+}) as unknown as Icon;
 
 // Two-network glyph (big mesh + small mesh) representing reasoning audit:
 // the model on the left producing a smaller derived trace on the right.
@@ -87,7 +121,7 @@ export function Sidebar() {
     // Workspace is the single project surface: sidebar lists projects,
     // clicking one opens its directory + chat. /dashboard is now only
     // the "create a new project" form, reached via the + Add menu.
-    { label: "Workspace", href: buildWorkspaceHrefForSlug(projectSlug), Icon: Flask },
+    { label: "Workspace", href: buildWorkspaceHrefForSlug(projectSlug), Icon: Chats },
     { label: "gbrain", href: buildGbrainHrefForSlug(projectSlug), Icon: Brain },
     { label: "Reasoning", href: "/dashboard/reasoning", Icon: ReasoningIcon },
   ];
@@ -122,7 +156,7 @@ export function Sidebar() {
     >
       <div className="h-14 flex items-center justify-center border-b-2 border-border w-full flex-shrink-0">
         <Link href="/" title="ScienceSwarm" className={`text-foreground flex items-center ${showLabels ? "gap-2" : ""}`}>
-          <Atom size={26} weight="duotone" />
+          <ScienceSwarmLogo size={26} />
           {showLabels && <span className="text-xs font-bold truncate">ScienceSwarm</span>}
         </Link>
       </div>
