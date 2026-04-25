@@ -11,6 +11,10 @@
  */
 
 import { spawn, type SpawnOptions, type ChildProcess } from "child_process";
+import {
+  resolveScienceSwarmRepoRoot,
+  scienceSwarmGbrainBin,
+} from "@/lib/gbrain/source-of-truth";
 
 type NodeSpawnFn = typeof spawn;
 
@@ -32,7 +36,7 @@ export type SpawnFn = (
 ) => ChildProcess;
 
 export interface GbrainClientOptions {
-  /** Override path to the gbrain binary. Defaults to GBRAIN_BIN or "gbrain". */
+  /** Override path to the gbrain binary. Defaults to ScienceSwarm's repo-local gbrain. */
   bin?: string;
   /** Injectable spawn for tests. Defaults to child_process.spawn. */
   spawnFn?: SpawnFn;
@@ -61,7 +65,10 @@ export interface GbrainClient {
 }
 
 function resolveBin(bin?: string): string {
-  return bin ?? process.env.GBRAIN_BIN?.trim() ?? "gbrain";
+  if (bin) return bin;
+  const scienceSwarmBin = process.env.SCIENCESWARM_GBRAIN_BIN?.trim();
+  if (scienceSwarmBin) return scienceSwarmBin;
+  return scienceSwarmGbrainBin(resolveScienceSwarmRepoRoot());
 }
 
 export function createGbrainClient(options: GbrainClientOptions = {}): GbrainClient {

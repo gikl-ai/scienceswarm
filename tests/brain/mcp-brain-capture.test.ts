@@ -28,6 +28,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("buildCapturePage", () => {
@@ -313,7 +314,7 @@ describe("createBrainCaptureHandler", () => {
     expect(parsed.data.runtime_gbrain_provenance).toEqual(RUNTIME_PROVENANCE);
   });
 
-  it("reports a human-readable error when gbrain is not on PATH (ENOENT)", async () => {
+  it("reports a human-readable error when repo-local gbrain is missing (ENOENT)", async () => {
     const handler = createBrainCaptureHandler({
       client: {
         async putPage() {
@@ -330,8 +331,8 @@ describe("createBrainCaptureHandler", () => {
 
     const result = await handler({ content: "hello" });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("gbrain CLI");
-    expect(result.content[0].text).toContain("not found on PATH");
+    expect(result.content[0].text).toContain("repo-local gbrain CLI");
+    expect(result.content[0].text).toContain("npm ci");
   });
 
   it("fails loud when SCIENCESWARM_USER_HANDLE is unset", async () => {
@@ -418,6 +419,30 @@ function makeFakeChild(opts: {
 }
 
 describe("createGbrainClient", () => {
+  it("defaults to ScienceSwarm's repo-local gbrain binary", async () => {
+    const repoRoot = "/tmp/scienceswarm-repo";
+    vi.stubEnv("SCIENCESWARM_REPO_ROOT", repoRoot);
+    vi.stubEnv("SCIENCESWARM_GBRAIN_BIN", "");
+    const spawnCalls: Array<{ cmd: string; args: readonly string[] }> = [];
+    const spawnFn: SpawnFn = ((cmd: string, args: readonly string[]) => {
+      spawnCalls.push({ cmd, args });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return makeFakeChild({ exitCode: 0, stdout: "done\n" }) as any;
+    }) as SpawnFn;
+
+    const client = createGbrainClient({ spawnFn });
+    await client.putPage("2026-04-13-foo-abc123", "# foo\n");
+
+    expect(spawnCalls[0].cmd).toBe(
+      join(
+        repoRoot,
+        "node_modules",
+        ".bin",
+        process.platform === "win32" ? "gbrain.cmd" : "gbrain",
+      ),
+    );
+  });
+
   it("spawns `gbrain put <slug>` and writes markdown to stdin", async () => {
     const spawnCalls: Array<{ cmd: string; args: readonly string[] }> = [];
     let captured: { _chunks: string[] } | null = null;

@@ -489,6 +489,12 @@ describe("runtime host adapters", () => {
       );
       vi.stubEnv("SCIENCESWARM_DIR", dataRoot);
       vi.stubEnv("BRAIN_ROOT", brainRoot);
+      const repoRoot = process.cwd();
+      const repoBinDir = path.join(repoRoot, "node_modules", ".bin");
+      const repoGbrainBin = path.join(
+        repoBinDir,
+        process.platform === "win32" ? "gbrain.cmd" : "gbrain",
+      );
 
       type CapturedMcpConfig = {
         mcpServers: {
@@ -512,7 +518,7 @@ describe("runtime host adapters", () => {
       const adapter = createClaudeCodeRuntimeHostAdapter({
         transport,
         sessionRoot,
-        repoRoot: process.cwd(),
+        repoRoot,
         sessionIdGenerator: () => nativeSessionId,
         env: {
           ...process.env,
@@ -572,12 +578,20 @@ describe("runtime host adapters", () => {
       );
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_DIR).toBe(dataRoot);
       expect(mcpConfig.mcpServers.scienceswarm.env.BRAIN_ROOT).toBe(brainRoot);
+      expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_REPO_ROOT).toBe(repoRoot);
+      expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_GBRAIN_BIN).toBe(repoGbrainBin);
+      expect(mcpConfig.mcpServers.scienceswarm.env.GBRAIN_BIN).toBe(repoGbrainBin);
+      expect(mcpConfig.mcpServers.scienceswarm.env.PATH.split(path.delimiter)[0]).toBe(repoBinDir);
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET)
         .toBeUndefined();
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN)
         .toEqual(expect.any(String));
       expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET).toBeUndefined();
       expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN).toBeUndefined();
+      expect(launch?.env?.SCIENCESWARM_REPO_ROOT).toBe(repoRoot);
+      expect(launch?.env?.SCIENCESWARM_GBRAIN_BIN).toBe(repoGbrainBin);
+      expect(launch?.env?.GBRAIN_BIN).toBe(repoGbrainBin);
+      expect((launch?.env?.PATH ?? "").split(path.delimiter)[0]).toBe(repoBinDir);
       await expect(readFile(mcpConfigPath, "utf8")).rejects.toThrow();
 
       await expect(readFile(path.join(launch?.cwd ?? "", "CLAUDE.md"), "utf8"))

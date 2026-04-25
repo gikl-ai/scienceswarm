@@ -87,6 +87,10 @@ describe("GET /api/runtime/health", () => {
       health: { status: "ready" },
       auth: { status: "not-required" },
     });
+    expect(body.gbrain.package).toMatchObject({
+      expectedVersion: expect.any(String),
+      binPath: expect.stringContaining("node_modules"),
+    });
     expect(body.checkedAt).toBe("2026-04-22T12:00:00.000Z");
   });
 
