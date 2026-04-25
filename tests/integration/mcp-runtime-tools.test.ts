@@ -9,6 +9,7 @@ import {
 import {
   createRuntimeMcpToolset,
 } from "@/lib/runtime-hosts/mcp/tools";
+import { resolveRuntimeMcpToolProfile } from "@/lib/runtime-hosts/mcp/tool-profiles";
 import {
   mintRuntimeMcpAccessToken,
   type RuntimeMcpToolName,
@@ -230,6 +231,169 @@ describe("runtime MCP tool wrappers", () => {
       mode: undefined,
       limit: 3,
       detail: undefined,
+    });
+  });
+
+  it("invokes all claude-code runtime MCP tools with valid authorization", async () => {
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-mcp-"));
+    await writeFile(path.join(tempRoot, "notes.md"), "alpha notes", "utf-8");
+    const runtimeProvenance = {
+      ...RUNTIME_PROVENANCE,
+      hostId: "claude-code",
+    };
+
+    const brainSearch = vi.fn(async () => ({ hits: ["alpha"] }));
+    const brainRead = vi.fn(async () => ({ content: "alpha doc", path: "notes.md" }));
+    const brainCapture = vi.fn(async () => ({ status: "captured" }));
+    const provenanceLog = vi.fn(async () => ({ logged: true }));
+    const projectWorkspaceRead = vi.fn(async () => ({
+      projectId: "project-alpha",
+      workspacePath: "notes.md",
+      content: "alpha notes",
+      bytes: 10,
+      truncated: false,
+    }));
+    const artifactImport = vi.fn(async () => ({
+      validation: {
+        ok: true,
+        mapping: { projectRelativePath: "results/summary.md" },
+      },
+      artifact: {
+        workspacePath: "results/summary.md",
+        provenance: {
+          runtimeSessionId: "session-1",
+          hostId: "claude-code",
+          sourceArtifactId: "artifact-1",
+          promptHash: "prompt-hash-1",
+          inputFileRefs: ["gbrain:wiki/notes/assay-summary"],
+          approvalState: "approved" as const,
+        },
+      },
+    }));
+    const openhandsDelegate = vi.fn(async () => ({ status: "delegated" }));
+    const tools = createRuntimeMcpToolset({
+      tokenSecret: SECRET,
+      now: () => NOW,
+      brainSearch,
+      brainRead,
+      brainCapture,
+      provenanceLog,
+      projectWorkspaceRead,
+      artifactImport,
+      openhandsDelegate,
+    });
+
+    const profileTools = resolveRuntimeMcpToolProfile("claude-code").allowedTools;
+    expect(profileTools).toEqual(
+      expect.arrayContaining([
+        "gbrain_search",
+        "gbrain_read",
+        "gbrain_capture",
+        "provenance_log",
+        "openhands_delegate",
+        "project_workspace_read",
+        "artifact_import",
+      ]),
+    );
+
+    await expect(
+      tools.gbrainSearch({
+        ...auth({
+          allowedTools: ["gbrain_search"],
+          hostId: "claude-code",
+          projectPolicy: "cloud-ok",
+        }),
+        query: "alpha",
+        limit: 3,
+      }),
+    ).resolves.toEqual({ hits: ["alpha"] });
+
+    await expect(
+      tools.gbrainRead({
+        ...auth({
+          allowedTools: ["gbrain_read"],
+          hostId: "claude-code",
+          projectPolicy: "cloud-ok",
+        }),
+        path: "notes.md",
+      }),
+    ).resolves.toEqual({ content: "alpha doc", path: "notes.md" });
+
+    await expect(
+      tools.gbrainCapture({
+        ...auth({
+          allowedTools: ["gbrain_capture"],
+          hostId: "claude-code",
+          projectPolicy: "cloud-ok",
+        }),
+        content: "Runtime note",
+        title: "Runtime note",
+        runtimeProvenance,
+      }),
+    ).resolves.toEqual({ status: "captured" });
+
+    await expect(
+      tools.provenanceLog({
+        ...auth({
+          allowedTools: ["provenance_log"],
+          hostId: "claude-code",
+          projectPolicy: "cloud-ok",
+        }),
+        event: "artifact-imported",
+        metadata: { artifactId: "artifact-1" },
+      }),
+    ).resolves.toEqual({ logged: true });
+
+    await expect(
+      tools.openhandsDelegate({
+        ...auth({
+          allowedTools: ["openhands_delegate"],
+          hostId: "claude-code",
+          projectPolicy: "cloud-ok",
+        }),
+        task: "Run unit tests",
+      }),
+    ).resolves.toEqual({ status: "delegated" });
+
+    await expect(
+      tools.projectWorkspaceRead({
+        ...auth({
+          allowedTools: ["project_workspace_read"],
+          hostId: "claude-code",
+          projectPolicy: "cloud-ok",
+        }),
+        workspacePath: "notes.md",
+        projectRoot: tempRoot,
+      }),
+    ).resolves.toMatchObject({
+      projectId: "project-alpha",
+      workspacePath: "notes.md",
+      content: "alpha notes",
+      truncated: false,
+    });
+
+    await expect(
+      tools.artifactImport({
+        ...auth({
+          allowedTools: ["artifact_import"],
+          hostId: "claude-code",
+          projectPolicy: "cloud-ok",
+        }),
+        sourcePath: "results/summary.md",
+        sourcePathKind: "project-relative",
+        allowedRoots: [tempRoot],
+        approvalState: "not-required",
+        importReason: "host-declared-artifact",
+        projectRoot: tempRoot,
+        runtimeProvenance,
+        promptHash: "prompt-hash-1",
+        inputFileRefs: ["gbrain:wiki/notes/assay-summary"],
+      }),
+    ).resolves.toMatchObject({
+      validation: { ok: true },
+      artifact: {
+        workspacePath: "results/summary.md",
+      },
     });
   });
 
