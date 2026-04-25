@@ -540,10 +540,31 @@ describe("paper-library acquisition route", () => {
   });
 
   it("accepts case-insensitive true-like enrichment refresh values", async () => {
+    const buildContext = vi.fn(async () => ({
+      project: "project-alpha",
+      scanId: "scan-1",
+      generatedAt: "2026-04-24T12:00:00.000Z",
+      nodes: [],
+      edges: [],
+      sources: [],
+      suggestions: [],
+      warnings: [],
+    }));
+    vi.doMock("@/lib/paper-library/library-enrichment", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/lib/paper-library/library-enrichment")>();
+      return {
+        ...actual,
+        buildLibraryCitationGraphContext: buildContext,
+      };
+    });
     const route = await import("@/app/api/brain/paper-library/enrichment/route");
     const response = await route.GET(new Request(
       "http://localhost/api/brain/paper-library/enrichment?project=project-alpha&question=Which%20papers%3F&refresh=TRUE",
     ));
+
     expect(response.status).toBe(200);
+    expect(buildContext).toHaveBeenCalledWith(expect.objectContaining({
+      refresh: true,
+    }));
   });
 });
