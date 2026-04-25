@@ -331,7 +331,7 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       args.push("--mcp-config", context.mcpConfigPath, "--strict-mcp-config");
     }
     if (context?.allowedTools?.length) {
-      args.push("--allowedTools", ...context.allowedTools);
+      args.push("--allowedTools", context.allowedTools.join(","));
     }
     if (launch.resumeSessionId) {
       args.push("--resume", launch.resumeSessionId);
