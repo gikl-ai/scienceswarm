@@ -175,7 +175,9 @@ function buildWindowNameCompletionHtml(): string {
             }
 
             const returnPath =
-              typeof result.returnPath === "string" && result.returnPath
+              typeof result.returnPath === "string" &&
+              result.returnPath.startsWith("/") &&
+              !result.returnPath.startsWith("//")
                 ? result.returnPath
                 : fallbackPath;
             window.location.replace(returnPath);

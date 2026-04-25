@@ -127,6 +127,15 @@ describe("/api/scienceswarm-auth/*", () => {
     expect(html).toContain("/api/scienceswarm-auth/session");
   });
 
+  it("rejects same-tab token relay documents on non-localhost origins", async () => {
+    const response = await getSession(
+      new Request("https://scienceswarm.ai/api/scienceswarm-auth/session"),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
+  });
+
   it("returns the local return path after JSON token handoff", async () => {
     const startResponse = await postStart(
       new Request("http://127.0.0.1:3022/api/scienceswarm-auth/start", {
