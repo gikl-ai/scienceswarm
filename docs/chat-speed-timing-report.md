@@ -15,6 +15,25 @@ npx tsx scripts/benchmark-chat-hi.ts \
   --json
 ```
 
+## Generated Row Command
+
+Use the row helper when you want a paste-ready table row instead of formatting
+the benchmark JSON by hand:
+
+```bash
+npx tsx scripts/benchmark-chat-hi-row.ts \
+  --url http://localhost:3001 \
+  --project project-alpha \
+  --message Hi \
+  --timing-artifact \
+  --pr '#PR' \
+  --change-area 'change-area'
+```
+
+The helper defaults `--date` to today in UTC and `--environment` to
+`Local <origin>`, so only the PR label and changed area are required for the
+common local workflow.
+
 ## Measurements
 
 | Date | PR | Change area | Environment | Headers ms | First chunk ms | Shared tick | Total ms | Progress events | Final text sample | Timing artifact |
@@ -35,5 +54,6 @@ npx tsx scripts/benchmark-chat-hi.ts \
   timings were not captured.
 - Follow-up speed PRs should add the merged PR number, the changed phase, and
   the new benchmark row here.
+- Prefer the generated-row command above when the helper script is available.
 - Row template:
   ``| YYYY-MM-DD | #PR | change-area | Local `http://localhost:3001` | headers | first-chunk | yes/no | total | progress-events | `final text sample` | timing artifact |``
