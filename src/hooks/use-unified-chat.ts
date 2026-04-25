@@ -1003,6 +1003,9 @@ const MAX_ACTIVITY_LOG_LINES = 48;
 const MAX_PROGRESS_LOG_ENTRIES = 64;
 const LOCAL_DIRECT_CHAT_HISTORY_MAX_MESSAGES = 8;
 const LOCAL_DIRECT_CHAT_HISTORY_MAX_CHARS = 8_000;
+const RUNTIME_RECENT_CHAT_CONTEXT_MAX_MESSAGES = 6;
+const RUNTIME_RECENT_CHAT_CONTEXT_MAX_CHARS = 4_000;
+const RUNTIME_RECENT_CHAT_CONTEXT_MAX_CHARS_PER_MESSAGE = 900;
 const SLASH_COMMAND_START_TIMEOUT_MS = 15_000;
 const SLASH_COMMAND_TIMEOUT_MESSAGE =
   "ScienceSwarm slash command did not start within 15 seconds. Check OpenClaw in Settings and retry.";
@@ -2233,6 +2236,57 @@ function buildQueuedHistory(messages: Message[], assistantId: string): Message[]
   return assistantIndex >= 0 ? messages.slice(0, assistantIndex) : messages;
 }
 
+interface RuntimeRecentChatContextPayload {
+  content: string;
+  messageCount: number;
+}
+
+function truncateRuntimeChatContext(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, maxChars).trimEnd()}\n[truncated]`;
+}
+
+function buildRuntimeRecentChatContext(
+  historyMessages: Message[],
+  currentContent: string,
+): RuntimeRecentChatContextPayload | null {
+  const current = currentContent.trim();
+  const entries = historyMessages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .filter((message) => message.content !== QUEUED_ASSISTANT_CONTENT)
+    .map((message) => ({
+      role: message.role,
+      content: message.content.trim(),
+    }))
+    .filter((message) => message.content.length > 0);
+
+  const last = entries.at(-1);
+  if (last?.role === "user" && last.content === current) {
+    entries.pop();
+  }
+
+  const selected = entries.slice(-RUNTIME_RECENT_CHAT_CONTEXT_MAX_MESSAGES);
+  if (selected.length === 0) return null;
+
+  const lines: string[] = [];
+  let remaining = RUNTIME_RECENT_CHAT_CONTEXT_MAX_CHARS;
+  for (const message of selected) {
+    if (remaining <= 0) break;
+    const label = message.role === "user" ? "User" : "Assistant";
+    const maxContentChars = Math.min(
+      RUNTIME_RECENT_CHAT_CONTEXT_MAX_CHARS_PER_MESSAGE,
+      remaining,
+    );
+    const content = truncateRuntimeChatContext(message.content, maxContentChars);
+    const line = `${label}: ${content}`;
+    lines.push(line);
+    remaining -= line.length + 2;
+  }
+
+  const content = lines.join("\n\n").trim();
+  return content ? { content, messageCount: selected.length } : null;
+}
+
 function restoreMessage(value: unknown, conversationBackend: Backend | null): Message | null {
   if (!value || typeof value !== "object") return null;
 
@@ -2608,33 +2662,47 @@ function buildRuntimeApiDataIncluded(
   activeFile: ActiveFileContext | undefined,
   files: UploadedFile[],
   explicit?: RuntimeDataIncluded[],
+  recentChatContext?: RuntimeRecentChatContextPayload | null,
 ): RuntimeDataIncluded[] {
-  if (explicit) return explicit;
+  const data: RuntimeDataIncluded[] = explicit
+    ? [...explicit]
+    : [
+        {
+          kind: "prompt",
+          label: "User prompt",
+          bytes: textBytes(content),
+        },
+      ];
 
-  const data: RuntimeDataIncluded[] = [
-    {
-      kind: "prompt",
-      label: "User prompt",
-      bytes: textBytes(content),
-    },
-  ];
+  if (!explicit) {
+    if (activeFile) {
+      const contextPayload = runtimeActiveFileContextPayload(activeFile);
+      data.push({
+        kind: "workspace-file",
+        label: contextPayload.path,
+        bytes: textBytes(contextPayload.content),
+      });
+    }
 
-  if (activeFile) {
-    const contextPayload = runtimeActiveFileContextPayload(activeFile);
-    data.push({
-      kind: "workspace-file",
-      label: contextPayload.path,
-      bytes: textBytes(contextPayload.content),
-    });
+    for (const file of files) {
+      const label = getUploadedFileReference(file);
+      if (!label) continue;
+      data.push({
+        kind: file.source === "gbrain" ? "gbrain-excerpt" : "workspace-file",
+        label,
+        ...(file.content ? { bytes: textBytes(file.content) } : {}),
+      });
+    }
   }
 
-  for (const file of files) {
-    const label = getUploadedFileReference(file);
-    if (!label) continue;
+  if (
+    recentChatContext
+    && !data.some((item) => item.label === "Recent chat context")
+  ) {
     data.push({
-      kind: file.source === "gbrain" ? "gbrain-excerpt" : "workspace-file",
-      label,
-      ...(file.content ? { bytes: textBytes(file.content) } : {}),
+      kind: "prompt",
+      label: "Recent chat context",
+      bytes: textBytes(recentChatContext.content),
     });
   }
 
@@ -2661,8 +2729,17 @@ function buildRuntimeApiPrompt(
   content: string,
   activeFile: ActiveFileContext | undefined,
   files: UploadedFile[] = [],
+  recentChatContext?: RuntimeRecentChatContextPayload | null,
 ): string {
-  const promptParts = [content.trimEnd()];
+  const promptParts = recentChatContext
+    ? [
+        "Recent ScienceSwarm chat context:",
+        recentChatContext.content,
+        "",
+        "Current user request:",
+        content.trimEnd(),
+      ]
+    : [content.trimEnd()];
   if (activeFile) {
     const contextPayload = runtimeActiveFileContextPayload(activeFile);
     promptParts.push(
@@ -3902,6 +3979,7 @@ export function useUnifiedChat(
       assistantId: string,
       context: SendContext,
       activeConversationId: string | null,
+      historyMessages: Message[],
       activeFile?: ActiveFileContext,
     ) => {
       if (!hasProjectScope(context.projectName)) {
@@ -3909,14 +3987,21 @@ export function useUnifiedChat(
       }
 
       const requestFiles = liveUploadedFilesRef.current;
+      const recentChatContext = buildRuntimeRecentChatContext(historyMessages, content);
+      const prompt = buildRuntimeApiPrompt(
+        content,
+        activeFile,
+        requestFiles,
+        recentChatContext,
+      );
       const dataIncluded = buildRuntimeApiDataIncluded(
         content,
         activeFile,
         requestFiles,
         context.dataIncluded,
+        recentChatContext,
       );
       const inputFileRefs = buildRuntimeApiInputFileRefs(content, activeFile, requestFiles);
-      const prompt = buildRuntimeApiPrompt(content, activeFile, requestFiles);
       const baseBody = {
         projectId: context.projectName,
         projectPolicy: context.projectPolicy,
@@ -4464,6 +4549,7 @@ export function useUnifiedChat(
               queued.assistantId,
               queued.context,
               activeConversationId,
+              historyMessages,
               queued.activeFile,
             );
           } else {

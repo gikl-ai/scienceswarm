@@ -506,6 +506,13 @@ describe("runtime host adapters", () => {
         "--add-dir",
         projectRoot,
         "--strict-mcp-config",
+        "--allowedTools",
+        "mcp__scienceswarm__gbrain_search",
+        "mcp__scienceswarm__gbrain_read",
+      ]));
+      expect(launch?.args).toEqual(expect.arrayContaining([
+        "mcp__scienceswarm__gbrain_capture",
+        "mcp__scienceswarm__project_workspace_read",
       ]));
       const appendSystemPromptIndex = launch?.args?.indexOf("--append-system-prompt") ?? -1;
       expect(appendSystemPromptIndex).toBeGreaterThanOrEqual(0);
