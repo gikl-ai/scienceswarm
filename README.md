@@ -238,6 +238,18 @@ policy shows a preview and approval gate, runtime health renders missing or
 not-authenticated CLIs without crashing settings, and historical sessions remain
 readable.
 
+For chat-speed changes, also run the local `Hi` benchmark and append the result
+to [`docs/chat-speed-timing-report.md`](docs/chat-speed-timing-report.md):
+
+```bash
+npx tsx scripts/benchmark-chat-hi.ts \
+  --url http://localhost:3001 \
+  --project project-alpha \
+  --message Hi \
+  --timing-artifact \
+  --json
+```
+
 ### Private Market Plugins
 
 ScienceSwarm keeps two distinct skill/plugin surfaces:
