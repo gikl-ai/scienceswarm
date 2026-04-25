@@ -6,6 +6,7 @@ import {
   fetchLatestTimingArtifact,
   chatTimingArtifactUrl,
   chatBenchmarkUrl,
+  formatBenchmarkMarkdownRow,
   formatBenchmarkSummary,
   normalizeBenchmarkBaseUrl,
   parseBenchmarkArgs,
@@ -346,6 +347,74 @@ describe("benchmark-chat-hi", () => {
         timingArtifact: null,
       }),
     ).toContain("Timing artifact: unavailable");
+  });
+
+  it("formats a markdown timing report row from a benchmark summary", () => {
+    expect(
+      formatBenchmarkMarkdownRow(
+        {
+          status: 200,
+          ok: true,
+          backend: "openclaw",
+          contentType: "text/event-stream",
+          conversationId: "bench-fixed",
+          headersMs: 58,
+          firstChunkMs: 58,
+          firstChunkSharedHeadersTick: true,
+          totalMs: 6677,
+          bytes: 256,
+          eventCount: 18,
+          progressEventCount: 14,
+          finalEventCount: 1,
+          finalTextSample: "Hi! What would you like help with?",
+          timingArtifact: {
+            available: false,
+            reason: "endpoint_disabled_or_no_timings",
+            detail: "HTTP 404 Not Found",
+          },
+        },
+        {
+          date: "2026-04-24",
+          prLabel: "#263",
+          changeArea: "benchmark summary",
+          environment: "Local `http://localhost:3001`",
+        },
+      ),
+    ).toBe(
+      "| 2026-04-24 | #263 | benchmark summary | Local `http://localhost:3001` | 58 | 58 | yes | 6677 | 14 | `Hi! What would you like help with?` | unavailable (artifact endpoint disabled or no timings; HTTP 404 Not Found) |",
+    );
+  });
+
+  it("escapes markdown row cells and handles missing first chunk and timing artifact", () => {
+    expect(
+      formatBenchmarkMarkdownRow(
+        {
+          status: 200,
+          ok: true,
+          backend: "openclaw",
+          contentType: "application/json",
+          conversationId: "bench-fixed",
+          headersMs: 12,
+          firstChunkMs: null,
+          firstChunkSharedHeadersTick: false,
+          totalMs: 40,
+          bytes: 64,
+          eventCount: 1,
+          progressEventCount: 0,
+          finalEventCount: 1,
+          finalTextSample: "Done | ready",
+          timingArtifact: null,
+        },
+        {
+          date: "2026-04-25",
+          prLabel: "baseline",
+          changeArea: "json fallback",
+          environment: "CI\npreview",
+        },
+      ),
+    ).toBe(
+      "| 2026-04-25 | baseline | json fallback | CI preview | 12 | n/a | no | 40 | 0 | `Done \\| ready` | unavailable |",
+    );
   });
 
   it("classifies a 404 timing response as disabled/no timings with a human hint", async () => {
