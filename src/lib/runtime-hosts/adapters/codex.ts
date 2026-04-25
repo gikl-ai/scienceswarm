@@ -36,6 +36,8 @@ import {
 import { buildSubscriptionNativeCliEnv } from "../transport/subscription-env";
 import { assertSafeProjectSlug } from "../../state/project-manifests";
 
+// Codex task turns can span several MCP calls; keep the token alive longer
+// than the shared 5 minute default without changing other runtime hosts.
 const CODEX_RUNTIME_MCP_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 export interface CodexRuntimeMcpContext {
