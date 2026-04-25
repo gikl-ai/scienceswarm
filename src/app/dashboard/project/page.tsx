@@ -4927,7 +4927,7 @@ function ProjectPageContent() {
                   <div className="mx-auto w-full max-w-[60rem]">
                     <div
                       data-testid="project-chat-composer"
-                      className={`rounded-[28px] border bg-white shadow-[0_12px_36px_rgba(15,23,42,0.07)] transition-colors ${
+                      className={`rounded-[28px] border bg-white shadow-[0_16px_32px_rgba(15,23,42,0.06)] transition-colors ${
                         chatInputDragOver
                           ? "border-accent ring-4 ring-accent/10"
                           : "border-rule focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
@@ -4976,7 +4976,27 @@ function ProjectPageContent() {
                           </button>
                         </div>
                       )}
-                      <div className="px-4 pb-2 pt-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3 px-4 pb-2 pt-4">
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            Project Chat
+                          </p>
+                          <p className="text-[13px] leading-5 text-slate-500">
+                            Keep the next turn grounded in this workspace.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {activeProjectSlug && (
+                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                              {activeProjectSlug}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                            OpenClaw
+                          </span>
+                        </div>
+                      </div>
+                      <div className="px-4 pb-2 pt-1">
                         <div className="relative flex-1">
                           <ChatMentionInput
                             ref={inputRef}
