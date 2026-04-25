@@ -88,13 +88,14 @@ const baseEnv: SavedLlmRuntimeEnv = {
 function fakeResult(
   request: CliTransportRunRequest,
   stdout: string,
+  stderr?: string,
 ): CliTransportRunResult {
   return {
     command: request.command,
     args: request.args ?? [],
     exitCode: 0,
     signal: null,
-    output: normalizeCliOutput({ stdout }),
+    output: normalizeCliOutput({ stdout, stderr }),
   };
 }
 
@@ -152,10 +153,12 @@ describe("runtime host adapters", () => {
     });
 
     await expect(adapter.health()).resolves.toMatchObject({ status: "ready" });
-    await expect(adapter.authStatus()).resolves.toMatchObject({
+    const authStatus = await adapter.authStatus();
+    expect(authStatus).toMatchObject({
       status: "authenticated",
-      accountLabel: "user@example.test",
+      detail: "CLI authentication is managed by the native host.",
     });
+    expect(authStatus).not.toHaveProperty("accountLabel");
 
     await expect(
       adapter.sendTurn(requestFor(requireRuntimeHostProfile("claude-code"), "chat")),
@@ -176,6 +179,37 @@ describe("runtime host adapters", () => {
         "--resume",
         "conversation-alpha",
       ]),
+    });
+  });
+
+  it("redacts raw subscription-native CLI auth output from status details", async () => {
+    const rawIdentity = JSON.stringify({
+      account: {
+        email: "private-user@example.test",
+        id: "acct-secret-123",
+      },
+      organization: "private-org",
+    });
+    const transport = new FakeCliTransport((request) => {
+      if (request.args?.includes("whoami")) {
+        return fakeResult(
+          request,
+          rawIdentity,
+          "subscription private-user@example.test",
+        );
+      }
+      return fakeResult(request, "claude 2.0.0");
+    });
+    const adapter = createTestClaudeCodeRuntimeHostAdapter({
+      transport,
+      authArgs: ["whoami"],
+    });
+
+    await expect(adapter.authStatus()).resolves.toEqual({
+      status: "authenticated",
+      authMode: "subscription-native",
+      provider: "anthropic",
+      detail: "CLI authentication is managed by the native host.",
     });
   });
 

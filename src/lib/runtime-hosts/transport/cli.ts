@@ -415,6 +415,7 @@ export async function detectCliAuthStatus(input: {
   transport?: CliTransport;
   timeoutMs?: number;
 }): Promise<RuntimeHostAuthStatus> {
+  const suppressNativeCliAuthDetails = input.authMode === "subscription-native";
   if (!input.args?.length) {
     return {
       status: "unknown",
@@ -436,7 +437,9 @@ export async function detectCliAuthStatus(input: {
       status: result.output.authChallenge ? "missing" : "authenticated",
       authMode: input.authMode,
       provider: input.provider,
-      accountLabel: result.output.text || undefined,
+      ...(suppressNativeCliAuthDetails
+        ? {}
+        : { accountLabel: result.output.text || undefined }),
       detail: "CLI authentication is managed by the native host.",
     };
   } catch (error) {
@@ -460,7 +463,11 @@ export async function detectCliAuthStatus(input: {
       status: "unknown",
       authMode: input.authMode,
       provider: input.provider,
-      detail: error instanceof Error ? error.message : "CLI auth check failed.",
+      detail: suppressNativeCliAuthDetails
+        ? "CLI auth check failed; native host output was not returned."
+        : error instanceof Error
+          ? error.message
+          : "CLI auth check failed.",
     };
   }
 }
