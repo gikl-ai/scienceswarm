@@ -346,8 +346,11 @@ export function getBrainStore(options: { root?: string } = {}): BrainStore {
   const hasExpiredFailure = clearExpiredBrainInitFailure(brainRoot);
   if (
     brainStoreState.instance
-    && brainStoreState.activeBrainRoot
-    && (brainStoreState.activeBrainRoot !== brainRoot || hasExpiredFailure)
+    && (
+      !brainStoreState.activeBrainRoot
+      || brainStoreState.activeBrainRoot !== brainRoot
+      || hasExpiredFailure
+    )
   ) {
     void brainStoreState.instance.dispose().catch(() => {});
     brainStoreState.instance = null;
