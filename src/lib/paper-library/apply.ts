@@ -161,7 +161,10 @@ function buildOperation(
       if (relaxedRender?.ok && relaxedRender.relativePath === source?.relativePath) {
         destinationRelativePath = relaxedRender.relativePath;
       } else {
-        conflictCodes.push(...rendered.problems.map((problem) => problem.code));
+        const reportedProblems = relaxedRender && !relaxedRender.ok
+          ? relaxedRender.problems
+          : rendered.problems;
+        conflictCodes.push(...reportedProblems.map((problem) => problem.code));
       }
     }
   }
