@@ -133,7 +133,7 @@ def main() -> None:
         "force_field": ["amber14-all.xml", "amber14/tip3p.xml"],
         "seeds": seeds,
         "n_frames_per_seed": int(len(rmsd_traces[0])),
-        "time_per_frame_ps": 1.0,
+        "time_per_frame_ps": float(time_traces[0][1] - time_traces[0][0]) if len(time_traces[0]) >= 2 else None,
         "by_seed": by_seed,
         "across_seeds": {
             "rmsd_ca_plateau_mean_A": float(np.mean(plateau_means)),

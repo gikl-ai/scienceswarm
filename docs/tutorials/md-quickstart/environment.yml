@@ -5,7 +5,7 @@ dependencies:
   - python=3.11
   - openmm=8.*
   - pdbfixer>=1.9
-  - mdtraj=1.*
+  - mdtraj>=1.11
   - matplotlib
   - numpy
   - pip

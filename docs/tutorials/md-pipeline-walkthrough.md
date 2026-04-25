@@ -71,7 +71,7 @@ Asset shape (excerpt):
 
 For lysozyme this is short: PDB 1AKI is the canonical 1.5-Å monomer
 crystal structure, and the AMBER ff14SB / TIP3P solution-MD literature
-sets the reference plateau band at 0.6–2.5 Å (Maier et al. 2015,
+sets the reference plateau band at 0.6–2.0 Å (Maier et al. 2015,
 biobb_wf_amber tutorial). Label these citations as
 `external-literature`.
 

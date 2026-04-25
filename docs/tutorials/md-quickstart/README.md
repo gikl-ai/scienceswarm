@@ -1,11 +1,13 @@
 # MD quickstart — lysozyme in explicit water with OpenMM
 
-A 30-minute molecular dynamics quickstart that runs end-to-end on a
-laptop CPU. You will solvate hen egg-white lysozyme (PDB 1AKI) in
-explicit TIP3P water with 0.15 M NaCl, run a brief equilibrium MD with
-AMBER ff14SB at 300 K, repeat the production stage with three random
-seeds, and verify the trajectory's Cα-RMSD plateau lands inside the
-published reference band.
+An end-to-end molecular dynamics quickstart that runs on a single
+machine. Wall time is roughly **3.5 h on a laptop CPU** and **~30 min
+on a CUDA GPU** (set `OPENMM_PLATFORM=CUDA` before stage 3). You will
+solvate hen egg-white lysozyme (PDB 1AKI) in explicit TIP3P water with
+0.15 M NaCl, run a brief equilibrium MD with AMBER ff14SB at 300 K,
+repeat the production stage with three random seeds, and verify the
+trajectory's Cα-RMSD plateau lands inside the published reference
+band.
 
 This tutorial exists to:
 
@@ -146,8 +148,10 @@ A typical converged `metrics.json` has this shape:
     "rmsf_ca_global_max_A": 2.10
   },
   "validation": {
-    "rmsd_reference_band_A": [0.6, 2.5],
-    "all_seeds_in_band": true
+    "rmsd_reference_band_A": [0.6, 2.0],
+    "seed_plateau_std_max_A": 0.4,
+    "all_seeds_in_band": true,
+    "seed_spread_within_threshold": true
   }
 }
 ```
