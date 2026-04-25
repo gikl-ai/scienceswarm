@@ -330,7 +330,7 @@ function cleanReferenceText(value: string): string {
 
 function stripReferenceMarker(value: string): string {
   return cleanReferenceText(value)
-    .replace(/^(?:\[\d{1,4}\]|\d{1,4}\.|\[[A-Za-z][A-Za-z0-9+.-]{1,16}\])\s*/, "")
+    .replace(/^(?:\[\d{1,4}\]|\d{1,3}\.|\[[A-Za-z][A-Za-z0-9+.-]{1,16}\])\s*/, "")
     .trim();
 }
 
@@ -341,6 +341,7 @@ function findReferenceSection(text: string): string | null {
     if (index < Math.floor(lines.length * 0.25)) continue;
     if (/^(references|bibliography|works cited)$/i.test(lines[index].trim())) {
       headingIndex = index;
+      break;
     }
   }
   if (headingIndex === -1) return null;
@@ -361,7 +362,7 @@ function findReferenceSection(text: string): string | null {
 }
 
 function startsWithReferenceMarker(line: string): boolean {
-  return /^(?:\[\d{1,4}\]|\d{1,4}\.|\[[A-Za-z][A-Za-z0-9+.-]{1,16}\])\s+/.test(line.trim());
+  return /^(?:\[\d{1,4}\]|\d{1,3}\.|\[[A-Za-z][A-Za-z0-9+.-]{1,16}\])\s+/.test(line.trim());
 }
 
 function likelyAuthorYearReferenceStart(line: string): boolean {
@@ -376,7 +377,7 @@ function likelyAuthorYearReferenceStart(line: string): boolean {
 function splitReferenceEntries(section: string): string[] {
   const markerized = section
     .replace(/\r\n?/g, "\n")
-    .replace(/\s+(?=(?:\[\d{1,4}\]|\d{1,4}\.|\[[A-Za-z][A-Za-z0-9+.-]{1,16}\])\s+)/g, "\n");
+    .replace(/\s+(?=(?:\[\d{1,4}\]|\d{1,3}\.|\[[A-Za-z][A-Za-z0-9+.-]{1,16}\])\s+)/g, "\n");
   const markerEntries = markerized
     .split(/\n+/)
     .map(stripReferenceMarker)

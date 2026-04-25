@@ -51,6 +51,22 @@ describe("paper-library identity", () => {
     expect(evidence.evidence).toContain("title_from_pdf_text");
   });
 
+  it("keeps PDF-text title evidence even when the filename matches the extracted title", () => {
+    const evidence = extractPaperIdentityEvidence({
+      relativePath: "Interesting Paper.pdf",
+      text: [
+        "Interesting Paper",
+        "Abstract",
+        "A paper with a matching filename.",
+      ].join("\n"),
+      wordCount: 120,
+    });
+
+    expect(evidence.titleHint).toBe("Interesting Paper");
+    expect(evidence.evidence).toContain("title_from_pdf_text");
+    expect(evidence.evidence).not.toContain("title_from_filename");
+  });
+
   it("derives a title from the front matter before falling back to the filename", () => {
     expect(deriveTitleHintFromText("arXiv:2601.00001\n\nA Minimal Agent for Automated Theorem Proving\n\nAbstract")).toBe("A Minimal Agent for Automated Theorem Proving");
     expect(deriveTitleHintFromText("Technical Report\nGOEDEL-PROVER-V2: SCALING FORMAL THEOREM\nPROVING WITH SCAFFOLDED DATA SYNTHESIS\nAuthors")).toBe(

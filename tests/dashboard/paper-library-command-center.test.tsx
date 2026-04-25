@@ -469,6 +469,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     expect(await screen.findByText("scanning")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/brain/paper-library/scan?project=demo-project&latest=1");
   });
 
   it("ignores malformed latest-scan payloads without breaking the scan view", async () => {
@@ -611,9 +612,11 @@ describe("PaperLibraryCommandCenter", () => {
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
     expect(await screen.findByText("Manifest and undo")).toBeInTheDocument();
-    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"step\":\"history\"");
-    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"manifestId\":\"manifest-1\"");
-    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"templateFormat\":\"papers/{year}/{title}.pdf\"");
+    await waitFor(() => {
+      expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"step\":\"history\"");
+      expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"manifestId\":\"manifest-1\"");
+      expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"templateFormat\":\"papers/{year}/{title}.pdf\"");
+    });
   });
 
   it("promotes a newer latest scan over a stale terminal browser session", async () => {
@@ -672,7 +675,9 @@ describe("PaperLibraryCommandCenter", () => {
       expect(screen.getByText("/tmp/latest-library")).toBeInTheDocument();
     });
 
-    expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"scanId\":\"scan-2\"");
+    await waitFor(() => {
+      expect(window.localStorage.getItem("scienceswarm.paperLibrary.session.demo-project")).toContain("\"scanId\":\"scan-2\"");
+    });
   });
 
   it("supports accept, plan, apply, and undo through the command center", async () => {
@@ -841,7 +846,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Save metadata/i }));
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Apply/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Apply1" })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Apply1" }));
@@ -850,7 +855,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
     expect(await screen.findByText("Manifest and undo")).toBeInTheDocument();
-    expect(await screen.findByText("applied")).toBeInTheDocument();
+    expect(await screen.findByText("1 applied")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Undo changes" }));
     expect(await screen.findAllByText("undone")).toHaveLength(3);
@@ -1523,7 +1528,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
     expect(await screen.findByText("Manifest and undo")).toBeInTheDocument();
-    expect(await screen.findByText("applied")).toBeInTheDocument();
+    expect(await screen.findByText("1 applied")).toBeInTheDocument();
   });
 
   it("shows command errors outside the scan step", async () => {

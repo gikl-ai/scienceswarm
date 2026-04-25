@@ -202,6 +202,46 @@ describe("paper-library graph", () => {
     });
   });
 
+  it("uses the first references heading and does not split on four-digit years", async () => {
+    await seedReviewState([
+      reviewItem({
+        paperId: "source",
+        title: "Interesting Paper",
+        identifiers: { doi: "10.1000/source" },
+        relativePath: "interesting-paper.pdf",
+      }),
+    ]);
+    mockExtractPdfText.mockResolvedValue({
+      text: [
+        "Interesting Paper",
+        "Abstract",
+        "We cite one paper in the real bibliography.",
+        "References",
+        "[1] Stable Reference Parsing. 2024. doi: 10.2000/stable.",
+        "Works Cited",
+        "Closing remarks only.",
+      ].join("\n"),
+      pageCount: 6,
+      wordCount: 180,
+      firstSentence: "Interesting Paper",
+    });
+
+    const graph = await buildPaperLibraryGraph({
+      project: "project-alpha",
+      scanId: "scan-1",
+      brainRoot,
+      adapters: [],
+      useCache: false,
+    });
+
+    expect(graph?.sourceRuns.find((run) => run.source === "pdf_text")).toMatchObject({
+      status: "success",
+    });
+    expect(graph?.nodes.find((node) => node.id === "paper:doi:10.2000/stable")).toMatchObject({
+      title: "Stable Reference Parsing",
+    });
+  });
+
   it("links local papers by DOI, arXiv, PMID, and OpenAlex identifiers while keeping external suggestions separate", async () => {
     await seedReviewState([
       reviewItem({ paperId: "source", title: "Source Paper", identifiers: { doi: "10.1000/source" } }),

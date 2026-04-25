@@ -211,7 +211,7 @@ describe("PaperLibrary gap suggestions", () => {
     await waitFor(() => {
       expect(screen.getByText("watching")).toBeInTheDocument();
     });
-    expect(graphRequests).toBe(1);
+    expect(graphRequests).toBe(2);
     expect(clusterRequests).toBe(1);
     expect(gapGetUrls).toHaveLength(2);
     expect(gapGetUrls.every((url) => !url.includes("refresh="))).toBe(true);
@@ -333,7 +333,7 @@ describe("PaperLibrary gap suggestions", () => {
     render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
     expect(await screen.findByText("Missing Seminal Paper (2025)")).toBeInTheDocument();
-    expect(graphRequests).toBe(1);
+    expect(graphRequests).toBe(2);
     expect(clusterRequests).toBe(1);
     expect(gapRequests).toBe(1);
 
@@ -342,7 +342,7 @@ describe("PaperLibrary gap suggestions", () => {
     await waitFor(() => {
       expect(gapRequests).toBe(2);
     });
-    expect(graphRequests).toBe(1);
+    expect(graphRequests).toBe(2);
     expect(clusterRequests).toBe(1);
     expect(screen.getByText("No gap suggestions match this filter yet.")).toBeInTheDocument();
   });

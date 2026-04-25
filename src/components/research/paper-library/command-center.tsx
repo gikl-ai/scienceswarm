@@ -1196,24 +1196,31 @@ export function PaperLibraryCommandCenter({
   const loadGraphOverview = useCallback(async ({ refresh = false }: {
     refresh?: boolean;
   } = {}) => {
-    if (!session.scanId) return;
+    const scanId = session.scanId;
+    if (!scanId) return;
     setGraphOverviewLoading(true);
     setGraphError(null);
     try {
       const params = new URLSearchParams({
         project: projectSlug,
-        scanId: session.scanId,
+        scanId,
         all: "1",
       });
       if (refresh) params.set("refresh", "1");
       const payload = await paperLibraryFetchJson<
         { ok: true } & PaperLibraryGraphResponse
       >(`/api/brain/paper-library/graph?${params.toString()}`);
-      setGraphOverview(payload);
+      if (sessionRef.current.scanId === scanId) {
+        setGraphOverview(payload);
+      }
     } catch (error) {
-      setGraphError(error instanceof Error ? error.message : "Could not load the full citation graph.");
+      if (sessionRef.current.scanId === scanId) {
+        setGraphError(error instanceof Error ? error.message : "Could not load the full citation graph.");
+      }
     } finally {
-      setGraphOverviewLoading(false);
+      if (sessionRef.current.scanId === scanId) {
+        setGraphOverviewLoading(false);
+      }
     }
   }, [projectSlug, session.scanId]);
 
@@ -1303,7 +1310,10 @@ export function PaperLibraryCommandCenter({
   useEffect(() => {
     if (!sessionRestored) return;
     if (skipLatestRestoreRef.current) return;
-    if (session.scanId && session.step !== "scan") return;
+    if (session.scanId) {
+      if (session.step !== "scan") return;
+      if (!scan || isScanInFlight(scan)) return;
+    }
     void loadLatestScan();
   }, [loadLatestScan, scan?.createdAt, scan?.id, scan?.updatedAt, session.scanId, session.step, sessionRestored]);
 
@@ -1737,6 +1747,7 @@ export function PaperLibraryCommandCenter({
   const graphPdfTextReferenceCount = graphData?.sourceRuns
     .filter((run) => run.source === "pdf_text")
     .reduce((total, run) => total + run.fetchedCount, 0) ?? 0;
+  const graphHasPdfTextEdges = graphData?.edges.some((edge) => edge.source === "pdf_text") ?? false;
   const graphWarnings = graphData ? summarizeGraphWarnings(graphData.warnings) : [];
   const approvalTokenExpired = approvalToken
     ? Date.parse(approvalToken.expiresAt) <= Date.now()
@@ -2260,7 +2271,7 @@ export function PaperLibraryCommandCenter({
                           : "Refresh graph after identifier enrichment, or review missing metadata so external citation lookup has stable IDs."}
                     </div>
                   )}
-                  {graphData && totalGraphEdgeCount > 0 && graphPdfTextRuns > 0 && (
+                  {graphData && totalGraphEdgeCount > 0 && graphHasPdfTextEdges && (
                     <div className="mt-3 rounded-lg border border-ok/30 bg-ok/10 px-3 py-2 text-sm text-ok">
                       Local PDF extraction found {graphPdfTextReferenceCount} references across {graphPdfTextSuccessfulRuns} papers and connected the citation map.
                     </div>

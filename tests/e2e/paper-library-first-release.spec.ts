@@ -60,6 +60,10 @@ test("paper library command center supports review, apply, and undo flows", asyn
   let applied = false;
   let undone = false;
 
+  await page.route("**/api/local-folder-picker", async (route) => {
+    await route.fulfill(json({ path: "/tmp/library" }));
+  });
+
   await page.route("**/api/brain/status", async (route) => {
     await route.fulfill(json({ pageCount: 4, backend: "gbrain" }));
   });
@@ -267,21 +271,17 @@ test("paper library command center supports review, apply, and undo flows", asyn
 
   await page.goto("/dashboard/gbrain?name=demo-project&view=paper-library");
 
-  await page.getByPlaceholder("/Users/you/Research Papers").fill("/tmp/library");
-  await page.getByRole("button", { name: "Start dry-run scan" }).click();
+  await page.getByRole("button", { name: "Import PDF Folder" }).click();
   await expect(page.getByText("ready for review", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Open review queue" }).click();
-  await expect(page.getByText("Interesting Paper (2024)")).toBeVisible();
-  await page.getByRole("button", { name: "Accept selected" }).click();
+  await expect(page.getByText("2024 - Smith - Interesting Paper.pdf")).toBeVisible();
+  await page.getByRole("button", { name: "Save metadata" }).click();
 
   await page.getByRole("button", { name: /^Apply\s+1$/ }).click();
   await page.getByRole("button", { name: /preview/i }).click();
   await expect(page.getByText("1 operations")).toBeVisible();
-  await page.getByRole("button", { name: "Approve plan" }).click();
-  await expect(page.getByText(/Plan approved until/)).toBeVisible();
-
-  await page.getByRole("button", { name: "Apply approved plan" }).click();
+  await page.getByRole("button", { name: "Apply 1 change" }).click();
   await expect(page.getByText("Manifest and undo")).toBeVisible();
   await expect(page.getByText("1 applied")).toBeVisible();
 

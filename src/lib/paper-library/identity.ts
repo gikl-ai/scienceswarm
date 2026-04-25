@@ -141,9 +141,10 @@ export function extractPaperIdentityEvidence(input: PaperIdentityEvidenceInput):
     evidence.push("pmid_detected");
   }
 
-  const titleHint = deriveTitleHintFromText(frontMatterText) ?? deriveTitleHintFromPath(input.relativePath);
+  const textTitle = deriveTitleHintFromText(frontMatterText);
+  const titleHint = textTitle ?? deriveTitleHintFromPath(input.relativePath);
   if (titleHint) {
-    evidence.push(titleHint === deriveTitleHintFromPath(input.relativePath) ? "title_from_filename" : "title_from_pdf_text");
+    evidence.push(textTitle ? "title_from_pdf_text" : "title_from_filename");
   }
 
   const textLayerTooThin = wordCount < 80 && !doi && !arxivId && !pmid;

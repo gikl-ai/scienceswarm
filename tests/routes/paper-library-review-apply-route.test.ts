@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initBrain } from "@/brain/init";
+import { getScienceSwarmProjectBrainRoot } from "@/lib/scienceswarm-paths";
 
 const mockIsLocal = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
 const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
@@ -152,7 +153,7 @@ describe("paper-library review and apply routes", () => {
     });
     expect(await exists(originalPath)).toBe(false);
     const { getBrainStore } = await import("@/brain/store");
-    const page = await getBrainStore({ root: path.join(dataRoot, "brain") })
+    const page = await getBrainStore({ root: getScienceSwarmProjectBrainRoot("project-alpha") })
       .getPage(`wiki/entities/papers/local-${reviewPage.items[0]?.paperId}`);
     expect(page).toMatchObject({
       title: expect.stringContaining("Interesting"),
