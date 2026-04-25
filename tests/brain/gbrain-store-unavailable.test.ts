@@ -17,6 +17,14 @@ function failingEngine(message = "pglite failed") {
   };
 }
 
+function healthyEngine() {
+  return {
+    connect: vi.fn().mockResolvedValue(undefined),
+    initSchema: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe("BrainStore unavailable backend retry cache", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -27,6 +35,7 @@ describe("BrainStore unavailable backend retry cache", () => {
     const store = await import("@/brain/store");
     await store.resetBrainStore();
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it("reuses a recent init failure instead of retrying PGLite on every caller", async () => {
@@ -54,6 +63,21 @@ describe("BrainStore unavailable backend retry cache", () => {
 
     expect(() => store.getBrainStore({ root })).toThrow("Brain backend unavailable");
     expect(mocks.createRuntimeEngine).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a failed custom root poison no-root callers", async () => {
+    mocks.createRuntimeEngine
+      .mockResolvedValueOnce(failingEngine())
+      .mockResolvedValueOnce(healthyEngine());
+    vi.stubEnv("BRAIN_ROOT", "/tmp/scienceswarm-default-brain");
+    const store = await import("@/brain/store");
+
+    await expect(
+      store.ensureBrainStoreReady({ root: "/tmp/scienceswarm-custom-failed-brain" }),
+    ).rejects.toThrow("Brain backend unavailable");
+
+    await expect(store.ensureBrainStoreReady()).resolves.toBeUndefined();
+    expect(mocks.createRuntimeEngine).toHaveBeenCalledTimes(2);
   });
 
   it("retries after the unavailable-backend cache expires", async () => {

@@ -299,6 +299,9 @@ function initializeBrainStore(
       failedAtMs: Date.now(),
       error: backendError,
     };
+    if (brainStoreState.activeBrainRoot === brainRoot) {
+      brainStoreState.activeBrainRoot = null;
+    }
     throw backendError;
   });
 
