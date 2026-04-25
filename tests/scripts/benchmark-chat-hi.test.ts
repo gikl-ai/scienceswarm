@@ -264,6 +264,7 @@ describe("benchmark-chat-hi", () => {
       },
     });
     expect(formattedWithTiming).toContain("Total: 100 ms");
+    expect(formattedWithTiming).toContain("Shared timing tick: no");
     expect(formattedWithTiming).toContain(
       "Timing phases: project_materialization skipped, chat_readiness 7 ms (inferred)",
     );
@@ -307,6 +308,25 @@ describe("benchmark-chat-hi", () => {
     ).toContain(
       "Timing phases: none\nSkipped phases: none\nPrompt chars: none\nPrompt highlights: none",
     );
+    expect(
+      formatBenchmarkSummary({
+        status: 200,
+        ok: true,
+        backend: "openclaw",
+        contentType: "text/event-stream",
+        conversationId: "bench-fixed",
+        headersMs: 58,
+        firstChunkMs: 58,
+        firstChunkSharedHeadersTick: true,
+        totalMs: 100,
+        bytes: 200,
+        eventCount: 3,
+        progressEventCount: 1,
+        finalEventCount: 1,
+        finalTextSample: "Hello.",
+        timingArtifact: null,
+      }),
+    ).toContain("Shared timing tick: yes");
     expect(
       formatBenchmarkSummary({
         status: 200,
