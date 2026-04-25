@@ -113,13 +113,6 @@ const RENAME_TEMPLATE_OPTIONS = [
     example: "papers/2024/Kaplan - Scaling Laws.pdf",
     detail: "Keeps large archives easier to scan.",
   },
-  {
-    id: "venue-folder",
-    label: "Venue folders",
-    format: "papers/{venue}/{year} - {title}.pdf",
-    example: "papers/NeurIPS/2024 - Scaling Laws.pdf",
-    detail: "Useful for conference-heavy collections.",
-  },
 ] as const;
 
 function templateOptionForFormat(format: string) {
@@ -1490,7 +1483,7 @@ export function PaperLibraryCommandCenter({
             <p className="mt-1 max-w-2xl text-sm text-muted">
               Pick a title format, preview every proposed move, then approve the exact reversible plan before anything touches disk.
             </p>
-            <div className="mt-4 grid gap-2 lg:grid-cols-4">
+            <div className="mt-4 grid gap-2 md:grid-cols-3">
               {RENAME_TEMPLATE_OPTIONS.map((option) => {
                 const active = session.templateFormat === option.format;
                 return (
