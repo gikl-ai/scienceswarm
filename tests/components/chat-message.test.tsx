@@ -756,6 +756,38 @@ describe("ChatMessage", () => {
     expect(screen.getByTestId("assistant-run-state")).not.toHaveTextContent("## Current plan");
   });
 
+  it("uses a compact markdown scale for progress transcript blocks", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "thinking",
+            text: "### Plan\n\n- Extract the results table\n- Render the chart",
+          },
+          {
+            kind: "activity",
+            text: "```bash\npython3 scripts/extract_results_chart.py\n```",
+          },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Plan" }),
+    ).toHaveClass("text-[13px]");
+    expect(screen.getByRole("list")).toHaveClass("space-y-1.5");
+    expect(
+      screen.getByText("python3 scripts/extract_results_chart.py").closest("pre"),
+    ).toHaveClass("rounded-2xl");
+    expect(
+      screen.getByText("python3 scripts/extract_results_chart.py").closest("pre"),
+    ).not.toHaveClass("rounded-3xl");
+  });
+
   it("renders mixed inline formatting inside visible explored transcript rows", () => {
     render(
       <ChatMessage
