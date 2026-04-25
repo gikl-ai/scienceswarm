@@ -48,6 +48,13 @@ export interface ChatBenchmarkSummary {
   timingArtifact?: ChatBenchmarkTimingArtifactResult | null;
 }
 
+export interface ChatBenchmarkReportRowMetadata {
+  date: string;
+  prLabel: string;
+  changeArea: string;
+  environment: string;
+}
+
 export interface ChatBenchmarkTimingPhaseSummary {
   name: string;
   durationMs: number;
@@ -354,6 +361,44 @@ function formatTimingArtifactUnavailableReason(
     case "endpoint_disabled_or_no_timings":
       return "artifact endpoint disabled or no timings";
   }
+}
+
+function escapeMarkdownTableCell(value: string): string {
+  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
+}
+
+function formatTimingArtifactCell(
+  timingArtifact: ChatBenchmarkTimingArtifactResult | null | undefined,
+): string {
+  if (timingArtifact === undefined || timingArtifact === null) {
+    return "unavailable";
+  }
+  if (isTimingArtifactUnavailable(timingArtifact)) {
+    return `unavailable (${formatTimingArtifactUnavailableReason(
+      timingArtifact.reason,
+    )}${timingArtifact.detail ? `; ${timingArtifact.detail}` : ""})`;
+  }
+  return `${timingArtifact.totalDurationMs} ms`;
+}
+
+export function formatBenchmarkMarkdownRow(
+  summary: ChatBenchmarkSummary,
+  metadata: ChatBenchmarkReportRowMetadata,
+): string {
+  const cells = [
+    escapeMarkdownTableCell(metadata.date),
+    escapeMarkdownTableCell(metadata.prLabel),
+    escapeMarkdownTableCell(metadata.changeArea),
+    escapeMarkdownTableCell(metadata.environment),
+    String(summary.headersMs),
+    summary.firstChunkMs === null ? "n/a" : String(summary.firstChunkMs),
+    summary.firstChunkSharedHeadersTick ? "yes" : "no",
+    String(summary.totalMs),
+    String(summary.progressEventCount),
+    `\`${escapeMarkdownTableCell(summary.finalTextSample || "n/a")}\``,
+    escapeMarkdownTableCell(formatTimingArtifactCell(summary.timingArtifact)),
+  ];
+  return `| ${cells.join(" | ")} |`;
 }
 
 export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
