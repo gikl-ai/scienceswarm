@@ -55,6 +55,14 @@ Primary metrics:
 - Time spent in readiness, project materialization, file reference merge, and
   artifact repair phases.
 
+Reporting helpers:
+
+- Prefer generating timing-report rows through the benchmark helper once
+  `formatBenchmarkMarkdownRow` is available in `scripts/benchmark-chat-hi.ts`.
+- If that helper is unavailable on the branch being measured, use the row
+  template documented in `docs/chat-speed-timing-report.md` so appended rows
+  stay consistent with the report schema.
+
 ## Shared Contracts
 
 ### Timing Contract
