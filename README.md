@@ -250,6 +250,18 @@ npx tsx scripts/benchmark-chat-hi.ts \
   --json
 ```
 
+To generate a paste-ready table row for that report, use:
+
+```bash
+npx tsx scripts/benchmark-chat-hi-row.ts \
+  --url http://localhost:3001 \
+  --project project-alpha \
+  --message Hi \
+  --timing-artifact \
+  --pr '#PR' \
+  --change-area 'change-area'
+```
+
 ### Private Market Plugins
 
 ScienceSwarm keeps two distinct skill/plugin surfaces:
