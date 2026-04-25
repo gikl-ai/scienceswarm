@@ -257,7 +257,7 @@ describe("ChatMessage", () => {
     expect(screen.getByTestId("assistant-media-gallery")).toHaveClass("my-6");
   });
 
-  it("keeps user turns inside the accent bubble", () => {
+  it("renders user turns as a subtle accent-tinted bubble", () => {
     render(
       <ChatMessage
         role="user"
@@ -266,9 +266,11 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByTestId("chat-bubble")).toHaveClass("rounded-xl");
-    expect(screen.getByTestId("chat-bubble")).toHaveClass("bg-accent");
-    expect(screen.getByTestId("chat-bubble")).toHaveClass("border-2");
+    const bubble = screen.getByTestId("chat-bubble");
+    expect(bubble).toHaveClass("rounded-xl");
+    expect(bubble).toHaveClass("bg-accent/10");
+    expect(bubble).toHaveClass("text-accent");
+    expect(bubble).toHaveClass("border-accent/30");
   });
 
   it("copies rendered message text instead of raw bubble directives", async () => {
