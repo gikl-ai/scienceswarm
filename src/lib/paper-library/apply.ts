@@ -126,6 +126,10 @@ function operationIsExactNoop(operation: ApplyOperation & { source: PaperLibrary
   return operation.source.relativePath === operation.destinationRelativePath;
 }
 
+function isLengthOnlyTemplateFailure(problems: Array<{ code: string }>): boolean {
+  return problems.every((problem) => problem.code === "segment_too_long" || problem.code === "path_too_long");
+}
+
 function buildOperation(
   item: PaperReviewItem,
   templateFormat: string,
@@ -147,12 +151,25 @@ function buildOperation(
     if (rendered.ok) {
       destinationRelativePath = rendered.relativePath;
     } else {
-      conflictCodes.push(...rendered.problems.map((problem) => problem.code));
+      const relaxedRender = source && isLengthOnlyTemplateFailure(rendered.problems)
+        ? renderRenameTemplate(templateFormat, templateValuesForItem(item), {
+            existingDestinations,
+            maxSegmentLength: Number.MAX_SAFE_INTEGER,
+            maxPathLength: Number.MAX_SAFE_INTEGER,
+          })
+        : null;
+      if (relaxedRender?.ok && relaxedRender.relativePath === source?.relativePath) {
+        destinationRelativePath = relaxedRender.relativePath;
+      } else {
+        conflictCodes.push(...rendered.problems.map((problem) => problem.code));
+      }
     }
   }
 
   const validation = validateRelativeDestination(destinationRelativePath, { existingDestinations });
-  if (!validation.ok) conflictCodes.push(...validation.problems.map((problem) => problem.code));
+  if (!validation.ok && !(source && source.relativePath === destinationRelativePath)) {
+    conflictCodes.push(...validation.problems.map((problem) => problem.code));
+  }
 
   return {
     id: randomUUID(),
@@ -590,8 +607,10 @@ async function preflightApplyOperation(
   if (!currentSnapshot.ok) throw new Error(currentSnapshot.problems[0]?.message ?? "Source cannot be snapshotted.");
   const comparison = compareSnapshot(source, currentSnapshot.snapshot);
   if (!comparison.ok) throw new Error(comparison.problems[0]?.message ?? "Source changed since approval.");
-  const destinationValidation = validateRelativeDestination(operation.destinationRelativePath);
-  if (!destinationValidation.ok) throw new Error(destinationValidation.problems[0]?.message ?? "Destination is unsafe.");
+  if (!operationIsExactNoop({ ...operation, source })) {
+    const destinationValidation = validateRelativeDestination(operation.destinationRelativePath);
+    if (!destinationValidation.ok) throw new Error(destinationValidation.problems[0]?.message ?? "Destination is unsafe.");
+  }
   const allowedPlannedDestination = options.allowExistingDestinationKeys?.has(relativePathKey(operation.destinationRelativePath)) ?? false;
   if (
     !operationHasSamePathKey({ ...operation, source })

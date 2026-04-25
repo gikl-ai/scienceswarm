@@ -53,7 +53,7 @@ describe("paper-library templates", () => {
   });
 
   it("blocks long paths and case-folded collisions", () => {
-    const longTitle = "x".repeat(130);
+    const longTitle = "x".repeat(190);
     expect(renderRenameTemplate("{title}.pdf", { title: longTitle })).toMatchObject({
       ok: false,
       problems: [expect.objectContaining({ code: "segment_too_long" })],
