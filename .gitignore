@@ -67,3 +67,4 @@ bench-stdout.log
 
 # Design-system bootstrap log (generated, not tracked)
 .scienceswarm-design.log
+.worktrees/
