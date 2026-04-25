@@ -62,8 +62,9 @@ Benchmark reporting workflow:
   the appended row or the accompanying report note, alongside the measured
   environment, `Headers ms`, `First chunk ms`, `Shared tick`, `Total ms`,
   `Progress events`, the final text sample, and timing-artifact availability.
-- Prefer `scripts/append-chat-benchmark-report-row.ts` when it is available
-  and the goal is to benchmark and update
+- Prefer the dedicated append helper once
+  `scripts/append-chat-benchmark-report-row.ts` is available on the branch
+  being measured and the goal is to benchmark and update
   `docs/chat-speed-timing-report.md` in one step.
 - `Shared tick` should track the benchmark field
   `firstChunkSharedHeadersTick` so equal rounded header and first-chunk timings
