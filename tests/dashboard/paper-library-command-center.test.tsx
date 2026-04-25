@@ -1201,6 +1201,118 @@ describe("PaperLibraryCommandCenter", () => {
     expect(screen.getByText(/Approval expired at/i)).toBeInTheDocument();
   });
 
+  it("regenerates an existing rename preview with the newly selected template", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.paperLibrary.session.demo-project",
+      JSON.stringify({
+        step: "apply",
+        rootPath: "/tmp/library",
+        templateFormat: "{year} - {title}.pdf",
+        scanId: "scan-1",
+        applyPlanId: "plan-1",
+      }),
+    );
+
+    let generatedPlanFormat = "{year} - {title}.pdf";
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({
+            status: "ready_for_apply",
+            counters: {
+              detectedFiles: 4,
+              identified: 4,
+              needsReview: 0,
+              readyForApply: 1,
+              failed: 0,
+            },
+            applyPlanId: "plan-1",
+          }),
+        });
+      }
+
+      if (url.startsWith("/api/brain/paper-library/apply-plan?")) {
+        const search = new URL(url, "http://localhost");
+        const planId = search.searchParams.get("id");
+        const templateFormat = planId === "plan-2" ? generatedPlanFormat : "{year} - {title}.pdf";
+        return Response.json({
+          ok: true,
+          plan: {
+            version: 1,
+            id: planId ?? "plan-1",
+            scanId: "scan-1",
+            project: "demo-project",
+            status: "validated",
+            rootPath: "/tmp/library",
+            rootRealpath: "/tmp/library",
+            templateFormat,
+            operationCount: 1,
+            conflictCount: 0,
+            operationShardIds: ["0001"],
+            planDigest: "digest",
+            createdAt: "2026-04-23T12:20:00.000Z",
+            updatedAt: "2026-04-23T12:20:00.000Z",
+          },
+          operations: [
+            {
+              id: "operation-1",
+              paperId: "paper-1",
+              kind: "rename",
+              source: baseReviewItem().source,
+              destinationRelativePath: templateFormat.startsWith("{first_author}")
+                ? "Smith 2024 - Interesting Paper.pdf"
+                : "2024 - Interesting Paper.pdf",
+              reason: "Paper library template proposal",
+              confidence: 0.82,
+              conflictCodes: [],
+            },
+          ],
+          totalCount: 1,
+          filteredCount: 1,
+        });
+      }
+
+      if (url === "/api/brain/paper-library/apply-plan" && method === "POST") {
+        const body = JSON.parse(String(init?.body)) as { templateFormat: string };
+        generatedPlanFormat = body.templateFormat;
+        return Response.json({ ok: true, applyPlanId: "plan-2" });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    expect(await screen.findByText(/2024 - Interesting Paper\.pdf/)).toBeInTheDocument();
+    const initialPlanLoads = fetchMock.mock.calls.filter(([request]) => String(request).startsWith("/api/brain/paper-library/apply-plan?")).length;
+
+    fireEvent.click(screen.getByRole("button", { name: /Author Year - Title/ }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([request]) => String(request).startsWith("/api/brain/paper-library/apply-plan?")).length).toBeGreaterThan(initialPlanLoads);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate rename preview" }));
+
+    await waitFor(() => {
+      const request = fetchMock.mock.calls.find(([input, init]) => (
+        String(input) === "/api/brain/paper-library/apply-plan" && init?.method === "POST"
+      ));
+      expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+        templateFormat: "{first_author} {year} - {title}.pdf",
+      });
+    });
+
+    expect(await screen.findByText(/Smith 2024 - Interesting Paper\.pdf/)).toBeInTheDocument();
+  });
+
   it("refreshes approval for a restored approved plan when the browser token is missing", async () => {
     window.localStorage.setItem(
       "scienceswarm.paperLibrary.session.demo-project",

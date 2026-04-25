@@ -477,6 +477,7 @@ export function PaperLibraryCommandCenter({
   projectSlug: string;
 }) {
   const skipLatestRestoreRef = useRef(false);
+  const templateSelectionDirtyRef = useRef(false);
   const [session, setSession] = useState<PaperLibrarySession>(() => defaultSession());
   const [restoredProjectSlug, setRestoredProjectSlug] = useState<string | null>(null);
   const sessionRestored = restoredProjectSlug === projectSlug;
@@ -550,6 +551,7 @@ export function PaperLibraryCommandCenter({
 
   useEffect(() => {
     skipLatestRestoreRef.current = false;
+    templateSelectionDirtyRef.current = false;
     setSession(readStoredSession(projectSlug));
     setScan(null);
     setScanError(null);
@@ -698,12 +700,12 @@ export function PaperLibraryCommandCenter({
       }));
       if (
         (payload.plan.manifestId && payload.plan.manifestId !== session.manifestId)
-        || payload.plan.templateFormat !== session.templateFormat
+        || (!templateSelectionDirtyRef.current && payload.plan.templateFormat !== session.templateFormat)
       ) {
         patchSession({
           manifestId: payload.plan.manifestId ?? session.manifestId,
           step: payload.plan.manifestId && session.step === "apply" ? "history" : session.step,
-          templateFormat: payload.plan.templateFormat,
+          ...(!templateSelectionDirtyRef.current ? { templateFormat: payload.plan.templateFormat } : {}),
         });
       }
     } catch (error) {
@@ -1112,12 +1114,22 @@ export function PaperLibraryCommandCenter({
         manifestId: undefined,
         step: "apply",
       });
+      templateSelectionDirtyRef.current = false;
       setApprovalToken(null);
       setManifestPage(null);
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : "Could not create the apply plan.");
     }
   }, [patchSession, projectSlug, session.rootPath, session.scanId, session.templateFormat]);
+
+  const handleSelectTemplateFormat = useCallback((templateFormat: string) => {
+    if (templateFormat === session.templateFormat) return;
+    templateSelectionDirtyRef.current = true;
+    setApprovalToken(null);
+    setCommandError(null);
+    setApplyPlanError(null);
+    patchSession({ templateFormat });
+  }, [patchSession, session.templateFormat]);
 
   const handleApprovePlan = useCallback(async () => {
     if (!session.applyPlanId) return;
@@ -1266,6 +1278,10 @@ export function PaperLibraryCommandCenter({
 
   const activePlan = applyPlanPage?.plan ?? null;
   const activeManifest = manifestPage?.manifest ?? null;
+  const activePlanMatchesTemplate = Boolean(
+    activePlan && activePlan.templateFormat === session.templateFormat,
+  );
+  const applyPlanTemplateStale = Boolean(activePlan && !activePlanMatchesTemplate);
 
   const reviewNeededCount = scan?.counters.needsReview ?? 0;
   const applyReadyCount = activePlan?.operationCount ?? scan?.counters.readyForApply ?? 0;
@@ -1286,12 +1302,14 @@ export function PaperLibraryCommandCenter({
     : false;
   const approvalNeedsRefresh = Boolean(
     activePlan
+    && activePlanMatchesTemplate
     && activePlan.status === "approved"
     && !activePlan.manifestId
     && (!approvalToken || approvalTokenExpired),
   );
   const canApprovePlan = Boolean(
     activePlan
+    && activePlanMatchesTemplate
     && activePlan.conflictCount === 0
     && !activePlan.manifestId
     && (activePlan.status === "validated" || approvalNeedsRefresh),
@@ -1523,7 +1541,7 @@ export function PaperLibraryCommandCenter({
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => patchSession({ templateFormat: option.format })}
+                    onClick={() => handleSelectTemplateFormat(option.format)}
                     className={`rounded-lg border px-3 py-3 text-left transition-colors ${
                       active
                         ? "border-accent bg-accent-faint text-foreground"
@@ -1595,6 +1613,12 @@ export function PaperLibraryCommandCenter({
                 </div>
               )}
 
+              {applyPlanTemplateStale && (
+                <div role="status" className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
+                  This preview uses {activePlan.templateFormat}. Regenerate rename preview to inspect {session.templateFormat}.
+                </div>
+              )}
+
               <div className="divide-y divide-border rounded-xl border border-border bg-white">
                 {applyPlanPage?.operations.map((operation) => (
                   <div key={operation.id} className="px-4 py-3">
@@ -1637,7 +1661,7 @@ export function PaperLibraryCommandCenter({
                 <button
                   type="button"
                   onClick={() => void handleApplyPlan()}
-                  disabled={!approvalToken || approvalTokenExpired}
+                  disabled={!approvalToken || approvalTokenExpired || !activePlanMatchesTemplate}
                   className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
                 >
                   Apply approved plan
@@ -2369,11 +2393,13 @@ export function PaperLibraryCommandCenter({
   }, [
     activeManifest,
     activePlan,
+    activePlanMatchesTemplate,
     approvalStatusMessage,
     approvalStatusTone,
     approvalToken,
     approvalTokenExpired,
     applyPlanError,
+    applyPlanTemplateStale,
     applyPlanLoading,
     applyPlanLoadingMore,
     applyPlanPage,
@@ -2405,6 +2431,7 @@ export function PaperLibraryCommandCenter({
     handleImportPdfFolder,
     handleRepairManifest,
     handleReviewAction,
+    handleSelectTemplateFormat,
     handleUndo,
     folderPickerLoading,
     loadApplyPlan,
