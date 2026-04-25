@@ -358,6 +358,11 @@ describe("paper-library graph", () => {
     expect(secondPage.loadedNodeCount).toBe(1);
     expect(secondPage.sourceRuns).toEqual([]);
     expect(secondPage.warnings).toEqual([]);
+
+    const fullGraph = windowPaperLibraryGraph(graph!, { all: true });
+    expect(fullGraph.loadedNodeCount).toBe(3);
+    expect(fullGraph.nextCursor).toBeUndefined();
+    expect(fullGraph.edges).toHaveLength(1);
   });
 
   it("rebuilds persisted graphs after review state changes", async () => {

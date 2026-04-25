@@ -23,6 +23,7 @@ const GraphLookupRequestSchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(250).optional(),
   focus: z.string().trim().min(1).optional(),
+  all: BooleanQuerySchema,
   refresh: BooleanQuerySchema,
 });
 
@@ -37,6 +38,7 @@ export async function GET(request: Request) {
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,
     focus: url.searchParams.get("focus") ?? undefined,
+    all: url.searchParams.get("all") ?? undefined,
     refresh: url.searchParams.get("refresh") ?? undefined,
   });
   if (!parsed.success) return paperLibraryBadRequest(parsed.error);
@@ -57,6 +59,7 @@ export async function GET(request: Request) {
         cursor: parsed.data.cursor,
         limit: parsed.data.limit,
         focusNodeId: parsed.data.focus,
+        all: parsed.data.all,
       }),
     });
   } catch (error) {

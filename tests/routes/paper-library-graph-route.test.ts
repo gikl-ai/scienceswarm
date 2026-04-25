@@ -129,6 +129,27 @@ describe("paper-library graph route", () => {
     ]);
   });
 
+  it("returns the full graph when all=1 is requested", async () => {
+    const { GET } = await import("@/app/api/brain/paper-library/graph/route");
+    const response = await GET(new Request(
+      "http://localhost/api/brain/paper-library/graph?project=project-alpha&scanId=scan-1&all=1",
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      ok: boolean;
+      nodes: Array<{ id: string }>;
+      loadedNodeCount: number;
+      nextCursor?: string;
+      filteredCount: number;
+    };
+    expect(body.ok).toBe(true);
+    expect(body.nodes).toHaveLength(1);
+    expect(body.loadedNodeCount).toBe(1);
+    expect(body.filteredCount).toBe(1);
+    expect(body.nextCursor).toBeUndefined();
+  });
+
   it("rejects malformed graph lookup input before touching state", async () => {
     const { GET } = await import("@/app/api/brain/paper-library/graph/route");
     const response = await GET(new Request(

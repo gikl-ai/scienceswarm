@@ -1168,7 +1168,7 @@ export async function getOrBuildPaperLibraryGraph(input: BuildPaperLibraryGraphI
 
 export function windowPaperLibraryGraph(
   graph: PaperLibraryGraph,
-  options: { cursor?: string; limit?: number; focusNodeId?: string },
+  options: { cursor?: string; limit?: number; focusNodeId?: string; all?: boolean },
 ): PaperLibraryGraphResponse {
   const focus = options.focusNodeId;
   const focusNeighbors = new Set<string>();
@@ -1182,6 +1182,20 @@ export function windowPaperLibraryGraph(
   const filteredNodes = focus
     ? graph.nodes.filter((node) => focusNeighbors.has(node.id))
     : graph.nodes;
+  if (options.all) {
+    const visibleIds = new Set(filteredNodes.map((node) => node.id));
+    return {
+      nodes: filteredNodes,
+      edges: graph.edges.filter((edge) => visibleIds.has(edge.sourceNodeId) && visibleIds.has(edge.targetNodeId)),
+      loadedNodeCount: filteredNodes.length,
+      totalEdgeCount: graph.edges.length,
+      sourceRuns: graph.sourceRuns,
+      warnings: graph.warnings,
+      nextCursor: undefined,
+      totalCount: graph.nodes.length,
+      filteredCount: filteredNodes.length,
+    };
+  }
   const page = readCursorWindow(filteredNodes, { cursor: options.cursor, limit: options.limit });
   const filteredNodeIds = new Set(filteredNodes.map((node) => node.id));
   const primaryIds = new Set(page.items.map((node) => node.id));
