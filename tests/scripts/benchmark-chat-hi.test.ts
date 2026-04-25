@@ -417,6 +417,47 @@ describe("benchmark-chat-hi", () => {
     );
   });
 
+  it("uses a longer code-span delimiter when the final sample contains backticks", () => {
+    expect(
+      formatBenchmarkMarkdownRow(
+        {
+          status: 200,
+          ok: true,
+          backend: "openclaw",
+          contentType: "text/event-stream",
+          conversationId: "bench-fixed",
+          headersMs: 25,
+          firstChunkMs: 30,
+          firstChunkSharedHeadersTick: false,
+          totalMs: 90,
+          bytes: 120,
+          eventCount: 4,
+          progressEventCount: 2,
+          finalEventCount: 1,
+          finalTextSample: "Use `npm install`",
+          timingArtifact: {
+            turnId: "turn-2",
+            startedAtMs: 2000,
+            totalDurationMs: 123,
+            outcome: "streamed",
+            status: 200,
+            phaseCount: 1,
+            phases: [{ name: "chat_readiness", durationMs: 7 }],
+            promptCharCounts: { total: 12 },
+          },
+        },
+        {
+          date: "2026-04-25",
+          prLabel: "#267",
+          changeArea: "markdown row helper",
+          environment: "Local `http://localhost:3001`",
+        },
+      ),
+    ).toBe(
+      "| 2026-04-25 | #267 | markdown row helper | Local `http://localhost:3001` | 25 | 30 | no | 90 | 2 | `` Use `npm install` `` | 123 ms |",
+    );
+  });
+
   it("classifies a 404 timing response as disabled/no timings with a human hint", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
