@@ -56,7 +56,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "gbrain": "git+https://github.com/garrytan/gbrain.git#90c5d93fcebb94c9d1e3b31167f9760fbfe077a9",
+    "gbrain": "git+https://github.com/garrytan/gbrain.git#11abb24ddd2209f8622870c2e48dc9ef050ad749",
     "googleapis": "^171.4.0",
     "gray-matter": "^4.0.3",
     "json5": "^2.2.3",
