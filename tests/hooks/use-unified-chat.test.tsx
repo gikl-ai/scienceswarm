@@ -542,7 +542,7 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("backend").textContent).toBe("codex");
   });
 
-  it("sends recent chat context with direct runtime follow-up turns", async () => {
+  it("forwards the native runtime conversation id on direct runtime follow-up turns", async () => {
     const runtimeBodies: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -595,12 +595,8 @@ describe("useUnifiedChat persistence", () => {
     expect(runtimeBodies).toHaveLength(2);
     expect(runtimeBodies[1]).toMatchObject({
       conversationId: "native-codex-session",
+      prompt: "Use the prior answer and continue",
     });
-    expect(String(runtimeBodies[1]?.prompt)).toContain("Recent ScienceSwarm chat context");
-    expect(String(runtimeBodies[1]?.prompt)).toContain("User: Ask Codex for a second opinion");
-    expect(String(runtimeBodies[1]?.prompt)).toContain("Assistant: First runtime answer");
-    expect(String(runtimeBodies[1]?.prompt)).toContain("Current user request:");
-    expect(String(runtimeBodies[1]?.prompt)).toContain("Use the prior answer and continue");
   });
 
   it("includes explicitly selected active file context in direct runtime prompts", async () => {
