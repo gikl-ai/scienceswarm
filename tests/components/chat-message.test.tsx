@@ -494,6 +494,29 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("summarizes dense explored activity in the live run-state detail", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "activity", text: "Read docs/results_table.csv" },
+          { kind: "activity", text: "Write docs/results_summary.md" },
+          { kind: "activity", text: "Search docs/ for timing notes" },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Explored 3 actions",
+    );
+    expect(screen.getByTestId("assistant-run-state")).not.toHaveTextContent(
+      "Search docs/ for timing notes",
+    );
+  });
+
   it("keeps the compact live run-state wrapper on a single spacing system", () => {
     render(
       <ChatMessage
