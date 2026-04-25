@@ -39,6 +39,13 @@ function jsonRequest(url: string, body: unknown): Request {
   });
 }
 
+async function copyFixturePdf(arxivId: string, destDir: string): Promise<string> {
+  await mkdir(destDir, { recursive: true });
+  const pdfPath = path.join(destDir, `${arxivId}.pdf`);
+  await copyFile(PDF_FIXTURE, pdfPath);
+  return pdfPath;
+}
+
 async function seedState(): Promise<void> {
   const root = stateRoot();
   await mkdir(path.join(root, "paper-library", "scans"), { recursive: true });
@@ -207,12 +214,7 @@ describe("paper-library acquisition route", () => {
     process.env.SCIENCESWARM_USER_HANDLE = "@paper-library-acquisition-route-test";
     brainRoot = path.join(dataRoot, "brain");
     initBrain({ root: brainRoot, name: "Test Researcher" });
-    mockDownloadArxivPdf.mockImplementation(async (arxivId: string, destDir: string) => {
-      await mkdir(destDir, { recursive: true });
-      const pdfPath = path.join(destDir, `${arxivId}.pdf`);
-      await copyFile(PDF_FIXTURE, pdfPath);
-      return pdfPath;
-    });
+    mockDownloadArxivPdf.mockImplementation(copyFixturePdf);
     await seedState();
   });
 
@@ -374,6 +376,96 @@ describe("paper-library acquisition route", () => {
       downloadStatus: "already_local",
       recommendedAction: "cite_only",
     });
+  });
+
+  it("rejects re-executing a terminal acquisition plan without downloading again", async () => {
+    const route = await import("@/app/api/brain/paper-library/acquisition/route");
+    const createResponse = await route.POST(jsonRequest("http://localhost/api/brain/paper-library/acquisition", {
+      action: "create",
+      project: "project-alpha",
+      scanId: "scan-1",
+      limit: 1,
+    }));
+    const created = await createResponse.json() as { acquisitionPlanId: string };
+
+    const firstExecute = await route.POST(jsonRequest("http://localhost/api/brain/paper-library/acquisition", {
+      action: "execute",
+      project: "project-alpha",
+      acquisitionPlanId: created.acquisitionPlanId,
+      userConfirmation: true,
+    }));
+    expect(firstExecute.status).toBe(200);
+    expect(mockDownloadArxivPdf).toHaveBeenCalledTimes(1);
+    mockDownloadArxivPdf.mockClear();
+
+    const secondExecute = await route.POST(jsonRequest("http://localhost/api/brain/paper-library/acquisition", {
+      action: "execute",
+      project: "project-alpha",
+      acquisitionPlanId: created.acquisitionPlanId,
+      userConfirmation: true,
+    }));
+
+    expect(secondExecute.status).toBe(409);
+    await expect(secondExecute.json()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid_state",
+        message: 'Acquisition plan has already been executed with status "completed".',
+      },
+    });
+    expect(mockDownloadArxivPdf).not.toHaveBeenCalled();
+  });
+
+  it("returns a typed conflict for concurrent execution of the same acquisition plan", async () => {
+    const route = await import("@/app/api/brain/paper-library/acquisition/route");
+    const createResponse = await route.POST(jsonRequest("http://localhost/api/brain/paper-library/acquisition", {
+      action: "create",
+      project: "project-alpha",
+      scanId: "scan-1",
+      limit: 1,
+    }));
+    const created = await createResponse.json() as { acquisitionPlanId: string };
+    let releaseDownload!: () => void;
+    let downloadStarted!: () => void;
+    const releaseDownloadPromise = new Promise<void>((resolve) => {
+      releaseDownload = resolve;
+    });
+    const downloadStartedPromise = new Promise<void>((resolve) => {
+      downloadStarted = resolve;
+    });
+    mockDownloadArxivPdf.mockImplementationOnce(async (arxivId: string, destDir: string) => {
+      downloadStarted();
+      await releaseDownloadPromise;
+      return copyFixturePdf(arxivId, destDir);
+    });
+
+    const firstExecutePromise = route.POST(jsonRequest("http://localhost/api/brain/paper-library/acquisition", {
+      action: "execute",
+      project: "project-alpha",
+      acquisitionPlanId: created.acquisitionPlanId,
+      userConfirmation: true,
+    }));
+    await downloadStartedPromise;
+
+    const secondExecute = await route.POST(jsonRequest("http://localhost/api/brain/paper-library/acquisition", {
+      action: "execute",
+      project: "project-alpha",
+      acquisitionPlanId: created.acquisitionPlanId,
+      userConfirmation: true,
+    }));
+    expect(secondExecute.status).toBe(409);
+    await expect(secondExecute.json()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "job_already_running",
+        message: "Acquisition plan is already running.",
+      },
+    });
+
+    releaseDownload();
+    const firstExecute = await firstExecutePromise;
+    expect(firstExecute.status).toBe(200);
+    expect(mockDownloadArxivPdf).toHaveBeenCalledTimes(1);
   });
 
   it("returns a typed conflict when an acquisition plan is already running", async () => {

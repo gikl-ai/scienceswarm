@@ -91,6 +91,12 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
+    if (parsed.data.action === "execute" && error instanceof Error && /already been executed/i.test(error.message)) {
+      return Response.json(
+        paperLibraryError("invalid_state", error.message),
+        { status: 409 },
+      );
+    }
     return paperLibraryBadRequest(error);
   }
 }

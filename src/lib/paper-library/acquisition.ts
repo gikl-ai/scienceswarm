@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import { mkdir, open, rm, type FileHandle } from "node:fs/promises";
+import path from "node:path";
 
 import { downloadArxivPdf } from "@/brain/arxiv-download";
 import {
@@ -35,6 +37,10 @@ interface AcquisitionCounts {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function isFileAlreadyExistsError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST";
 }
 
 function stableHash(value: unknown): string {
@@ -221,6 +227,39 @@ function normalizeAcquisitionPlan(value: unknown): PaperLibraryAcquisitionPlan {
     items: parsed.items ?? [],
     warnings: parsed.warnings ?? [],
   };
+}
+
+async function withAcquisitionPlanLock<T>(
+  input: {
+    project: string;
+    acquisitionPlanId: string;
+    brainRoot: string;
+  },
+  run: (paths: { stateRoot: string; planPath: string }) => Promise<T>,
+): Promise<T> {
+  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
+  const planPath = getPaperLibraryAcquisitionPlanPath(input.project, input.acquisitionPlanId, stateRoot);
+  const lockPath = `${planPath}.lock`;
+  let handle: FileHandle | null = null;
+
+  await mkdir(path.dirname(planPath), { recursive: true });
+  try {
+    handle = await open(lockPath, "wx");
+  } catch (error) {
+    if (isFileAlreadyExistsError(error)) {
+      throw new Error("Acquisition plan is already running.");
+    }
+    throw error;
+  }
+
+  try {
+    return await run({ stateRoot, planPath });
+  } finally {
+    const acquiredHandle = handle;
+    handle = null;
+    if (acquiredHandle) await acquiredHandle.close();
+    await rm(lockPath, { force: true });
+  }
 }
 
 function planWithItems(
@@ -434,33 +473,37 @@ export async function executeAcquisitionPlan(input: {
   acquisitionPlanId: string;
   brainRoot: string;
 }): Promise<PaperLibraryAcquisitionPlan | null> {
-  const plan = await readAcquisitionPlan(input.project, input.acquisitionPlanId, input.brainRoot);
-  if (!plan) return null;
-  if (plan.status === "running") throw new Error("Acquisition plan is already running.");
+  return withAcquisitionPlanLock(input, async ({ stateRoot, planPath }) => {
+    const plan = await readAcquisitionPlan(input.project, input.acquisitionPlanId, input.brainRoot);
+    if (!plan) return null;
+    if (plan.status === "running") throw new Error("Acquisition plan is already running.");
+    if (plan.status !== "planned") {
+      throw new Error(`Acquisition plan has already been executed with status "${plan.status}".`);
+    }
 
-  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
-  const startedAt = nowIso();
-  const running = PaperLibraryAcquisitionPlanSchema.parse({
-    ...plan,
-    status: "running",
-    updatedAt: startedAt,
+    const startedAt = nowIso();
+    const running = PaperLibraryAcquisitionPlanSchema.parse({
+      ...plan,
+      status: "running",
+      updatedAt: startedAt,
+    });
+    await writeJsonFile(planPath, running);
+
+    const updatedItems: PaperLibraryAcquisitionItem[] = [];
+    for (const item of running.items) {
+      updatedItems.push(await executeItem({
+        project: input.project,
+        brainRoot: input.brainRoot,
+        planId: running.id,
+        stateRoot,
+        item,
+        updatedAt: nowIso(),
+      }));
+    }
+
+    const updatedAt = nowIso();
+    const completed = planWithItems(running, updatedItems, completedStatus(updatedItems), updatedAt);
+    await writeJsonFile(planPath, completed);
+    return completed;
   });
-  await writeJsonFile(getPaperLibraryAcquisitionPlanPath(input.project, input.acquisitionPlanId, stateRoot), running);
-
-  const updatedItems: PaperLibraryAcquisitionItem[] = [];
-  for (const item of running.items) {
-    updatedItems.push(await executeItem({
-      project: input.project,
-      brainRoot: input.brainRoot,
-      planId: running.id,
-      stateRoot,
-      item,
-      updatedAt: nowIso(),
-    }));
-  }
-
-  const updatedAt = nowIso();
-  const completed = planWithItems(running, updatedItems, completedStatus(updatedItems), updatedAt);
-  await writeJsonFile(getPaperLibraryAcquisitionPlanPath(input.project, input.acquisitionPlanId, stateRoot), completed);
-  return completed;
 }
