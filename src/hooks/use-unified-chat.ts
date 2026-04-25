@@ -1651,7 +1651,6 @@ function extractGatewayChatProgressUpdate(
     case "chat.abort": {
       const statusLine = formatGatewayChatStatusLine(eventName, payload);
       if (statusLine) {
-        update.activityLines.push(statusLine);
         update.progressEntries.push(...buildProgressEntries("activity", [statusLine], {
           source: "gateway",
           phase: "waiting",

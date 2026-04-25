@@ -5486,6 +5486,9 @@ describe("useUnifiedChat persistence", () => {
     expect(screen.getByTestId("activity-log").textContent).not.toContain(
       "Sending request to OpenClaw | Waiting for OpenClaw to respond",
     );
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
+      "Chat failed: OpenClaw transport failed | Chat aborted: User interrupted the run",
+    );
   });
 
   it("automatically refreshes the workspace tree while the project view stays open", async () => {
