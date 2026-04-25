@@ -58,7 +58,9 @@ npx tsx scripts/benchmark-chat-hi-row.ts \
   --change-area 'change-area'
 ```
 
-To benchmark and update `docs/chat-speed-timing-report.md` in one step, use:
+Once `scripts/append-chat-benchmark-report-row.ts` is available on the branch
+you are validating, you can benchmark and update
+`docs/chat-speed-timing-report.md` in one step with:
 
 ```bash
 npx tsx scripts/append-chat-benchmark-report-row.ts \
