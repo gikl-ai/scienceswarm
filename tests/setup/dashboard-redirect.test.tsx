@@ -101,6 +101,27 @@ describe("DashboardLayout redirect", () => {
     expect(redirectMock).toHaveBeenCalledWith("/setup");
   });
 
+  it("renders children when durable setup data exists even if runtime readiness is incomplete", async () => {
+    getConfigStatusMock.mockResolvedValue(
+      notReadyStatus({
+        persistedSetup: {
+          hasUserHandle: true,
+          hasEmail: true,
+          hasTelegramBotToken: true,
+          brainRootReady: true,
+          complete: true,
+        },
+      }),
+    );
+
+    const marker = { __marker: "children-slot" } as unknown as React.ReactNode;
+    const element = await DashboardLayout({ children: marker });
+
+    expect(redirectMock).not.toHaveBeenCalled();
+    expect(element).toBeDefined();
+    expect(element).not.toBeNull();
+  });
+
   it("redirects to /setup when getConfigStatus throws (safer default) without leaking err.message", async () => {
     // The layout deliberately does NOT log the thrown error's
     // message string. Node I/O errors (`Error: ENOENT: no such file,

@@ -111,6 +111,13 @@ interface PersistedBootstrapState {
   updatedAt: string;
 }
 
+interface SetupStatusResponse {
+  ready?: boolean;
+  persistedSetup?: {
+    complete?: boolean;
+  };
+}
+
 function clearPersistedBootstrapState(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(BOOTSTRAP_STORAGE_KEY);
@@ -225,6 +232,9 @@ export default function SetupPage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(
     () => initialPersistedState?.updatedAt ?? null,
   );
+  const [checkingExistingSetup, setCheckingExistingSetup] = useState(
+    () => initialPersistedState === null,
+  );
   const gbrainEvent = getLatestTaskEvent(events, "gbrain-init");
   const openclawEvent = getLatestTaskEvent(events, "openclaw");
   const openhandsEvent = getLatestTaskEvent(events, "openhands-docker");
@@ -261,6 +271,44 @@ export default function SetupPage() {
       updatedAt: lastUpdatedAt ?? new Date().toISOString(),
     });
   }, [events, hydrated, lastUpdatedAt, submitted, submittedTelegram, summary]);
+
+  useEffect(() => {
+    if (!hydrated || submitted) {
+      setCheckingExistingSetup(false);
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("force") === "1" || params.get("rerun") === "1") {
+      setCheckingExistingSetup(false);
+      return;
+    }
+
+    let cancelled = false;
+    const redirectIfSetupAlreadyExists = async () => {
+      try {
+        const res = await fetch("/api/setup/status", { cache: "no-store" });
+        if (!res.ok) {
+          return;
+        }
+        const data = (await res.json()) as SetupStatusResponse;
+        if (cancelled) return;
+        if (data.ready || data.persistedSetup?.complete === true) {
+          router.replace("/dashboard/project");
+          return;
+        }
+      } catch {
+        // Fall through to the form. A transient status failure should
+        // not block a first-time user from completing setup.
+      } finally {
+        if (!cancelled) setCheckingExistingSetup(false);
+      }
+    };
+
+    void redirectIfSetupAlreadyExists();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, router, submitted]);
 
   useEffect(() => {
     if (!submitted || summary || !hydrated) {
@@ -424,7 +472,7 @@ export default function SetupPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-5 px-4 py-8">
-      {hydrated && !submitted && (
+      {hydrated && !checkingExistingSetup && !submitted && (
         <BootstrapForm
           disabled={false}
           onSubmit={handleSubmit}

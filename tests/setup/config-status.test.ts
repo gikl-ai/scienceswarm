@@ -31,6 +31,11 @@ async function writeEnvLocal(
   await fs.writeFile(path.join(repoRoot, ".env"), contents, "utf8");
 }
 
+async function createReadyBrainRoot(root: string): Promise<void> {
+  await fs.mkdir(path.join(root, "brain.pglite"), { recursive: true });
+  await fs.writeFile(path.join(root, "RESOLVER.md"), "# Resolver\n", "utf8");
+}
+
 async function rmrf(dir: string): Promise<void> {
   await fs.rm(dir, { recursive: true, force: true });
 }
@@ -374,6 +379,13 @@ describe("getConfigStatus", () => {
     expect(status.ready).toBe(false);
     expect(status.rawValues).toEqual({});
     expect(status.redactedKeys).toEqual([]);
+    expect(status.persistedSetup).toEqual({
+      hasUserHandle: false,
+      hasEmail: false,
+      hasTelegramBotToken: false,
+      brainRootReady: false,
+      complete: false,
+    });
   });
 
   it("reports ready=true when OpenAI mode has a valid backend and data dir", async () => {
@@ -409,6 +421,59 @@ describe("getConfigStatus", () => {
     expect(status.openaiApiKey.state).toBe("missing");
     expect(status.scienceswarmDir).toEqual({ state: "ok" });
     expect(status.ready).toBe(true);
+  });
+
+  it("reports persisted setup complete when a saved user handle and initialized brain exist", async () => {
+    const brainRoot = path.join(tmpHome, "brain");
+    await createReadyBrainRoot(brainRoot);
+    await writeEnvLocal(
+      repoRoot,
+      [
+        "SCIENCESWARM_USER_HANDLE=testuser",
+        "GIT_USER_EMAIL=testuser@example.com",
+        "TELEGRAM_BOT_TOKEN=123456789:abcdefghijklmnopqrstuvwxyzABCDE",
+        `BRAIN_ROOT=${brainRoot}`,
+        "AGENT_BACKEND=none",
+        "",
+      ].join("\n"),
+    );
+
+    const status = await getConfigStatus(repoRoot);
+
+    expect(status.ready).toBe(false);
+    expect(status.persistedSetup).toEqual({
+      hasUserHandle: true,
+      hasEmail: true,
+      hasTelegramBotToken: true,
+      brainRootReady: true,
+      complete: true,
+    });
+    expect(JSON.stringify(status)).not.toContain(
+      "123456789:abcdefghijklmnopqrstuvwxyzABCDE",
+    );
+    expect(status.rawValues["TELEGRAM_BOT_TOKEN"]).toBe(
+      REDACTED_SECRET_SENTINEL,
+    );
+  });
+
+  it("does not report persisted setup complete for a saved handle without an initialized brain", async () => {
+    await writeEnvLocal(
+      repoRoot,
+      [
+        "SCIENCESWARM_USER_HANDLE=testuser",
+        "GIT_USER_EMAIL=testuser@example.com",
+        "",
+      ].join("\n"),
+    );
+
+    const status = await getConfigStatus(repoRoot);
+
+    expect(status.persistedSetup).toMatchObject({
+      hasUserHandle: true,
+      hasEmail: true,
+      brainRootReady: false,
+      complete: false,
+    });
   });
 
   it("reports ready=false for local mode when the agent backend is missing", async () => {
