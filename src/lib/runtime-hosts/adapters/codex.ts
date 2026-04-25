@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 
 import type {
@@ -34,8 +34,9 @@ import {
   type CliTransport,
 } from "../transport/cli";
 import { buildSubscriptionNativeCliEnv } from "../transport/subscription-env";
+import { assertSafeProjectSlug } from "../../state/project-manifests";
 
-const DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS = 15 * 60 * 1000;
+const CODEX_RUNTIME_MCP_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 export interface CodexRuntimeMcpContext {
   configArgs: string[];
@@ -325,15 +326,18 @@ export function buildCodexRuntimeMcpContext(input: {
   }
 
   const repoRoot = path.resolve(input.repoRoot ?? process.cwd());
-  const projectId = input.request.projectId;
+  const projectId = assertSafeProjectSlug(input.request.projectId);
+  const runtimeSessionId = assertSingleLineRuntimeMcpField(
+    "runtimeSessionId",
+    input.runtimeSessionId,
+  );
   const allowedTools = resolveRuntimeMcpToolProfile("codex").allowedTools;
   const token = mintRuntimeMcpAccessToken({
     projectId,
-    runtimeSessionId: input.runtimeSessionId,
+    runtimeSessionId,
     hostId: "codex",
     allowedTools,
-    ttlMs: input.tokenTtlMs ?? DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS,
-    secret: randomBytes(32).toString("base64url"),
+    ttlMs: input.tokenTtlMs ?? CODEX_RUNTIME_MCP_TOKEN_TTL_MS,
   });
   const shell = input.env.SCIENCESWARM_RUNTIME_MCP_SHELL ?? "/bin/sh";
   const command = [
@@ -347,7 +351,7 @@ export function buildCodexRuntimeMcpContext(input: {
   ].join(" ");
   const instructions = buildCodexRuntimeMcpInstructions({
     projectId,
-    runtimeSessionId: input.runtimeSessionId,
+    runtimeSessionId,
     projectPolicy: input.request.preview.projectPolicy,
     approvalStateApproved:
       input.request.approvalState === "approved" ||
@@ -418,4 +422,14 @@ function tomlStringArray(values: readonly string[]): string {
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function assertSingleLineRuntimeMcpField(
+  field: string,
+  value: string,
+): string {
+  if (/[\r\n]/.test(value)) {
+    throw new Error(`Invalid ${field}: runtime MCP fields must be single-line.`);
+  }
+  return value;
 }
