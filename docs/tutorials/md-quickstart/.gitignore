@@ -1,0 +1,12 @@
+1AKI.pdb
+prepared.pdb
+solvated.pdb
+system.xml
+equilibrated.pdb
+equilibrated.xml
+prod_seed*.dcd
+prod_seed*.log
+eq_*.log
+analysis/
+__pycache__/
+*.pyc
