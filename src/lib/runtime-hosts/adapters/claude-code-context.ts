@@ -92,6 +92,10 @@ export async function buildClaudeCodeRuntimeContext(
     safePathSegment(capsuleSessionId),
   );
   await mkdir(sessionDir, { recursive: true });
+  await Promise.all([
+    mkdir(path.join(sessionDir, ".remember", "logs", "autonomous"), { recursive: true }),
+    mkdir(path.join(sessionDir, ".remember", "tmp"), { recursive: true }),
+  ]);
 
   const loadedProjectGuidance = await buildScienceSwarmPromptContextText({
     projectId: input.request.projectId,

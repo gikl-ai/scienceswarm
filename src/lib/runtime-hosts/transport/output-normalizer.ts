@@ -49,7 +49,7 @@ const ANSI_PATTERN = new RegExp(
 );
 
 const AUTH_CHALLENGE_PATTERN =
-  /\b(auth(?:entication)? required|not authenticated|unauthorized|forbidden|please log in|please login|sign in|login required|api key required|missing api key|invalid api key)\b/i;
+  /\b(auth(?:entication)? required|not authenticated|unauthorized|forbidden|please log in|please login|sign in|login required|api key required|missing api key|invalid api key|failed to authenticate|authentication_error|invalid authentication credentials)\b|(?:api error|status|http)\s*:?\s*401\b/i;
 
 function asString(value: string | Buffer | undefined): string {
   if (!value) return "";
