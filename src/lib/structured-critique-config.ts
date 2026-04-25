@@ -42,7 +42,7 @@ function normalizeServiceBaseUrl(baseUrl: string): string {
     parsed = new URL(baseUrl);
   } catch {
     throw new StructuredCritiqueConfigError(
-      "Reasoning Audit live analysis override is invalid. `STRUCTURED_CRITIQUE_SERVICE_URL` must be a valid hosted critique URL ending in `/v1`.",
+      "Reasoning Audit live analysis override is invalid. `STRUCTURED_CRITIQUE_SERVICE_URL` must be a valid Cloud critique URL ending in `/v1`.",
     );
   }
 

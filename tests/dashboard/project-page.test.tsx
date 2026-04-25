@@ -1160,9 +1160,10 @@ describe("Project dashboard smoke test", () => {
     expect(postEndpoints).toEqual(["/api/chat/command"]);
   });
 
-  it("requires runtime preview approval before hosted chat sends", async () => {
+  it("requires third-party data approval before third-party chat sends", async () => {
     const runtimePreviewBodies: Record<string, unknown>[] = [];
     const runtimeSessionBodies: Record<string, unknown>[] = [];
+    const runtimeStream = createDeferredSseResponse();
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -1365,16 +1366,19 @@ describe("Project dashboard smoke test", () => {
       if (url === "/api/runtime/sessions/stream" && method === "POST") {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
         runtimeSessionBodies.push(body);
+        if (body.prompt === "Talk to Codex directly") {
+          return runtimeStream.response;
+        }
         return createRuntimeStreamResponse([
           {
             event: {
               type: "message",
-              payload: { text: "Codex direct answer" },
+              payload: { text: "Codex follow-up answer" },
             },
           },
           {
             session: {
-              id: "runtime-session-codex",
+              id: "runtime-session-codex-follow-up",
               conversationId: "codex-native-session",
               status: "completed",
             },
@@ -1419,10 +1423,14 @@ describe("Project dashboard smoke test", () => {
     fireEvent.change(input, { target: { value: "Talk to Codex directly" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    const previewDialog = await screen.findByRole("dialog", { name: "Hosted runtime reminder" });
+    const previewDialog = await screen.findByRole("dialog", {
+      name: "Reminder: your data will be sent to a third party",
+    });
     expect(previewDialog).toBeInTheDocument();
     expect(previewDialog)
-      .toHaveTextContent("future chat turns to the same host can send without interrupting you");
+      .toHaveTextContent("Your prompt and the data listed below will be sent to Codex, a third party.");
+    expect(previewDialog).not.toHaveTextContent("Policy passed");
+    expect(previewDialog).not.toHaveTextContent("Hosted");
     expect(input).toHaveValue("");
     expect(runtimePreviewBodies).toEqual([
       expect.objectContaining({
@@ -1435,7 +1443,34 @@ describe("Project dashboard smoke test", () => {
     ]);
     expect(runtimeSessionBodies).toEqual([]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Acknowledge and send" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send to third party" }));
+
+    await waitFor(() => {
+      expect(runtimeSessionBodies).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", {
+        name: "Reminder: your data will be sent to a third party",
+      })).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText("Codex direct answer")).not.toBeInTheDocument();
+
+    act(() => {
+      runtimeStream.send({
+        event: {
+          type: "message",
+          payload: { text: "Codex direct answer" },
+        },
+      });
+      runtimeStream.send({
+        session: {
+          id: "runtime-session-codex",
+          conversationId: "codex-native-session",
+          status: "completed",
+        },
+      });
+      runtimeStream.close();
+    });
 
     expect(await screen.findByText("Codex direct answer")).toBeInTheDocument();
     expect(input).toHaveValue("");
@@ -1449,10 +1484,6 @@ describe("Project dashboard smoke test", () => {
         prompt: "Talk to Codex directly",
       }),
     ]);
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Hosted runtime reminder" })).not.toBeInTheDocument();
-    });
-
     fireEvent.change(input, { target: { value: "Follow up without interruption" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
@@ -1460,14 +1491,16 @@ describe("Project dashboard smoke test", () => {
       expect(runtimePreviewBodies).toHaveLength(2);
       expect(runtimeSessionBodies).toHaveLength(2);
     });
-    expect(screen.queryByRole("dialog", { name: "Hosted runtime reminder" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", {
+      name: "Reminder: your data will be sent to a third party",
+    })).not.toBeInTheDocument();
     expect(runtimeSessionBodies[1]).toEqual(expect.objectContaining({
       approvalState: "approved",
       prompt: "Follow up without interruption",
     }));
   });
 
-  it("auto-sends chat when runtime preview does not require approval", async () => {
+  it("auto-sends chat when destination review does not require approval", async () => {
     const runtimePreviewBodies: Record<string, unknown>[] = [];
     const runtimeSessionBodies: Record<string, unknown>[] = [];
 
@@ -1747,7 +1780,7 @@ describe("Project dashboard smoke test", () => {
       }),
     ]);
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Runtime preview" })).not.toBeInTheDocument();
+      expect(screen.queryByTestId("turn-preview-sheet")).not.toBeInTheDocument();
     });
   });
 

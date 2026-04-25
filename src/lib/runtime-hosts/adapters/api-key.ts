@@ -50,7 +50,7 @@ export class RuntimeApiKeyMissingError extends RuntimeHostError {
       code: "RUNTIME_HOST_AUTH_REQUIRED",
       status: 401,
       message: `Missing ${input.provider} API key runtime configuration.`,
-      userMessage: "Runtime host requires an API key in .env.",
+      userMessage: "This AI provider requires an API key in .env.",
       recoverable: true,
       context: {
         provider: input.provider,
@@ -123,7 +123,7 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
     return {
       privacyClass: this.runtimeProfile.privacyClass,
       adapterProof: "declared-hosted",
-      reason: "API-key runtime requests are sent to the configured hosted provider.",
+      reason: "API-key requests are sent to the configured third-party provider.",
       observedAt: new Date().toISOString(),
     };
   }
@@ -317,7 +317,7 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
         code: "RUNTIME_HOST_AUTH_REQUIRED",
         status: 401,
         message: "Vertex AI runtime requires VERTEX_AI_PROJECT in .env.",
-        userMessage: "Runtime host requires Vertex AI project configuration.",
+        userMessage: "Vertex AI requires project configuration in .env.",
         recoverable: true,
         context: {
           provider: this.provider,
@@ -360,8 +360,8 @@ export class ApiKeyRuntimeHostAdapter implements ResearchRuntimeHost {
         status: response.status,
         message: "API-key runtime provider request failed.",
         userMessage: response.status === 401 || response.status === 403
-          ? "Runtime host rejected the configured API key."
-          : "Runtime host provider request failed.",
+          ? "The AI provider rejected the configured API key."
+          : "The AI provider request failed.",
         recoverable: true,
         context: {
           provider: this.provider,

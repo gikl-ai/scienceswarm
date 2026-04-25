@@ -58,10 +58,10 @@ export function ProjectRuntimeSection({
       data-testid="project-runtime-section"
     >
       <div>
-        <h2 className="text-lg font-semibold">Project runtime</h2>
+        <h2 className="text-lg font-semibold">Project AI destinations</h2>
         <p className="mt-1 max-w-3xl text-sm text-muted">
           Use the project chat composer switcher for everyday Claude Code and OpenClaw
-          sends. Settings keeps runtime diagnostics, advanced modes, compare targets,
+          sends. Settings keeps destination diagnostics, advanced modes, compare targets,
           and session history in one place.
         </p>
       </div>
@@ -89,7 +89,7 @@ export function ProjectRuntimeSection({
       )}
 
       {!runtimeHealth && (
-        <p className="text-sm text-muted">Loading runtime host availability...</p>
+        <p className="text-sm text-muted">Loading destination availability...</p>
       )}
 
       {runtimeHealth && projectId && (

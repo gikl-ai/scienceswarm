@@ -24,7 +24,7 @@ describe("strict local destination policy", () => {
     });
   });
 
-  it("blocks hosted model, critique, embedding, search, enrichment, and execution payloads in strict local-only mode", () => {
+  it("blocks cloud model, critique, embedding, search, enrichment, and execution payloads in strict local-only mode", () => {
     const env = { SCIENCESWARM_STRICT_LOCAL_ONLY: "1" };
 
     for (const request of [

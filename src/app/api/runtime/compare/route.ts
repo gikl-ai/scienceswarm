@@ -166,7 +166,7 @@ export async function POST(request: Request): Promise<Response> {
               code: "RUNTIME_HOST_UNKNOWN",
               status: 404,
               message: `No runtime adapter registered for ${child.hostId}.`,
-              userMessage: "That runtime host is not available.",
+              userMessage: "That AI destination is not available.",
               recoverable: true,
               context: { hostId: child.hostId },
             });
@@ -177,7 +177,7 @@ export async function POST(request: Request): Promise<Response> {
               code: "RUNTIME_INVALID_REQUEST",
               status: 500,
               message: `Runtime compare child ${child.id} is missing its preview.`,
-              userMessage: "Runtime compare could not prepare one child preview.",
+              userMessage: "Compare could not prepare one destination preview.",
               recoverable: false,
               context: {
                 childSessionId: child.id,

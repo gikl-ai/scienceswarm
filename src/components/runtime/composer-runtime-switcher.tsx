@@ -82,9 +82,9 @@ function summaryLabel(input: {
   compareHostIds: string[];
 }): string {
   if (input.mode === "compare") {
-    return `Compare · ${Math.max(1, input.compareHostIds.length)} hosts`;
+    return `Compare · ${Math.max(1, input.compareHostIds.length)} destinations`;
   }
-  return `${MODE_LABELS[input.mode]} · ${input.host?.profile.label ?? "Runtime"}`;
+  return `${MODE_LABELS[input.mode]} · ${input.host?.profile.label ?? "Destination"}`;
 }
 
 function triggerSubtitle(input: {
@@ -93,7 +93,7 @@ function triggerSubtitle(input: {
   compareHostIds: string[];
 }): string {
   if (input.mode === "compare") {
-    return `Compare ${Math.max(1, input.compareHostIds.length)} hosts · ${POLICY_LABELS[input.projectPolicy]}`;
+    return `Compare ${Math.max(1, input.compareHostIds.length)} destinations · ${POLICY_LABELS[input.projectPolicy]}`;
   }
   return `${MODE_LABELS[input.mode]} mode · ${POLICY_LABELS[input.projectPolicy]}`;
 }
@@ -136,7 +136,7 @@ export function ComposerRuntimeSwitcher({
   const selectedHost = hostById(hosts, selectedHostId);
   const selectedReason = selectedHost
     ? runtimeHostDisabledReason({ host: selectedHost, policy: projectPolicy, mode })
-    : "Runtime host unavailable";
+    : "Destination unavailable";
   const currentSummary = summaryLabel({ host: selectedHost, mode, compareHostIds });
   const triggerCopy = triggerSubtitle({ mode, projectPolicy, compareHostIds });
   const visibleHosts = useMemo(
@@ -185,7 +185,7 @@ export function ComposerRuntimeSwitcher({
         className="inline-flex min-h-11 max-w-[15rem] items-center gap-3 rounded-full border border-rule bg-sunk/85 px-3.5 py-2 text-left transition-colors hover:border-accent/60 hover:bg-white focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label="Change runtime"
+        aria-label="Change destination"
         disabled={loading && hosts.length === 0}
         onClick={() => onOpenChange(!open)}
       >
@@ -202,7 +202,7 @@ export function ComposerRuntimeSwitcher({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-strong">
-            {selectedHost?.profile.label ?? "Runtime"}
+            {selectedHost?.profile.label ?? "Destination"}
           </span>
           <span className="block truncate text-[11px] font-medium text-dim">
             {triggerCopy}
@@ -214,7 +214,7 @@ export function ComposerRuntimeSwitcher({
       {open && (
         <div
           role="dialog"
-          aria-label="Runtime switcher"
+          aria-label="Destination switcher"
           className="absolute bottom-full right-0 z-40 mb-2 w-[min(26rem,calc(100vw-1.5rem))] rounded-[26px] border border-rule bg-raised p-3 text-sm shadow-[0_24px_80px_rgba(15,23,42,0.18)]"
           onKeyDown={(event) => {
             if (event.key === "Escape") onOpenChange(false);
@@ -223,20 +223,20 @@ export function ComposerRuntimeSwitcher({
           <div className="flex items-start justify-between gap-3 px-2 py-2">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                Runtime For This Turn
+                Destination For This Turn
               </p>
               <p className="mt-1 truncate text-base font-semibold text-foreground">
                 {currentSummary}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted">
-                Choose the runtime, mode, and privacy gate before this prompt leaves the composer.
+                Choose where this prompt goes before it leaves the composer.
               </p>
             </div>
             <RuntimeStatusChip
               label={
                 selectedHost
                   ? hostStatusCopy(selectedHost, selectedReason)
-                  : "Runtime unavailable"
+                  : "Destination unavailable"
               }
               tone={statusTone(selectedReason)}
             />
@@ -297,7 +297,7 @@ export function ComposerRuntimeSwitcher({
 
           <div className="mt-3">
             <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-              Runtime Hosts
+              Destinations
             </p>
           </div>
           <div className="mt-2 max-h-[18rem] space-y-2 overflow-y-auto">
@@ -360,7 +360,7 @@ export function ComposerRuntimeSwitcher({
           {mode === "compare" && (
             <div className="mt-3 rounded-2xl border border-border/80 bg-surface/40 p-2.5">
               <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-                Compare Hosts
+                Compare Destinations
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {visibleHosts

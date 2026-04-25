@@ -113,13 +113,13 @@ function ScienceSwarmLocalBridgeInner() {
           Connect your local ScienceSwarm install
         </h1>
         <p className="mt-4 text-sm leading-7 text-muted-foreground">
-          Create a free ScienceSwarm account to connect the hosted Reasoning
-          API to your local install. When you run hosted Reasoning, the PDF
+          Create a free ScienceSwarm account to connect the Cloud Reasoning
+          API to your local install. When you run Cloud Reasoning, the PDF
           or pasted text is sent to ScienceSwarm&apos;s cloud service rather
           than the local model.
         </p>
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
-          ScienceSwarm routes this hosted reasoning flow across frontier
+          ScienceSwarm routes this Cloud Reasoning flow across frontier
           models from Google, Anthropic, and OpenAI. During the beta period,
           ScienceSwarm is covering that access for free.
         </p>

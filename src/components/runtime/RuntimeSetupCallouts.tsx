@@ -14,7 +14,7 @@ function setupAction(host: RuntimeHealthHost): string {
     return "Install and start the local OpenHands service.";
   }
 
-  return "Start the local ScienceSwarm runtime.";
+  return "Start the local ScienceSwarm service.";
 }
 
 function needsSetup(host: RuntimeHealthHost): boolean {
@@ -50,10 +50,10 @@ export function RuntimeSetupCallouts({
       data-testid="runtime-setup-callouts"
     >
       <div>
-        <h2 className="text-lg font-semibold">Runtime setup</h2>
+        <h2 className="text-lg font-semibold">Destination setup</h2>
         <p className="mt-1 max-w-3xl text-sm text-muted">
-          Recovery actions reflect install and auth state from the runtime
-          health check; unavailable hosts are not shown as ready.
+          Recovery actions reflect install and auth state from the destination
+          health check; unavailable destinations are not shown as ready.
         </p>
       </div>
 
@@ -79,7 +79,7 @@ export function RuntimeSetupCallouts({
         </ul>
       ) : (
         <p className="text-sm text-muted">
-          Runtime hosts reported ready setup state.
+          AI destinations reported ready setup state.
         </p>
       )}
     </section>

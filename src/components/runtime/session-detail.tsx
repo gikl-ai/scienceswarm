@@ -33,7 +33,7 @@ export function SessionDetail({
     <aside
       className="border-t border-border bg-surface px-4 py-3"
       data-testid="runtime-session-detail"
-      aria-label="Runtime session detail"
+      aria-label="AI session detail"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -123,7 +123,7 @@ export function SessionDetail({
             )}
             {session.status === "failed" && (
               <p className="border-t border-border px-3 py-2 text-xs text-muted">
-                Retry from the composer after changing host or policy.
+                Retry from the composer after changing destination or policy.
               </p>
             )}
           </div>

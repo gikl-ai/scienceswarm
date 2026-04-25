@@ -88,7 +88,13 @@ function capabilityBlockReason(
 ): string | null {
   const capability = MODE_CAPABILITY[mode];
   if (host.capabilities.includes(capability)) return null;
-  return `Runtime host ${host.id} does not support ${mode} mode.`;
+  return `${host.label} does not support ${mode} mode.`;
+}
+
+function destinationRiskCopy(privacyClass: RuntimePrivacyClass): string {
+  if (privacyClass === "hosted") return "a third party";
+  if (privacyClass === "external-network") return "an external network";
+  return "a non-local destination";
 }
 
 function effectivePrivacyForHost(
@@ -160,7 +166,7 @@ function hostPolicyDecision(input: {
       host: input.host,
       privacyClass,
       adapterProof,
-      blockedReason: `Project policy local-only blocks runtime host ${input.host.id} (${privacyClass}) before prompt construction.`,
+      blockedReason: `Local-only policy blocks ${input.host.label} because it would send data to ${destinationRiskCopy(privacyClass)}.`,
     };
   }
 
@@ -174,7 +180,7 @@ function hostPolicyDecision(input: {
       host: input.host,
       privacyClass,
       adapterProof,
-      blockedReason: `Project policy ${input.projectPolicy} blocks ${input.mode} mode for runtime host ${input.host.id}; ${requiredProjectPolicy} is required.`,
+      blockedReason: `This project policy blocks ${input.mode} mode for ${input.host.label}; switch to ${requiredProjectPolicy} first.`,
     };
   }
 
@@ -183,7 +189,7 @@ function hostPolicyDecision(input: {
       host: input.host,
       privacyClass,
       adapterProof,
-      blockedReason: `Project policy ${input.projectPolicy} blocks hosted task mode for runtime host ${input.host.id}; execution-ok is required.`,
+      blockedReason: `Task mode with ${input.host.label} would send data to ${destinationRiskCopy(privacyClass)}; switch to execution-ok first.`,
     };
   }
 
@@ -203,7 +209,7 @@ function compareBlockReason(
   if (!blocked) return null;
 
   if (projectPolicy === "local-only" && !isLocalPrivacy(blocked.privacyClass)) {
-    return `Compare includes runtime host ${blocked.host.id} (${blocked.privacyClass}); local-only projects can compare only local or local-network hosts.`;
+    return `Compare includes ${blocked.host.label}, which would send data to ${destinationRiskCopy(blocked.privacyClass)}. Local-only projects can compare only local destinations.`;
   }
 
   return blocked.blockedReason;
@@ -286,7 +292,7 @@ export function assertTurnPreviewAllowsPromptConstruction(
       hostId: preview.hostId,
       projectPolicy: preview.projectPolicy,
       mode: preview.mode,
-      reason: preview.blockReason ?? "Runtime host request is blocked by policy.",
+      reason: preview.blockReason ?? "This request is blocked by the project policy.",
     });
   }
 

@@ -75,7 +75,7 @@ export async function fetchWebSearchWatchItems(input: {
   const decision = evaluateStrictLocalDestination({
     destination: "hosted-search",
     dataClass: "web-search-query",
-    feature: "frontier watch hosted web search",
+    feature: "frontier watch cloud web search",
     privacy: "hosted",
   });
   if (!decision.allowed) {

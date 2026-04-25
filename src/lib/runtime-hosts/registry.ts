@@ -279,7 +279,7 @@ export class RuntimeHostRegistry {
       code: "RUNTIME_HOST_UNKNOWN",
       status: 404,
       message: `Unknown runtime host: ${hostId}`,
-      userMessage: "That runtime host is no longer available.",
+      userMessage: "That AI destination is no longer available.",
       recoverable: true,
       context: { hostId },
     });
@@ -301,7 +301,7 @@ export class RuntimeHostRegistry {
       known: false,
       readOnly: true,
       id: hostId,
-      label: `Unknown runtime host (${hostId})`,
+      label: `Unknown AI destination (${hostId})`,
       profile: null,
     };
   }

@@ -63,7 +63,7 @@ export interface RuntimeHealthResponse {
 const PRIVACY_LABELS: Record<RuntimePrivacyClass, string> = {
   "local-only": "Local only",
   "local-network": "Local network",
-  hosted: "Hosted",
+  hosted: "Third party",
   "external-network": "External network",
 };
 
@@ -296,10 +296,10 @@ export function RuntimeHostMatrix({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Runtime hosts</h2>
+          <h2 className="text-lg font-semibold">AI destinations</h2>
           <p className="mt-1 max-w-3xl text-sm text-muted">
-            Installed host state comes from /api/runtime/health, including auth
-            mode, privacy class, capabilities, and lifecycle support.
+            Installed destination state comes from /api/runtime/health, including auth
+            mode, where data can go, capabilities, and lifecycle support.
           </p>
         </div>
         <span className="rounded border border-border bg-background px-2.5 py-1 text-xs text-muted">
@@ -391,7 +391,7 @@ export function RuntimeHostMatrix({
           </table>
         </div>
       ) : (
-        <p className="text-sm text-muted">Loading runtime host health...</p>
+        <p className="text-sm text-muted">Loading destination health...</p>
       )}
     </section>
   );

@@ -3697,7 +3697,7 @@ export function useUnifiedChat(
       activeFile?: ActiveFileContext,
     ) => {
       if (!hasProjectScope(context.projectName)) {
-        throw new Error("Runtime host sends require an active project.");
+        throw new Error("AI destination sends require an active project.");
       }
 
       const requestFiles = liveUploadedFilesRef.current;

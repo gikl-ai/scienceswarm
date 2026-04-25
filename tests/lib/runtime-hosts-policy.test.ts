@@ -49,7 +49,7 @@ describe("runtime host TurnPreview policy", () => {
         allowed: false,
         requiresUserApproval: false,
         effectivePrivacyClass: "hosted",
-        blockReason: expect.stringContaining("before prompt construction"),
+        blockReason: expect.stringContaining("would send data to a third party"),
       });
     }
 
@@ -80,7 +80,7 @@ describe("runtime host TurnPreview policy", () => {
       }),
     ).toMatchObject({
       allowed: false,
-      blockReason: expect.stringContaining("execution-ok is required"),
+      blockReason: expect.stringContaining("switch to execution-ok first"),
     });
 
     expect(
@@ -106,7 +106,7 @@ describe("runtime host TurnPreview policy", () => {
     });
 
     expect(preview.allowed).toBe(false);
-    expect(preview.blockReason).toContain("before prompt construction");
+    expect(preview.blockReason).toContain("would send data to a third party");
     expect(() => assertTurnPreviewAllowsPromptConstruction(preview)).toThrow(
       RuntimePrivacyBlocked,
     );
@@ -132,7 +132,7 @@ describe("runtime host TurnPreview policy", () => {
     ).not.toThrow();
   });
 
-  it("requires execution-ok approval for task-capable hosted runtimes", () => {
+  it("requires execution-ok approval for task-capable third-party destinations", () => {
     const preview = computeTurnPreview({
       projectPolicy: "execution-ok",
       host: requireRuntimeHostProfile("gemini-cli"),
@@ -184,7 +184,7 @@ describe("runtime host TurnPreview policy", () => {
     });
     expect(blocked).toMatchObject({
       allowed: false,
-      blockReason: expect.stringContaining("local-only projects can compare"),
+      blockReason: expect.stringContaining("Local-only projects can compare"),
       accountDisclosure: {
         compareFanOutCount: 2,
       },
@@ -244,7 +244,7 @@ describe("runtime host TurnPreview policy", () => {
 
     expect(hostedSynthesis).toMatchObject({
       allowed: false,
-      blockReason: expect.stringContaining("before prompt construction"),
+      blockReason: expect.stringContaining("would send data to a third party"),
       dataIncluded: childOutputs,
     });
   });
@@ -291,7 +291,7 @@ describe("runtime host TurnPreview policy", () => {
     const openclaw = requireRuntimeHostProfile("openclaw");
 
     expect(() => assertHostSupportsTurnMode(openclaw, "task")).toThrow(
-      "Runtime host openclaw does not support task.",
+      "AI destination openclaw does not support task.",
     );
   });
 

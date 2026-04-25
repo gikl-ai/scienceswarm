@@ -126,7 +126,7 @@ describe("runtime host contracts and registry", () => {
       known: false,
       readOnly: true,
       id: "legacy-runtime-v1",
-      label: "Unknown runtime host (legacy-runtime-v1)",
+      label: "Unknown AI destination (legacy-runtime-v1)",
       profile: null,
     });
     expect(resolveRuntimeHostRecord("codex")).toMatchObject({

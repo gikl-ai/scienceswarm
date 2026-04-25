@@ -42,7 +42,7 @@ function preview(overrides: Partial<TurnPreview> = {}): TurnPreview {
   };
 }
 
-describe("runtime preview acknowledgement", () => {
+describe("destination review acknowledgement", () => {
   beforeEach(() => {
     window.localStorage.clear();
   });

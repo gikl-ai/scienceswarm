@@ -50,7 +50,7 @@ describe("/api/structured-critique", () => {
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({
-      error: expect.stringContaining("Strict local-only mode blocks hosted structured critique"),
+      error: expect.stringContaining("Strict local-only mode blocks Cloud structured critique"),
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -66,7 +66,7 @@ describe("/api/structured-critique", () => {
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({
-      error: expect.stringContaining("Strict local-only mode blocks hosted structured critique polling"),
+      error: expect.stringContaining("Strict local-only mode blocks Cloud structured critique polling"),
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -334,7 +334,7 @@ describe("/api/structured-critique", () => {
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({
       error:
-        "Create a free account at scienceswarm.ai and sign in to use the hosted Reasoning API.",
+        "Create a free account at scienceswarm.ai and sign in to use the Cloud Reasoning API.",
     });
   });
 
@@ -513,7 +513,7 @@ describe("/api/structured-critique", () => {
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
       error:
-        "Reasoning Audit live analysis override is invalid. `STRUCTURED_CRITIQUE_SERVICE_URL` must be a valid hosted critique URL ending in `/v1`.",
+        "Reasoning Audit live analysis override is invalid. `STRUCTURED_CRITIQUE_SERVICE_URL` must be a valid Cloud critique URL ending in `/v1`.",
     });
   });
 

@@ -23,7 +23,7 @@ export class RuntimeCliMalformedOutputError extends RuntimeHostError {
       code: "RUNTIME_TRANSPORT_ERROR",
       status: 502,
       message: input.detail,
-      userMessage: "Runtime host output could not be parsed.",
+      userMessage: "The AI destination output could not be parsed.",
       recoverable: true,
       context: {
         ...input,
@@ -120,7 +120,7 @@ export function normalizeCliOutput(
 
   if (input.requireJson && json === null && jsonLines.length === 0) {
     throw new RuntimeCliMalformedOutputError({
-      detail: "Runtime host returned non-JSON output when JSON was required.",
+      detail: "The AI destination returned non-JSON output when JSON was required.",
     });
   }
 

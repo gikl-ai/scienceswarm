@@ -203,7 +203,7 @@ describe("runtime session APIs", () => {
         projectId: "project-alpha",
         projectPolicy: "cloud-ok",
         mode: "chat",
-        prompt: "Use hosted runtime.",
+        prompt: "Use third-party destination.",
       },
     ));
     expect(preview.status).toBe(200);
@@ -215,7 +215,7 @@ describe("runtime session APIs", () => {
         projectId: "project-alpha",
         projectPolicy: "local-only",
         mode: "chat",
-        prompt: "Use hosted runtime.",
+        prompt: "Use third-party destination.",
         approvalState: "approved",
       },
     ));
@@ -277,7 +277,7 @@ describe("runtime session APIs", () => {
         projectId: "project-alpha",
         projectPolicy: "cloud-ok",
         mode: "chat",
-        prompt: "Hosted turn",
+        prompt: "Third-party turn",
         approvalState: "approved",
       },
     ));
@@ -298,14 +298,14 @@ describe("runtime session APIs", () => {
       return typeof text === "string" ? [text] : [];
     });
 
-    expect(messageTexts).toEqual(["stream from codex: Hosted turn"]);
+    expect(messageTexts).toEqual(["stream from codex: Third-party turn"]);
     expect(payloads).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           event: expect.objectContaining({
             type: "message",
             payload: expect.objectContaining({
-              text: "stream from codex: Hosted turn",
+              text: "stream from codex: Third-party turn",
               nativeSessionId: "codex-native-session",
             }),
           }),
@@ -358,7 +358,7 @@ describe("runtime session APIs", () => {
         projectId: "project-alpha",
         projectPolicy: "cloud-ok",
         mode: "chat",
-        prompt: "Hosted turn",
+        prompt: "Third-party turn",
         approvalState: "approved",
       },
     ));
@@ -485,7 +485,7 @@ describe("runtime session APIs", () => {
           projectId: "project-alpha",
           projectPolicy: "cloud-ok",
           mode: "chat",
-          prompt: "Hosted turn",
+          prompt: "Third-party turn",
           approvalState: "approved",
         }),
       },
@@ -659,7 +659,7 @@ describe("runtime session APIs", () => {
               code: "RUNTIME_TRANSPORT_ERROR",
               status: 502,
               message: "Runtime CLI exited due to signal SIGTERM.",
-              userMessage: "Runtime host command was interrupted.",
+              userMessage: "The AI destination command was interrupted.",
               recoverable: true,
             });
           },
@@ -675,7 +675,7 @@ describe("runtime session APIs", () => {
         projectId: "project-alpha",
         projectPolicy: "cloud-ok",
         mode: "chat",
-        prompt: "Hosted turn",
+        prompt: "Third-party turn",
         approvalState: "approved",
       },
     ));

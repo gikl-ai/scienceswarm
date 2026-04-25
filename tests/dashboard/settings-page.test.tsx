@@ -1226,7 +1226,7 @@ describe("SettingsPage runtime settings", () => {
     );
   });
 
-  it("renders project runtime controls and keeps hosted hosts disabled under local-only policy", async () => {
+  it("renders project destination controls and keeps third-party destinations disabled under local-only policy", async () => {
     vi.stubGlobal("fetch", buildFetchStub());
 
     render(

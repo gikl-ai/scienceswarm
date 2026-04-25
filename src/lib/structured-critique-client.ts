@@ -312,7 +312,7 @@ export async function probeStructuredCritiqueReadiness(
       status: "not_configured",
       detail: configStatus.missingKeys.length > 0
         ? `Missing ${configStatus.missingKeys.join(" and ")}.`
-        : "Hosted Descartes critique is not configured.",
+        : "Cloud Descartes critique is not configured.",
       observedAt,
     };
   }
@@ -328,7 +328,7 @@ export async function probeStructuredCritiqueReadiness(
       detail:
         error instanceof Error
           ? sanitizeStructuredCritiqueMessage(error.message)
-          : "Hosted Descartes critique is not configured.",
+          : "Cloud Descartes critique is not configured.",
       observedAt,
     };
   }
@@ -348,7 +348,7 @@ export async function probeStructuredCritiqueReadiness(
         configured: true,
         ready: true,
         status: "ready",
-        detail: "Hosted Descartes readiness/auth probe succeeded.",
+        detail: "Cloud Descartes readiness/auth probe succeeded.",
         endpoint,
         httpStatus: response.status,
         observedAt,
@@ -381,8 +381,8 @@ export async function probeStructuredCritiqueReadiness(
       ready: false,
       status: authFailed ? "auth_failed" : "unavailable",
       detail: authFailed
-        ? "Hosted Descartes rejected the configured credentials."
-        : `Hosted Descartes readiness probe failed: ${detail}`,
+        ? "Cloud Descartes rejected the configured credentials."
+        : `Cloud Descartes readiness probe failed: ${detail}`,
       endpoint,
       httpStatus: response.status,
       observedAt,
@@ -393,7 +393,7 @@ export async function probeStructuredCritiqueReadiness(
         configured: true,
         ready: false,
         status: "timeout",
-        detail: `Hosted Descartes readiness probe timed out after ${Math.round(probeTimeoutMs / 1000)} seconds.`,
+        detail: `Cloud Descartes readiness probe timed out after ${Math.round(probeTimeoutMs / 1000)} seconds.`,
         endpoint,
         observedAt,
       };
@@ -403,7 +403,7 @@ export async function probeStructuredCritiqueReadiness(
         configured: true,
         ready: false,
         status: "network_error",
-        detail: "Hosted Descartes could not be reached from this server.",
+        detail: "Cloud Descartes could not be reached from this server.",
         endpoint,
         observedAt,
       };
@@ -418,7 +418,7 @@ export async function probeStructuredCritiqueReadiness(
               error.message,
               structuredCritiqueSecrets(config),
             )
-          : "Hosted Descartes readiness probe failed.",
+          : "Cloud Descartes readiness probe failed.",
       endpoint,
       observedAt,
     };

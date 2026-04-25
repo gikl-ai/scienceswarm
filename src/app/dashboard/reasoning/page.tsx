@@ -38,9 +38,9 @@ const MAX_POLLS = 120;
 const POLL_TIMEOUT_MESSAGE =
   "Analysis is taking longer than expected. This run is still saved in Recent Reasoning Analyses so you can check back shortly.";
 const QUEUED_POLL_TIMEOUT_MESSAGE =
-  "ScienceSwarm's hosted reasoning queue has accepted this run but it has not started yet. This run is still saved in Recent Reasoning Analyses so you can check back shortly.";
+  "ScienceSwarm's Cloud Reasoning queue has accepted this run but it has not started yet. This run is still saved in Recent Reasoning Analyses so you can check back shortly.";
 const QUEUED_PROGRESS_RECOVERY_MESSAGE =
-  "Queued in ScienceSwarm's hosted reasoning service. You can leave this page open or reopen the run from Recent Reasoning Analyses later.";
+  "Queued in ScienceSwarm's Cloud Reasoning service. You can leave this page open or reopen the run from Recent Reasoning Analyses later.";
 const DEFAULT_STYLE_PROFILE = "professional";
 const SECTION_LABEL = "text-xs font-medium uppercase tracking-widest text-muted";
 const REASONING_AUDIT_LOADING_AUTH_MESSAGE =
@@ -377,7 +377,7 @@ function buildReasoningWaitEstimate(
     return {
       label: "Queued; not started yet",
       detail:
-        "Hosted reasoning jobs can sit in the queue before compute begins. It is safe to leave this page and reopen the run from Recent Reasoning Analyses.",
+        "Cloud Reasoning jobs can sit in the queue before compute begins. It is safe to leave this page and reopen the run from Recent Reasoning Analyses.",
     };
   }
 
@@ -386,7 +386,7 @@ function buildReasoningWaitEstimate(
       return {
         label: "Often 20-60 minutes for pasted text",
         detail:
-          "No live ETA is available yet. Longer excerpts may run longer when the hosted queue is busy.",
+          "No live ETA is available yet. Longer excerpts may run longer when the Cloud Reasoning queue is busy.",
       };
     }
     if (input.charCount < 12_000) {
@@ -399,7 +399,7 @@ function buildReasoningWaitEstimate(
     return {
       label: "Often 20-60 minutes for longer pasted text",
       detail:
-        "Large excerpts may run longer when the hosted queue is busy.",
+        "Large excerpts may run longer when the Cloud Reasoning queue is busy.",
     };
   }
 
@@ -408,7 +408,7 @@ function buildReasoningWaitEstimate(
       return {
         label: "Often 30-120+ minutes for paper PDFs",
         detail:
-          "No live ETA is available yet. Large PDFs can take over 1 hour to process, especially when the hosted queue is busy.",
+          "No live ETA is available yet. Large PDFs can take over 1 hour to process, especially when the Cloud Reasoning queue is busy.",
       };
     }
     if (input.size < 5 * 1024 * 1024) {
@@ -724,7 +724,7 @@ async function listHostedCritiqueHistory(
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(
-      readErrorFromPayload(payload) || "Failed to load hosted reasoning analyses",
+      readErrorFromPayload(payload) || "Failed to load Cloud Reasoning analyses",
     );
   }
   const jobs =
@@ -732,7 +732,7 @@ async function listHostedCritiqueHistory(
       ? (payload as { jobs?: unknown }).jobs
       : payload;
   if (!Array.isArray(jobs)) {
-    throw new Error("Hosted reasoning history returned an invalid response");
+    throw new Error("Cloud Reasoning history returned an invalid response");
   }
   return jobs.map((job) => normalizeStructuredCritiqueJobPayload(job));
 }

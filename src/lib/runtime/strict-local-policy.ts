@@ -147,7 +147,7 @@ export function evaluateStrictLocalDestination(
       allowed: true,
       strictLocalOnly,
       privacy,
-      reason: `${request.feature} is labeled external-network and is not a hosted model, critique, embedding, search, enrichment, or execution call.`,
+      reason: `${request.feature} is labeled external-network and is not a cloud model, critique, embedding, search, enrichment, or execution call.`,
     };
   }
 

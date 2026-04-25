@@ -29,7 +29,7 @@ const STORAGE_KEY = "structured-critique-history.v1";
 const POLL_TIMEOUT_MESSAGE =
   "Analysis is taking longer than expected. This run is still saved in Recent Reasoning Analyses so you can check back shortly.";
 const QUEUED_POLL_TIMEOUT_MESSAGE =
-  "ScienceSwarm's hosted reasoning queue has accepted this run but it has not started yet. This run is still saved in Recent Reasoning Analyses so you can check back shortly.";
+  "ScienceSwarm's Cloud Reasoning queue has accepted this run but it has not started yet. This run is still saved in Recent Reasoning Analyses so you can check back shortly.";
 
 function makeCompletedJob(overrides?: Record<string, unknown>) {
   return {
@@ -173,7 +173,7 @@ function makeHealthResponse(structuredCritique = true, detail?: string) {
       detail:
         detail ??
         (structuredCritique
-          ? "Hosted Descartes critique is ready."
+          ? "Cloud Descartes critique is ready."
           : "Live analysis requires `STRUCTURED_CRITIQUE_SERVICE_URL` and `STRUCTURED_CRITIQUE_SERVICE_TOKEN` for the hosted Descartes critique service. Restart the Next.js server after changing them."),
     },
   });
@@ -188,7 +188,7 @@ function makeAuthStatusResponse(
 ) {
   return Response.json({
     detail:
-      "Create a free account at scienceswarm.ai and sign in to use the hosted Reasoning API.",
+      "Create a free account at scienceswarm.ai and sign in to use the Cloud Reasoning API.",
     expiresAt: null,
     signedIn: false,
     ...overrides,
@@ -304,7 +304,7 @@ describe("Critique workspace", () => {
         if (String(input) === "/api/health") {
           return makeHealthResponse(
             false,
-            "Hosted Descartes critique is blocked in strict local-only mode.",
+            "Cloud Descartes critique is blocked in strict local-only mode.",
           );
         }
         if (isPersistedCritiqueList(input)) {
@@ -327,7 +327,7 @@ describe("Critique workspace", () => {
     render(<StructuredCritiquePage />);
 
     expect(
-      await screen.findByText("Hosted Descartes critique is blocked in strict local-only mode."),
+      await screen.findByText("Cloud Descartes critique is blocked in strict local-only mode."),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/Live analysis requires `STRUCTURED_CRITIQUE_SERVICE_URL`/),
@@ -1244,7 +1244,7 @@ describe("Critique workspace", () => {
     expect(screen.getByText("Recovered Audit")).toBeInTheDocument();
   });
 
-  it("surfaces hosted queue progress honestly while a run is waiting", async () => {
+  it("surfaces Cloud Reasoning queue progress honestly while a run is waiting", async () => {
     const recoveredJob = {
       id: "job-queued-1",
       status: "COMPLETED",

@@ -57,8 +57,8 @@ export class RuntimeHostCapabilityUnsupported extends RuntimeHostError {
     super({
       code: "RUNTIME_HOST_CAPABILITY_UNSUPPORTED",
       status: 422,
-      message: `Runtime host ${input.hostId} does not support ${input.capability}.`,
-      userMessage: "This runtime does not support the requested action.",
+      message: `AI destination ${input.hostId} does not support ${input.capability}.`,
+      userMessage: "This destination does not support the requested action.",
       recoverable: true,
       context: input,
     });
@@ -94,8 +94,8 @@ export class RuntimePreviewApprovalRequired extends RuntimeHostError {
     super({
       code: "RUNTIME_PREVIEW_APPROVAL_REQUIRED",
       status: 428,
-      message: `Runtime host ${input.hostId} requires preview approval before ${input.mode}.`,
-      userMessage: "Approve the runtime preview before sending project content.",
+      message: `AI destination ${input.hostId} requires review approval before ${input.mode}.`,
+      userMessage: "Review where your data will be sent before sending project content.",
       recoverable: true,
       context: input,
     });
@@ -131,7 +131,7 @@ export function mapRuntimeHostErrorToApiError(error: unknown): RuntimeApiError {
   return {
     status: 500,
     body: {
-      error: "Runtime host request failed.",
+      error: "AI destination request failed.",
       code: "RUNTIME_TRANSPORT_ERROR",
       recoverable: false,
     },

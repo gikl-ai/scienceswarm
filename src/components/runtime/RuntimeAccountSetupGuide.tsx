@@ -109,7 +109,7 @@ export function RuntimeAccountSetupGuide({
           <p className="mt-1 max-w-3xl text-sm text-muted">
             ScienceSwarm does not connect Claude, Codex, or Gemini accounts directly.
             Install each provider CLI, sign in there, then choose Cloud ok before selecting
-            the hosted runtime.
+            a third-party destination.
           </p>
         </div>
         <RuntimeStatusChip label="No tokens stored" tone="ok" />
@@ -164,7 +164,7 @@ export function RuntimeAccountSetupGuide({
       </ol>
 
       <p className="mt-3 text-xs text-muted">
-        After sign-in, use Project policy: Cloud ok. Hosted sends still show a preview
+        After sign-in, use Project policy: Cloud ok. Third-party sends still show a preview
         before any prompt or project context leaves the local workspace.
       </p>
     </section>

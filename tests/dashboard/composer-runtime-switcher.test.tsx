@@ -103,7 +103,7 @@ describe("ComposerRuntimeSwitcher", () => {
       />,
     );
 
-    const trigger = screen.getByRole("button", { name: "Change runtime" });
+    const trigger = screen.getByRole("button", { name: "Change destination" });
     expect(trigger).toHaveTextContent("Chat");
     expect(trigger).toHaveTextContent("Claude Code");
     expect(trigger).toHaveTextContent("Cloud ok");
@@ -127,8 +127,8 @@ describe("ComposerRuntimeSwitcher", () => {
       />,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Runtime switcher" });
-    expect(within(dialog).getByText("Runtime For This Turn")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Destination switcher" });
+    expect(within(dialog).getByText("Destination For This Turn")).toBeInTheDocument();
     expect(within(dialog).getByText("Project Privacy")).toBeInTheDocument();
     expect(within(dialog).getByText("Check: claude auth status")).toBeInTheDocument();
     expect(within(dialog).getAllByText("Claude Code")[0]).toBeInTheDocument();
@@ -158,7 +158,7 @@ describe("ComposerRuntimeSwitcher", () => {
       />,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Runtime switcher" });
+    const dialog = screen.getByRole("dialog", { name: "Destination switcher" });
     fireEvent.click(within(dialog).getByRole("button", { name: /Claude Code/ }));
 
     expect(onProjectPolicyChange).toHaveBeenCalledWith("cloud-ok");
@@ -186,7 +186,7 @@ describe("ComposerRuntimeSwitcher", () => {
       />,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Runtime switcher" });
+    const dialog = screen.getByRole("dialog", { name: "Destination switcher" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Local only" }));
 
     expect(onProjectPolicyChange).toHaveBeenCalledWith("local-only");

@@ -134,7 +134,7 @@ describe("runtime MCP tool wrappers", () => {
     expect(brainSearch).not.toHaveBeenCalled();
   });
 
-  it("recomputes TurnPreview and blocks hosted hosts from local-only project data", async () => {
+  it("recomputes TurnPreview and blocks third-party destinations from local-only project data", async () => {
     const projectWorkspaceRead = vi.fn(async () => ({
       projectId: "project-alpha",
       workspacePath: "notes.md",

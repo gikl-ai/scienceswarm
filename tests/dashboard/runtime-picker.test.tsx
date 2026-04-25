@@ -54,7 +54,7 @@ function host(input: {
 }
 
 describe("RuntimePicker", () => {
-  it("keeps hosted runtimes disabled under local-only policy and visible before send", () => {
+  it("keeps third-party destinations disabled under local-only policy and visible before send", () => {
     render(
       <RuntimePicker
         hosts={[
