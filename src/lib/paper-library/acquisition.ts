@@ -365,14 +365,23 @@ async function executeItem(input: {
     }
   }
   if (input.item.mode === "watch") {
-    await markGapAction({
-      project: input.project,
-      scanId: input.item.scanId,
-      brainRoot: input.brainRoot,
-      suggestionId: input.item.suggestionId,
-      action: "watch",
-    });
-    return { ...input.item, status: "watching", error: undefined, updatedAt: input.updatedAt };
+    try {
+      await markGapAction({
+        project: input.project,
+        scanId: input.item.scanId,
+        brainRoot: input.brainRoot,
+        suggestionId: input.item.suggestionId,
+        action: "watch",
+      });
+      return { ...input.item, status: "watching", error: undefined, updatedAt: input.updatedAt };
+    } catch (error) {
+      return {
+        ...input.item,
+        status: "failed",
+        error: error instanceof Error ? error.message : "Could not mark paper suggestion for watching.",
+        updatedAt: input.updatedAt,
+      };
+    }
   }
 
   const arxivId = input.item.selectedLocation?.source === "arxiv"

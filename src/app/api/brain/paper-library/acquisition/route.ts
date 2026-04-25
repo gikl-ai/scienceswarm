@@ -85,6 +85,12 @@ export async function POST(request: Request) {
       failedCount: plan.failedCount,
     });
   } catch (error) {
+    if (parsed.data.action === "execute" && error instanceof Error && /already running/i.test(error.message)) {
+      return Response.json(
+        paperLibraryError("job_already_running", "Acquisition plan is already running."),
+        { status: 409 },
+      );
+    }
     return paperLibraryBadRequest(error);
   }
 }

@@ -4,7 +4,11 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initBrain } from "@/brain/init";
 import { getBrainStore } from "@/brain/store";
-import { getPaperLibraryClustersPath, getPaperLibraryGraphPath } from "@/lib/paper-library/state";
+import {
+  getPaperLibraryAcquisitionPlanPath,
+  getPaperLibraryClustersPath,
+  getPaperLibraryGraphPath,
+} from "@/lib/paper-library/state";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 const mockIsLocal = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
@@ -369,6 +373,38 @@ describe("paper-library acquisition route", () => {
     expect(enrichment.suggestions.find((suggestion) => suggestion.title === "Missing Open Access Paper")).toMatchObject({
       downloadStatus: "already_local",
       recommendedAction: "cite_only",
+    });
+  });
+
+  it("returns a typed conflict when an acquisition plan is already running", async () => {
+    const route = await import("@/app/api/brain/paper-library/acquisition/route");
+    const createResponse = await route.POST(jsonRequest("http://localhost/api/brain/paper-library/acquisition", {
+      action: "create",
+      project: "project-alpha",
+      scanId: "scan-1",
+      limit: 1,
+    }));
+    const created = await createResponse.json() as { acquisitionPlanId: string; plan: Record<string, unknown> };
+    await writeFile(
+      getPaperLibraryAcquisitionPlanPath("project-alpha", created.acquisitionPlanId, stateRoot()),
+      JSON.stringify({ ...created.plan, status: "running" }),
+      "utf-8",
+    );
+
+    const executeResponse = await route.POST(jsonRequest("http://localhost/api/brain/paper-library/acquisition", {
+      action: "execute",
+      project: "project-alpha",
+      acquisitionPlanId: created.acquisitionPlanId,
+      userConfirmation: true,
+    }));
+
+    expect(executeResponse.status).toBe(409);
+    await expect(executeResponse.json()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "job_already_running",
+        message: "Acquisition plan is already running.",
+      },
     });
   });
 });
