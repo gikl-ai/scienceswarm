@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { GET as getStatus } from "@/app/api/scienceswarm-auth/status/route";
-import { POST as postSession } from "@/app/api/scienceswarm-auth/session/route";
+import {
+  GET as getSession,
+  POST as postSession,
+} from "@/app/api/scienceswarm-auth/session/route";
 import { POST as postSignOut } from "@/app/api/scienceswarm-auth/sign-out/route";
 import { POST as postStart } from "@/app/api/scienceswarm-auth/start/route";
 import {
@@ -109,6 +112,51 @@ describe("/api/scienceswarm-auth/*", () => {
     const html = await sessionResponse.text();
     expect(html).toContain("/dashboard/reasoning?brain_slug=paper-critique");
     expect(html).toContain("Return to ScienceSwarm");
+  });
+
+  it("serves a same-tab token relay document for hosted sign-in handoffs", async () => {
+    const response = await getSession(
+      new Request("http://127.0.0.1:3022/api/scienceswarm-auth/session"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const html = await response.text();
+    expect(html).toContain("Completing ScienceSwarm sign-in");
+    expect(html).toContain("window.name");
+    expect(html).toContain("/api/scienceswarm-auth/session");
+  });
+
+  it("returns the local return path after JSON token handoff", async () => {
+    const startResponse = await postStart(
+      new Request("http://127.0.0.1:3022/api/scienceswarm-auth/start", {
+        method: "POST",
+        headers: {
+          referer: "http://127.0.0.1:3022/dashboard/reasoning?brain_slug=paper-critique",
+        },
+      }),
+    );
+    const startPayload = (await startResponse.json()) as { state: string };
+
+    const token = makeJwt(Math.floor(Date.now() / 1000) + 3600);
+    const sessionResponse = await postSession(
+      new Request("http://127.0.0.1:3022/api/scienceswarm-auth/session", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          state: startPayload.state,
+          token,
+        }),
+      }),
+    );
+
+    expect(sessionResponse.status).toBe(200);
+    await expect(sessionResponse.json()).resolves.toMatchObject({
+      returnPath: "/dashboard/reasoning?brain_slug=paper-critique",
+      signedIn: true,
+    });
   });
 
   it("stores a local auth cookie from a valid hosted token handoff", async () => {
