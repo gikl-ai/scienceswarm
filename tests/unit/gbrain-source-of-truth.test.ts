@@ -71,6 +71,17 @@ describe("ScienceSwarm gbrain source of truth", () => {
     expect(env.PATH?.split(path.delimiter)[0]).toBe(scienceSwarmNodeBinDir(repoRoot));
   });
 
+  it("normalizes Windows-style Path into PATH for runtime MCP passthrough", () => {
+    const repoRoot = "/tmp/scienceswarm";
+    const env = buildScienceSwarmGbrainEnv({
+      NODE_ENV: "test",
+      Path: "C:\\Users\\Alice\\.bun\\bin;C:\\Windows\\System32",
+    }, repoRoot);
+
+    expect(env.PATH?.split(path.delimiter)[0]).toBe(scienceSwarmNodeBinDir(repoRoot));
+    expect(env.Path).toBe(env.PATH);
+  });
+
   it("reports stale node_modules when installed gbrain differs from package-lock", async () => {
     const repoRoot = await makeRepo({
       expectedVersion: "0.20.4",

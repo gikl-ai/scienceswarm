@@ -63,10 +63,12 @@ export function prependPathEntries(
     .map((entry) => path.resolve(entry))
     .filter((entry) => !existing.has(entry));
   if (prepend.length === 0) return env;
+  const nextPath = [...prepend, current].filter(Boolean).join(path.delimiter);
 
   return {
     ...env,
-    [key]: [...prepend, current].filter(Boolean).join(path.delimiter),
+    [key]: nextPath,
+    PATH: nextPath,
   };
 }
 
