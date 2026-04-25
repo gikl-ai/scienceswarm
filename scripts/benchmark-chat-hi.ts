@@ -367,6 +367,21 @@ function escapeMarkdownTableCell(value: string): string {
   return value.replaceAll("|", "\\|").replaceAll("\n", " ");
 }
 
+function formatMarkdownCodeSpan(value: string): string {
+  const maxBacktickRun = Math.max(
+    0,
+    ...Array.from(value.matchAll(/`+/g), (match) => match[0].length),
+  );
+  const delimiter = "`".repeat(maxBacktickRun + 1);
+  const requiresPadding =
+    value.startsWith("`") ||
+    value.endsWith("`") ||
+    value.startsWith(" ") ||
+    value.endsWith(" ");
+  const content = requiresPadding ? ` ${value} ` : value;
+  return `${delimiter}${content}${delimiter}`;
+}
+
 function formatTimingArtifactCell(
   timingArtifact: ChatBenchmarkTimingArtifactResult | null | undefined,
 ): string {
@@ -395,7 +410,9 @@ export function formatBenchmarkMarkdownRow(
     summary.firstChunkSharedHeadersTick ? "yes" : "no",
     String(summary.totalMs),
     String(summary.progressEventCount),
-    `\`${escapeMarkdownTableCell(summary.finalTextSample || "n/a")}\``,
+    formatMarkdownCodeSpan(
+      escapeMarkdownTableCell(summary.finalTextSample || "n/a"),
+    ),
     escapeMarkdownTableCell(formatTimingArtifactCell(summary.timingArtifact)),
   ];
   return `| ${cells.join(" | ")} |`;
