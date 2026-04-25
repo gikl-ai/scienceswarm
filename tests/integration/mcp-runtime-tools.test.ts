@@ -8,6 +8,7 @@ import {
 } from "@/lib/runtime-hosts/concurrency";
 import {
   createRuntimeMcpToolset,
+  type RuntimeMcpArtifactImportResult,
 } from "@/lib/runtime-hosts/mcp/tools";
 import { resolveRuntimeMcpToolProfile } from "@/lib/runtime-hosts/mcp/tool-profiles";
 import {
@@ -253,19 +254,41 @@ describe("runtime MCP tool wrappers", () => {
       bytes: 10,
       truncated: false,
     }));
-    const artifactImport = vi.fn(async () => ({
+    const artifactImport = vi.fn(async (_params: unknown, _mapper: unknown): Promise<RuntimeMcpArtifactImportResult> => ({
       validation: {
         ok: true,
-        mapping: { projectRelativePath: "results/summary.md" },
+        approvalRequired: false,
+        mapping: {
+          projectId: "project-alpha",
+          hostId: "claude-code",
+          projectRelativePath: "results/summary.md",
+          localAbsolutePath: path.join(tempRoot, "results/summary.md"),
+          hostNativePath: "results/summary.md",
+        },
+        request: {
+          projectId: "project-alpha",
+          sourceHostId: "claude-code",
+          sourceSessionId: "session-1",
+          sourcePath: "results/summary.md",
+          sourcePathKind: "project-relative",
+          allowedRoots: ["/tmp"],
+          approvalState: "not-required",
+          importReason: "host-declared-artifact",
+        },
       },
       artifact: {
+        artifactId: "artifact-1",
+        projectId: "project-alpha",
+        sourceHostId: "claude-code",
+        sourceSessionId: "session-1",
+        sourcePath: "results/summary.md",
         workspacePath: "results/summary.md",
+        gbrainSlug: null,
         provenance: {
-          runtimeSessionId: "session-1",
-          hostId: "claude-code",
-          sourceArtifactId: "artifact-1",
           promptHash: "prompt-hash-1",
           inputFileRefs: ["gbrain:wiki/notes/assay-summary"],
+          generatedAt: "2026-04-22T11:00:00.000Z",
+          importedBy: "runtime-mcp",
           approvalState: "approved" as const,
         },
       },
@@ -385,7 +408,6 @@ describe("runtime MCP tool wrappers", () => {
         approvalState: "not-required",
         importReason: "host-declared-artifact",
         projectRoot: tempRoot,
-        runtimeProvenance,
         promptHash: "prompt-hash-1",
         inputFileRefs: ["gbrain:wiki/notes/assay-summary"],
       }),
