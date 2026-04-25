@@ -114,6 +114,14 @@ function sameRelativePathKey(left: string, right: string): boolean {
   return relativePathKey(left) === relativePathKey(right);
 }
 
+function normalizeRelativePathSeparators(relativePath: string): string {
+  return relativePath.replace(/\\/g, "/");
+}
+
+function sameRelativePath(left: string, right: string): boolean {
+  return normalizeRelativePathSeparators(left) === normalizeRelativePathSeparators(right);
+}
+
 function operationMovesSource(operation: ApplyOperation): operation is ApplyOperation & { source: PaperLibraryFileSnapshot } {
   return Boolean(operation.source && !sameRelativePathKey(operation.source.relativePath, operation.destinationRelativePath));
 }
@@ -123,7 +131,7 @@ function operationHasSamePathKey(operation: ApplyOperation & { source: PaperLibr
 }
 
 function operationIsExactNoop(operation: ApplyOperation & { source: PaperLibraryFileSnapshot }): boolean {
-  return operation.source.relativePath === operation.destinationRelativePath;
+  return sameRelativePath(operation.source.relativePath, operation.destinationRelativePath);
 }
 
 function isLengthOnlyTemplateFailure(problems: Array<{ code: string }>): boolean {
@@ -158,8 +166,8 @@ function buildOperation(
             maxPathLength: Number.MAX_SAFE_INTEGER,
           })
         : null;
-      if (relaxedRender?.ok && relaxedRender.relativePath === source?.relativePath) {
-        destinationRelativePath = relaxedRender.relativePath;
+      if (relaxedRender?.ok && source && sameRelativePath(relaxedRender.relativePath, source.relativePath)) {
+        destinationRelativePath = source.relativePath;
       } else {
         const reportedProblems = relaxedRender && !relaxedRender.ok
           ? relaxedRender.problems
@@ -170,7 +178,7 @@ function buildOperation(
   }
 
   const validation = validateRelativeDestination(destinationRelativePath, { existingDestinations });
-  if (!validation.ok && !(source && source.relativePath === destinationRelativePath)) {
+  if (!validation.ok && !(source && sameRelativePath(source.relativePath, destinationRelativePath))) {
     conflictCodes.push(...validation.problems.map((problem) => problem.code));
   }
 
