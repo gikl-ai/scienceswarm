@@ -283,6 +283,126 @@ describe("paper-library review and apply", () => {
     })).rejects.toThrow(/validated/i);
   });
 
+  it("does not block an exact no-op rename for an existing long filename", async () => {
+    const longTitle = "x".repeat(190);
+    const originalPath = path.join(paperRoot, `${longTitle}.pdf`);
+    await writeFile(originalPath, "long-name pdf", "utf-8");
+
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const reviewPage = await listPaperReviewItems({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      limit: 10,
+    });
+    const item = reviewPage?.items[0];
+    if (!item) throw new Error("expected review item");
+
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: item.id,
+      action: "correct",
+      selectedCandidateId: item.candidates[0]?.id,
+      correction: { title: longTitle },
+      brainRoot,
+    });
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{title}.pdf",
+    });
+    expect(created?.plan).toMatchObject({
+      status: "validated",
+      conflictCount: 0,
+      operationCount: 1,
+    });
+    expect(created?.operations[0]).toMatchObject({
+      source: { relativePath: `${longTitle}.pdf` },
+      destinationRelativePath: `${longTitle}.pdf`,
+      conflictCodes: [],
+    });
+
+    const approval = await approveApplyPlan({
+      project: "project-alpha",
+      applyPlanId: created?.plan.id ?? "",
+      brainRoot,
+    });
+    const applied = await applyApprovedPlan({
+      project: "project-alpha",
+      applyPlanId: approval?.plan.id ?? "",
+      approvalToken: approval?.approvalToken ?? "",
+      brainRoot,
+    });
+    expect(applied?.manifest.status).toBe("applied");
+    expect(applied?.operations[0]?.status).toBe("verified");
+    await expect(readFile(originalPath, "utf-8")).resolves.toBe("long-name pdf");
+  });
+
+  it("allows long paper-title destinations that are still safe filesystem paths", async () => {
+    const originalPath = path.join(
+      paperRoot,
+      "Breen 2025 - Ax-Prover A Deep Reasoning Agentic Framework for Theorem Proving in Mathematics and Quantum Physics.pdf",
+    );
+    await writeFile(originalPath, "paper-title pdf", "utf-8");
+
+    const brainRoot = path.join(dataRoot, "brain");
+    const scan = await startPaperLibraryScan({
+      project: "project-alpha",
+      rootPath: paperRoot,
+      brainRoot,
+    });
+    await waitForScan("project-alpha", scan.id);
+
+    const reviewPage = await listPaperReviewItems({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      limit: 10,
+    });
+    const item = reviewPage?.items[0];
+    if (!item) throw new Error("expected review item");
+
+    await updatePaperReviewItem({
+      project: "project-alpha",
+      scanId: scan.id,
+      itemId: item.id,
+      action: "correct",
+      selectedCandidateId: item.candidates[0]?.id,
+      correction: {
+        title: "Ax-Prover: A Deep Reasoning Agentic Framework for Theorem Proving in Mathematics and Quantum Physics",
+        year: 2025,
+        authors: ["Benjamin Breen"],
+      },
+      brainRoot,
+    });
+
+    const created = await createApplyPlan({
+      project: "project-alpha",
+      scanId: scan.id,
+      brainRoot,
+      templateFormat: "{first_author} {year} - {title}.pdf",
+    });
+    expect(created?.plan).toMatchObject({
+      status: "validated",
+      conflictCount: 0,
+      operationCount: 1,
+    });
+    expect(created?.operations[0]).toMatchObject({
+      destinationRelativePath: "Benjamin Breen 2025 - Ax-Prover A Deep Reasoning Agentic Framework for Theorem Proving in Mathematics and Quantum Physics.pdf",
+      conflictCodes: [],
+    });
+  });
+
   it("allows valid rename chains by applying blocking source moves first", async () => {
     const firstPath = path.join(paperRoot, "a.pdf");
     const secondPath = path.join(paperRoot, "b.pdf");

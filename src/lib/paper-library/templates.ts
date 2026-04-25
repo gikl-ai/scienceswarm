@@ -1,5 +1,7 @@
 const TEMPLATE_VARIABLE_RE = /\{([^{}]+)\}/g;
 const RESERVED_WINDOWS_NAMES = new Set(["con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"]);
+const DEFAULT_MAX_SEGMENT_LENGTH = 180;
+const DEFAULT_MAX_PATH_LENGTH = 240;
 
 export const PHASE_1_TEMPLATE_VARIABLES = [
   "year",
@@ -133,8 +135,8 @@ export function renderRenameTemplate(
 
   const rawSegments = rendered.split(/[\\/]+/).filter(Boolean);
   const segments = rawSegments.map(sanitizePathSegment);
-  const maxSegmentLength = options.maxSegmentLength ?? 120;
-  const maxPathLength = options.maxPathLength ?? 240;
+  const maxSegmentLength = options.maxSegmentLength ?? DEFAULT_MAX_SEGMENT_LENGTH;
+  const maxPathLength = options.maxPathLength ?? DEFAULT_MAX_PATH_LENGTH;
 
   for (const segment of segments) {
     if (segment.length > maxSegmentLength) {
