@@ -255,6 +255,32 @@ describe("runtime MCP tool wrappers", () => {
     });
   });
 
+  it("runs authorized openhands delegation through the injected handler", async () => {
+    const openhandsDelegate = vi.fn(async () => ({ status: "delegated" }));
+    const tools = createRuntimeMcpToolset({
+      tokenSecret: SECRET,
+      now: () => NOW,
+      openhandsDelegate,
+    });
+
+    await expect(
+      tools.openhandsDelegate({
+        ...auth({
+          allowedTools: ["openhands_delegate"],
+          hostId: "claude-code",
+          projectPolicy: "cloud-ok",
+        }),
+        task: "Run unit tests",
+      }),
+    ).resolves.toEqual({ status: "delegated" });
+    expect(openhandsDelegate).toHaveBeenCalledWith({
+      task: "Run unit tests",
+      repository: undefined,
+      branch: undefined,
+      model: undefined,
+    });
+  });
+
   it("rejects runtime gbrain_capture before write access when provenance is missing", async () => {
     const brainCapture = vi.fn(async () => ({ status: "should-not-run" }));
     const tools = createRuntimeMcpToolset({
