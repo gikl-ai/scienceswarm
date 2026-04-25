@@ -55,6 +55,17 @@ Primary metrics:
 - Time spent in readiness, project materialization, file reference merge, and
   artifact repair phases.
 
+Benchmark reporting workflow:
+
+- Every merged speed PR must append a row to `docs/chat-speed-timing-report.md`.
+- Each row should include the merged PR label, the changed phase or area, the
+  measured environment, `Headers ms`, `First chunk ms`, `Shared tick`,
+  `Total ms`, `Progress events`, the final text sample, and timing-artifact
+  availability.
+- `Shared tick` should track the benchmark field
+  `firstChunkSharedHeadersTick` so equal rounded header and first-chunk timings
+  remain visible in review without opening raw JSON.
+
 ## Shared Contracts
 
 ### Timing Contract
