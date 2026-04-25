@@ -16,6 +16,12 @@ export interface AppendBenchmarkReportOptions {
   reportPath: string;
 }
 
+export interface AppendBenchmarkReportResult {
+  reportPath: string;
+  row: string;
+  ok: boolean;
+}
+
 export function appendBenchmarkReportHelpText(): string {
   return [
     "Usage: npx tsx scripts/append-chat-benchmark-report-row.ts [row options] [append options]",
@@ -37,7 +43,11 @@ export function parseAppendBenchmarkReportArgs(
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--report") {
-      reportPath = argv[++index] ?? reportPath;
+      const value = argv[++index];
+      if (!value) {
+        throw new Error("--report requires a path argument");
+      }
+      reportPath = value;
       continue;
     }
     rowArgv.push(arg);
@@ -70,8 +80,15 @@ export function appendBenchmarkRowToReport(
 
 export async function appendBenchmarkReportRow(
   options: AppendBenchmarkReportOptions,
-): Promise<{ reportPath: string; row: string }> {
+): Promise<AppendBenchmarkReportResult> {
   const result = await runBenchmarkRowCli(options.rowOptions);
+  if (!result.summary.ok) {
+    return {
+      reportPath: options.reportPath,
+      row: result.row,
+      ok: false,
+    };
+  }
   const existingReport = await readFile(options.reportPath, "utf8");
   const nextReport = appendBenchmarkRowToReport(existingReport, result.row);
   if (nextReport !== existingReport) {
@@ -80,6 +97,7 @@ export async function appendBenchmarkReportRow(
   return {
     reportPath: options.reportPath,
     row: result.row,
+    ok: true,
   };
 }
 
@@ -94,6 +112,14 @@ async function main(): Promise<void> {
     const result = await appendBenchmarkReportRow(
       parseAppendBenchmarkReportArgs(argv),
     );
+    if (!result.ok) {
+      console.error(
+        `Benchmark failed; report was not updated at ${result.reportPath}`,
+      );
+      console.log(result.row);
+      process.exitCode = 1;
+      return;
+    }
     console.log(`Appended benchmark row to ${result.reportPath}`);
     console.log(result.row);
   } catch (error) {
