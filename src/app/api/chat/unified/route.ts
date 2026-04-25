@@ -8690,6 +8690,7 @@ export async function handleUnifiedChatPost(
     }
 
     if (commandTransport && parsedSlashCommand) {
+      attemptedOpenClawTurn = true;
       const commandPrompt = buildOpenClawSlashCommandPrompt(parsedSlashCommand);
       const commandMessage = activeFile
         ? `${buildStructuredActiveFileContext(activeFile)}\n\nCurrent user request:\n${commandPrompt}`
