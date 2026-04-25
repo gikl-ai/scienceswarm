@@ -161,7 +161,10 @@ def main() -> None:
             "check thermostat/barostat coupling and box size"
         )
     else:
-        print("warning: could not parse density column from eq_npt_free.log; skipping density gate")
+        raise AssertionError(
+            "could not parse density column from eq_npt_free.log; "
+            "cannot validate end-of-NPT density"
+        )
 
 
 if __name__ == "__main__":
