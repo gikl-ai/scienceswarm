@@ -17,9 +17,9 @@ npx tsx scripts/benchmark-chat-hi.ts \
 
 ## Measurements
 
-| Date | Environment | Headers ms | First chunk ms | Total ms | Progress events | Final text sample | Timing artifact |
-| --- | --- | ---: | ---: | ---: | ---: | --- | --- |
-| 2026-04-24 | Local `http://localhost:3001` | 58 | 58 | 6677 | 14 | `Hi! What would you like help with?` | unavailable (`SCIENCESWARM_CHAT_TIMING` disabled, endpoint returned `404`) |
+| Date | Environment | Headers ms | First chunk ms | Shared tick | Total ms | Progress events | Final text sample | Timing artifact |
+| --- | --- | ---: | ---: | :---: | ---: | ---: | --- | --- |
+| 2026-04-24 | Local `http://localhost:3001` | 58 | 58 | yes | 6677 | 14 | `Hi! What would you like help with?` | unavailable (`SCIENCESWARM_CHAT_TIMING` disabled, endpoint returned `404`) |
 
 ## Notes
 
@@ -28,6 +28,9 @@ npx tsx scripts/benchmark-chat-hi.ts \
 - `Headers ms` and `First chunk ms` matched in this run because the first SSE
   chunk arrived in the first readable-stream pull after the response opened.
   Future rows may show a gap there; equal values are still a valid measurement.
+- `Shared tick` mirrors the benchmark JSON field
+  `firstChunkSharedHeadersTick`, which is `true` when the rounded header and
+  first-chunk timings land on the same millisecond tick.
 - The timing-artifact endpoint was not available for this run, so deeper phase
   timings were not captured.
 - Follow-up speed PRs should add the merged PR number, the changed phase, and
