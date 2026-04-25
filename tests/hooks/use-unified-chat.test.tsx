@@ -5463,6 +5463,13 @@ describe("useUnifiedChat persistence", () => {
               payload: { reason: "User interrupted the run" },
             },
           },
+          {
+            progress: {
+              type: "event",
+              method: "chat.abort",
+              payload: { reason: "User pressed stop" },
+            },
+          },
         ]);
       }
 
@@ -5480,14 +5487,20 @@ describe("useUnifiedChat persistence", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("progress-log").textContent).toContain(
-        "activity:Chat failed: OpenClaw transport failed | activity:Chat aborted: User interrupted the run",
+        "activity:Chat failed: OpenClaw transport failed | activity:Chat aborted: User interrupted the run | activity:Chat aborted: User pressed stop",
       );
     });
     expect(screen.getByTestId("activity-log").textContent).not.toContain(
       "Sending request to OpenClaw | Waiting for OpenClaw to respond",
     );
     expect(screen.getByTestId("activity-log").textContent).not.toContain(
-      "Chat failed: OpenClaw transport failed | Chat aborted: User interrupted the run",
+      "Chat failed: OpenClaw transport failed",
+    );
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
+      "Chat aborted: User interrupted the run",
+    );
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
+      "Chat aborted: User pressed stop",
     );
   });
 
