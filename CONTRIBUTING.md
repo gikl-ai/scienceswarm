@@ -45,7 +45,8 @@ npx tsx scripts/benchmark-chat-hi.ts \
   --json
 ```
 
-When you want a paste-ready report row for the timing table, use:
+When you want a paste-ready report row for
+`docs/chat-speed-timing-report.md`, use:
 
 ```bash
 npx tsx scripts/benchmark-chat-hi-row.ts \
