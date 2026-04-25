@@ -45,6 +45,18 @@ npx tsx scripts/benchmark-chat-hi.ts \
   --json
 ```
 
+To benchmark and update `docs/chat-speed-timing-report.md` in one step, use:
+
+```bash
+npx tsx scripts/append-chat-benchmark-report-row.ts \
+  --url http://localhost:3001 \
+  --project project-alpha \
+  --message Hi \
+  --timing-artifact \
+  --pr '#PR' \
+  --change-area 'change-area'
+```
+
 ## Contribution rules
 
 - Do not commit secrets, private local paths, or local runtime state.
