@@ -38,6 +38,7 @@ export interface ChatBenchmarkSummary {
   conversationId: string;
   headersMs: number;
   firstChunkMs: number | null;
+  firstChunkSharedHeadersTick: boolean;
   totalMs: number;
   bytes: number;
   eventCount: number;
@@ -211,6 +212,11 @@ export function summarizeChatBenchmarkResponse(params: {
   const fallbackText = isRecord(fallbackJson)
     ? asString(fallbackJson.response) ?? asString(fallbackJson.text) ?? ""
     : "";
+  const roundedHeadersMs = Math.round(params.headersMs);
+  const roundedFirstChunkMs =
+    typeof params.firstChunkMs === "number"
+      ? Math.round(params.firstChunkMs)
+      : null;
 
   return {
     status: params.status,
@@ -218,11 +224,10 @@ export function summarizeChatBenchmarkResponse(params: {
     backend: params.backend,
     contentType: params.contentType,
     conversationId: params.conversationId,
-    headersMs: Math.round(params.headersMs),
-    firstChunkMs:
-      typeof params.firstChunkMs === "number"
-        ? Math.round(params.firstChunkMs)
-        : null,
+    headersMs: roundedHeadersMs,
+    firstChunkMs: roundedFirstChunkMs,
+    firstChunkSharedHeadersTick:
+      roundedFirstChunkMs !== null && roundedFirstChunkMs === roundedHeadersMs,
     totalMs: Math.round(params.totalMs),
     bytes: params.bytes,
     eventCount: events.length,
