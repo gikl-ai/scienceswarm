@@ -404,6 +404,41 @@ describe("gbrain page", () => {
     expect(await screen.findByLabelText("Search research brain")).toBeInTheDocument();
   });
 
+  it("keeps the Paper Library panel constrained so its internal body can scroll", async () => {
+    searchParamsValue = "name=demo-project&view=paper-library";
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 4, backend: "gbrain" });
+      }
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json(
+          { error: { message: "Paper library scan not found." } },
+          { status: 404 },
+        );
+      }
+
+      return Response.json({});
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GbrainPage />);
+
+    const commandCenter = await screen.findByTestId("paper-library-command-center");
+    expect(commandCenter).toHaveClass("min-h-0", "flex-1", "flex-col");
+    expect(commandCenter.parentElement).toHaveClass(
+      "flex",
+      "min-h-0",
+      "flex-1",
+      "flex-col",
+      "overflow-hidden",
+    );
+  });
+
   it("keeps the skills view available when gbrain is missing", async () => {
     searchParamsValue = "view=skills";
 
