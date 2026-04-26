@@ -424,7 +424,7 @@ describe("Project dashboard smoke test", () => {
     expect(within(composer).getByRole("button", { name: "Send" })).toBeEnabled();
   });
 
-  it("rotates placeholder prompts only while the composer is empty and unfocused", async () => {
+  it("pauses placeholder rotation while the composer has typed input", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
     vi.useFakeTimers();
@@ -447,17 +447,17 @@ describe("Project dashboard smoke test", () => {
       "What's still open from last week?",
     );
 
-    fireEvent.focus(input);
-    const focusedPlaceholder = input.getAttribute("placeholder");
+    fireEvent.change(input, { target: { value: "Hi" } });
+    const pausedPlaceholder = input.getAttribute("placeholder");
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4100);
     });
     expect(input).toHaveAttribute(
       "placeholder",
-      focusedPlaceholder,
+      pausedPlaceholder,
     );
 
-    fireEvent.blur(input);
+    fireEvent.change(input, { target: { value: "" } });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4100);
     });
