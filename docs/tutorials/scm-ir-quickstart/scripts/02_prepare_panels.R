@@ -1,6 +1,6 @@
 # Stage 2 — assemble three balanced country-year panels.
 #
-# Reads the WDI panel and bundled Basque dataset from stage 1, then
+# Reads the cached World Bank panel and bundled Basque dataset from stage 1, then
 # carves three case-specific tibbles ready for SCM:
 #
 #   * brexit:  GBR + 24 OECD donors, 1995–2023, treatment 2016
@@ -54,7 +54,7 @@ brexit_outcome <- "gdp_pc"
 # Predictors averaged over the pre-period inside tidysynth at fit time.
 brexit_predictors <- c("trade_openness", "investment_pct")
 
-require_balanced(panel, brexit_units, brexit_years, brexit_outcome, "brexit")
+invisible(require_balanced(panel, brexit_units, brexit_years, brexit_outcome, "brexit"))
 
 brexit_panel <- panel %>%
   filter(iso3c %in% brexit_units,
@@ -90,7 +90,7 @@ russia_years <- c(2000L, 2023L)
 russia_outcome <- "gdp_pc"
 russia_predictors <- c("trade_openness", "investment_pct", "fx_lcu_per_usd")
 
-require_balanced(panel, russia_units, russia_years, russia_outcome, "russia")
+invisible(require_balanced(panel, russia_units, russia_years, russia_outcome, "russia"))
 
 russia_panel <- panel %>%
   filter(iso3c %in% russia_units,

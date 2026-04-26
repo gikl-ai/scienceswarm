@@ -31,4 +31,10 @@ enough to interpret the post-period gap.
    pre-RMSPE, RMSPE/SD ratio, and a `Confidence Boundary` describing
    what the fit supports.
 
+When the `scienceswarm` MCP tools are available, save the fit note with
+`gbrain_capture` before answering. Use a clear title, the asset kind above,
+the active project, and links or references to the upstream study brief and
+data manifest. If saving fails, report the exact save failure and do not
+present the note as durable.
+
 Do not proceed to inference until the pre-period fit gate passes.

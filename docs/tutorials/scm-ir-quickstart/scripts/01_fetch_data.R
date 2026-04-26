@@ -1,18 +1,21 @@
 # Stage 1 — fetch raw panel data for the three IR cases.
 #
-# Pulls World Bank development indicators for Brexit (UK + OECD donors)
-# and Russia 2022 (RU + upper-middle-income donors); loads the bundled
-# Abadie/Diamond/Hainmueller German reunification dataset from the Synth
-# package. Caches WDI pulls to data/raw/ so re-runs are offline-safe.
+# Pulls World Bank development indicators directly from the World Bank API
+# for Brexit (UK + OECD donors) and Russia 2022 (RU + upper-middle-income
+# donors); loads the bundled Abadie & Gardeazabal Basque dataset from the
+# Synth package. Caches API pulls to data/raw/ so re-runs are offline-safe.
 #
 # Run:  Rscript 01_fetch_data.R
 
 suppressPackageStartupMessages({
-  library(WDI)
   library(dplyr)
   library(tidyr)
+  library(purrr)
   library(readr)
+  library(jsonlite)
 })
+
+options(timeout = max(120, getOption("timeout")))
 
 args <- commandArgs(trailingOnly = FALSE); script_arg <- args[grep("^--file=", args)]; HERE <- if (length(script_arg) == 1L) normalizePath(dirname(sub("^--file=", "", script_arg[1]))) else getwd()
 ROOT <- normalizePath(file.path(HERE, ".."))
@@ -56,32 +59,89 @@ ALL_ISO3 <- unique(c("GBR", BREXIT_DONORS, "RUS", RUSSIA_DONORS))
 
 CACHE_PATH <- file.path(RAW_DIR, "wdi_panel.rds")
 
-fetch_wdi_panel <- function() {
-  message("Fetching WDI panel for ", length(ALL_ISO3), " countries × ",
-          length(INDICATORS), " indicators (1990–2023)...")
-  raw <- WDI(
-    country = ALL_ISO3,
-    indicator = INDICATORS,
-    start = 1990,
-    end = 2023,
-    extra = TRUE
+fetch_world_bank_indicator <- function(iso3_codes, indicator_code, value_name,
+                                       start_year = 1990L, end_year = 2023L) {
+  country_path <- paste(iso3_codes, collapse = ";")
+  url <- sprintf(
+    "https://api.worldbank.org/v2/country/%s/indicator/%s?format=json&date=%d:%d&per_page=20000",
+    country_path,
+    indicator_code,
+    start_year,
+    end_year
   )
-  panel <- raw %>%
+
+  message("  - ", value_name, " (", indicator_code, ")")
+  payload <- tryCatch(
+    jsonlite::fromJSON(url, flatten = TRUE),
+    error = function(e) {
+      stop("World Bank API request failed for ", indicator_code, ": ",
+           conditionMessage(e))
+    }
+  )
+
+  if (!is.list(payload) || length(payload) < 2L || is.null(payload[[2]])) {
+    stop("World Bank API returned an unexpected payload for ", indicator_code)
+  }
+
+  rows <- as_tibble(payload[[2]])
+  if (nrow(rows) == 0L) {
+    stop("World Bank API returned 0 rows for ", indicator_code)
+  }
+
+  country_names <- if ("country.value" %in% names(rows)) {
+    rows[["country.value"]]
+  } else if ("country$value" %in% names(rows)) {
+    rows[["country$value"]]
+  } else if ("country" %in% names(rows) && is.data.frame(rows$country) && "value" %in% names(rows$country)) {
+    rows$country$value
+  } else if ("country" %in% names(rows) && is.list(rows$country)) {
+    unlist(lapply(rows$country, function(x) {
+      if (is.list(x) && "value" %in% names(x)) x$value else NA_character_
+    }))
+  } else {
+    NULL
+  }
+
+  if (is.null(country_names) || all(is.na(country_names))) {
+    stop(
+      "Unexpected World Bank response schema for ", indicator_code,
+      ": missing country name field"
+    )
+  }
+
+  out <- tibble(
+    iso3c = rows$countryiso3code,
+    country = country_names,
+    year = as.integer(rows$date),
+    value = as.numeric(rows$value)
+  )
+  names(out)[names(out) == "value"] <- value_name
+  out
+}
+
+fetch_wdi_panel <- function() {
+  message("Fetching World Bank panel for ", length(ALL_ISO3), " countries x ",
+          length(INDICATORS), " indicators (1990-2023)...")
+  imap(INDICATORS, ~ fetch_world_bank_indicator(
+    ALL_ISO3,
+    indicator_code = .x,
+    value_name = .y
+  )) %>%
+    reduce(full_join, by = c("iso3c", "country", "year")) %>%
     select(iso3c, country, year, all_of(names(INDICATORS))) %>%
     arrange(iso3c, year) %>%
     as_tibble()
-  panel
 }
 
 if (file.exists(CACHE_PATH)) {
-  message("Using cached WDI panel: ", CACHE_PATH)
+  message("Using cached World Bank panel: ", CACHE_PATH)
   panel <- readRDS(CACHE_PATH)
 } else {
   panel <- tryCatch(
     fetch_wdi_panel(),
     error = function(e) {
       stop(
-        "WDI fetch failed: ", conditionMessage(e), "\n",
+        "World Bank panel fetch failed: ", conditionMessage(e), "\n",
         "Check internet connectivity, then re-run."
       )
     }
@@ -100,7 +160,7 @@ coverage <- panel %>%
   )
 
 stopifnot(
-  "Coverage panel is empty — WDI fetch returned no rows" = nrow(coverage) > 0,
+  "Coverage panel is empty - World Bank API fetch returned no rows" = nrow(coverage) > 0,
   "Some donor countries returned 0 GDP observations" =
     all(coverage$gdp_nonmiss > 0)
 )
@@ -123,7 +183,7 @@ saveRDS(basque, basque_path)
 message("Wrote ", basque_path, " (n=", nrow(basque), " region-years)")
 
 cat(sprintf(
-  "OK: WDI panel %d countries × %d years = %d rows; %d indicators\n",
+  "OK: World Bank panel %d countries x %d years = %d rows; %d indicators\n",
   length(unique(panel$iso3c)),
   length(unique(panel$year)),
   nrow(panel),

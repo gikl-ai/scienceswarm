@@ -28,4 +28,10 @@ ATT is robust to modeling choices.
    error, and confidence interval, and a `Confidence Boundary` that
    states which method is the headline estimate and why.
 
+When the `scienceswarm` MCP tools are available, save the comparison note with
+`gbrain_capture` before answering. Use a clear title, the asset kind above,
+the active project, and links or references to the upstream fit note. If
+saving fails, report the exact save failure and do not present the note as
+durable.
+
 Do not report a headline ATT without cross-method confirmation.
