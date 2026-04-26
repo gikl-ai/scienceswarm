@@ -41,6 +41,7 @@ import {
   type ClaudeCodeInvocationContext,
   type ClaudeCodeRuntimeContextBuilder,
 } from "./claude-code-context";
+import { runtimeRunIdFromSessionId } from "../workspace";
 
 function isNativeClaudeCodeSessionId(
   conversationId: string | null,
@@ -67,6 +68,7 @@ interface ClaudeCodeLaunchPlan {
   wrapperSessionId: string;
   nativeSessionId: string;
   resumeSessionId: string | null;
+  runId: string;
 }
 
 export interface ClaudeCodeRuntimeHostAdapterOptions {
@@ -79,7 +81,7 @@ export interface ClaudeCodeRuntimeHostAdapterOptions {
   authArgs?: string[];
   env?: NodeJS.ProcessEnv | (() => NodeJS.ProcessEnv);
   repoRoot?: string;
-  sessionRoot?: string;
+  dataRoot?: string;
   enableRuntimeMcp?: boolean;
   contextBuilder?: ClaudeCodeRuntimeContextBuilder;
 }
@@ -94,7 +96,7 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
   private readonly authArgs?: string[];
   private readonly env?: NodeJS.ProcessEnv | (() => NodeJS.ProcessEnv);
   private readonly repoRoot?: string;
-  private readonly sessionRoot?: string;
+  private readonly dataRoot?: string;
   private readonly enableRuntimeMcp?: boolean;
   private readonly contextBuilder: ClaudeCodeRuntimeContextBuilder;
   private messageEventSequence = 0;
@@ -109,7 +111,7 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
     this.authArgs = options.authArgs;
     this.env = options.env;
     this.repoRoot = options.repoRoot;
-    this.sessionRoot = options.sessionRoot;
+    this.dataRoot = options.dataRoot;
     this.enableRuntimeMcp = options.enableRuntimeMcp;
     this.contextBuilder = options.contextBuilder ?? buildClaudeCodeRuntimeContext;
   }
@@ -282,10 +284,11 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
     return await this.contextBuilder({
       request: input.request,
       wrapperSessionId: input.launch.wrapperSessionId,
-      capsuleSessionId: input.launch.nativeSessionId,
+      nativeSessionId: input.launch.nativeSessionId,
+      runId: input.launch.runId,
       env: input.env,
       repoRoot: this.repoRoot,
-      sessionRoot: this.sessionRoot,
+      dataRoot: this.dataRoot,
       enableRuntimeMcp: this.enableRuntimeMcp,
     });
   }
@@ -358,6 +361,7 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
       wrapperSessionId,
       nativeSessionId,
       resumeSessionId,
+      runId: runtimeRunIdFromSessionId(wrapperSessionId),
     };
   }
 
