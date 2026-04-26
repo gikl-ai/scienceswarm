@@ -17,6 +17,12 @@ Useful flags:
 - `--conversation-id benchmark-hi-fixed` when you want deterministic artifact
   matching across repeated local runs
 
+For a machine-readable timing snapshot, run:
+
+```bash
+SCIENCESWARM_CHAT_TIMING=1 npx tsx scripts/benchmark-chat-hi.ts --timing-artifact --json | jq '{headersMs, firstChunkMs, totalMs, timingArtifact: .timingArtifact.observedSplit}'
+```
+
 ## Read the output
 
 - `Headers` is the browser-visible time to initial response headers.
