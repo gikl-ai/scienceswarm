@@ -19,6 +19,7 @@ describe("runtime MCP tool profiles", () => {
     ).toEqual([
       "gbrain_search",
       "gbrain_read",
+      "gbrain_structural_retrieve",
       "gbrain_capture",
       "provenance_log",
       "project_workspace_read",
@@ -31,6 +32,7 @@ describe("runtime MCP tool profiles", () => {
     expect(profile.always).toEqual([
       "gbrain_search",
       "gbrain_read",
+      "gbrain_structural_retrieve",
       "gbrain_capture",
       "provenance_log",
     ]);
@@ -38,6 +40,7 @@ describe("runtime MCP tool profiles", () => {
       expect.arrayContaining([
         "gbrain_search",
         "gbrain_read",
+        "gbrain_structural_retrieve",
         "gbrain_capture",
         "provenance_log",
       ]),

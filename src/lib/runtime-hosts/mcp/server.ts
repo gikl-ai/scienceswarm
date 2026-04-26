@@ -127,6 +127,26 @@ export function registerRuntimeMcpTools(
   );
 
   server.tool(
+    "gbrain_structural_retrieve",
+    "Runtime-authorized compact structural gbrain retrieval",
+    {
+      ...runtimeMcpAuthSchema,
+      query: z.string().describe("Structural retrieval query"),
+      studyId: z.string().optional().describe("Optional active Study id; must match projectId when supplied"),
+      studySlug: z.string().optional().describe("Optional active Study slug; must match projectId when supplied"),
+      legacyProjectSlug: z.string().optional().describe("Optional legacy project slug; must match projectId when supplied"),
+      sourceIds: z.array(z.string()).optional().describe("Optional source id allowlist"),
+      pageIds: z.array(z.string()).optional().describe("Optional gbrain page id allowlist"),
+      nearSymbol: z.string().optional().describe("Optional symbol name or qualified symbol"),
+      walkDepth: z.number().optional().describe("Maximum graph walk depth"),
+      limit: z.number().optional().describe("Maximum compact records"),
+    },
+    async (params) => runRuntimeTool(() =>
+      tools.gbrainStructuralRetrieve(withDefaultAuth(params, deps))
+    ),
+  );
+
+  server.tool(
     "gbrain_capture",
     "Runtime-authorized gbrain capture with provenance",
     {

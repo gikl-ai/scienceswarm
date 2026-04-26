@@ -10,6 +10,7 @@ import {
   createRuntimeMcpToolset,
   type RuntimeMcpArtifactImportResult,
 } from "@/lib/runtime-hosts/mcp/tools";
+import type { RuntimeStructuralRetrievalResult } from "@/lib/runtime-hosts/mcp/structural-retrieval";
 import { resolveRuntimeMcpToolProfile } from "@/lib/runtime-hosts/mcp/tool-profiles";
 import {
   mintRuntimeMcpAccessToken,
@@ -27,6 +28,39 @@ const RUNTIME_PROVENANCE = {
   inputFileRefs: ["gbrain:wiki/notes/assay-summary"],
   approvalState: "approved" as const,
 };
+
+function structuralRetrievalResult(
+  overrides: Partial<RuntimeStructuralRetrievalResult> = {},
+): RuntimeStructuralRetrievalResult {
+  return {
+    status: "ok",
+    degraded: false,
+    records: [],
+    provenance: {
+      engine: "gbrain",
+      projectId: "project-alpha",
+      studyId: null,
+      studySlug: null,
+      runtimeSessionIdHash: "hash",
+      hostId: "codex",
+      capability: {
+        structuralNavigationAvailable: true,
+        schemaVersion: 29,
+        chunkerVersion: "4",
+        blockers: [],
+      },
+      queryHash: "query-hash",
+      filters: {
+        sourceIds: [],
+        pageIds: [],
+        nearSymbol: null,
+        walkDepth: 1,
+        limit: 8,
+      },
+    },
+    ...overrides,
+  };
+}
 
 let tempRoot = "";
 
@@ -245,6 +279,14 @@ describe("runtime MCP tool wrappers", () => {
 
     const brainSearch = vi.fn(async () => ({ hits: ["alpha"] }));
     const brainRead = vi.fn(async () => ({ content: "alpha doc", path: "notes.md" }));
+    const structuralRetrieval = vi.fn(async () =>
+      structuralRetrievalResult({
+        provenance: {
+          ...structuralRetrievalResult().provenance,
+          hostId: "claude-code",
+        },
+      })
+    );
     const brainCapture = vi.fn(async () => ({ status: "captured" }));
     const provenanceLog = vi.fn(async () => ({ logged: true }));
     const projectWorkspaceRead = vi.fn(async () => ({
@@ -299,6 +341,7 @@ describe("runtime MCP tool wrappers", () => {
       now: () => NOW,
       brainSearch,
       brainRead,
+      structuralRetrieval,
       brainCapture,
       provenanceLog,
       projectWorkspaceRead,
@@ -311,6 +354,7 @@ describe("runtime MCP tool wrappers", () => {
       expect.arrayContaining([
         "gbrain_search",
         "gbrain_read",
+        "gbrain_structural_retrieve",
         "gbrain_capture",
         "provenance_log",
         "openhands_delegate",
@@ -341,6 +385,18 @@ describe("runtime MCP tool wrappers", () => {
         path: "notes.md",
       }),
     ).resolves.toEqual({ content: "alpha doc", path: "notes.md" });
+
+    await expect(
+      tools.gbrainStructuralRetrieve({
+        ...auth({
+          allowedTools: ["gbrain_structural_retrieve"],
+          hostId: "claude-code",
+          projectPolicy: "cloud-ok",
+        }),
+        query: "alpha",
+        limit: 2,
+      }),
+    ).resolves.toMatchObject({ status: "ok", degraded: false });
 
     await expect(
       tools.gbrainCapture({
@@ -439,6 +495,39 @@ describe("runtime MCP tool wrappers", () => {
       metadata: { artifactId: "artifact-1" },
       runtimeProvenance: undefined,
     });
+  });
+
+  it("runs authorized structural retrieval without passing token material to the reader", async () => {
+    const structuralRetrieval = vi.fn(async () =>
+      structuralRetrievalResult({
+        status: "degraded",
+        degraded: true,
+        provenance: {
+          ...structuralRetrievalResult().provenance,
+          capability: {
+            structuralNavigationAvailable: false,
+            schemaVersion: null,
+            chunkerVersion: "4",
+            blockers: ["capability gate failed"],
+          },
+        },
+      })
+    );
+    const tools = createRuntimeMcpToolset({
+      tokenSecret: SECRET,
+      now: () => NOW,
+      structuralRetrieval,
+    });
+
+    await expect(
+      tools.gbrainStructuralRetrieve({
+        ...auth({ allowedTools: ["gbrain_structural_retrieve"] }),
+        query: "alpha",
+      }),
+    ).resolves.toMatchObject({ status: "degraded" });
+    expect(structuralRetrieval).toHaveBeenCalledWith(
+      expect.not.objectContaining({ token: expect.any(String) }),
+    );
   });
 
   it("runs authorized openhands delegation through the injected handler", async () => {

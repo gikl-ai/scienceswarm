@@ -17,8 +17,9 @@ export interface RuntimeMcpResolvedToolProfile {
 }
 
 const PROFILE_TOOL_ALIASES: Record<string, RuntimeMcpToolName[]> = {
-  gbrain_read: ["gbrain_search", "gbrain_read"],
+  gbrain_read: ["gbrain_search", "gbrain_read", "gbrain_structural_retrieve"],
   gbrain_write: ["gbrain_capture"],
+  structural_retrieval: ["gbrain_structural_retrieve"],
   provenance_log: ["provenance_log"],
   project_workspace_read: ["project_workspace_read"],
   artifact_import: ["artifact_import"],
