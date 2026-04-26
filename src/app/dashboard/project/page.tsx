@@ -4909,7 +4909,7 @@ function ProjectPageContent() {
                   <div className="mx-auto w-full max-w-[60rem]">
                     <div
                       data-testid="project-chat-composer"
-                      className={`rounded-[var(--radius-3)] border bg-raised shadow-none transition-colors ${
+                      className={`rounded-[var(--radius-3)] border bg-raised shadow-[0_12px_36px_rgba(15,23,42,0.07)] transition-colors ${
                         chatInputDragOver
                           ? "border-accent ring-4 ring-accent/10"
                           : "border-rule focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
@@ -5009,7 +5009,7 @@ function ProjectPageContent() {
                             placeholder={isChatBusy ? "Processing..." : ""}
                             disabled={isChatBusy}
                             rows={2}
-                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[var(--radius-2)] border border-rule-soft bg-sunk/45 py-2.5 pl-3 pr-12 text-[15px] leading-6 text-strong caret-accent placeholder:text-quiet transition-colors focus:border-accent/60 focus:bg-sunk/65 focus:outline-none focus:ring-0 disabled:opacity-50`}
+                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[var(--radius-2)] border border-rule-soft bg-sunk/35 py-2.5 pl-3 pr-12 text-[15px] leading-6 text-strong caret-accent placeholder:text-quiet transition-colors focus:border-accent/60 focus:bg-sunk/55 focus:outline-none focus:ring-0 disabled:opacity-50`}
                           />
                           <button
                             type="button"
@@ -5027,7 +5027,7 @@ function ProjectPageContent() {
                           </button>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-3 border-t border-rule-soft px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
+                      <div className="flex flex-col gap-3 border-t border-rule/70 px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
                         <div className="flex min-w-0 flex-col gap-2">
                           <div className="flex flex-wrap items-center gap-2.5">
                             <ComposerRuntimeSwitcher
