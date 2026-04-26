@@ -42,6 +42,7 @@ const MAX_RELATIONS_PER_KIND = 25;
 const MAX_LOCAL_REFERENCES_PER_PAPER = 250;
 const REFERENCE_ENTRY_MIN_LENGTH = 20;
 const LOCAL_TITLE_MATCH_THRESHOLD = 0.72;
+const GRAPH_ABSTRACT_MAX = 5_000;
 
 interface PaperGraphSeed {
   item: PaperReviewItem;
@@ -127,6 +128,11 @@ function normalizeDoi(value: string | undefined): string | undefined {
     .replace(/[)\].,;:\s]+$/g, "")
     .toLowerCase();
   return normalized || undefined;
+}
+
+function normalizeGraphAbstract(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized.slice(0, GRAPH_ABSTRACT_MAX) : undefined;
 }
 
 function normalizeArxivId(value: string | undefined): string | undefined {
@@ -288,7 +294,7 @@ function nodeFromSeed(seed: PaperGraphSeed): PaperLibraryGraphNode {
     authors: correctionAuthors(item) ?? candidate.authors,
     year: correctionNumber(item, "year") ?? candidate.year,
     venue: correctionString(item, "venue") ?? candidate.venue,
-    abstract: correctionString(item, "abstract") ?? item.abstract,
+    abstract: normalizeGraphAbstract(correctionString(item, "abstract") ?? item.abstract),
     identifiers,
     local: true,
     suggestion: false,
@@ -640,7 +646,7 @@ async function enrichSeedsFromLocalPdfReferences(input: {
       if (extracted.abstract) {
         const node = input.nodes.get(seed.nodeId);
         if (node && !node.abstract) {
-          input.nodes.set(seed.nodeId, { ...node, abstract: extracted.abstract });
+          input.nodes.set(seed.nodeId, { ...node, abstract: normalizeGraphAbstract(extracted.abstract) });
         }
       }
       const section = findReferenceSection(extracted.text);
@@ -851,7 +857,7 @@ function applyRelations(input: {
       suggestion: kind === "bridge_suggestion",
       sources: [input.adapterSource],
       evidence: mergeUnique(paper.evidence, [`${input.adapterSource}:${kind}`]),
-      abstract: paper.abstract,
+      abstract: normalizeGraphAbstract(paper.abstract),
       referenceCount: paper.referenceCount,
       citationCount: paper.citationCount,
     });
@@ -1390,7 +1396,7 @@ function parseSemanticScholarPaper(value: unknown): PaperLibraryExternalPaper | 
   return {
     sourceId,
     title: readString(paper.title),
-    abstract: readString(paper.abstract),
+    abstract: normalizeGraphAbstract(readString(paper.abstract)),
     year: readNumber(paper.year),
     venue: readString(paper.venue),
     identifiers,
