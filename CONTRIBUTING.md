@@ -35,6 +35,9 @@ the merge candidate.
 ## Contribution rules
 
 - Do not commit secrets, private local paths, or local runtime state.
+- Keep local-only scratch material under untracked locations such as `.local/`,
+  and keep machine-specific env overrides in ignored files like `.env.local`
+  rather than tracked repo paths.
 - Do not put private project names, local slugs, or local workspace contents in
   code, docs, tests, PR bodies, or review replies. Use hypothetical examples
   such as `project-alpha`.
