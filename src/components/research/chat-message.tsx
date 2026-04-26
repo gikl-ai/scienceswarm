@@ -245,6 +245,15 @@ const PROGRESS_INLINE_CODE_CLASS =
 const ASSISTANT_CODE_BLOCK_CLASS =
   "my-6 overflow-x-auto rounded-3xl border border-rule bg-ink px-5 py-4 text-[13px] leading-6 text-quiet shadow-[0_12px_30px_rgba(15,23,42,0.12)]";
 const ASSISTANT_RULE_CLASS = "my-8 border-0 border-t border-rule";
+const ASSISTANT_TABLE_WRAPPER_CLASS =
+  "my-6 overflow-x-auto rounded-[1.35rem] border border-rule bg-raised shadow-[0_16px_36px_-24px_rgba(15,23,42,0.24)]";
+const ASSISTANT_TABLE_CLASS =
+  "min-w-full border-collapse text-left text-[14px] leading-6 text-body";
+const ASSISTANT_TABLE_HEAD_CLASS = "bg-sunk/90 text-strong";
+const ASSISTANT_TABLE_ROW_CLASS = "border-t border-rule first:border-t-0 even:bg-sunk/35";
+const ASSISTANT_TABLE_HEADER_CELL_CLASS =
+  "border-b border-rule px-4 py-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-dim";
+const ASSISTANT_TABLE_CELL_CLASS = "px-4 py-3 align-top";
 const ASSISTANT_MEDIA_CARD_CLASS =
   "overflow-hidden rounded-[1.35rem] border border-rule/90 bg-raised shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]";
 const ASSISTANT_MEDIA_FRAME_CLASS =
@@ -290,6 +299,15 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   li: ({ children }) => <li className={ASSISTANT_LIST_ITEM_CLASS}>{children}</li>,
   blockquote: ({ children }) => <blockquote className={ASSISTANT_BLOCKQUOTE_CLASS}>{children}</blockquote>,
   hr: () => <hr className={ASSISTANT_RULE_CLASS} />,
+  table: ({ children }) => (
+    <div className={ASSISTANT_TABLE_WRAPPER_CLASS}>
+      <table className={ASSISTANT_TABLE_CLASS}>{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className={ASSISTANT_TABLE_HEAD_CLASS}>{children}</thead>,
+  tr: ({ children }) => <tr className={ASSISTANT_TABLE_ROW_CLASS}>{children}</tr>,
+  th: ({ children }) => <th className={ASSISTANT_TABLE_HEADER_CELL_CLASS}>{children}</th>,
+  td: ({ children }) => <td className={ASSISTANT_TABLE_CELL_CLASS}>{children}</td>,
   pre: ({ children }) => <pre className={ASSISTANT_CODE_BLOCK_CLASS}>{children}</pre>,
   code: ({ className, children }) => {
     const languageClass = typeof className === "string" ? className : "";

@@ -91,6 +91,30 @@ describe("ChatMessage", () => {
     expect(screen.getByText("Validate the chart").closest("li")).toHaveClass("pl-2");
   });
 
+  it("renders assistant markdown tables on a styled reading surface", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "| Metric | Value |\n" +
+          "| --- | --- |\n" +
+          "| First chunk | 58 ms |\n" +
+          "| Total | 6677 ms |"
+        }
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    const table = screen.getByRole("table");
+    expect(table.parentElement).toHaveClass("rounded-[1.35rem]");
+    expect(table.parentElement).toHaveClass("border-rule");
+    expect(table).toHaveClass("min-w-full");
+    expect(screen.getByRole("columnheader", { name: "Metric" })).toHaveClass("uppercase");
+    expect(screen.getByRole("columnheader", { name: "Metric" })).toHaveClass("px-4");
+    expect(screen.getByRole("cell", { name: "58 ms" })).toHaveClass("px-4");
+    expect(screen.getByRole("cell", { name: "6677 ms" }).closest("tr")).toHaveClass("even:bg-sunk/35");
+  });
+
   it("uses softer caption and metadata typography for assistant media and footer", () => {
     const timestamp = new Date(2026, 3, 22, 16, 45, 0);
     const expectedFooter = `${timestamp.toLocaleDateString(undefined, {
