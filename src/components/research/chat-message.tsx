@@ -983,10 +983,12 @@ function summarizeCompactSteps(steps: Step[]): string[] {
 function ExploredTranscriptBlock({
   blockIndex,
   lines,
+  rawCount,
   compact,
 }: {
   blockIndex: number;
   lines: string[];
+  rawCount: number;
   compact: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -995,12 +997,19 @@ function ExploredTranscriptBlock({
     expanded || hiddenCount === 0
       ? lines
       : lines.slice(0, EXPLORED_INLINE_LINE_LIMIT);
+  const actionCountLabel = `${rawCount} action${rawCount === 1 ? "" : "s"}`;
 
   return (
     <div className={compact ? "space-y-1.5" : "space-y-1"}>
       <div className={`flex items-start gap-2 ${PROGRESS_SECTION_META.activity.rowClassName}`}>
         <span aria-hidden="true" className="pt-0.5 text-quiet">• </span>
         <span className="font-medium">Explored</span>
+        <span
+          data-testid={`assistant-explored-count-${blockIndex}`}
+          className="inline-flex items-center rounded-full border border-rule bg-raised px-2 py-0.5 text-[10px] font-medium text-dim"
+        >
+          {actionCountLabel}
+        </span>
       </div>
       <div className={`${compact ? "space-y-1 pl-4" : "space-y-1 pl-5"} text-muted`}>
         {visibleLines.map((line, lineIndex) => (
@@ -1077,6 +1086,7 @@ function buildProgressSectionChanges(
           key={block.stableKey}
           blockIndex={index}
           lines={block.lines}
+          rawCount={block.rawCount}
           compact={compact}
         />,
       );
