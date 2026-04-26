@@ -1456,8 +1456,15 @@ describe("ChatMessage", () => {
       />,
     );
 
+    const video = container.querySelector("video");
+    const audio = container.querySelector("audio");
+
     expect(container.querySelector("video source")).toHaveAttribute("type", "video/mp4");
     expect(container.querySelector("audio source")).toHaveAttribute("type", "audio/mp4");
+    expect(video?.closest("figure")).toHaveClass("rounded-[1.35rem]");
+    expect(video?.closest("figure")).toHaveClass("shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]");
+    expect(audio?.closest("figure")).toHaveClass("rounded-[1.35rem]");
+    expect(audio?.closest("figure")).toHaveClass("shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]");
   });
 
   it("renders PDF MEDIA references as inline iframe", () => {
@@ -1549,10 +1556,13 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByTitle("Snake")).toHaveAttribute(
+    const iframe = screen.getByTitle("Snake");
+    expect(iframe).toHaveAttribute(
       "src",
       "/api/workspace/raw/project-alpha/figures/snake-game/index.html",
     );
+    expect(iframe.parentElement).toHaveClass("rounded-[1.35rem]");
+    expect(iframe.parentElement).toHaveClass("shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]");
   });
 
   it("maps legacy MEDIA html aliases to project index previews", () => {
@@ -1565,10 +1575,13 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByTitle("snake")).toHaveAttribute(
+    const iframe = screen.getByTitle("snake");
+    expect(iframe).toHaveAttribute(
       "src",
       "/api/workspace/raw/project-alpha/snake/index.html",
     );
+    expect(iframe.parentElement).toHaveClass("rounded-[1.35rem]");
+    expect(iframe.parentElement).toHaveClass("shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]");
   });
 
   it("maps legacy embed refs to project index previews", () => {
