@@ -106,6 +106,19 @@ export function buildBrainMaintenancePlan(
   };
 }
 
+function redactGbrainCapabilitiesForSignals(
+  capabilities: GbrainCapabilities | undefined,
+): GbrainCapabilities | undefined {
+  if (!capabilities) return undefined;
+  return {
+    ...capabilities,
+    package: {
+      ...capabilities.package,
+      binPath: "[redacted]",
+    },
+  };
+}
+
 function buildSignals(
   report: BrainHealthReport,
   context: BrainMaintenanceContext,
@@ -139,7 +152,9 @@ function buildSignals(
     unconfiguredIntegrations,
     syncConfigured,
     source: report.source,
-    gbrainCapabilities: context.gbrainCapabilities,
+    gbrainCapabilities: redactGbrainCapabilitiesForSignals(
+      context.gbrainCapabilities,
+    ),
   };
 }
 

@@ -6,7 +6,7 @@ import {
   scienceSwarmGbrainBin,
   type ScienceSwarmGbrainPackageState,
 } from "@/lib/gbrain/source-of-truth";
-import { getBrainStore } from "./store";
+import { BrainBackendUnavailableError, getBrainStore } from "./store";
 
 const execFileAsync = promisify(execFile);
 
@@ -326,13 +326,22 @@ function buildReindexState(
   };
 }
 
+function isExpectedSchemaSnapshotFailure(error: unknown): boolean {
+  if (error instanceof BrainBackendUnavailableError) return true;
+
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /information_schema|no such table|relation .* does not exist|column .* does not exist/i.test(
+    message,
+  );
+}
+
 export async function readCurrentGbrainSchemaSnapshot(): Promise<GbrainSchemaSnapshot | null> {
   try {
     const store = getBrainStore();
     const engine = (store as unknown as { engine?: RuntimeSchemaEngine }).engine;
     if (!engine || typeof engine.executeRaw !== "function") return null;
 
-    const [version, columns, sources] = await Promise.all([
+    const [version, columns] = await Promise.all([
       engine.getConfig("version").catch(() => null),
       engine.executeRaw<{ table_name: string; column_name: string }>(
         [
@@ -342,23 +351,31 @@ export async function readCurrentGbrainSchemaSnapshot(): Promise<GbrainSchemaSna
           "AND table_name IN ('sources', 'content_chunks', 'code_edges_chunk', 'code_edges_symbol')",
         ].join(" "),
       ),
-      engine.executeRaw<{ chunker_version: string | null }>(
-        "SELECT DISTINCT chunker_version FROM sources ORDER BY chunker_version",
-      ),
     ]);
+    const fields = columns.map((row) => ({
+      table: row.table_name,
+      column: row.column_name,
+    }));
+    const hasSourceChunkerVersion = fields.some(
+      (field) => field.table === "sources" && field.column === "chunker_version",
+    );
+    const sources = hasSourceChunkerVersion
+      ? await engine.executeRaw<{ chunker_version: string | null }>(
+        "SELECT DISTINCT chunker_version FROM sources ORDER BY chunker_version",
+      )
+      : [];
+
     return {
       schemaVersion:
         typeof version === "string" && version.trim()
           ? Number.parseInt(version, 10)
           : null,
-      fields: columns.map((row) => ({
-        table: row.table_name,
-        column: row.column_name,
-      })),
+      fields,
       sourceChunkerVersions: sources.map((row) => row.chunker_version ?? null),
     };
-  } catch {
-    return null;
+  } catch (error) {
+    if (isExpectedSchemaSnapshotFailure(error)) return null;
+    throw error;
   }
 }
 

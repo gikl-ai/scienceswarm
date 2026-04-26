@@ -225,6 +225,7 @@ describe("GET /api/brain/maintenance", () => {
     const body = await response.json();
     expect(body.signals.gbrainCapabilities).toMatchObject({
       structuralNavigationAvailable: false,
+      package: { binPath: "[redacted]" },
       reindex: { status: "required" },
     });
     expect(body.signals.gbrainCapabilities.blockers).toContain(
