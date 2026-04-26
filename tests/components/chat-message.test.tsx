@@ -179,6 +179,10 @@ describe("ChatMessage", () => {
       />,
     );
 
+    expect(screen.getByAltText("docs/results_chart.png")).toHaveClass("rounded-[1rem]");
+    expect(screen.getByAltText("docs/results_chart.png").closest("figure")).toHaveClass(
+      "shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]",
+    );
     expect(screen.getByText("docs/results_chart.png")).toHaveClass("text-[11px]");
     expect(screen.getByText(expectedFooter)).toHaveClass("text-[9px]");
     expect(screen.getByText(expectedFooter)).toHaveClass("border-rule/60");
@@ -1470,6 +1474,8 @@ describe("ChatMessage", () => {
     expect(iframe).not.toBeNull();
     expect(iframe?.getAttribute("src")).toContain("file=reports%2Fpaper.pdf");
     expect(iframe?.getAttribute("sandbox")).toBe("allow-same-origin allow-downloads");
+    expect(iframe?.parentElement).toHaveClass("rounded-[1.35rem]");
+    expect(iframe?.parentElement).toHaveClass("shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]");
   });
 
   it("renders FLAC/OPUS/AAC MEDIA references as inline audio", () => {
