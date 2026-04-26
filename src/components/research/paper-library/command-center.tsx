@@ -2888,54 +2888,66 @@ export function PaperLibraryCommandCenter({
                             </p>
                           </div>
                         )}
-                        {graphInsights.derivativeNeighbors.length > 0 && (
-                          <div className="mt-4">
-                            <p className="text-xs font-semibold text-strong">
-                              Cited by{" "}
-                              <span className="font-mono text-[10px] tabular-nums text-dim">
-                                {graphInsights.derivativeByNodeId.get(selectedNode.id) ?? 0}
-                              </span>
-                            </p>
-                            <p className="mt-1 text-[11px] text-quiet">Papers in the graph that cite this one (forward citations).</p>
-                            <div className="mt-2 space-y-2">
-                              {graphInsights.derivativeNeighbors.map((node) => (
-                                <button
-                                  className="flex w-full items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-sunk px-2 py-2 text-left text-xs text-dim transition-colors hover:text-strong"
-                                  key={node.id}
-                                  onClick={() => setSelectedGraphNodeId(node.id)}
-                                  type="button"
-                                >
-                                  <span className="size-2 rounded-full" style={{ backgroundColor: graphNodeFill(node) }} />
-                                  <span className="min-w-0 truncate">{graphNodeTitle(node)}</span>
-                                </button>
-                              ))}
+                        {graphInsights.derivativeNeighbors.length > 0 && (() => {
+                          const total = graphInsights.derivativeByNodeId.get(selectedNode.id) ?? 0;
+                          const shown = graphInsights.derivativeNeighbors.length;
+                          const truncated = total > shown;
+                          return (
+                            <div className="mt-4">
+                              <p className="text-xs font-semibold text-strong">
+                                Cited by{" "}
+                                <span className="font-mono text-[10px] tabular-nums text-dim">
+                                  {total}
+                                  {truncated ? ` (showing ${shown})` : ""}
+                                </span>
+                              </p>
+                              <p className="mt-1 text-[11px] text-quiet">Papers in the graph that cite this one (forward citations).</p>
+                              <div className="mt-2 space-y-2">
+                                {graphInsights.derivativeNeighbors.map((node) => (
+                                  <button
+                                    className="flex w-full items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-sunk px-2 py-2 text-left text-xs text-dim transition-colors hover:text-strong"
+                                    key={node.id}
+                                    onClick={() => setSelectedGraphNodeId(node.id)}
+                                    type="button"
+                                  >
+                                    <span className="size-2 rounded-full" style={{ backgroundColor: graphNodeFill(node) }} />
+                                    <span className="min-w-0 truncate">{graphNodeTitle(node)}</span>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                        {graphInsights.priorNeighbors.length > 0 && (
-                          <div className="mt-4">
-                            <p className="text-xs font-semibold text-strong">
-                              References{" "}
-                              <span className="font-mono text-[10px] tabular-nums text-dim">
-                                {graphInsights.priorByNodeId.get(selectedNode.id) ?? 0}
-                              </span>
-                            </p>
-                            <p className="mt-1 text-[11px] text-quiet">Papers this one cites (backward references).</p>
-                            <div className="mt-2 space-y-2">
-                              {graphInsights.priorNeighbors.map((node) => (
-                                <button
-                                  className="flex w-full items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-sunk px-2 py-2 text-left text-xs text-dim transition-colors hover:text-strong"
-                                  key={node.id}
-                                  onClick={() => setSelectedGraphNodeId(node.id)}
-                                  type="button"
-                                >
-                                  <span className="size-2 rounded-full" style={{ backgroundColor: graphNodeFill(node) }} />
-                                  <span className="min-w-0 truncate">{graphNodeTitle(node)}</span>
-                                </button>
-                              ))}
+                          );
+                        })()}
+                        {graphInsights.priorNeighbors.length > 0 && (() => {
+                          const total = graphInsights.priorByNodeId.get(selectedNode.id) ?? 0;
+                          const shown = graphInsights.priorNeighbors.length;
+                          const truncated = total > shown;
+                          return (
+                            <div className="mt-4">
+                              <p className="text-xs font-semibold text-strong">
+                                References{" "}
+                                <span className="font-mono text-[10px] tabular-nums text-dim">
+                                  {total}
+                                  {truncated ? ` (showing ${shown})` : ""}
+                                </span>
+                              </p>
+                              <p className="mt-1 text-[11px] text-quiet">Papers this one cites (backward references).</p>
+                              <div className="mt-2 space-y-2">
+                                {graphInsights.priorNeighbors.map((node) => (
+                                  <button
+                                    className="flex w-full items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-sunk px-2 py-2 text-left text-xs text-dim transition-colors hover:text-strong"
+                                    key={node.id}
+                                    onClick={() => setSelectedGraphNodeId(node.id)}
+                                    type="button"
+                                  >
+                                    <span className="size-2 rounded-full" style={{ backgroundColor: graphNodeFill(node) }} />
+                                    <span className="min-w-0 truncate">{graphNodeTitle(node)}</span>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                         {graphInsights.priorNeighbors.length === 0 && graphInsights.derivativeNeighbors.length === 0 && graphInsights.neighborNodes.length > 0 && (
                           <div className="mt-4">
                             <p className="text-xs font-semibold text-strong">Related papers</p>

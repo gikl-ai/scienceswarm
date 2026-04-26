@@ -83,12 +83,16 @@ export function computeGraphInsights(
   const neighborLimit = input.neighborLimit ?? DEFAULT_NEIGHBOR_LIMIT;
 
   const degreeByNodeId = new Map<string, number>();
-  const priorByNodeId = new Map<string, number>();
-  const derivativeByNodeId = new Map<string, number>();
+  // Track unique citing/cited *papers* (not edges) so a paper that
+  // appears in both `references` and `cited_by` adapter outputs for
+  // the same neighbour pair is only counted once on each side. The
+  // sets get reduced to scalar counts after the edge walk.
+  const priorTargetsByNode = new Map<string, Set<string>>();
+  const derivativeSourcesByNode = new Map<string, Set<string>>();
   for (const node of nodes) {
     degreeByNodeId.set(node.id, 0);
-    priorByNodeId.set(node.id, 0);
-    derivativeByNodeId.set(node.id, 0);
+    priorTargetsByNode.set(node.id, new Set<string>());
+    derivativeSourcesByNode.set(node.id, new Set<string>());
   }
 
   for (const edge of edges) {
@@ -102,18 +106,21 @@ export function computeGraphInsights(
     );
     if (edge.kind === "references" || edge.kind === "cited_by") {
       // Both kinds share the source-cites-target orientation. The edge
-      // contributes to the citing paper's prior count (it cites someone)
-      // and to the cited paper's derivative count (it is cited by
+      // contributes to the citing paper's prior set (it cites someone)
+      // and to the cited paper's derivative set (it is cited by
       // someone) — independent of which adapter happened to emit it.
-      priorByNodeId.set(
-        edge.sourceNodeId,
-        (priorByNodeId.get(edge.sourceNodeId) ?? 0) + 1,
-      );
-      derivativeByNodeId.set(
-        edge.targetNodeId,
-        (derivativeByNodeId.get(edge.targetNodeId) ?? 0) + 1,
-      );
+      priorTargetsByNode.get(edge.sourceNodeId)?.add(edge.targetNodeId);
+      derivativeSourcesByNode.get(edge.targetNodeId)?.add(edge.sourceNodeId);
     }
+  }
+
+  const priorByNodeId = new Map<string, number>();
+  for (const [nodeId, targets] of priorTargetsByNode) {
+    priorByNodeId.set(nodeId, targets.size);
+  }
+  const derivativeByNodeId = new Map<string, number>();
+  for (const [nodeId, sources] of derivativeSourcesByNode) {
+    derivativeByNodeId.set(nodeId, sources.size);
   }
 
   const sortedNodes = [...nodes].sort((left, right) => {
@@ -163,11 +170,28 @@ export function computeGraphInsights(
       )
     : [];
 
-  const neighborNodes = mergeUniquePreservingOrder(
-    derivativeNeighbors,
-    priorNeighbors,
-    neighborLimit,
-  );
+  // When the selected node has citation-graph neighbours (prior or
+  // derivative), surface them in forward-first order. When it has
+  // none — typical for a node connected only via `same_identity` or
+  // `bridge_suggestion` edges — fall back to *all* incident
+  // neighbours so the right-sidebar's "Related papers" surface still
+  // has something to show.
+  const neighborNodes =
+    priorNeighbors.length === 0 && derivativeNeighbors.length === 0
+      ? collectNeighbors(
+          selectedEdges,
+          sortedNodes,
+          (edge) =>
+            edge.sourceNodeId === selectedNode?.id
+              ? edge.targetNodeId
+              : edge.sourceNodeId,
+          neighborLimit,
+        )
+      : mergeUniquePreservingOrder(
+          derivativeNeighbors,
+          priorNeighbors,
+          neighborLimit,
+        );
 
   return {
     degreeByNodeId,

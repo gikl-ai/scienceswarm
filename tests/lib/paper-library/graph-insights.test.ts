@@ -112,6 +112,22 @@ describe("computeGraphInsights — direction-aware counts", () => {
     expect(insights.degreeByNodeId.get("b")).toBe(1);
     expect(insights.degreeByNodeId.get("c")).toBe(1);
   });
+
+  it("counts unique citing/cited papers, not edges", () => {
+    // Two adapters can both report the same A→B citation: one as a
+    // `references` edge from A's bibliography, one as a `cited_by`
+    // edge from B's incoming citations. The duplicate edges should
+    // contribute one unique pair to each side, not two.
+    const insights = computeGraphInsights({
+      nodes: [node("A"), node("B")],
+      edges: [
+        edge("e1", "A", "B", "references"),
+        edge("e2", "A", "B", "cited_by"),
+      ],
+    });
+    expect(insights.priorByNodeId.get("A")).toBe(1);
+    expect(insights.derivativeByNodeId.get("B")).toBe(1);
+  });
 });
 
 // ── prior / derivative neighbour split ───────────────
@@ -213,6 +229,31 @@ describe("computeGraphInsights — neighbour splits", () => {
       selectedNodeId: "seed",
     });
     expect(insights.neighborNodes.map((n) => n.id)).toEqual(["C1", "R1"]);
+  });
+
+  it("falls back to all-kinds neighbours when prior+derivative are both empty", () => {
+    // A node connected only via `same_identity` or `bridge_suggestion`
+    // edges has no prior/derivative neighbours. The "Related papers"
+    // fallback in the UI relies on `neighborNodes` containing those
+    // edges' counterparties so it has something to render.
+    const insights = computeGraphInsights({
+      nodes: [
+        node("seed", { local: true }),
+        node("siblingId"),
+        node("bridge"),
+      ],
+      edges: [
+        edge("e1", "seed", "siblingId", "same_identity"),
+        edge("e2", "seed", "bridge", "bridge_suggestion"),
+      ],
+      selectedNodeId: "seed",
+    });
+    expect(insights.priorNeighbors).toEqual([]);
+    expect(insights.derivativeNeighbors).toEqual([]);
+    expect(insights.neighborNodes.map((n) => n.id).sort()).toEqual([
+      "bridge",
+      "siblingId",
+    ]);
   });
 });
 
