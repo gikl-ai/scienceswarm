@@ -70,11 +70,18 @@ export interface ParseResult {
 
 const ARXIV_RE =
   /(?:arxiv\s*[:/]?\s*|abs\/|arxiv\.org\/abs\/)\s*(\d{4}\.\d{4,5})/i;
+// DOI suffix is broad ([RFC] valid DOIs accept many ASCII glyphs) but
+// must stop at any closing bracket/brace/paren so that DOIs wrapped in
+// `\url{...}` or `\href{...}{...}` don't capture the LaTeX wrapper.
 const DOI_RE =
-  /\b(?:doi[:\s]*|https?:\/\/(?:dx\.)?doi\.org\/)(10\.\d+\/[^\s,;]+)/i;
+  /\b(?:doi[:\s]*|https?:\/\/(?:dx\.)?doi\.org\/)(10\.\d+\/[^\s,;)}\]]+)/i;
 const PMID_RE = /\bPMID\s*:?\s*(\d{6,9})\b/i;
 const YEAR_RE = /\b(19\d{2}|20\d{2})\b/;
 const PAREN_YEAR_RE = /\((\d{4})/;
+// Module-level `g`-flag regex: only ever pass to `String.matchAll`,
+// which clones the regex internally. Direct `.exec()` / `.test()`
+// calls would carry stale `lastIndex` state across invocations and
+// produce silent mis-parses.
 const BIBITEM_HEAD_RE =
   /\\bibitem(?:\s*\[[^\]]*\])?\s*\{([^}]+)\}/g;
 
@@ -90,9 +97,10 @@ function findArxiv(value: string): string | undefined {
 function findDoi(value: string): string | undefined {
   const raw = value.match(DOI_RE)?.[1];
   if (!raw) return undefined;
-  // The DOI regex tolerates broad characters; trim a trailing period
-  // that is almost always sentence punctuation, not part of the DOI.
-  return raw.replace(/[.,;]$/, "");
+  // The DOI capture excludes structural closers, but a trailing
+  // sentence period / comma / semicolon can still slip in when the
+  // DOI sits at the end of a sentence — strip those.
+  return raw.replace(/[.,;]+$/, "");
 }
 
 function findPmid(value: string): string | undefined {
@@ -100,9 +108,12 @@ function findPmid(value: string): string | undefined {
 }
 
 function findYear(value: string): number | undefined {
-  // Prefer a year inside parentheses (typical natbib short-label
-  // style); otherwise take the first standalone 4-digit year that
-  // looks like a publication year.
+  // Prefer a year inside parentheses — many entry bodies still carry
+  // a `(YYYY)` token even after the natbib short label has been
+  // sliced away with the `\bibitem` header (e.g. an `\textit{Author
+  // (YYYY)}` byline, or an in-line "appeared in NIPS (2017)"). When
+  // no parenthesised year is present we take the first standalone
+  // 4-digit year that looks like a publication year.
   const paren = value.match(PAREN_YEAR_RE)?.[1];
   if (paren) {
     const year = Number(paren);

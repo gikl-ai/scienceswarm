@@ -76,6 +76,24 @@ B. Author.
     expect(entries[1].doi).toBe("10.5555/zzz");
   });
 
+  it("strips trailing LaTeX braces and parentheses from DOIs wrapped in `\\url{...}` / `\\href{...}{...}`", () => {
+    const input = `\\begin{thebibliography}{2}
+\\bibitem{u}
+U. Author.
+\\newblock A url-wrapped DOI title.
+\\newblock \\newblock \\url{https://doi.org/10.1145/3386569.3392412}.
+
+\\bibitem{h}
+H. Author.
+\\newblock A href-wrapped DOI title.
+\\newblock \\href{https://doi.org/10.1234/abcd}{Publisher link}.
+\\end{thebibliography}`;
+    const { entries } = parseBbl(input);
+    expect(entries).toHaveLength(2);
+    expect(entries[0].doi).toBe("10.1145/3386569.3392412");
+    expect(entries[1].doi).toBe("10.1234/abcd");
+  });
+
   it("falls back to \\emph for the title when there are too few \\newblocks", () => {
     const input = `\\begin{thebibliography}{1}
 \\bibitem{minimal}
