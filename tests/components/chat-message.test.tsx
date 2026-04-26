@@ -1197,6 +1197,22 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("does not treat inline MEDIA prose as a workspace media directive", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"Here is the chart MEDIA:figures/summary chart final.png see above."}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-21T10:00:12.000Z")}
+      />,
+    );
+
+    expect(screen.queryByAltText("figures/summary chart final.png see above.")).not.toBeInTheDocument();
+    expect(screen.getByTestId("assistant-reply-content")).toHaveTextContent(
+      "Here is the chart MEDIA:figures/summary chart final.png see above.",
+    );
+  });
+
   it("renders AVIF MEDIA references as inline image", () => {
     render(
       <ChatMessage
