@@ -206,6 +206,27 @@ async function readJsonIfPresent(filePath: string): Promise<unknown | null> {
   }
 }
 
+async function readJsonOrJsonlIfPresent(filePath: string): Promise<unknown | null> {
+  let raw: string;
+  try {
+    raw = await readFile(filePath, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+  }
+  return trimmed
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line) as unknown);
+}
+
 async function listFilesRecursive(root: string): Promise<string[]> {
   async function walk(dir: string): Promise<string[]> {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -229,8 +250,22 @@ function relativePortable(fromRoot: string, filePath: string): string {
   return path.relative(fromRoot, filePath).split(path.sep).join("/");
 }
 
+function normalizeSafeRelativePath(relativePath: string): string {
+  const normalized = path.posix.normalize(relativePath.trim().replaceAll("\\", "/"));
+  if (
+    !normalized
+    || normalized === "."
+    || normalized === ".."
+    || normalized.startsWith("../")
+    || path.posix.isAbsolute(normalized)
+  ) {
+    throw new Error(`Unsafe relative migration path: ${relativePath}`);
+  }
+  return normalized;
+}
+
 function relativeDestination(base: string, relativePath: string): string {
-  return path.join(base, ...relativePath.split("/").filter(Boolean));
+  return path.join(base, ...normalizeSafeRelativePath(relativePath).split("/"));
 }
 
 async function firstExistingFile(paths: string[]): Promise<string | null> {
@@ -268,8 +303,12 @@ function referencedWikiPaths(manifest: unknown): string[] {
   const paths = new Set<string>();
   const maybeAdd = (value: unknown) => {
     if (typeof value !== "string") return;
-    const normalized = value.trim().replaceAll("\\", "/");
-    if (!normalized || normalized.startsWith("../") || path.isAbsolute(normalized)) return;
+    let normalized: string;
+    try {
+      normalized = normalizeSafeRelativePath(value);
+    } catch {
+      return;
+    }
     if (normalized.startsWith("wiki/")) paths.add(normalized);
   };
 
@@ -711,6 +750,7 @@ export async function executeLegacyProjectStateMigration(
   async function worker(): Promise<void> {
     while (nextIndex < plan.entries.length && state === "completed" && !options.signal?.aborted) {
       const entry = plan.entries[nextIndex++];
+      if (!entry) break;
       await runEntry(entry);
     }
     if (options.signal?.aborted && state === "completed") {
@@ -743,6 +783,15 @@ export async function readMigratedOrLegacyProjectFile(input: {
 }): Promise<unknown | null> {
   const entry = input.plan.entries.find((candidate) => candidate.classification === input.classification);
   if (!entry) return null;
+  if (input.classification === "chat-history") {
+    if (entry.destinationPath && await fileExists(entry.destinationPath)) {
+      return readJsonOrJsonlIfPresent(entry.destinationPath);
+    }
+    if (entry.sourcePath && await fileExists(entry.sourcePath)) {
+      return readJsonOrJsonlIfPresent(entry.sourcePath);
+    }
+    return null;
+  }
   if (entry.destinationPath && await fileExists(entry.destinationPath)) {
     return readJsonIfPresent(entry.destinationPath);
   }

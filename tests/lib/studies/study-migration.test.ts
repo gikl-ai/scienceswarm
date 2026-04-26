@@ -128,6 +128,28 @@ describe("Study migration planning", () => {
       path.join(roots.brainRoot, "state", "paper-library", "global-cache.json"),
     ]));
   });
+
+  it("rejects linked wiki paths that would traverse outside legacy roots", async () => {
+    const roots = await installFixture();
+    const manifestPath = path.join(roots.projectsRoot, "project-alpha", ".brain", "state", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf-8")) as { taskPaths: string[] };
+    manifest.taskPaths.push("wiki/../../../outside-secret.md");
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
+    await writeFile(path.join(roots.projectsRoot, "outside-secret.md"), "do not copy", "utf-8");
+
+    const plan = await planLegacyProjectStateMigration({
+      legacyProjectSlug: "project-alpha",
+      studyId: "study_alpha",
+      threadId: "thread_alpha",
+      projectsRoot: roots.projectsRoot,
+      brainRoot: roots.brainRoot,
+      stateRoot: roots.stateRoot,
+      generatedAt: "2026-04-26T00:00:00.000Z",
+    });
+
+    expect(plan.entries.some((entry) => entry.relativePath.includes("outside-secret"))).toBe(false);
+    expect(plan.entries.some((entry) => entry.sourcePath?.endsWith("outside-secret.md"))).toBe(false);
+  });
 });
 
 describe("Study migration execution", () => {
@@ -193,7 +215,7 @@ describe("Study migration execution", () => {
   });
 
   it("reads migrated files first and falls back to untouched legacy files", async () => {
-    const { plan } = await planFixture();
+    const { roots, plan } = await planFixture();
     const legacyManifest = await readMigratedOrLegacyProjectFile({
       plan,
       classification: "project-manifest",
@@ -214,5 +236,15 @@ describe("Study migration execution", () => {
       project: "project-alpha",
       lastImport: { name: "Placeholder source import" },
     });
+
+    const messagesPath = path.join(roots.stateRoot, "threads", "thread_alpha", "messages.jsonl");
+    await writeFile(messagesPath, "{\"role\":\"user\",\"content\":\"one\"}\n{\"role\":\"assistant\",\"content\":\"two\"}\n", "utf-8");
+    await expect(readMigratedOrLegacyProjectFile({
+      plan,
+      classification: "chat-history",
+    })).resolves.toEqual([
+      { role: "user", content: "one" },
+      { role: "assistant", content: "two" },
+    ]);
   });
 });
