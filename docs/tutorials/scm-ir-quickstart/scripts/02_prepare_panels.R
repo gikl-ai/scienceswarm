@@ -125,7 +125,8 @@ message("Wrote russia.rds: ", length(russia_case$donor_units), " donors, ",
 # investment share (invest), sector composition, schooling.
 basque_panel <- basque %>%
   as_tibble() %>%
-  filter(regionname != "Spain (Espana)") %>%
+  filter(regionname != "Spain (Espana)",
+         year >= 1960L, year <= 1997L) %>%
   mutate(
     iso3c = regionname,
     country = regionname,

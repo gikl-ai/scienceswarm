@@ -136,15 +136,19 @@ fit_dr_sc <- function(case, classic_fit) {
   long <- to_panel_long(case)
 
   # Outcome-model bias correction: predict treated outcome using donor
-  # outcomes via OLS on the pre-period; project forward.
+  # outcomes via OLS on the pre-period; project forward. Drop `treat`
+  # before pivoting — keeping it would add an implicit ID column and
+  # split each year into separate donor (treat=0) and treated (treat=1)
+  # rows, leaving NAs that break the OLS bias-correction matrix.
   wide <- long %>%
+    select(unit, year, outcome) %>%
     pivot_wider(names_from = unit, values_from = outcome) %>%
     arrange(year)
 
   treated_col <- case$treated_unit
-  donor_cols <- setdiff(colnames(wide), c("year", "treat", treated_col))
-  pre <- wide %>% filter(year < case$treatment_year) %>% select(-treat)
-  post <- wide %>% filter(year >= case$treatment_year) %>% select(-treat)
+  donor_cols <- setdiff(colnames(wide), c("year", treated_col))
+  pre <- wide %>% filter(year < case$treatment_year)
+  post <- wide %>% filter(year >= case$treatment_year)
 
   classic_att <- classic_fit$summary$effect_avg_post
 

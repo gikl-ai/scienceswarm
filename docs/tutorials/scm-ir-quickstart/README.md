@@ -45,8 +45,10 @@ canonical so the tutorial focuses on technique rather than novelty.
 | 4. Method comparison (gsynth, SDID, DR-SC) | `04_fit_alternative_methods.R` | ~60 s | `output/fits/alternatives_*.rds` |
 | 5. Render interactive HTML report | `05_render_html.R` | ~10 s | `output/scm-ir-report.html` |
 
-The final HTML is **self-contained** (no external CDN dependencies) and
-includes:
+The deliverable is one HTML file (`scm-ir-report.html`) plus a sibling
+`output/lib/` folder of locally-embedded Plotly assets — **no external
+CDN dependencies**. The two pieces are co-located, so the HTML renders
+correctly when opened directly from disk. The HTML includes:
 
 - Animated counterfactual trajectory (treated vs. synthetic, gap fills
   in over the post-treatment window)
@@ -86,7 +88,7 @@ takes ~5 min; subsequent runs are instant.
 Verify the install:
 
 ```bash
-Rscript -e 'cat(c("tidysynth", "Synth", "gsynth", "synthdid", "WDI", "plotly", "htmlwidgets"), sep = "\n"); for (p in c("tidysynth","Synth","gsynth","synthdid","WDI","plotly","htmlwidgets")) suppressMessages(library(p, character.only = TRUE)); cat("OK\n")'
+Rscript -e 'core <- c("tidysynth","Synth","gsynth","WDI","plotly","htmlwidgets"); for (p in core) suppressMessages(library(p, character.only = TRUE)); cat(paste0(core, " OK"), sep = "\n"); if (requireNamespace("synthdid", quietly = TRUE)) { suppressMessages(library(synthdid)); cat("synthdid OK\n") } else { cat("synthdid not installed (optional; SDID method will be skipped)\n") }'
 ```
 
 ---
@@ -127,7 +129,7 @@ before the next stage is meaningful.
 | `02_prepare_panels.R` | Each case has ≥ 10 pre-treatment years, ≥ 15 donor candidates |
 | `03_fit_classic_scm.R` | Pre-period RMSPE / outcome-SD ratio ≤ 0.25 (well-fitted pre-period) |
 | `04_fit_alternative_methods.R` | Sign of estimated effect is consistent across ≥ 3 of 4 methods |
-| `05_render_html.R` | Self-contained HTML ≥ 200 KB and contains all 7 wow elements |
+| `05_render_html.R` | HTML + sibling `lib/` folder ≥ 1 MB total and HTML contains all 7 wow elements |
 
 The 0.25 RMSPE / outcome-SD ratio reflects the practical guidance
 in Abadie (2021, *JEL*) and Abadie/Diamond/Hainmueller (2010): a

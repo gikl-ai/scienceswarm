@@ -47,66 +47,56 @@ trajectory_fig <- function(fit) {
   traj <- fit$trajectory
   placebos <- fit$placebos
 
-  # Animated reveal: build cumulative frames from treatment year forward.
-  pre <- traj %>% filter(year < case$treatment_year)
-  post_years <- sort(unique(traj$year[traj$year >= case$treatment_year]))
+  # Animated reveal via plotly's ~frame aesthetic. Frame variable is the
+  # max-visible year: for each frame f, we include all rows with year ≤ f
+  # so the trace draws progressively as the user scrubs the slider.
+  # Frames start at the treatment year (the pre-period is static context).
+  treatment_year <- case$treatment_year
+  frame_years <- sort(unique(traj$year[traj$year >= treatment_year]))
+  pre_pad <- traj %>% filter(year < treatment_year)
 
-  frames <- lapply(post_years, function(yr) {
-    visible_traj <- traj %>% filter(year <= yr)
-    list(
-      name = as.character(yr),
-      data = list(
-        list(
-          x = visible_traj$year,
-          y = visible_traj$actual,
-          type = "scatter", mode = "lines+markers",
-          line = list(color = COL_TREATED, width = 3)
-        ),
-        list(
-          x = visible_traj$year,
-          y = visible_traj$synthetic,
-          type = "scatter", mode = "lines",
-          line = list(color = COL_SYNTH, width = 3, dash = "dash")
-        )
-      ),
-      traces = list(0L, 1L)
-    )
+  anim <- map_dfr(frame_years, function(fy) {
+    bind_rows(pre_pad, traj %>% filter(year >= treatment_year, year <= fy)) %>%
+      mutate(frame_year = fy)
   })
 
-  # Placebo gap traces (gray spaghetti).
+  y_range <- range(c(traj$actual, traj$synthetic, placebos$actual), na.rm = TRUE)
+
   p <- plot_ly() %>%
     add_lines(
-      data = placebos, x = ~year, y = ~gap,
+      data = placebos, x = ~year, y = ~gap + traj$actual[1] - placebos$gap[1],
       split = ~unit,
       line = list(color = COL_PLACEBO, width = 1),
-      showlegend = FALSE,
-      hoverinfo = "skip",
-      name = "placebo gaps"
+      showlegend = FALSE, hoverinfo = "skip", name = "placebo gaps",
+      inherit = FALSE
     ) %>%
     add_lines(
-      x = traj$year, y = traj$actual,
+      data = anim, x = ~year, y = ~actual, frame = ~frame_year,
       line = list(color = COL_TREATED, width = 3),
       name = paste0("Actual ", case$treated_unit_name)
     ) %>%
     add_lines(
-      x = traj$year, y = traj$synthetic,
+      data = anim, x = ~year, y = ~synthetic, frame = ~frame_year,
       line = list(color = COL_SYNTH, width = 3, dash = "dash"),
       name = "Synthetic counterfactual"
     ) %>%
+    animation_opts(frame = 350, transition = 150, redraw = FALSE) %>%
+    animation_slider(currentvalue = list(prefix = "Year ≤ ",
+                                         font = list(color = COL_TREATED))) %>%
     layout(
       title = list(text = paste0("Counterfactual trajectory — ", case$display_name),
                    font = list(size = 16)),
       xaxis = list(title = "Year"),
-      yaxis = list(title = case$outcome_label),
+      yaxis = list(title = case$outcome_label, range = y_range),
       shapes = list(list(
         type = "line",
-        x0 = case$treatment_year, x1 = case$treatment_year,
+        x0 = treatment_year, x1 = treatment_year,
         y0 = 0, y1 = 1, yref = "paper",
         line = list(color = COL_TREATED, dash = "dot", width = 1)
       )),
       annotations = list(list(
-        x = case$treatment_year, y = 1, yref = "paper",
-        text = paste0("Treatment ", case$treatment_year),
+        x = treatment_year, y = 1, yref = "paper",
+        text = paste0("Treatment ", treatment_year),
         showarrow = FALSE, yshift = 10,
         font = list(color = COL_TREATED)
       ))

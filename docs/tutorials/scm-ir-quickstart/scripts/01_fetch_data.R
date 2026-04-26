@@ -100,6 +100,7 @@ coverage <- panel %>%
   )
 
 stopifnot(
+  "Coverage panel is empty — WDI fetch returned no rows" = nrow(coverage) > 0,
   "Some donor countries returned 0 GDP observations" =
     all(coverage$gdp_nonmiss > 0)
 )
