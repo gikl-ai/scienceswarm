@@ -845,6 +845,12 @@ describe("ChatMessage", () => {
     );
 
     expect(
+      screen.getByRole("heading", { level: 3, name: "Plan" }).parentElement,
+    ).toHaveClass("rounded-2xl");
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Plan" }).parentElement,
+    ).toHaveClass("bg-sunk/35");
+    expect(
       screen.getByRole("heading", { level: 3, name: "Plan" }),
     ).toHaveClass("text-[13px]");
     expect(screen.getByRole("list")).toHaveClass("space-y-1.5");
