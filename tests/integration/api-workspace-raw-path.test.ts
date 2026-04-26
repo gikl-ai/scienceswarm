@@ -45,7 +45,7 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
     mkdirSync(snakeDir, { recursive: true });
     writeFileSync(
       path.join(snakeDir, "index.html"),
-      "<!doctype html><title>Snake</title><link\nrel=stylesheet\nmedia=print\nhref=./style.css><script src=./game.js></script >",
+      "<!doctype html><title>Snake</title><link\nrel=stylesheet\nmedia=print\nhref=./style.css><script\nsrc=./game.js></script foo=\"bar\">",
     );
     writeFileSync(path.join(snakeDir, "style.css"), "body { background: black; color: white; }");
     writeFileSync(path.join(snakeDir, "game.js"), "globalThis.snakeLoaded = true;");

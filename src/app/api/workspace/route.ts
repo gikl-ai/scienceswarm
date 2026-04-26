@@ -1640,7 +1640,7 @@ async function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): Pro
 
   return replaceHtmlMatches(
     withStyles,
-    /<script\b([^>]*)>\s*<\/script\s*>/gi,
+    /<script\b([\s\S]*?)>\s*<\/script\b[^>]*>/gi,
     async (match) => {
       const tag = match[0];
       const attributes = match[1] ?? "";
