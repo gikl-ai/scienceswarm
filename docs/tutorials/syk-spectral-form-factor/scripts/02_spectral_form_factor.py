@@ -18,7 +18,7 @@ Reference values for <r> from the Atas-Bogomolny-Roux-Roy 2013 surmise
 (PRL 110.084101).  The surmise mean is computed by integrating r * P(r)
 on r in [0, 1] for each ensemble class:
     Poisson:  2 ln 2 - 1                     ~  0.38629
-    GOE:      Atas surmise mean              ~  0.5307
+    GOE:      Atas surmise mean              ~  0.53071
     GUE:      Atas surmise mean              ~  0.59945
     GSE:      Atas surmise mean              ~  0.67617
 
@@ -47,7 +47,7 @@ HERE = Path(__file__).resolve().parent
 # Atas-Bogomolny-Roux-Roy 2013 surmise reference values for <r>.
 R_REFERENCE: dict[str, float] = {
     "Poisson": 0.38629,
-    "GOE": 0.5307,
+    "GOE": 0.53071,
     "GUE": 0.59945,
     "GSE": 0.67617,
 }
