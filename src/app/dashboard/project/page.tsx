@@ -5108,13 +5108,13 @@ function ProjectPageContent() {
                               <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px] text-slate-700">
                                 @
                               </code>
-                              Mention files
+                              <span>Mention files</span>
                             </span>
                             <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50/85 px-2.5 py-1 text-slate-600">
                               <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px] text-slate-700">
                                 /
                               </code>
-                              Commands
+                              <span>Commands</span>
                             </span>
                             <span className="text-slate-400">
                               Enter to send · Shift+Enter for a new line.
