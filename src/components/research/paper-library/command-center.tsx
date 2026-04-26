@@ -623,7 +623,7 @@ function CitationGraphDetailMap({
         <defs>
           <radialGradient cx="50%" cy="48%" id="citation-map-bg" r="70%">
             <stop offset="0%" stopColor="var(--surface-raised)" />
-            <stop offset="65%" stopColor="var(--surface-ink)" />
+            <stop offset="65%" stopColor="var(--surface-raised)" />
             <stop offset="100%" stopColor="var(--surface-sunk)" />
           </radialGradient>
           <filter id="node-shadow" x="-30%" y="-30%" width="160%" height="160%">
@@ -992,6 +992,8 @@ export function PaperLibraryCommandCenter({
 }) {
   const skipLatestRestoreRef = useRef(false);
   const templateSelectionDirtyRef = useRef(false);
+  const graphActionMessageTimeoutRef = useRef<number | null>(null);
+  const graphMoreRef = useRef<HTMLDivElement>(null);
   const [session, setSession] = useState<PaperLibrarySession>(() => defaultSession());
   const [restoredProjectSlug, setRestoredProjectSlug] = useState<string | null>(null);
   const sessionRestored = restoredProjectSlug === projectSlug;
@@ -1082,6 +1084,38 @@ export function PaperLibraryCommandCenter({
     setReviewFilter(DEFAULT_REVIEW_FILTER);
     setDraftsByItemId({});
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (graphActionMessageTimeoutRef.current !== null) {
+        window.clearTimeout(graphActionMessageTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!graphMoreOpen) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (graphMoreRef.current?.contains(target)) return;
+      setGraphMoreOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setGraphMoreOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [graphMoreOpen]);
 
   useEffect(() => {
     skipLatestRestoreRef.current = false;
@@ -1454,6 +1488,11 @@ export function PaperLibraryCommandCenter({
     }
   }, [gapFilter, projectSlug, session.scanId]);
 
+  const currentScanCreatedAt = scan?.createdAt;
+  const currentScanId = scan?.id;
+  const currentScanInFlight = scan ? isScanInFlight(scan) : false;
+  const currentScanUpdatedAt = scan?.updatedAt;
+
   useEffect(() => {
     if (!sessionRestored) return;
     if (!session.scanId) {
@@ -1468,10 +1507,19 @@ export function PaperLibraryCommandCenter({
     if (skipLatestRestoreRef.current) return;
     if (session.scanId) {
       if (session.step !== "scan") return;
-      if (!scan || isScanInFlight(scan)) return;
+      if (!currentScanId || currentScanInFlight) return;
     }
     void loadLatestScan();
-  }, [loadLatestScan, scan, session.scanId, session.step, sessionRestored]);
+  }, [
+    currentScanCreatedAt,
+    currentScanId,
+    currentScanInFlight,
+    currentScanUpdatedAt,
+    loadLatestScan,
+    session.scanId,
+    session.step,
+    sessionRestored,
+  ]);
 
   useEffect(() => {
     if (!sessionRestored) return;
@@ -1937,11 +1985,9 @@ export function PaperLibraryCommandCenter({
       if (degreeDelta !== 0) return degreeDelta;
       return graphNodeTitle(left).localeCompare(graphNodeTitle(right));
     });
-    const selectedNode = (
-      selectedGraphNodeId
-        ? nodes.find((node) => node.id === selectedGraphNodeId)
-        : undefined
-    ) ?? sortedNodes[0] ?? null;
+    const selectedNode = selectedGraphNodeId
+      ? (nodes.find((node) => node.id === selectedGraphNodeId) ?? null)
+      : null;
     const selectedEdges = selectedNode
       ? edges.filter((edge) => edge.sourceNodeId === selectedNode.id || edge.targetNodeId === selectedNode.id)
       : [];
@@ -1985,6 +2031,16 @@ export function PaperLibraryCommandCenter({
   const graphWarnings = useMemo(() => (
     graphData ? summarizeGraphWarnings(graphData.warnings) : []
   ), [graphData]);
+  const setTimedGraphActionMessage = useCallback((message: string) => {
+    if (graphActionMessageTimeoutRef.current !== null) {
+      window.clearTimeout(graphActionMessageTimeoutRef.current);
+    }
+    setGraphActionMessage(message);
+    graphActionMessageTimeoutRef.current = window.setTimeout(() => {
+      setGraphActionMessage(null);
+      graphActionMessageTimeoutRef.current = null;
+    }, 4_000);
+  }, []);
   const handleCopyGraphLink = useCallback(async (node?: GraphMapNode | null) => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -1995,12 +2051,12 @@ export function PaperLibraryCommandCenter({
         throw new Error("Clipboard unavailable");
       }
       await navigator.clipboard.writeText(url.toString());
-      setGraphActionMessage(node ? "Copied selected paper link." : "Copied graph link.");
+      setTimedGraphActionMessage(node ? "Copied selected paper link." : "Copied graph link.");
     } catch {
-      setGraphActionMessage(node ? "Selected paper link is ready in the address bar." : "Graph link is ready in the address bar.");
+      setTimedGraphActionMessage(node ? "Selected paper link is ready in the address bar." : "Graph link is ready in the address bar.");
       window.history.replaceState(null, "", url.toString());
     }
-  }, []);
+  }, [setTimedGraphActionMessage]);
   const handleResetGraphView = useCallback(() => {
     setGraphPerspective("all");
     setGraphNodeFilter("all");
@@ -2008,15 +2064,15 @@ export function PaperLibraryCommandCenter({
     setGraphListView(false);
     setSelectedGraphNodeId(null);
     setGraphMoreOpen(false);
-    setGraphActionMessage("Graph filters reset.");
-  }, []);
+    setTimedGraphActionMessage("Graph filters reset.");
+  }, [setTimedGraphActionMessage]);
   const handleSelectMostConnectedGraphNode = useCallback(() => {
     const node = graphInsights.sortedNodes[0];
     if (!node) return;
     setSelectedGraphNodeId(node.id);
     setGraphMoreOpen(false);
-    setGraphActionMessage("Selected the most connected paper.");
-  }, [graphInsights.sortedNodes]);
+    setTimedGraphActionMessage("Selected the most connected paper.");
+  }, [graphInsights.sortedNodes, setTimedGraphActionMessage]);
   const approvalTokenExpired = approvalToken
     ? Date.parse(approvalToken.expiresAt) <= Date.now()
     : false;
@@ -2606,7 +2662,7 @@ export function PaperLibraryCommandCenter({
                       </button>
                     ))}
                   </div>
-                  <div className="relative">
+                  <div className="relative" ref={graphMoreRef}>
                     <button
                       aria-expanded={graphMoreOpen}
                       aria-label="More graph actions"
