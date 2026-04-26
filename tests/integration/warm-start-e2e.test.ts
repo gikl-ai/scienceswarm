@@ -24,7 +24,8 @@ import { tmpdir } from "os";
 import { scanCorpus, approveAndImport } from "@/brain/coldstart";
 import type { BrainConfig, ImportPreview } from "@/brain/types";
 import type { LLMClient, LLMResponse } from "@/brain/llm";
-import { getProjectLocalImportSummaryPath, getProjectRootPath } from "@/lib/state/project-storage";
+import { getProjectRootPath, getProjectLocalImportSummaryPath } from "@/lib/state/project-storage";
+import { getLegacyProjectStudyFilePath } from "@/lib/studies/state";
 
 const FIXTURES = join(__dirname, "..", "fixtures", "coldstart");
 
@@ -230,9 +231,10 @@ describe("warm-start E2E", () => {
 
     expect(result.errors).toEqual([]);
 
-    const importSummaryPath = getProjectLocalImportSummaryPath("project-alpha");
+    const importSummaryPath = getLegacyProjectStudyFilePath("project-alpha", "import-summary.json");
     expect(existsSync(importSummaryPath)).toBe(true);
     expect(readFileSync(importSummaryPath, "utf-8")).toContain('"source": "coldstart-project-import"');
+    expect(existsSync(getProjectLocalImportSummaryPath("project-alpha"))).toBe(false);
 
     const projectRoot = getProjectRootPath("project-alpha");
     expect(existsSync(join(projectRoot, "papers", "attention.pdf"))).toBe(true);

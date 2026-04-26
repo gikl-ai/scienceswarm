@@ -50,7 +50,7 @@ describe("POST /api/projects", () => {
     expect(del.status).toBe(403);
   });
 
-  it("creates a project, bootstraps brain state, and returns explicit slug normalization details", async () => {
+  it("creates a project, bootstraps Study state, and returns explicit slug normalization details", async () => {
     const { POST } = await import("@/app/api/projects/route");
     const createdRecords: ProjectRecord[] = [];
     const fakeRepository: ProjectRepository = {
@@ -96,26 +96,22 @@ describe("POST /api/projects", () => {
       changed: true,
     });
 
-    const manifestPath = path.join(
+    const studyStatePath = path.join(
       dataRoot,
-      "projects",
-      "my-first-test-project",
-      ".brain",
       "state",
-      "manifest.json",
+      "studies",
+      "study_my-first-test-project",
+      "study.json",
     );
-    const projectPagePath = path.join(
+    const legacyBrainPath = path.join(
       dataRoot,
       "projects",
       "my-first-test-project",
       ".brain",
-      "wiki",
-      "projects",
-      "my-first-test-project.md",
     );
 
-    expect(await readFile(manifestPath, "utf-8")).toContain('"slug": "my-first-test-project"');
-    expect(await readFile(projectPagePath, "utf-8")).toContain("Track frontier AI updates.");
+    expect(await readFile(studyStatePath, "utf-8")).toContain('"legacyProjectSlug": "my-first-test-project"');
+    await expect(readFile(legacyBrainPath, "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
     __setProjectRepositoryOverride(null);
   });
 

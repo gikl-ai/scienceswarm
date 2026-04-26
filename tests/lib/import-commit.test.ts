@@ -19,10 +19,9 @@ import {
   getImportedWorkspacePath,
 } from "@/lib/import/commit-import";
 import {
-  getProjectAbsoluteWikiPath,
   getLegacyProjectManifestPath,
-  getProjectLocalManifestPath,
 } from "@/lib/state/project-storage";
+import { getLegacyProjectStudyFilePath } from "@/lib/studies/state";
 import { hashContent } from "@/lib/workspace-manager";
 
 const ROOT = join(tmpdir(), "scienceswarm-import-commit-test");
@@ -436,7 +435,7 @@ describe("commitImportedProject", () => {
     expect(readFileSync(getImportedWorkspacePath("alpha-project", "papers/scanned.pdf"), "utf-8")).toBe(
       "not a real pdf",
     );
-    const sourcePage = readFileSync(getProjectAbsoluteWikiPath("alpha-project", fallbackPath), "utf-8");
+    const sourcePage = readFileSync(join(ROOT, "brain", fallbackPath), "utf-8");
     expect(sourcePage).toContain('"filename":"papers/scanned.pdf"');
   });
 
@@ -588,7 +587,7 @@ describe("commitImportedProject", () => {
 
     const result = await commitImportedProject(request);
 
-    expect(result.manifestPath).toBe(getProjectLocalManifestPath("alpha-project"));
+    expect(result.manifestPath).toBe(getLegacyProjectStudyFilePath("alpha-project", "manifest.json"));
   });
 
   it("copies sourcePath bytes into the legacy workspace mirror", async () => {

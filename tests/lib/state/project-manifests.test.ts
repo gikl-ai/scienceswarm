@@ -13,6 +13,7 @@ import {
 } from "@/lib/state/project-manifests";
 import type { ProjectManifest } from "@/brain/types";
 import * as atomicJson from "@/lib/state/atomic-json";
+import { getLegacyProjectStudyFilePath } from "@/lib/studies/state";
 
 const ROOT = join(tmpdir(), "scienceswarm-state-manifest");
 const DATA_ROOT = join(tmpdir(), "scienceswarm-state-manifest-data");
@@ -99,7 +100,7 @@ describe("project-manifests", () => {
     );
   });
 
-  it("uses the project root as the default manifest location and migrates legacy state", async () => {
+  it("reads legacy manifests without moving them into project-local .brain state", async () => {
     process.env.SCIENCESWARM_DIR = DATA_ROOT;
     const legacyStateRoot = join(DATA_ROOT, "brain", "state");
     const legacyManifestPath = getProjectManifestPath("project-alpha", legacyStateRoot);
@@ -132,17 +133,12 @@ describe("project-manifests", () => {
     );
 
     const manifest = await readProjectManifest("project-alpha");
-    const canonicalManifestPath = getProjectManifestPath("project-alpha");
 
     expect(manifest?.title).toBe("Project Alpha");
-    expect(canonicalManifestPath).toBe(
-      join(DATA_ROOT, "projects", "project-alpha", ".brain", "state", "manifest.json"),
-    );
-    expect(readFileSync(canonicalManifestPath, "utf-8")).toContain("\"title\": \"Project Alpha\"");
-    expect(existsSync(legacyManifestPath)).toBe(false);
+    expect(existsSync(legacyManifestPath)).toBe(true);
     expect(
       existsSync(join(DATA_ROOT, "projects", "project-alpha", ".brain", getProjectPagePath("project-alpha"))),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("treats an explicit project-local state root as canonical", () => {
@@ -186,9 +182,9 @@ describe("project-manifests", () => {
     expect(existsSync(join(DATA_ROOT, "projects", "missing-project", ".brain"))).toBe(false);
   });
 
-  it("re-reads the canonical manifest before returning null when a concurrent migration wins the race", async () => {
+  it("prefers canonical Study state over legacy project manifests", async () => {
     process.env.SCIENCESWARM_DIR = DATA_ROOT;
-    const canonicalManifestPath = getProjectManifestPath("project-alpha");
+    const canonicalManifestPath = getLegacyProjectStudyFilePath("project-alpha", "manifest.json");
     const manifest: ProjectManifest = {
       version: 1,
       projectId: "project-alpha",
@@ -207,19 +203,17 @@ describe("project-manifests", () => {
       updatedAt: "2026-04-12T00:00:00.000Z",
     };
     const readJsonFile = vi.spyOn(atomicJson, "readJsonFile");
-    let canonicalReads = 0;
 
     readJsonFile.mockImplementation(async (targetPath) => {
       if (targetPath === canonicalManifestPath) {
-        canonicalReads += 1;
-        return canonicalReads === 1 ? null : manifest;
+        return manifest;
       }
       return null;
     });
 
     try {
       await expect(readProjectManifest("project-alpha")).resolves.toEqual(manifest);
-      expect(canonicalReads).toBe(2);
+      expect(readJsonFile).toHaveBeenCalledWith(canonicalManifestPath);
     } finally {
       readJsonFile.mockRestore();
     }
