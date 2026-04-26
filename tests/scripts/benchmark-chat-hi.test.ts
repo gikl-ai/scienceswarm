@@ -864,6 +864,46 @@ describe("benchmark-chat-hi", () => {
     });
   });
 
+  it("ignores skipped phases when deriving observed server timing milestones", () => {
+    expect(
+      summarizeLatestTimingArtifact({
+        timings: [
+          {
+            turnId: "turn-skipped-split",
+            totalDurationMs: 150,
+            outcome: "streamed",
+            status: 200,
+            phases: [
+              {
+                name: "request_parse",
+                startedAtMs: 1000,
+                endedAtMs: 1010,
+                durationMs: 10,
+              },
+              {
+                name: "chat_readiness",
+                startedAtMs: 1010,
+                endedAtMs: 1010,
+                durationMs: 0,
+                skipped: true,
+              },
+              {
+                name: "chat_send_ack",
+                startedAtMs: 1042,
+                endedAtMs: 1042,
+                durationMs: 0,
+                skipped: true,
+              },
+            ],
+            promptCharCounts: { total: 2 },
+          },
+        ],
+      }),
+    ).toMatchObject({
+      observedSplit: null,
+    });
+  });
+
   it("filters timing artifacts to turns that started after the benchmark request", () => {
     const responseJson = {
       timings: [
