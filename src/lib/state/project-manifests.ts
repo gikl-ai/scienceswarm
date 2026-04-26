@@ -124,6 +124,8 @@ export async function updateProjectManifest(
   if (root) {
     return updateJsonFile<ProjectManifest>(getProjectManifestPath(safeSlug, root), updater);
   }
+  // The pre-read is only a fallback snapshot for first-time promotion from
+  // legacy storage; updateJsonFile still uses canonical Study state if present.
   const current = await readProjectManifest(safeSlug);
   return updateJsonFile<ProjectManifest>(
     getLegacyProjectStudyFilePath(safeSlug, "manifest.json"),
@@ -264,6 +266,8 @@ export async function ensureProjectManifest(
   }
 
   if (stateRoot) {
+    // Explicit legacy roots retain the old compatibility migration behavior;
+    // default Study-state callers must remain non-mutating on legacy storage.
     await migrateLegacyProjectState(safeSlug);
     await migrateLegacyProjectWiki(safeSlug);
   }

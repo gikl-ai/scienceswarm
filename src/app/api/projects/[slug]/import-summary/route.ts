@@ -33,12 +33,8 @@ export async function GET(
   try {
     const brainRoot = resolveBrainRoot() ?? getScienceSwarmBrainRoot();
     const preferredStateRoot = getProjectStateRootForBrainRoot(slug, brainRoot);
-    const legacyStateRoot = `${brainRoot}/state`;
     const summary = await readProjectImportSummary(slug)
-      ?? await readProjectImportSummary(slug, preferredStateRoot)
-      ?? (legacyStateRoot !== preferredStateRoot
-        ? await readProjectImportSummary(slug, legacyStateRoot)
-        : null);
+      ?? await readProjectImportSummary(slug, preferredStateRoot);
     return Response.json({
       project: slug,
       lastImport: summary?.lastImport ?? null,
