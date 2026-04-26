@@ -19,7 +19,10 @@ function listTrackedFiles(): string[] {
 describe("repo local-state guard", () => {
   it("does not track local-only private state directories", () => {
     const trackedLocalState = listTrackedFiles().filter(
-      (file) => file === ".local" || file.startsWith(".local/"),
+      (file) =>
+        file === ".local"
+        || file.startsWith(".local/")
+        || file.includes("/.local/"),
     );
 
     expect(trackedLocalState).toEqual([]);
@@ -27,7 +30,7 @@ describe("repo local-state guard", () => {
 
   it("does not track local environment override files", () => {
     const trackedLocalEnvFiles = listTrackedFiles().filter((file) =>
-      /^\.env(\.[^/]+)?\.local$/.test(file),
+      /(^|\/)\.env(\.[^/]+)?\.local$/.test(file),
     );
 
     expect(trackedLocalEnvFiles).toEqual([]);
