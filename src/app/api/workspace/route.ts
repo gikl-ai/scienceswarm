@@ -1533,34 +1533,226 @@ function isHtmlRawExtension(ext: string): boolean {
   return ext === "html" || ext === "htm";
 }
 
-function injectHtmlPreviewShim(html: string): string {
-  if (html.includes(HTML_PREVIEW_SHIM_MARKER)) {
-    return html;
+function decodePreviewAssetPath(assetPath: string): string | null {
+  const withoutFragment = assetPath.split("#", 1)[0] ?? assetPath;
+  const withoutQuery = withoutFragment.split("?", 1)[0] ?? withoutFragment;
+  if (
+    !withoutQuery ||
+    withoutQuery.startsWith("/") ||
+    /^[a-z][a-z0-9+.-]*:/i.test(withoutQuery)
+  ) {
+    return null;
   }
 
-  if (/<head(?:\s[^>]*)?>/i.test(html)) {
-    return html.replace(/<head(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
+  try {
+    return decodeURIComponent(withoutQuery);
+  } catch {
+    return withoutQuery;
   }
-
-  if (/<body(?:\s[^>]*)?>/i.test(html)) {
-    return html.replace(/<body(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
-  }
-
-  if (/<!doctype html[^>]*>/i.test(html)) {
-    return html.replace(/<!doctype html[^>]*>/i, (match) => `${match}\n${HTML_PREVIEW_STORAGE_SHIM}`);
-  }
-
-  return `${HTML_PREVIEW_STORAGE_SHIM}${html}`;
 }
 
-function buildBufferedRawPreviewResponse(params: {
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+async function readPreviewAsset(
+  baseDir: string | undefined,
+  assetPath: string,
+  allowedExtensions: Set<string>,
+): Promise<string | null> {
+  if (!baseDir) return null;
+  const decodedPath = decodePreviewAssetPath(assetPath);
+  if (!decodedPath) return null;
+  const ext = path.extname(decodedPath).slice(1).toLowerCase();
+  if (!allowedExtensions.has(ext)) return null;
+
+  const resolved = safeResolveInsideDirectory(baseDir, decodedPath);
+  if ("error" in resolved || resolved.stat.size > MAX_RAW_BYTES) return null;
+  try {
+    return await fs.promises.readFile(resolved.realFile, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+async function replaceHtmlMatches(
+  input: string,
+  pattern: RegExp,
+  replaceMatch: (match: RegExpMatchArray) => Promise<string>,
+): Promise<string> {
+  let output = "";
+  let lastIndex = 0;
+  for (const match of input.matchAll(pattern)) {
+    const index = match.index ?? lastIndex;
+    output += input.slice(lastIndex, index);
+    output += await replaceMatch(match);
+    lastIndex = index + match[0].length;
+  }
+  return `${output}${input.slice(lastIndex)}`;
+}
+
+function getHtmlAttribute(attributes: string, name: string): string | null {
+  const escapedName = escapeRegExp(name);
+  const pattern = new RegExp(
+    `\\b${escapedName}\\s*=\\s*(?:(["'])(.*?)\\1|([^\\s>"'=]+))`,
+    "i",
+  );
+  const match = attributes.match(pattern);
+  return match?.[2] ?? match?.[3] ?? null;
+}
+
+function removeHtmlAttribute(attributes: string, name: string): string {
+  const escapedName = escapeRegExp(name);
+  const pattern = new RegExp(
+    `\\s*\\b${escapedName}\\s*=\\s*(?:(["']).*?\\1|[^\\s>"'=]+)`,
+    "i",
+  );
+  return attributes.replace(pattern, "").replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function escapeHtmlEndTagPrefix(content: string, tagName: string): string {
+  const lowerContent = content.toLowerCase();
+  const lowerNeedle = `</${tagName.toLowerCase()}`;
+  let escaped = "";
+  let searchIndex = 0;
+
+  while (true) {
+    const matchIndex = lowerContent.indexOf(lowerNeedle, searchIndex);
+    if (matchIndex === -1) {
+      return `${escaped}${content.slice(searchIndex)}`;
+    }
+
+    escaped += `${content.slice(searchIndex, matchIndex)}<\\/${content.slice(
+      matchIndex + 2,
+      matchIndex + lowerNeedle.length,
+    )}`;
+    searchIndex = matchIndex + lowerNeedle.length;
+  }
+}
+
+function isScriptCloseNameBoundary(value: string | undefined): boolean {
+  return value === undefined || value === ">" || value === "/" || /\s/.test(value);
+}
+
+function findScriptCloseTagEnd(html: string, fromIndex: number): number | null {
+  const lowerHtml = html.toLowerCase();
+  let searchIndex = fromIndex;
+
+  while (true) {
+    const closeStart = lowerHtml.indexOf("</script", searchIndex);
+    if (closeStart === -1) return null;
+
+    const afterName = closeStart + "</script".length;
+    if (!isScriptCloseNameBoundary(lowerHtml[afterName])) {
+      searchIndex = afterName;
+      continue;
+    }
+
+    const closeEnd = lowerHtml.indexOf(">", afterName);
+    return closeEnd === -1 ? null : closeEnd + 1;
+  }
+}
+
+async function inlineScriptPreviewAssets(
+  html: string,
+  assetBaseDir: string,
+  scriptExtensions: Set<string>,
+): Promise<string> {
+  const scriptOpenPattern = /<script\b([\s\S]*?)>/gi;
+  let output = "";
+  let readIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = scriptOpenPattern.exec(html)) !== null) {
+    const openStart = match.index;
+    const openEnd = scriptOpenPattern.lastIndex;
+    const closeEnd = findScriptCloseTagEnd(html, openEnd);
+    if (closeEnd === null) continue;
+
+    const attributes = match[1] ?? "";
+    const src = getHtmlAttribute(attributes, "src");
+    if (!src) {
+      scriptOpenPattern.lastIndex = closeEnd;
+      continue;
+    }
+
+    const script = await readPreviewAsset(assetBaseDir, src, scriptExtensions);
+    if (script === null) {
+      scriptOpenPattern.lastIndex = closeEnd;
+      continue;
+    }
+
+    const inlineAttributes = removeHtmlAttribute(attributes, "src");
+    output += html.slice(readIndex, openStart);
+    output += `<script${inlineAttributes ? ` ${inlineAttributes}` : ""} data-scienceswarm-inlined-asset="${escapeHtmlAttribute(src)}">\n${escapeHtmlEndTagPrefix(script, "script")}\n</script>`;
+    readIndex = closeEnd;
+    scriptOpenPattern.lastIndex = closeEnd;
+  }
+
+  return `${output}${html.slice(readIndex)}`;
+}
+
+async function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): Promise<string> {
+  if (!assetBaseDir) return html;
+  const scriptExtensions = new Set(["js", "mjs", "cjs"]);
+  const styleExtensions = new Set(["css"]);
+
+  const withStyles = await replaceHtmlMatches(html, /<link\b([\s\S]*?)>/gi, async (match) => {
+    const tag = match[0];
+    const attributes = match[1] ?? "";
+    const rel = getHtmlAttribute(attributes, "rel");
+    const href = getHtmlAttribute(attributes, "href");
+    if (!href || !rel?.split(/\s+/).some((entry) => entry.toLowerCase() === "stylesheet")) {
+      return tag;
+    }
+    const css = await readPreviewAsset(assetBaseDir, href, styleExtensions);
+    if (css === null) return tag;
+    const media = getHtmlAttribute(attributes, "media");
+    const mediaAttribute = media ? ` media="${escapeHtmlAttribute(media)}"` : "";
+    return `<style${mediaAttribute} data-scienceswarm-inlined-asset="${escapeHtmlAttribute(href)}">\n${escapeHtmlEndTagPrefix(css, "style")}\n</style>`;
+  });
+
+  return inlineScriptPreviewAssets(withStyles, assetBaseDir, scriptExtensions);
+}
+
+async function injectHtmlPreviewShim(html: string, assetBaseDir?: string): Promise<string> {
+  const previewHtml = await inlineHtmlPreviewAssets(html, assetBaseDir);
+  if (html.includes(HTML_PREVIEW_SHIM_MARKER)) {
+    return previewHtml;
+  }
+
+  if (/<head(?:\s[^>]*)?>/i.test(previewHtml)) {
+    return previewHtml.replace(/<head(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
+  }
+
+  if (/<body(?:\s[^>]*)?>/i.test(previewHtml)) {
+    return previewHtml.replace(/<body(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
+  }
+
+  if (/<!doctype html[^>]*>/i.test(previewHtml)) {
+    return previewHtml.replace(/<!doctype html[^>]*>/i, (match) => `${match}\n${HTML_PREVIEW_STORAGE_SHIM}`);
+  }
+
+  return `${HTML_PREVIEW_STORAGE_SHIM}${previewHtml}`;
+}
+
+async function buildBufferedRawPreviewResponse(params: {
   ext: string;
   fileName: string;
   buffer: Buffer;
   contentType: string;
-}): Response {
+  htmlAssetBaseDir?: string;
+}): Promise<Response> {
   const body = isHtmlRawExtension(params.ext)
-    ? injectHtmlPreviewShim(params.buffer.toString("utf-8"))
+    ? await injectHtmlPreviewShim(params.buffer.toString("utf-8"), params.htmlAssetBaseDir)
     : new Uint8Array(params.buffer);
   const contentLength = typeof body === "string"
     ? Buffer.byteLength(body)
@@ -1895,6 +2087,7 @@ async function handleRaw(filePath: string, projectId: string | null) {
       fileName: path.basename(realFile),
       buffer: buf,
       contentType,
+      htmlAssetBaseDir: path.dirname(realFile),
     });
   }
 
@@ -1924,6 +2117,7 @@ async function handleRaw(filePath: string, projectId: string | null) {
       fileName: path.basename(realFile),
       buffer: buf,
       contentType,
+      htmlAssetBaseDir: path.dirname(realFile),
     });
   }
 
@@ -1994,6 +2188,7 @@ async function handleRaw(filePath: string, projectId: string | null) {
     fileName: path.basename(realFile),
     buffer: buf,
     contentType,
+    htmlAssetBaseDir: path.dirname(realFile),
   });
 }
 
