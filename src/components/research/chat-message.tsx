@@ -1147,7 +1147,7 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunSt
       const detail = compactDetail(block.entry.text);
       if (detail) {
         return {
-          label: block.section === "thinking" ? "Thinking" : "Activity",
+          label: PROGRESS_SECTION_META[block.section].compactTitle,
           text: detail,
         };
       }
@@ -1156,14 +1156,14 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunSt
     if (block.lines.length > 0) {
       if (block.rawCount > 1) {
         return {
-          label: "Activity",
+          label: PROGRESS_SECTION_META[block.section].compactTitle,
           text: `Explored ${block.rawCount} actions`,
         };
       }
       const detail = compactDetail(block.lines[block.lines.length - 1]);
       if (detail) {
         return {
-          label: "Activity",
+          label: PROGRESS_SECTION_META[block.section].compactTitle,
           text: detail,
         };
       }
