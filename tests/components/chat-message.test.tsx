@@ -834,6 +834,34 @@ describe("ChatMessage", () => {
     expect(screen.getByText("results").closest("code")).not.toHaveClass("bg-sunk/90");
   });
 
+  it("adds calmer section rhythm inside progress markdown blocks", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "thinking",
+            text:
+              "### Plan\n\n" +
+              "Lead paragraph.\n\n" +
+              "- Extract the `results` table\n\n" +
+              "```bash\npython3 scripts/extract_results_chart.py\n```",
+          },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 3, name: "Plan" })).toHaveClass("mt-3");
+    expect(screen.getByText("Lead paragraph.").closest("p")).toHaveClass("mt-2");
+    expect(screen.getByRole("list")).toHaveClass("mt-2");
+    expect(
+      screen.getByText("python3 scripts/extract_results_chart.py").closest("pre"),
+    ).toHaveClass("mt-2");
+  });
+
   it("renders markdown tables when a progress row carries GFM table syntax", () => {
     render(
       <ChatMessage
