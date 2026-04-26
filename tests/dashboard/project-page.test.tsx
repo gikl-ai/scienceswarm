@@ -385,7 +385,7 @@ describe("Project dashboard smoke test", () => {
     expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
   });
 
-  it("renders footer controls as one compact row without an idle send button", async () => {
+  it("renders footer controls as one compact row with a disabled idle send button", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -405,7 +405,20 @@ describe("Project dashboard smoke test", () => {
     expect(
       within(guidance).getByText("Enter to send · Shift+Enter for a new line."),
     ).toBeInTheDocument();
-    expect(within(composer).queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
+  it("enables the footer send button once the composer has input", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    const composer = await screen.findByTestId("project-chat-composer");
+    const input = within(composer).getByTestId("chat-input");
+    fireEvent.change(input, { target: { value: "Hi" } });
+
+    expect(within(composer).getByRole("button", { name: "Send" })).toBeEnabled();
   });
 
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {

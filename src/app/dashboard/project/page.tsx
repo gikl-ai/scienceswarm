@@ -5083,7 +5083,7 @@ function ProjectPageContent() {
                             Stop
                           </button>
                         )}
-                        <div className="ml-auto">
+                        <div className="ml-auto flex items-center gap-2">
                           <VoiceButton
                             voiceState={voiceState}
                             voiceError={voiceError}
@@ -5096,6 +5096,14 @@ function ProjectPageContent() {
                               else if (voiceState === "speaking") stopPlayback();
                             }}
                           />
+                          <button
+                            type="button"
+                            onClick={handleSend}
+                            disabled={isChatBusy || !input.trim()}
+                            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-accent px-4 text-sm font-semibold text-white shadow-none transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-accent/40 disabled:text-white/80"
+                          >
+                            Send
+                          </button>
                         </div>
                       </div>
                     </div>
