@@ -467,6 +467,41 @@ describe("Project dashboard smoke test", () => {
     );
   });
 
+  it("rotates placeholder prompts only while the composer is empty and unfocused", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    const composer = await screen.findByTestId("project-chat-composer");
+    const input = within(composer).getByLabelText("Chat with your project");
+
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "Summarize the latest paper I uploaded",
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 4100));
+    });
+    await waitFor(() => {
+      expect(input).toHaveAttribute(
+        "placeholder",
+        "What's still open from last week?",
+      );
+    });
+
+    fireEvent.focus(input);
+    const focusedPlaceholder = input.getAttribute("placeholder");
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 4100));
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      focusedPlaceholder,
+    );
+  });
+
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
     const fetchMock = stubDashboardFetch({
       latestPaperLibraryScan: {

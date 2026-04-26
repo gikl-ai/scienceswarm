@@ -1787,6 +1787,7 @@ function ProjectPageContent() {
     }, CHAT_PLACEHOLDER_ROTATE_MS);
     return () => window.clearInterval(interval);
   }, [chatInputFocused, hasComposerInput]);
+  }, [chatInputFocused, hasComposerInput]);
   const activeAssistantMessageId = isStreaming
     ? [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null
     : null;
