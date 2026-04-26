@@ -1,0 +1,13 @@
+{
+  "legacyProjectSlug": "project-alpha",
+  "studyId": "study_alpha",
+  "studySlug": "project-alpha",
+  "threadId": "thread_alpha",
+  "aliases": [
+    {
+      "legacyProjectSlug": "project-alpha",
+      "studyId": "study_alpha",
+      "studySlug": "project-alpha"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "projectId": "project-alpha",
+  "slug": "project-alpha",
+  "title": "Project Alpha",
+  "privacy": "local-first",
+  "status": "active",
+  "projectPagePath": "wiki/projects/project-alpha.md",
+  "sourceRefs": [
+    {
+      "kind": "import",
+      "ref": "wiki/projects/project-alpha/source-note.md",
+      "hash": "fixture-source-hash"
+    }
+  ],
+  "decisionPaths": [],
+  "taskPaths": [
+    "wiki/projects/project-alpha/tasks/task-one.md"
+  ],
+  "artifactPaths": [],
+  "frontierPaths": [],
+  "activeThreads": [
+    {
+      "channel": "web",
+      "threadId": "thread_alpha",
+      "lastActivityAt": "2026-04-26T00:00:00.000Z"
+    }
+  ],
+  "dedupeKeys": [],
+  "updatedAt": "2026-04-26T00:00:00.000Z"
+}
