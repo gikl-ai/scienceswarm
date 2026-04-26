@@ -131,7 +131,12 @@ def _extract_trajectory(widget: dict[str, Any]) -> dict[str, Any] | None:
                    We bin by year to recover a min/max placebo envelope.
     """
     traces = widget.get("data") or []
-    if len(traces) < 4:
+    # Need at minimum the actual treated trace + the synthetic counterfactual
+    # trace.  The placebo cloud is optional; we'll skip the envelope if it
+    # is not present.  This intentionally tolerates 3-trace widgets (which
+    # show up if a future stage-6 emits a static trajectory without the
+    # animation overlay) and 5+ trace widgets.
+    if len(traces) < 2:
         return None
 
     actual_trace = next((t for t in traces if str(t.get("name", "")).startswith("Actual")), None)
@@ -151,7 +156,14 @@ def _extract_trajectory(widget: dict[str, Any]) -> dict[str, Any] | None:
     # again.  Reconstruct per-year placebo *bands* (min / max envelope) from
     # the flat trace instead — that's a cleaner visual anyway and matches
     # what most modern policy-brief charts use to visualize placebo clouds.
-    placebos = traces[1] if len(traces) > 1 else None
+    # Pick the largest "placebo*" trace by point count; that's the animation-
+    # frame data on the existing R output.  Falls back to None if missing.
+    placebo_candidates = [
+        t for t in traces
+        if "placebo" in str(t.get("name", "")).lower()
+        and isinstance(t.get("y"), list)
+    ]
+    placebos = max(placebo_candidates, key=lambda t: len(t.get("y") or [])) if placebo_candidates else None
     placebo_band: dict[str, list[float]] | None = None
     if placebos and isinstance(placebos.get("x"), list) and isinstance(placebos.get("y"), list):
         flat_x = placebos["x"]

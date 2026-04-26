@@ -9,7 +9,7 @@ inputs:
   - out: output HTML file path
   - theme: optional theme override (default: spec.meta.theme or "broadsheet")
 outputs:
-  - HTML file at the specified --out path (single self-contained page)
+  - HTML file at the specified --out path (single HTML file; Plotly and Google Fonts loaded from CDNs at view time, so view-time internet access is required for the page to fully render)
 themes:
   - broadsheet
 ---
@@ -18,9 +18,11 @@ themes:
 
 ## Purpose
 
-Renders a typed JSON spec describing a scientific run into a single
-self-contained HTML report. Theme-driven so adjacent reports can have
-deliberately different visual identities.
+Renders a typed JSON spec describing a scientific run into a single HTML
+file. Plotly and Google Fonts are loaded from CDNs at view time — no
+build pipeline is required, but the rendered page is not fully offline-
+self-contained without those CDN assets cached. Theme-driven so adjacent
+reports can have deliberately different visual identities.
 
 ## When to use
 

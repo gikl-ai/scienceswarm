@@ -1,7 +1,10 @@
 # `scientific_report` — sophisticated HTML reports from a typed spec
 
 A small Python library + CLI that turns a structured JSON description of a
-scientific run into a single self-contained HTML report.
+scientific run into a single HTML file. Interactive Plotly figures and
+Google Fonts are loaded from public CDNs at view time, so the resulting
+page renders without a build step but requires view-time internet access
+to look fully styled.
 
 The renderer is theme-driven. Each theme owns its full HTML/CSS/JS surface;
 nothing is shared across themes by accident. This is deliberate — adjacent

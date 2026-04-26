@@ -39,6 +39,8 @@ def render_report(spec: dict[str, Any], out_path: Path) -> Path:
 
 
 def load_spec(spec_path: Path) -> dict[str, Any]:
-    """Convenience loader."""
-    with open(spec_path) as fh:
+    """Convenience loader.  UTF-8 explicit so non-ASCII characters in case
+    names, interpretation prose, etc. round-trip cleanly on locales whose
+    default encoding is not UTF-8 (Windows being the most common case)."""
+    with open(spec_path, encoding="utf-8") as fh:
         return json.load(fh)

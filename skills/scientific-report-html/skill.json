@@ -15,9 +15,11 @@
     "cli"
   ],
   "owner": "scienceswarm",
-  "summary": "Theme-driven HTML report renderer. Consumes a JSON spec and emits a single self-contained interactive report.",
+  "summary": "Theme-driven HTML report renderer. Consumes a JSON spec and emits a single HTML file (interactive Plotly charts and Google Fonts loaded from CDNs at view time).",
   "source": {
     "kind": "local",
     "path": "tooling/scientific_report"
-  }
+  },
+  "createdAt": "2026-04-26T22:30:00.000Z",
+  "updatedAt": "2026-04-26T22:30:00.000Z"
 }

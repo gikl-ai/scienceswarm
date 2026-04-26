@@ -92,6 +92,10 @@ def render(spec: dict[str, Any]) -> str:
     date = meta.get("date") or _dt.date.today().isoformat()
     issue = meta.get("issue", "")
     generated_at = meta.get("generated_at") or _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    # Write the resolved values back into meta so downstream builders
+    # (the colophon, masthead) see the computed fallbacks rather than the
+    # original missing-or-blank values.
+    meta = {**meta, "generated_at": generated_at, "date": date}
 
     # The renderer hands every plot's data structure off to client-side JS via
     # an embedded <script type="application/json"> island, then JS turns each

@@ -23,7 +23,7 @@ def main() -> int:
                     help="Theme name to use (default: spec.meta.theme or 'broadsheet').")
     args = ap.parse_args()
 
-    with open(args.spec) as fh:
+    with open(args.spec, encoding="utf-8") as fh:
         spec = json.load(fh)
     if args.theme:
         spec.setdefault("meta", {})["theme"] = args.theme
