@@ -8,6 +8,7 @@
  */
 
 import { generateHealthReportWithGbrain } from "@/brain/brain-health";
+import { probeGbrainCapabilities } from "@/brain/gbrain-capabilities";
 import { buildScienceSwarmMaintenanceContext } from "@/brain/maintenance-context";
 import {
   MaintenanceJobConflictError,
@@ -38,10 +39,18 @@ export async function GET(request: Request) {
     }
 
     const report = await generateHealthReportWithGbrain(config);
+    const gbrainCapabilities = report.source === "gbrain"
+      ? await probeGbrainCapabilities()
+      : undefined;
     return Response.json(
       buildBrainMaintenancePlan(
         report,
-        buildScienceSwarmMaintenanceContext(report, process.env, config.root),
+        buildScienceSwarmMaintenanceContext(
+          report,
+          process.env,
+          config.root,
+          gbrainCapabilities,
+        ),
       ),
     );
   } catch (err) {

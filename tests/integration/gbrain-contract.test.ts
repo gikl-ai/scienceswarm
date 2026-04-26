@@ -809,24 +809,30 @@ describe("gbrain contract behaviors: links", () => {
 });
 
 describe("gbrain contract behaviors: search", () => {
-  it("6. searchKeyword ranks title matches above body-only matches", async () => {
-    // Page A: keyword in the title, unrelated body.
-    // Page B: unrelated title, keyword in the body.
-    // gbrain's search_vector trigger weights title at 'A' and compiled_truth
-    // at 'B', so ts_rank should put A first. If an upstream pin bump flattens
-    // the weights (or drops title entirely), this fires.
-    await seedPageWithChunks("behavior-rank-title", {
-      title: "monosemantic neurons explained",
-      compiled_truth: "Some unrelated filler text about weather patterns.",
+  it("6. searchKeyword returns chunk-grain body matches", async () => {
+    // v0.21 moves keyword search from page search_vector to
+    // content_chunks.search_vector. A title-only hit is no longer enough;
+    // callers should expect matched chunk metadata from body/chunk content.
+    await seedPageWithChunks("behavior-rank-body-a", {
+      title: "Mechanistic interpretability primer",
+      compiled_truth: "Monosemantic neurons appear in sparse feature circuits.",
     });
-    await seedPageWithChunks("behavior-rank-body", {
+    await seedPageWithChunks("behavior-rank-body-b", {
       title: "Weather forecasting primer",
       compiled_truth: "A long discussion that happens to mention monosemantic features once.",
+    });
+    await seedPageWithChunks("behavior-rank-title-only", {
+      title: "monosemantic neurons explained",
+      compiled_truth: "Some unrelated filler text about weather patterns.",
     });
 
     const results = await engine.searchKeyword("monosemantic", { limit: 5 });
     expect(results.length).toBeGreaterThanOrEqual(2);
-    expect(results[0].slug).toBe("behavior-rank-title");
+    const slugs = results.map((result) => result.slug);
+    expect(slugs).toContain("behavior-rank-body-a");
+    expect(slugs).toContain("behavior-rank-body-b");
+    expect(slugs).not.toContain("behavior-rank-title-only");
+    expect(results.every((result) => /monosemantic/i.test(result.chunk_text))).toBe(true);
   });
 
   it("7. searchVector with a zero vector returns [] (no hits, no error)", async () => {
