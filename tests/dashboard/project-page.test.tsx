@@ -335,10 +335,11 @@ describe("Project dashboard smoke test", () => {
     const input = within(composer).getByLabelText("Chat with your project");
 
     expect(input).toHaveAttribute("placeholder", "");
+    expect(composer).toHaveClass("shadow-[0_12px_36px_rgba(15,23,42,0.07)]");
     expect(input).toHaveClass("py-2.5");
     expect(input).toHaveClass("pl-3");
     expect(input).toHaveClass("pr-12");
-    expect(input).toHaveClass("bg-sunk/45");
+    expect(input).toHaveClass("bg-sunk/35");
     expect(input).not.toHaveClass("px-0");
     expect(input).not.toHaveClass("py-1");
     expect(composer).toHaveClass("rounded-[var(--radius-3)]");
