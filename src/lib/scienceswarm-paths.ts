@@ -38,14 +38,26 @@ export function getScienceSwarmProjectRoot(projectSlug: string): string {
   return path.join(getScienceSwarmProjectsRoot(), assertProjectSlug(projectSlug));
 }
 
+/**
+ * @deprecated Legacy Project compatibility path. New Study-aware code should
+ * use `src/lib/studies` path helpers and keep app state out of `.brain`.
+ */
 export function getScienceSwarmProjectBrainRoot(projectSlug: string): string {
   return path.join(getScienceSwarmProjectRoot(projectSlug), ".brain");
 }
 
+/**
+ * @deprecated Legacy Project compatibility path. New Study-aware code should
+ * use the canonical Knowledge root from `src/lib/studies`.
+ */
 export function getScienceSwarmProjectBrainWikiRoot(projectSlug: string): string {
   return path.join(getScienceSwarmProjectBrainRoot(projectSlug), "wiki");
 }
 
+/**
+ * @deprecated Legacy Project compatibility path. New Study-aware code should
+ * use canonical State helpers from `src/lib/studies`.
+ */
 export function getScienceSwarmProjectBrainStateRoot(projectSlug: string): string {
   return path.join(getScienceSwarmProjectBrainRoot(projectSlug), "state");
 }

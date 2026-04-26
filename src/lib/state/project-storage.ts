@@ -24,6 +24,10 @@ export function getProjectRootPath(
   return join(projectsRoot, assertProjectSlug(slug));
 }
 
+/**
+ * @deprecated Legacy Project compatibility path. New Study-aware code should
+ * use `src/lib/studies` Knowledge/State path helpers.
+ */
 export function getProjectBrainRootPath(
   slug: string,
   projectsRoot = getScienceSwarmProjectsRoot(),
@@ -31,6 +35,10 @@ export function getProjectBrainRootPath(
   return join(getProjectRootPath(slug, projectsRoot), ".brain");
 }
 
+/**
+ * @deprecated Legacy Project compatibility path. New Study-aware code should
+ * keep operational state under the canonical Study State root.
+ */
 export function getProjectLocalStateRoot(
   slug: string,
   projectsRoot = getScienceSwarmProjectsRoot(),
@@ -38,6 +46,10 @@ export function getProjectLocalStateRoot(
   return join(getProjectBrainRootPath(slug, projectsRoot), "state");
 }
 
+/**
+ * @deprecated Legacy Project compatibility path. New Study-aware code should
+ * use the canonical Knowledge root instead of project-local `.brain`.
+ */
 export function getProjectLocalWikiRoot(
   slug: string,
   projectsRoot = getScienceSwarmProjectsRoot(),
