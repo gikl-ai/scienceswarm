@@ -7,6 +7,7 @@ import type { ImportPreview } from "@/brain/types";
 
 const DATA_ROOT = path.join(tmpdir(), "scienceswarm-mvp-warm-start");
 const BRAIN_ROOT = path.join(DATA_ROOT, "brain");
+const ORIGINAL_BRAIN_ROOT = process.env.BRAIN_ROOT;
 
 const mockLoadBrainConfig = vi.fn();
 vi.mock("@/brain/config", () => ({
@@ -58,6 +59,7 @@ function buildPreview(): ImportPreview {
 beforeEach(() => {
   rmSync(DATA_ROOT, { recursive: true, force: true });
   process.env.SCIENCESWARM_DIR = DATA_ROOT;
+  process.env.BRAIN_ROOT = BRAIN_ROOT;
   process.env.SCIENCESWARM_USER_HANDLE = "@test-researcher";
   initBrain({ root: BRAIN_ROOT, name: "Test Researcher" });
   mockLoadBrainConfig.mockReturnValue(makeConfig());
@@ -66,6 +68,11 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(DATA_ROOT, { recursive: true, force: true });
   delete process.env.SCIENCESWARM_DIR;
+  if (ORIGINAL_BRAIN_ROOT === undefined) {
+    delete process.env.BRAIN_ROOT;
+  } else {
+    process.env.BRAIN_ROOT = ORIGINAL_BRAIN_ROOT;
+  }
   delete process.env.SCIENCESWARM_USER_HANDLE;
   mockLoadBrainConfig.mockReset();
 });
