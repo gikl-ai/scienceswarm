@@ -70,7 +70,7 @@ describe("append-chat-benchmark-report-row", () => {
         "#277",
         "--change-area",
         "append helper",
-      ]),
+      ], {}),
     ).toThrow(
       "A report path is required. Pass --report <path> or set SCIENCESWARM_CHAT_REPORT_PATH.",
     );
