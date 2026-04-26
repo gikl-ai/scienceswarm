@@ -240,19 +240,25 @@ for (case_id in names(alternatives)) {
 }
 
 # --- Validation gate: cross-method sign consistency ---------------------------
-# Reject if methods disagree on the sign of the effect for the same case.
+# Reject if fewer than 75% of available methods agree on the sign of the
+# effect. With 4 methods this means ≥ 3 same sign; with 3 methods it means
+# all 3 must agree (2-vs-1 fails because 67% < 75%); with 2 methods the
+# gate is skipped.
+SIGN_AGREEMENT_FLOOR <- 0.75
 for (case_id in names(alternatives)) {
   ests <- map_dbl(alternatives[[case_id]], ~ if (is.null(.x)) NA_real_ else .x$estimate)
   ests <- ests[!is.na(ests)]
   if (length(ests) >= 3L) {
     sign_pos <- mean(ests > 0)
-    if (sign_pos > 0 && sign_pos < 1 && min(sign_pos, 1 - sign_pos) >= 0.5) {
+    agreement <- max(sign_pos, 1 - sign_pos)
+    if (agreement < SIGN_AGREEMENT_FLOOR) {
       stop(sprintf(
-        "[%s] methods disagree on sign of effect: %s. Result is not robust.",
-        case_id,
+        "[%s] methods disagree on sign of effect (only %.0f%% same sign, need ≥ %.0f%%): %s. Result is not robust.",
+        case_id, 100 * agreement, 100 * SIGN_AGREEMENT_FLOOR,
         paste(sprintf("%s=%.1f", names(ests), ests), collapse = ", ")
       ))
     }
   }
 }
-cat("\nOK: methods agree on sign of effect for every case (≥ 3 of 4 same sign)\n")
+cat(sprintf("\nOK: methods agree on sign of effect for every case (≥ %.0f%% same sign)\n",
+            100 * SIGN_AGREEMENT_FLOOR))

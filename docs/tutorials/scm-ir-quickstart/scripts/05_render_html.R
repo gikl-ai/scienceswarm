@@ -290,7 +290,7 @@ methods_paragraph_html <- function(fit, alts) {
     "We estimate the effect of %s on %s using the synthetic control method (Abadie, Diamond & Hainmueller, 2010), with a donor pool of %d %s. The pre-treatment period (%d–%d) is matched on three lagged outcome values and %d economic predictors. The pre-period root-mean-square prediction error is %.2f (%.2f × outcome SD), well within the %.2f threshold for an interpretable counterfactual (Abadie 2021). The estimated average treatment effect on the treated is %.2f over %d–%d. Permutation inference across donor placebos yields a p-value of %.3f. Robustness to method choice: %s.",
     case$display_name, case$outcome_label,
     length(case$donor_units),
-    if (case$case_id == "basque") "OECD economies" else
+    if (case$case_id == "basque") "Spanish regional economies" else
       if (case$case_id == "russia") "upper-middle-income economies" else "OECD economies",
     case$pre_window[1], case$pre_window[2],
     length(case$predictor_vars),
@@ -483,7 +483,7 @@ page <- tags$html(
         "How does this work?"
       ),
       tags$h1("Synthetic Control for International Relations Shocks"),
-      tags$p("Brexit · Russia 2022 sanctions · German reunification — fit by ScienceSwarm")
+      tags$p("Brexit · Russia 2022 sanctions · Basque Country / ETA terrorism — fit by ScienceSwarm")
     ),
     tags$main(
       case_tabs,

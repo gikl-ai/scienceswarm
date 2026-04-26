@@ -33,14 +33,15 @@ INDICATORS <- c(
 )
 
 # --- Donor pools ---------------------------------------------------------------
-# Brexit donors: high-income OECD economies excluding the UK and the
+# Brexit donors: 24 high-income OECD economies excluding the UK and the
 # eurozone-core economies that had their own simultaneous shocks (the
 # 2015 refugee crisis was concentrated in DEU/AUT/SWE; we keep them but
-# this is a defensible alternative). 22 donors is a reasonable size.
+# this is a defensible alternative). These match brexit_units in
+# 02_prepare_panels.R exactly so nothing is fetched and silently unused.
 BREXIT_DONORS <- c(
-  "AUS", "AUT", "BEL", "CAN", "CHE", "CHL", "CZE", "DEU", "DNK", "ESP",
+  "AUS", "AUT", "BEL", "CAN", "CHE", "CZE", "DEU", "DNK", "ESP",
   "FIN", "FRA", "GRC", "IRL", "ISR", "ITA", "JPN", "KOR", "NLD", "NOR",
-  "NZL", "POL", "PRT", "SVK", "SVN", "SWE", "USA"
+  "NZL", "POL", "PRT", "SWE", "USA"
 )
 
 # Russia 2022 donors: upper-middle-income economies with comparable

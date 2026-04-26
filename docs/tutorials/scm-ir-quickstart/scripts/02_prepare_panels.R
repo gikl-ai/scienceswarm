@@ -1,9 +1,9 @@
 # Stage 2 — assemble three balanced country-year panels.
 #
-# Reads the WDI panel and bundled German dataset from stage 1, then
+# Reads the WDI panel and bundled Basque dataset from stage 1, then
 # carves three case-specific tibbles ready for SCM:
 #
-#   * brexit:  GBR + 27 OECD donors, 1995–2023, treatment 2016
+#   * brexit:  GBR + 24 OECD donors, 1995–2023, treatment 2016
 #   * russia:  RUS + 19 upper-middle-income donors, 2000–2023, treatment 2022
 #   * basque: Basque Country + 16 Spanish regions, 1960–1997, treatment 1975
 #
