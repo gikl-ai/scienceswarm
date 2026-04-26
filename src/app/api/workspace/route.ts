@@ -1559,7 +1559,11 @@ function escapeHtmlAttribute(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function readPreviewAsset(baseDir: string | undefined, assetPath: string, allowedExtensions: Set<string>): string | null {
+async function readPreviewAsset(
+  baseDir: string | undefined,
+  assetPath: string,
+  allowedExtensions: Set<string>,
+): Promise<string | null> {
   if (!baseDir) return null;
   const decodedPath = decodePreviewAssetPath(assetPath);
   if (!decodedPath) return null;
@@ -1568,43 +1572,82 @@ function readPreviewAsset(baseDir: string | undefined, assetPath: string, allowe
 
   const resolved = safeResolveInsideDirectory(baseDir, decodedPath);
   if ("error" in resolved || resolved.stat.size > MAX_RAW_BYTES) return null;
-  return fs.readFileSync(resolved.realFile, "utf-8");
+  try {
+    return await fs.promises.readFile(resolved.realFile, "utf-8");
+  } catch {
+    return null;
+  }
 }
 
-function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): string {
+async function replaceHtmlMatches(
+  input: string,
+  pattern: RegExp,
+  replaceMatch: (match: RegExpMatchArray) => Promise<string>,
+): Promise<string> {
+  let output = "";
+  let lastIndex = 0;
+  for (const match of input.matchAll(pattern)) {
+    const index = match.index ?? lastIndex;
+    output += input.slice(lastIndex, index);
+    output += await replaceMatch(match);
+    lastIndex = index + match[0].length;
+  }
+  return `${output}${input.slice(lastIndex)}`;
+}
+
+function getHtmlAttribute(attributes: string, name: string): string | null {
+  const pattern = new RegExp(
+    `\\b${name}\\s*=\\s*(?:(["'])(.*?)\\1|([^\\s>"'=]+))`,
+    "i",
+  );
+  const match = attributes.match(pattern);
+  return match?.[2] ?? match?.[3] ?? null;
+}
+
+function removeHtmlAttribute(attributes: string, name: string): string {
+  const pattern = new RegExp(
+    `\\s*\\b${name}\\s*=\\s*(?:(["']).*?\\1|[^\\s>"'=]+)`,
+    "i",
+  );
+  return attributes.replace(pattern, "").replace(/\s+/g, " ").trim();
+}
+
+async function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): Promise<string> {
   if (!assetBaseDir) return html;
   const scriptExtensions = new Set(["js", "mjs", "cjs"]);
   const styleExtensions = new Set(["css"]);
-  const getAttribute = (attributes: string, name: string): string | null => {
-    const pattern = new RegExp(`\\b${name}\\s*=\\s*([\"'])(.*?)\\1`, "i");
-    const match = attributes.match(pattern);
-    return match?.[2] ?? null;
-  };
 
-  const withStyles = html.replace(/<link\b([^>]*)>/gi, (tag, attributes: string) => {
-    const rel = getAttribute(attributes, "rel");
-    const href = getAttribute(attributes, "href");
+  const withStyles = await replaceHtmlMatches(html, /<link\b([^>]*)>/gi, async (match) => {
+    const tag = match[0];
+    const attributes = match[1] ?? "";
+    const rel = getHtmlAttribute(attributes, "rel");
+    const href = getHtmlAttribute(attributes, "href");
     if (!href || !rel?.split(/\s+/).some((entry) => entry.toLowerCase() === "stylesheet")) {
       return tag;
     }
-    const css = readPreviewAsset(assetBaseDir, href, styleExtensions);
+    const css = await readPreviewAsset(assetBaseDir, href, styleExtensions);
     if (css === null) return tag;
     return `<style data-scienceswarm-inlined-asset="${escapeHtmlAttribute(href)}">\n${css.replace(/<\/style/gi, "<\\/style")}\n</style>`;
   });
 
-  return withStyles.replace(
-    /<script\b([^>]*)\bsrc\s*=\s*(["'])(.*?)\2([^>]*)>\s*<\/script>/gi,
-    (tag, beforeSrc: string, _quote: string, src: string, afterSrc: string) => {
-      const script = readPreviewAsset(assetBaseDir, src, scriptExtensions);
+  return replaceHtmlMatches(
+    withStyles,
+    /<script\b([^>]*)>\s*<\/script>/gi,
+    async (match) => {
+      const tag = match[0];
+      const attributes = match[1] ?? "";
+      const src = getHtmlAttribute(attributes, "src");
+      if (!src) return tag;
+      const script = await readPreviewAsset(assetBaseDir, src, scriptExtensions);
       if (script === null) return tag;
-      const attributes = `${beforeSrc} ${afterSrc}`.replace(/\s+/g, " ").trim();
-      return `<script${attributes ? ` ${attributes}` : ""} data-scienceswarm-inlined-asset="${escapeHtmlAttribute(src)}">\n${script.replace(/<\/script/gi, "<\\/script")}\n</script>`;
+      const inlineAttributes = removeHtmlAttribute(attributes, "src");
+      return `<script${inlineAttributes ? ` ${inlineAttributes}` : ""} data-scienceswarm-inlined-asset="${escapeHtmlAttribute(src)}">\n${script.replace(/<\/script/gi, "<\\/script")}\n</script>`;
     },
   );
 }
 
-function injectHtmlPreviewShim(html: string, assetBaseDir?: string): string {
-  const previewHtml = inlineHtmlPreviewAssets(html, assetBaseDir);
+async function injectHtmlPreviewShim(html: string, assetBaseDir?: string): Promise<string> {
+  const previewHtml = await inlineHtmlPreviewAssets(html, assetBaseDir);
   if (html.includes(HTML_PREVIEW_SHIM_MARKER)) {
     return previewHtml;
   }
@@ -1624,15 +1667,15 @@ function injectHtmlPreviewShim(html: string, assetBaseDir?: string): string {
   return `${HTML_PREVIEW_STORAGE_SHIM}${previewHtml}`;
 }
 
-function buildBufferedRawPreviewResponse(params: {
+async function buildBufferedRawPreviewResponse(params: {
   ext: string;
   fileName: string;
   buffer: Buffer;
   contentType: string;
   htmlAssetBaseDir?: string;
-}): Response {
+}): Promise<Response> {
   const body = isHtmlRawExtension(params.ext)
-    ? injectHtmlPreviewShim(params.buffer.toString("utf-8"), params.htmlAssetBaseDir)
+    ? await injectHtmlPreviewShim(params.buffer.toString("utf-8"), params.htmlAssetBaseDir)
     : new Uint8Array(params.buffer);
   const contentLength = typeof body === "string"
     ? Buffer.byteLength(body)
