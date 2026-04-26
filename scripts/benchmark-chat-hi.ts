@@ -363,6 +363,28 @@ function formatTimingArtifactUnavailableReason(
   }
 }
 
+function formatObservedLatencySplit(summary: ChatBenchmarkSummary): string {
+  const browserToServerMs = summary.headersMs;
+  const serverToFirstChunkMs =
+    typeof summary.firstChunkMs === "number"
+      ? Math.max(0, summary.firstChunkMs - summary.headersMs)
+      : null;
+  const firstChunkToCompleteMs =
+    typeof summary.firstChunkMs === "number"
+      ? Math.max(0, summary.totalMs - summary.firstChunkMs)
+      : null;
+
+  return [
+    `browser->server headers ${browserToServerMs} ms`,
+    `server->first chunk ${
+      serverToFirstChunkMs === null ? "n/a" : `${serverToFirstChunkMs} ms`
+    }`,
+    `first chunk->complete ${
+      firstChunkToCompleteMs === null ? "n/a" : `${firstChunkToCompleteMs} ms`
+    }`,
+  ].join(", ");
+}
+
 function escapeMarkdownTableCell(value: string): string {
   return value.replaceAll("|", "\\|").replaceAll("\n", " ");
 }
@@ -434,6 +456,7 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
       summary.firstChunkMs === null ? "n/a" : `${summary.firstChunkMs} ms`
     }`,
     `Total: ${summary.totalMs} ms`,
+    `Observed split: ${formatObservedLatencySplit(summary)}`,
     `Bytes: ${summary.bytes}`,
     `Events: ${summary.eventCount} (${summary.progressEventCount} progress, ${summary.finalEventCount} final)`,
     ...(timingArtifact === undefined
