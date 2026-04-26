@@ -89,6 +89,26 @@ describe("FileVisualizer", () => {
     });
   });
 
+  it("renders markdown numbered and bulleted lists with visible marker styles", () => {
+    render(
+      <FileVisualizer
+        preview={ready({
+          content: "# Workflow\n\n1. Start the project\n2. Import the tutorial\n\n- Check files\n- Send the prompt",
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const lists = screen.getAllByRole("list");
+    const orderedList = lists.find((list) => list.tagName === "OL");
+    const unorderedList = lists.find((list) => list.tagName === "UL");
+
+    expect(orderedList).toHaveClass("list-decimal");
+    expect(unorderedList).toHaveClass("list-disc");
+    expect(screen.getByText("Start the project").closest("li")).toHaveClass("pl-1");
+    expect(screen.getByText("Check files").closest("li")).toHaveClass("pl-1");
+  });
+
   it("calls use-in-chat and close callbacks", () => {
     const onUseInChat = vi.fn();
     const onClose = vi.fn();
