@@ -246,6 +246,8 @@ const PROGRESS_INLINE_CODE_CLASS =
   "rounded border border-rule/70 bg-sunk/70 px-1 py-0.5 font-mono text-[0.85em] font-normal text-body";
 const PROGRESS_TASK_LIST_CHECKBOX_CLASS =
   "mr-2 inline-block h-3.5 w-3.5 rounded border border-rule accent-accent align-[-0.18em]";
+const PROGRESS_MARKDOWN_BLOCK_CLASS =
+  "min-w-0 flex-1 rounded-2xl border border-rule/75 bg-sunk/35 px-3 py-2.5 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.3)] [&>div>p:first-child]:mt-0 [&>div>ul:last-child]:mb-0 [&>div>ol:last-child]:mb-0 [&>div>pre:last-child]:mb-0";
 const ASSISTANT_CODE_BLOCK_CLASS =
   "my-6 overflow-x-auto rounded-3xl border border-rule bg-ink px-5 py-4 text-[13px] leading-6 text-quiet shadow-[0_12px_30px_rgba(15,23,42,0.12)]";
 const ASSISTANT_RULE_CLASS = "my-8 border-0 border-t border-rule";
@@ -1547,9 +1549,7 @@ function shouldRenderProgressMarkdownBlock(value: string): boolean {
 
 function renderProgressMarkdown(value: string) {
   return (
-    <div
-      className="min-w-0 flex-1 [&>div>p:first-child]:mt-0 [&>div>ul:last-child]:mb-0 [&>div>ol:last-child]:mb-0 [&>div>pre:last-child]:mb-0"
-    >
+    <div className={PROGRESS_MARKDOWN_BLOCK_CLASS}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeSanitize]}
