@@ -322,6 +322,37 @@ describe("paper-library graph", () => {
     });
   });
 
+  it("caps external abstracts to the graph schema limit", async () => {
+    await seedReviewState([
+      reviewItem({ paperId: "source", title: "Source Paper", identifiers: { doi: "10.1000/source" } }),
+    ]);
+    const longAbstract = "A".repeat(5_500);
+    const graph = await buildPaperLibraryGraph({
+      project: "project-alpha",
+      scanId: "scan-1",
+      brainRoot,
+      adapters: [{
+        source: "semantic_scholar",
+        fetch: async () => ({
+          references: [{
+            title: "Long Abstract Reference",
+            identifiers: { doi: "10.3000/long-abstract" },
+            abstract: longAbstract,
+          }],
+        }),
+      }],
+      useCache: false,
+    });
+
+    expect(graph?.nodes.find((node) => node.id === "paper:doi:10.3000/long-abstract")?.abstract).toHaveLength(5_000);
+    expect(await getOrBuildPaperLibraryGraph({
+      project: "project-alpha",
+      scanId: "scan-1",
+      brainRoot,
+      adapters: [],
+    })).not.toBeNull();
+  });
+
   it("records failed source runs without blocking the local graph and reuses cached failures", async () => {
     await seedReviewState([
       reviewItem({ paperId: "source", title: "Source Paper", identifiers: { doi: "10.1000/source" } }),
