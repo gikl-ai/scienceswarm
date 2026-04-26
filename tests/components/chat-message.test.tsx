@@ -134,6 +134,27 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("cell", { name: "42" })).toHaveStyle({ textAlign: "right" });
   });
 
+  it("renders assistant markdown task lists with styled checkboxes", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        content={"- [x] Validate the chart\n- [ ] Publish the summary"}
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    const checkboxes = Array.from(
+      container.querySelectorAll('[data-testid="assistant-reply-content"] input[type="checkbox"]'),
+    );
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[0]).toHaveClass("h-4");
+    expect(checkboxes[0]).toHaveClass("accent-accent");
+    expect(checkboxes[0].closest("li")).toHaveClass("task-list-item");
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
   it("uses softer caption and metadata typography for assistant media and footer", () => {
     const timestamp = new Date(2026, 3, 22, 16, 45, 0);
     const expectedFooter = `${timestamp.toLocaleDateString(undefined, {
@@ -924,6 +945,32 @@ describe("ChatMessage", () => {
 
     expect(container.querySelector('[data-testid="assistant-progress-transcript"] hr')).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: "Current plan" })).toBeInTheDocument();
+  });
+
+  it("renders progress markdown task lists with compact checkbox styling", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "thinking",
+            text: "- [x] Inspect the timing artifact\n- [ ] Publish the summary",
+          },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const checkboxes = Array.from(
+      container.querySelectorAll('[data-testid="assistant-progress-transcript"] input[type="checkbox"]'),
+    );
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[0]).toHaveClass("h-3.5");
+    expect(checkboxes[0]).toHaveClass("accent-accent");
+    expect(checkboxes[0].closest("li")).toHaveClass("task-list-item");
   });
 
   it("renders mixed inline formatting inside visible explored transcript rows", () => {
