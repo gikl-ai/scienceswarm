@@ -110,6 +110,7 @@ import {
 } from "@/lib/structured-critique-schema";
 import { Spinner } from "@/components/spinner";
 import {
+  buildWorkspaceRawPreviewUrl,
   classifyFile,
   isRawRenderableKind,
   shouldLoadAsText,
@@ -1310,7 +1311,7 @@ function LazyFileCard({
   onSaveContent: (content: string) => Promise<void>;
   onNavigateBrainPage: (slug: string) => void;
 }) {
-  const gbrainTarget = extractGbrainPreviewTarget(filePath);
+  const gbrainTarget = useMemo(() => extractGbrainPreviewTarget(filePath), [filePath]);
   const [preview, setPreview] = useState<FilePreviewState>({
     status: "loading",
     path: filePath,
@@ -1364,14 +1365,12 @@ function LazyFileCard({
     // For raw-renderable files (images, PDFs), we can resolve immediately
     // without fetching content — just supply the raw URL.
     if (isRawRenderableKind(kind)) {
-      const params = new URLSearchParams({ action: "raw", file: filePath });
-      if (projectSlug) params.set("projectId", projectSlug);
       setPreview({
         status: "ready",
         path: filePath,
         source: "workspace",
         kind,
-        rawUrl: `/api/workspace?${params.toString()}`,
+        rawUrl: buildWorkspaceRawPreviewUrl(filePath, projectSlug) ?? undefined,
         editable: false,
       });
       return;
@@ -1417,6 +1416,10 @@ function LazyFileCard({
           content: typeof data.content === "string" ? data.content : "",
           sizeBytes: data.size,
           mime: "text/plain",
+          rawUrl:
+            kind === "html"
+              ? buildWorkspaceRawPreviewUrl(filePath, projectSlug, { preferPathRoute: true }) ?? undefined
+              : undefined,
           editable: false,
         });
       })
@@ -1434,7 +1437,7 @@ function LazyFileCard({
     return () => {
       cancelled = true;
     };
-  }, [filePath, messageId, projectSlug, staticPreviewsRef]);
+  }, [filePath, gbrainTarget, messageId, projectSlug, staticPreviewsRef]);
 
   return (
     <div className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden h-[66vh]">
@@ -2923,6 +2926,10 @@ function ProjectPageContent() {
                 source: "workspace",
                 kind,
                 content: data.content,
+                rawUrl:
+                  kind === "html"
+                    ? buildWorkspaceRawPreviewUrl(path, safeProjectSlug, { preferPathRoute: true }) ?? undefined
+                    : undefined,
                 sizeBytes: data.size,
                 editable: Boolean(safeProjectSlug),
               });

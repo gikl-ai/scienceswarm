@@ -297,7 +297,26 @@ export function LatexRenderer({ content }: { content: string }) {
   return <MarkdownRenderer content={latexToMarkdown(content)} />;
 }
 
-export function HtmlRenderer({ content, title }: { content: string; title: string }) {
+export function HtmlRenderer({
+  content,
+  rawUrl,
+  title,
+}: {
+  content: string;
+  rawUrl?: string;
+  title: string;
+}) {
+  if (rawUrl) {
+    return (
+      <iframe
+        title={title}
+        src={rawUrl}
+        sandbox="allow-scripts"
+        className="h-full w-full border-0 bg-white"
+      />
+    );
+  }
+
   return (
     <iframe
       title={title}
@@ -596,7 +615,7 @@ export function RenderedFileContent({ preview }: { preview: Extract<FilePreviewS
     case "notebook":
       return <NotebookRenderer content={content} />;
     case "html":
-      return <HtmlRenderer content={content} title={preview.path} />;
+      return <HtmlRenderer content={content} rawUrl={preview.rawUrl} title={preview.path} />;
     case "data":
       return <DataTableRenderer content={content} path={preview.path} />;
     case "pdf":

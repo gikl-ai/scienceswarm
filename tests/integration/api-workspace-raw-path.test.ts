@@ -62,8 +62,10 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
     expect(htmlRes.headers.get("Content-Security-Policy")).toContain("style-src 'self'");
     expect(htmlRes.headers.get("Content-Security-Policy")).toContain("connect-src 'none'");
     const html = await htmlRes.text();
-    expect(html).toContain("./game.js");
-    expect(html).toContain("./style.css");
+    expect(html).toContain("data-scienceswarm-inlined-asset=\"./game.js\"");
+    expect(html).toContain("globalThis.snakeLoaded = true;");
+    expect(html).toContain("data-scienceswarm-inlined-asset=\"./style.css\"");
+    expect(html).toContain("body { background: black; color: white; }");
     expect(html).toContain("data-scienceswarm-html-preview-shim");
 
     const scriptRes = await GET(

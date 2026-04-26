@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWorkspaceRawPreviewUrl,
   classifyFile,
   getShikiLanguageForPath,
   isRawRenderableKind,
@@ -49,5 +50,16 @@ describe("file visualization classifier", () => {
     expect(shouldLoadAsText(classifyFile("figure.svg"))).toBe(true);
     expect(shouldLoadAsText(classifyFile("paper.pdf"))).toBe(false);
   });
-});
 
+  it("builds path-style raw preview URLs for HTML reports with sibling assets", () => {
+    expect(
+      buildWorkspaceRawPreviewUrl("output/scm-ir-report.html", "polsci-demo", {
+        preferPathRoute: true,
+      }),
+    ).toBe("/api/workspace/raw/polsci-demo/output/scm-ir-report.html");
+    expect(
+      buildWorkspaceRawPreviewUrl("docs/summary chart.png", "project-alpha"),
+    ).toBe("/api/workspace?action=raw&file=docs%2Fsummary+chart.png&projectId=project-alpha");
+    expect(buildWorkspaceRawPreviewUrl("../secret.html", "project-alpha")).toBeNull();
+  });
+});

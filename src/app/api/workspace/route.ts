@@ -1533,24 +1533,95 @@ function isHtmlRawExtension(ext: string): boolean {
   return ext === "html" || ext === "htm";
 }
 
-function injectHtmlPreviewShim(html: string): string {
+function decodePreviewAssetPath(assetPath: string): string | null {
+  const withoutFragment = assetPath.split("#", 1)[0] ?? assetPath;
+  const withoutQuery = withoutFragment.split("?", 1)[0] ?? withoutFragment;
+  if (
+    !withoutQuery ||
+    withoutQuery.startsWith("/") ||
+    /^[a-z][a-z0-9+.-]*:/i.test(withoutQuery)
+  ) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(withoutQuery);
+  } catch {
+    return withoutQuery;
+  }
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function readPreviewAsset(baseDir: string | undefined, assetPath: string, allowedExtensions: Set<string>): string | null {
+  if (!baseDir) return null;
+  const decodedPath = decodePreviewAssetPath(assetPath);
+  if (!decodedPath) return null;
+  const ext = path.extname(decodedPath).slice(1).toLowerCase();
+  if (!allowedExtensions.has(ext)) return null;
+
+  const resolved = safeResolveInsideDirectory(baseDir, decodedPath);
+  if ("error" in resolved || resolved.stat.size > MAX_RAW_BYTES) return null;
+  return fs.readFileSync(resolved.realFile, "utf-8");
+}
+
+function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): string {
+  if (!assetBaseDir) return html;
+  const scriptExtensions = new Set(["js", "mjs", "cjs"]);
+  const styleExtensions = new Set(["css"]);
+  const getAttribute = (attributes: string, name: string): string | null => {
+    const pattern = new RegExp(`\\b${name}\\s*=\\s*([\"'])(.*?)\\1`, "i");
+    const match = attributes.match(pattern);
+    return match?.[2] ?? null;
+  };
+
+  const withStyles = html.replace(/<link\b([^>]*)>/gi, (tag, attributes: string) => {
+    const rel = getAttribute(attributes, "rel");
+    const href = getAttribute(attributes, "href");
+    if (!href || !rel?.split(/\s+/).some((entry) => entry.toLowerCase() === "stylesheet")) {
+      return tag;
+    }
+    const css = readPreviewAsset(assetBaseDir, href, styleExtensions);
+    if (css === null) return tag;
+    return `<style data-scienceswarm-inlined-asset="${escapeHtmlAttribute(href)}">\n${css.replace(/<\/style/gi, "<\\/style")}\n</style>`;
+  });
+
+  return withStyles.replace(
+    /<script\b([^>]*)\bsrc\s*=\s*(["'])(.*?)\2([^>]*)>\s*<\/script>/gi,
+    (tag, beforeSrc: string, _quote: string, src: string, afterSrc: string) => {
+      const script = readPreviewAsset(assetBaseDir, src, scriptExtensions);
+      if (script === null) return tag;
+      const attributes = `${beforeSrc} ${afterSrc}`.replace(/\s+/g, " ").trim();
+      return `<script${attributes ? ` ${attributes}` : ""} data-scienceswarm-inlined-asset="${escapeHtmlAttribute(src)}">\n${script.replace(/<\/script/gi, "<\\/script")}\n</script>`;
+    },
+  );
+}
+
+function injectHtmlPreviewShim(html: string, assetBaseDir?: string): string {
+  const previewHtml = inlineHtmlPreviewAssets(html, assetBaseDir);
   if (html.includes(HTML_PREVIEW_SHIM_MARKER)) {
-    return html;
+    return previewHtml;
   }
 
-  if (/<head(?:\s[^>]*)?>/i.test(html)) {
-    return html.replace(/<head(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
+  if (/<head(?:\s[^>]*)?>/i.test(previewHtml)) {
+    return previewHtml.replace(/<head(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
   }
 
-  if (/<body(?:\s[^>]*)?>/i.test(html)) {
-    return html.replace(/<body(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
+  if (/<body(?:\s[^>]*)?>/i.test(previewHtml)) {
+    return previewHtml.replace(/<body(?:\s[^>]*)?>/i, (match) => `${match}${HTML_PREVIEW_STORAGE_SHIM}`);
   }
 
-  if (/<!doctype html[^>]*>/i.test(html)) {
-    return html.replace(/<!doctype html[^>]*>/i, (match) => `${match}\n${HTML_PREVIEW_STORAGE_SHIM}`);
+  if (/<!doctype html[^>]*>/i.test(previewHtml)) {
+    return previewHtml.replace(/<!doctype html[^>]*>/i, (match) => `${match}\n${HTML_PREVIEW_STORAGE_SHIM}`);
   }
 
-  return `${HTML_PREVIEW_STORAGE_SHIM}${html}`;
+  return `${HTML_PREVIEW_STORAGE_SHIM}${previewHtml}`;
 }
 
 function buildBufferedRawPreviewResponse(params: {
@@ -1558,9 +1629,10 @@ function buildBufferedRawPreviewResponse(params: {
   fileName: string;
   buffer: Buffer;
   contentType: string;
+  htmlAssetBaseDir?: string;
 }): Response {
   const body = isHtmlRawExtension(params.ext)
-    ? injectHtmlPreviewShim(params.buffer.toString("utf-8"))
+    ? injectHtmlPreviewShim(params.buffer.toString("utf-8"), params.htmlAssetBaseDir)
     : new Uint8Array(params.buffer);
   const contentLength = typeof body === "string"
     ? Buffer.byteLength(body)
@@ -1895,6 +1967,7 @@ async function handleRaw(filePath: string, projectId: string | null) {
       fileName: path.basename(realFile),
       buffer: buf,
       contentType,
+      htmlAssetBaseDir: path.dirname(realFile),
     });
   }
 
@@ -1924,6 +1997,7 @@ async function handleRaw(filePath: string, projectId: string | null) {
       fileName: path.basename(realFile),
       buffer: buf,
       contentType,
+      htmlAssetBaseDir: path.dirname(realFile),
     });
   }
 
@@ -1994,6 +2068,7 @@ async function handleRaw(filePath: string, projectId: string | null) {
     fileName: path.basename(realFile),
     buffer: buf,
     contentType,
+    htmlAssetBaseDir: path.dirname(realFile),
   });
 }
 
