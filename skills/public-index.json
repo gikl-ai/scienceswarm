@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-25T01:34:38.178Z",
+  "generatedAt": "2026-04-26T06:00:10.764Z",
   "skills": [
     {
       "slug": "db-arxiv",
@@ -512,6 +512,119 @@
       "owner": "scienceswarm",
       "status": "ready",
       "summary": "Optional reasoning patterns for evidence maps, design critique, next experiments, model-system fit, target prioritization, multimodal interpretation, and decision updates."
+    },
+    {
+      "slug": "scienceswarm-scm-data-acquisition",
+      "name": "ScienceSwarm SCM Data Acquisition",
+      "description": "Pull and curate the country-year (or unit-time) panel needed for synthetic control. Validate balance, coverage, and donor-pool integrity before any modeling.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "data",
+        "panel"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Second step of the SCM pipeline: assemble a balanced unit-time panel with documented sources and validated coverage."
+    },
+    {
+      "slug": "scienceswarm-scm-inference-and-placebos",
+      "name": "ScienceSwarm SCM Inference and Placebos",
+      "description": "Run permutation-based inference for synthetic control: in-space placebos across donors, in-time placebos across alternate treatment years, and leave-one-out donor sensitivity.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "inference",
+        "placebo"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fifth step of the SCM pipeline: produce honest non-parametric inference and falsification tests."
+    },
+    {
+      "slug": "scienceswarm-scm-method-comparison",
+      "name": "ScienceSwarm SCM Method Comparison",
+      "description": "Run modern SCM variants — generalized SCM (Xu), synthetic DiD (Arkhangelsky et al.), and doubly-robust SC (Ben-Michael et al.) — alongside classic Abadie SCM and gate the result on cross-method sign consistency.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "robustness"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fourth step of the SCM pipeline: cross-check the classic-SC ATT against modern variants and refuse to report fragile, single-method results."
+    },
+    {
+      "slug": "scienceswarm-scm-pretreatment-fit",
+      "name": "ScienceSwarm SCM Pre-Treatment Fit",
+      "description": "Fit classic Abadie synthetic control: choose predictors, solve donor weights via the constrained quadratic program, and gate the fit on pre-period RMSPE relative to outcome variability.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "fitting",
+        "abadie"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Third step of the SCM pipeline: produce the synthetic counterfactual and gate it on pre-period fit quality."
+    },
+    {
+      "slug": "scienceswarm-scm-question-design",
+      "name": "ScienceSwarm SCM Question Design",
+      "description": "Frame an international-relations or social-science research question for synthetic control analysis: identify the treated unit, treatment date, donor pool, outcome of interest, and decide whether SCM is the right method.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "causal-inference",
+        "planning"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "First step of the SCM pipeline: turn a substantive question about a policy shock, sanction, treaty, or regime change into an SCM-fit research design."
+    },
+    {
+      "slug": "scienceswarm-scm-results-rendering",
+      "name": "ScienceSwarm SCM Results Rendering",
+      "description": "Render the synthetic-control results as a single interactive HTML report with animated counterfactual trajectory, donor weights, placebo distribution, what-if falsification chart, method-comparison forest plot, methodology modal, and an auto-generated paper-ready Methods paragraph.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "visualization",
+        "html"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Sixth and final step of the SCM pipeline: produce the publication-grade HTML deliverable."
     },
     {
       "slug": "db-semantic-scholar",

@@ -1,0 +1,25 @@
+{
+  "slug": "scienceswarm-scm-pretreatment-fit",
+  "name": "ScienceSwarm SCM Pre-Treatment Fit",
+  "description": "Fit classic Abadie synthetic control: choose predictors, solve donor weights via the constrained quadratic program, and gate the fit on pre-period RMSPE relative to outcome variability.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "fitting",
+    "abadie"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Third step of the SCM pipeline: produce the synthetic counterfactual and gate it on pre-period fit quality.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-25T00:00:00.000Z",
+  "updatedAt": "2026-04-25T00:00:00.000Z"
+}

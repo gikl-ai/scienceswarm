@@ -1,0 +1,25 @@
+{
+  "slug": "scienceswarm-scm-data-acquisition",
+  "name": "ScienceSwarm SCM Data Acquisition",
+  "description": "Pull and curate the country-year (or unit-time) panel needed for synthetic control. Validate balance, coverage, and donor-pool integrity before any modeling.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "data",
+    "panel"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Second step of the SCM pipeline: assemble a balanced unit-time panel with documented sources and validated coverage.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-25T00:00:00.000Z",
+  "updatedAt": "2026-04-25T00:00:00.000Z"
+}

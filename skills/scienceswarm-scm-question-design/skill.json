@@ -1,0 +1,25 @@
+{
+  "slug": "scienceswarm-scm-question-design",
+  "name": "ScienceSwarm SCM Question Design",
+  "description": "Frame an international-relations or social-science research question for synthetic control analysis: identify the treated unit, treatment date, donor pool, outcome of interest, and decide whether SCM is the right method.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "causal-inference",
+    "planning"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "First step of the SCM pipeline: turn a substantive question about a policy shock, sanction, treaty, or regime change into an SCM-fit research design.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-25T00:00:00.000Z",
+  "updatedAt": "2026-04-25T00:00:00.000Z"
+}
