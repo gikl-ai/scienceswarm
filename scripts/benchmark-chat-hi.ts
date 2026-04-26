@@ -58,8 +58,19 @@ export interface ChatBenchmarkReportRowMetadata {
 export interface ChatBenchmarkTimingPhaseSummary {
   name: string;
   durationMs: number;
+  startedAtMs?: number;
+  endedAtMs?: number;
   skipped?: boolean;
   inferred?: boolean;
+}
+
+export interface ChatBenchmarkObservedSplit {
+  chatReadinessDurationMs: number | null;
+  gatewayConnectAuthDurationMs: number | null;
+  requestToSendAckMs: number | null;
+  requestToFirstGatewayEventMs: number | null;
+  requestToFirstAssistantTextMs: number | null;
+  requestToFinalAssistantTextMs: number | null;
 }
 
 export interface ChatBenchmarkTimingArtifactSummary {
@@ -71,6 +82,7 @@ export interface ChatBenchmarkTimingArtifactSummary {
   phaseCount: number;
   phases: ChatBenchmarkTimingPhaseSummary[];
   promptCharCounts: Record<string, number>;
+  observedSplit: ChatBenchmarkObservedSplit | null;
 }
 
 export type ChatBenchmarkTimingArtifactUnavailableReason =
@@ -337,6 +349,104 @@ function formatPromptBudgetHighlights(
   return highlights.length === 0 ? "none" : highlights.join(", ");
 }
 
+function timingPhaseByName(
+  phases: ChatBenchmarkTimingPhaseSummary[],
+  name: string,
+): ChatBenchmarkTimingPhaseSummary | null {
+  for (const phase of phases) {
+    if (phase.name === name) {
+      return phase;
+    }
+  }
+  return null;
+}
+
+function earliestPhaseStartedAtMs(
+  phases: ChatBenchmarkTimingPhaseSummary[],
+): number | null {
+  let earliest: number | null = null;
+  for (const phase of phases) {
+    if (typeof phase.startedAtMs !== "number") {
+      continue;
+    }
+    earliest =
+      earliest === null ? phase.startedAtMs : Math.min(earliest, phase.startedAtMs);
+  }
+  return earliest;
+}
+
+function phaseEndedOffsetMs(
+  phases: ChatBenchmarkTimingPhaseSummary[],
+  name: string,
+): number | null {
+  const requestStartedAtMs = earliestPhaseStartedAtMs(phases);
+  const phase = timingPhaseByName(phases, name);
+  if (
+    requestStartedAtMs === null ||
+    !phase ||
+    typeof phase.endedAtMs !== "number"
+  ) {
+    return null;
+  }
+  return Math.max(0, Math.round(phase.endedAtMs - requestStartedAtMs));
+}
+
+function buildObservedTimingSplit(
+  phases: ChatBenchmarkTimingPhaseSummary[],
+): ChatBenchmarkObservedSplit | null {
+  const observedSplit: ChatBenchmarkObservedSplit = {
+    chatReadinessDurationMs:
+      timingPhaseByName(phases, "chat_readiness")?.durationMs ?? null,
+    gatewayConnectAuthDurationMs:
+      timingPhaseByName(phases, "gateway_connect_auth")?.durationMs ?? null,
+    requestToSendAckMs: phaseEndedOffsetMs(phases, "chat_send_ack"),
+    requestToFirstGatewayEventMs: phaseEndedOffsetMs(phases, "first_gateway_event"),
+    requestToFirstAssistantTextMs: phaseEndedOffsetMs(
+      phases,
+      "first_assistant_text",
+    ),
+    requestToFinalAssistantTextMs: phaseEndedOffsetMs(
+      phases,
+      "final_assistant_text",
+    ),
+  };
+
+  return Object.values(observedSplit).some((value) => value !== null)
+    ? observedSplit
+    : null;
+}
+
+function formatObservedTimingArtifactSplit(
+  observedSplit: ChatBenchmarkObservedSplit | null | undefined,
+): string | null {
+  if (!observedSplit) {
+    return null;
+  }
+
+  const parts = [
+    observedSplit.chatReadinessDurationMs === null
+      ? null
+      : `readiness ${observedSplit.chatReadinessDurationMs} ms`,
+    observedSplit.gatewayConnectAuthDurationMs === null
+      ? null
+      : `connect/auth ${observedSplit.gatewayConnectAuthDurationMs} ms`,
+    observedSplit.requestToSendAckMs === null
+      ? null
+      : `request->ack ${observedSplit.requestToSendAckMs} ms`,
+    observedSplit.requestToFirstGatewayEventMs === null
+      ? null
+      : `request->first gateway event ${observedSplit.requestToFirstGatewayEventMs} ms`,
+    observedSplit.requestToFirstAssistantTextMs === null
+      ? null
+      : `request->first assistant text ${observedSplit.requestToFirstAssistantTextMs} ms`,
+    observedSplit.requestToFinalAssistantTextMs === null
+      ? null
+      : `request->final text ${observedSplit.requestToFinalAssistantTextMs} ms`,
+  ].filter((part): part is string => Boolean(part));
+
+  return parts.length === 0 ? null : parts.join(", ");
+}
+
 function isTimingArtifactUnavailable(
   timingArtifact: ChatBenchmarkTimingArtifactResult | null | undefined,
 ): timingArtifact is ChatBenchmarkTimingArtifactUnavailableSummary {
@@ -446,6 +556,10 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
     timingArtifact && !isTimingArtifactUnavailable(timingArtifact)
       ? formatSkippedTimingPhasesForSummary(timingArtifact.phases)
       : null;
+  const observedTimingArtifactSplit =
+    timingArtifact && !isTimingArtifactUnavailable(timingArtifact)
+      ? formatObservedTimingArtifactSplit(timingArtifact.observedSplit)
+      : null;
   return [
     "Chat Hi Benchmark",
     `Status: ${summary.status} ${summary.ok ? "ok" : "failed"}`,
@@ -475,6 +589,9 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
             `Timing artifact: ${timingArtifact.totalDurationMs} ms, outcome ${
               timingArtifact.outcome ?? "unknown"
             }, status ${timingArtifact.status ?? "unknown"}`,
+            ...(observedTimingArtifactSplit
+              ? [`Server timing: ${observedTimingArtifactSplit}`]
+              : []),
             `Timing phases: ${formatTimingPhasesForSummary(timingArtifact.phases)}`,
             ...(skippedTimingPhases
               ? [`Skipped phases: ${skippedTimingPhases}`]
@@ -608,6 +725,12 @@ export function summarizeLatestTimingArtifact(
         return [{
           name,
           durationMs: Math.round(durationMs),
+          ...(typeof phase.startedAtMs === "number"
+            ? { startedAtMs: Math.round(phase.startedAtMs) }
+            : {}),
+          ...(typeof phase.endedAtMs === "number"
+            ? { endedAtMs: Math.round(phase.endedAtMs) }
+            : {}),
           ...(typeof phase.skipped === "boolean"
             ? { skipped: phase.skipped }
             : {}),
@@ -636,6 +759,7 @@ export function summarizeLatestTimingArtifact(
     phaseCount: phases.length,
     phases,
     promptCharCounts,
+    observedSplit: buildObservedTimingSplit(phases),
   };
 }
 
