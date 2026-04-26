@@ -1627,7 +1627,9 @@ async function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): Pro
     }
     const css = await readPreviewAsset(assetBaseDir, href, styleExtensions);
     if (css === null) return tag;
-    return `<style data-scienceswarm-inlined-asset="${escapeHtmlAttribute(href)}">\n${css.replace(/<\/style/gi, "<\\/style")}\n</style>`;
+    const media = getHtmlAttribute(attributes, "media");
+    const mediaAttribute = media ? ` media="${escapeHtmlAttribute(media)}"` : "";
+    return `<style${mediaAttribute} data-scienceswarm-inlined-asset="${escapeHtmlAttribute(href)}">\n${css.replace(/<\/style/gi, "<\\/style")}\n</style>`;
   });
 
   return replaceHtmlMatches(

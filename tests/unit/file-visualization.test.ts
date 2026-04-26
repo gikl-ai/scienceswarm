@@ -61,5 +61,11 @@ describe("file visualization classifier", () => {
       buildWorkspaceRawPreviewUrl("docs/summary chart.png", "project-alpha"),
     ).toBe("/api/workspace?action=raw&file=docs%2Fsummary+chart.png&projectId=project-alpha");
     expect(buildWorkspaceRawPreviewUrl("../secret.html", "project-alpha")).toBeNull();
+    expect(buildWorkspaceRawPreviewUrl("..\\secret.html", "project-alpha")).toBeNull();
+    expect(
+      buildWorkspaceRawPreviewUrl("output\\scm-ir-report.html", "polsci-demo", {
+        preferPathRoute: true,
+      }),
+    ).toBe("/api/workspace/raw/polsci-demo/output/scm-ir-report.html");
   });
 });

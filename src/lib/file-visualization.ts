@@ -121,7 +121,7 @@ export function getFileDisplayName(filePath: string): string {
 
 export function normalizeWorkspaceRelativePath(filePath: string): string | null {
   const segments: string[] = [];
-  for (const segment of filePath.split("/")) {
+  for (const segment of filePath.replaceAll("\\", "/").split("/")) {
     if (!segment || segment === ".") {
       continue;
     }

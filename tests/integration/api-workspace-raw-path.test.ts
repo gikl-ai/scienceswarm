@@ -45,7 +45,7 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
     mkdirSync(snakeDir, { recursive: true });
     writeFileSync(
       path.join(snakeDir, "index.html"),
-      "<!doctype html><title>Snake</title><link rel=stylesheet href=./style.css><script src=./game.js></script>",
+      "<!doctype html><title>Snake</title><link rel=stylesheet media=print href=./style.css><script src=./game.js></script>",
     );
     writeFileSync(path.join(snakeDir, "style.css"), "body { background: black; color: white; }");
     writeFileSync(path.join(snakeDir, "game.js"), "globalThis.snakeLoaded = true;");
@@ -65,6 +65,7 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
     expect(html).toContain("data-scienceswarm-inlined-asset=\"./game.js\"");
     expect(html).toContain("globalThis.snakeLoaded = true;");
     expect(html).toContain("data-scienceswarm-inlined-asset=\"./style.css\"");
+    expect(html).toContain("<style media=\"print\"");
     expect(html).toContain("body { background: black; color: white; }");
     expect(html).toContain("data-scienceswarm-html-preview-shim");
 
