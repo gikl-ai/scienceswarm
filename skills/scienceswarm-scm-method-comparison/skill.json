@@ -1,0 +1,24 @@
+{
+  "slug": "scienceswarm-scm-method-comparison",
+  "name": "ScienceSwarm SCM Method Comparison",
+  "description": "Run modern SCM variants — generalized SCM (Xu), synthetic DiD (Arkhangelsky et al.), and doubly-robust SC (Ben-Michael et al.) — alongside classic Abadie SCM and gate the result on cross-method sign consistency.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "robustness"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fourth step of the SCM pipeline: cross-check the classic-SC ATT against modern variants and refuse to report fragile, single-method results.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-25T00:00:00.000Z",
+  "updatedAt": "2026-04-25T00:00:00.000Z"
+}

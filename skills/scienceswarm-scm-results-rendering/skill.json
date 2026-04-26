@@ -1,0 +1,25 @@
+{
+  "slug": "scienceswarm-scm-results-rendering",
+  "name": "ScienceSwarm SCM Results Rendering",
+  "description": "Render the synthetic-control results as a single interactive HTML report with animated counterfactual trajectory, donor weights, placebo distribution, what-if slider, multi-outcome panel, methodology modal, and an auto-generated paper-ready Methods paragraph.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "visualization",
+    "html"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Sixth and final step of the SCM pipeline: produce the publication-grade HTML deliverable.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-25T00:00:00.000Z",
+  "updatedAt": "2026-04-25T00:00:00.000Z"
+}

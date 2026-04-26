@@ -21,6 +21,12 @@ const eslintConfig = defineConfig([
     "build/**",
     ".worktrees/**",
     "next-env.d.ts",
+    // Tutorial-generated artifacts: scripts emit data/ and output/ folders
+    // (e.g. plotly.js, jquery, crosstalk bundles emitted by htmlwidgets).
+    // These are gitignored per-tutorial but materialize on any dev's
+    // machine that runs the pipeline.
+    "docs/tutorials/*/data/**",
+    "docs/tutorials/*/output/**",
   ]),
   {
     files: ["**/*.{ts,tsx,mts,mjs,js,jsx}"],

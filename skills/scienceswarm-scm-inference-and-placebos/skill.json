@@ -1,0 +1,25 @@
+{
+  "slug": "scienceswarm-scm-inference-and-placebos",
+  "name": "ScienceSwarm SCM Inference and Placebos",
+  "description": "Run permutation-based inference for synthetic control: in-space placebos across donors, in-time placebos across alternate treatment years, and leave-one-out donor sensitivity.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "inference",
+    "placebo"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fifth step of the SCM pipeline: produce honest non-parametric inference and falsification tests.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-25T00:00:00.000Z",
+  "updatedAt": "2026-04-25T00:00:00.000Z"
+}
