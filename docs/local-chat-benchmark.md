@@ -44,6 +44,15 @@ latency fields.
 - `Prompt chars` and `Prompt highlights` help verify that fast-path turns are
   not silently picking up large recent-context or workspace-file payloads.
 
+## Diagnose slow runs
+
+- Slow `Headers` or a large `Observed split` before the first chunk usually
+  points at the local ScienceSwarm request path: readiness checks, workspace
+  prep, or prompt/context assembly before OpenClaw starts responding.
+- Slow `Server timing` after `request->ack` or `request->first gateway event`
+  usually points at downstream OpenClaw or model work after the request already
+  left the local route handler.
+
 ## Reporting in PRs
 
 When you include benchmark evidence in a PR body, capture:
