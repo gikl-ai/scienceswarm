@@ -14,14 +14,17 @@ and computes:
     distinguishes Poisson, GOE, GUE, and GSE.
   - the spectral density rho(E), averaged over disorder realizations.
 
-Reference values for <r> (Atas-Bogomolny-Roux-Roy 2013, PRL 110.084101):
+Reference values for <r> from the Atas-Bogomolny-Roux-Roy 2013 surmise
+(PRL 110.084101).  The surmise mean is computed by integrating r * P(r)
+on r in [0, 1] for each ensemble class:
     Poisson:  2 ln 2 - 1                     ~  0.38629
-    GOE:      4 - 2 sqrt 3                   ~  0.53590  (often quoted 0.5307; surmise vs. exact)
-    GUE:      Atas surmise                   ~  0.59945
-    GSE:      Atas surmise                   ~  0.67617
+    GOE:      Atas surmise mean              ~  0.53071
+    GUE:      Atas surmise mean              ~  0.59945
+    GSE:      Atas surmise mean              ~  0.67617
 
-We use the Atas surmise as the reference: <r>_GOE = 0.53590,
-<r>_GUE = 0.59945, <r>_GSE = 0.67617.
+(Do not confuse the GOE gap-ratio surmise mean ~ 0.5307 with the unrelated
+Wigner level-spacing value 4 - 2 sqrt 3 ~ 0.5359, which is the mean of the
+spacing distribution P(s) and not the gap-ratio surmise.)
 
 For N = 22 (the default), N mod 8 = 6 -> GUE in the even-parity sector.
 
@@ -44,7 +47,7 @@ HERE = Path(__file__).resolve().parent
 # Atas-Bogomolny-Roux-Roy 2013 surmise reference values for <r>.
 R_REFERENCE: dict[str, float] = {
     "Poisson": 0.38629,
-    "GOE": 0.53590,
+    "GOE": 0.53071,
     "GUE": 0.59945,
     "GSE": 0.67617,
 }
@@ -67,7 +70,13 @@ def expected_class(N: int) -> str:
       N mod 8 = 4  -> GSE
       N mod 8 = 6  -> GUE
     """
-    return {0: "GOE", 2: "GUE", 4: "GSE", 6: "GUE"}[N % 8]
+    table = {0: "GOE", 2: "GUE", 4: "GSE", 6: "GUE"}
+    if N % 8 not in table:
+        raise ValueError(
+            f"N = {N} is odd; SYK_4 requires an even number of Majoranas. "
+            "Re-run 01_diagonalize.py with --N <even>."
+        )
+    return table[N % 8]
 
 
 def spectral_form_factor(
