@@ -11,6 +11,7 @@ import { hashContent } from "@/lib/workspace-manager";
 import type { ProjectManifest } from "@/brain/types";
 import type { ProjectWatchConfig } from "@/lib/watch/types";
 import { resolvePgliteDatabasePath } from "@/lib/capture/materialize-memory";
+import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 
 let TEST_ROOT = "";
 
@@ -75,6 +76,7 @@ async function setupBrain() {
   await resetBrainStore();
   assignTestRoot();
   vi.stubEnv("SCIENCESWARM_DIR", TEST_ROOT);
+  vi.stubEnv("BRAIN_ROOT", join(TEST_ROOT, "brain"));
   // Decision 3A: capture writes thread getCurrentUserHandle() and
   // throw loudly if SCIENCESWARM_USER_HANDLE is unset. Stub it here so
   // every capture route test gets a sane default handle.
@@ -807,7 +809,8 @@ describe("GET/POST /api/brain/watch-config", () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     const openScienceRoot = join(tmpdir(), "scienceswarm-watch-compose-project-bootstrap");
     const brainRoot = join(openScienceRoot, "brain");
-    process.env.SCIENCESWARM_DIR = openScienceRoot;
+    vi.stubEnv("SCIENCESWARM_DIR", openScienceRoot);
+    vi.stubEnv("BRAIN_ROOT", brainRoot);
     rmSync(openScienceRoot, { recursive: true, force: true });
     brainInitModule.initBrain({ root: brainRoot, name: "Test Researcher" });
     mockLoadBrainConfig.mockReturnValue({
@@ -849,7 +852,6 @@ describe("GET/POST /api/brain/watch-config", () => {
         readFileSync(join(openScienceRoot, "projects", "alpha", ".brain", "state", "manifest.json"), "utf-8"),
       ).toContain('"title": "Alpha Project"');
     } finally {
-      delete process.env.SCIENCESWARM_DIR;
       rmSync(openScienceRoot, { recursive: true, force: true });
     }
   });
@@ -2042,9 +2044,7 @@ describe("POST /api/brain/import-project", () => {
     expect(data.sourcePagePaths).toEqual([
       `wiki/resources/imports/alpha-project/notes-summary-${hashContent("notes/summary.md").slice(0, 8)}.md`,
     ]);
-    expect(
-      readFileSync(join(TEST_ROOT, "projects", "alpha-project", ".brain", data.projectPagePath), "utf-8"),
-    ).toContain("Alpha Project");
+    expect(readFileSync(join(getScienceSwarmBrainRoot(), data.projectPagePath), "utf-8")).toContain("Alpha Project");
     expect(readFileSync(data.manifestPath, "utf-8")).toContain('"slug": "alpha-project"');
   });
 
@@ -2242,9 +2242,7 @@ describe("POST /api/brain/import-project", () => {
       durationMs: 0,
       mode: "gbrain-direct",
     });
-    expect(
-      readFileSync(join(TEST_ROOT, "projects", "alpha-project", ".brain", data.projectPagePath), "utf-8"),
-    ).toContain("Alpha Project");
+    expect(readFileSync(join(getScienceSwarmBrainRoot(), data.projectPagePath), "utf-8")).toContain("Alpha Project");
   });
 
   it("does not re-import the legacy disk corpus after direct gbrain commit", async () => {
@@ -2312,9 +2310,7 @@ describe("POST /api/brain/import-project", () => {
       durationMs: 0,
       mode: "gbrain-direct",
     });
-    expect(
-      readFileSync(join(TEST_ROOT, "projects", "alpha-project", ".brain", data.projectPagePath), "utf-8"),
-    ).toContain("Alpha Project");
+    expect(readFileSync(join(getScienceSwarmBrainRoot(), data.projectPagePath), "utf-8")).toContain("Alpha Project");
   });
 });
 

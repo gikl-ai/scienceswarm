@@ -79,6 +79,10 @@ export function getScienceSwarmBrainRoot(): string {
   );
 }
 
+export function isDefaultScienceSwarmBrainRoot(brainRoot: string): boolean {
+  return path.resolve(brainRoot) === path.resolve(getScienceSwarmBrainRoot());
+}
+
 export function resolveScienceSwarmBrainRootFromValues(
   values: Record<string, string | undefined>,
 ): string {

@@ -9,6 +9,7 @@ import {
   readProjectImportSummary,
   type ProjectImportSummary,
 } from "@/lib/state/project-import-summary";
+import { isDefaultScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 import { buildArtifactSourceSnapshotFromPage } from "@/lib/artifact-source-snapshots";
 import { normalizeArtifactSourceSnapshots } from "@/lib/artifact-provenance";
@@ -330,6 +331,13 @@ async function loadProjectImportSummaryForConfig(
   project: string,
 ): Promise<ProjectImportSummary | null> {
   try {
+    if (isDefaultScienceSwarmBrainRoot(config.root)) {
+      const canonicalSummaryRecord = await readProjectImportSummary(project);
+      if (canonicalSummaryRecord) {
+        return canonicalSummaryRecord.lastImport;
+      }
+    }
+
     const summaryRecord = await readProjectImportSummary(
       project,
       getProjectStateRootForBrainRoot(project, config.root),

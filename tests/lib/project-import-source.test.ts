@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { getLegacyProjectStudyFilePath } from "@/lib/studies/state";
+
 let root = "";
 const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
 const ORIGINAL_BRAIN_ROOT = process.env.BRAIN_ROOT;
@@ -59,16 +61,17 @@ describe("project import source state", () => {
       lastJobId: "job-1",
     });
 
-    const persistedPath = path.join(
+    const persistedPath = getLegacyProjectStudyFilePath("project-alpha", "import-source.json");
+    expect(existsSync(persistedPath)).toBe(true);
+    expect(readFileSync(persistedPath, "utf-8")).toContain("\"folderPath\": \"/tmp/project-alpha\"");
+    expect(existsSync(path.join(
       process.env.SCIENCESWARM_DIR!,
       "projects",
       "project-alpha",
       ".brain",
       "state",
       "import-source.json",
-    );
-    expect(existsSync(persistedPath)).toBe(true);
-    expect(readFileSync(persistedPath, "utf-8")).toContain("\"folderPath\": \"/tmp/project-alpha\"");
+    ))).toBe(false);
   });
 
   it("skips malformed legacy import-job records while inferring sources", async () => {

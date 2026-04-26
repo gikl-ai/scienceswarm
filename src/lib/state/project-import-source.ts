@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { getScienceSwarmBrainRoot, resolveConfiguredPath } from "@/lib/scienceswarm-paths";
+import { getLegacyProjectStudyFilePath } from "@/lib/studies/state";
 import { readJsonFile, writeJsonFile } from "./atomic-json";
 import { assertSafeProjectSlug } from "./project-manifests";
 import { getProjectLocalStateRoot } from "./project-storage";
@@ -24,6 +25,10 @@ interface ImportJobCandidate {
 }
 
 function getProjectImportSourcePath(project: string): string {
+  return getLegacyProjectStudyFilePath(assertSafeProjectSlug(project), "import-source.json");
+}
+
+function getLegacyProjectImportSourcePath(project: string): string {
   return path.join(getProjectLocalStateRoot(assertSafeProjectSlug(project)), "import-source.json");
 }
 
@@ -114,6 +119,15 @@ export async function readProjectImportSource(
   let record: unknown = null;
   try {
     record = await readJsonFile<unknown>(getProjectImportSourcePath(safeProject));
+  } catch {
+    record = null;
+  }
+  if (isProjectImportSourceRecord(record) && record.project === safeProject) {
+    return record;
+  }
+
+  try {
+    record = await readJsonFile<unknown>(getLegacyProjectImportSourcePath(safeProject));
   } catch {
     record = null;
   }

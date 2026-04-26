@@ -150,6 +150,45 @@ describe("Study migration planning", () => {
     expect(plan.entries.some((entry) => entry.relativePath.includes("outside-secret"))).toBe(false);
     expect(plan.entries.some((entry) => entry.sourcePath?.endsWith("outside-secret.md"))).toBe(false);
   });
+
+  it("fails dry-run planning when a legacy tree exceeds the file bound", async () => {
+    const roots = await installFixture();
+    const manifestPath = path.join(roots.projectsRoot, "project-alpha", ".brain", "state", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf-8")) as { taskPaths: string[] };
+    manifest.taskPaths.push("wiki/projects/project-alpha/tasks");
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
+    await writeFile(
+      path.join(roots.projectsRoot, "project-alpha", ".brain", "wiki", "projects", "project-alpha", "tasks", "task-two.md"),
+      "# Task two\n",
+      "utf-8",
+    );
+
+    await expect(planLegacyProjectStateMigration({
+      legacyProjectSlug: "project-alpha",
+      studyId: "study_alpha",
+      threadId: "thread_alpha",
+      projectsRoot: roots.projectsRoot,
+      brainRoot: roots.brainRoot,
+      stateRoot: roots.stateRoot,
+      generatedAt: "2026-04-26T00:00:00.000Z",
+      maxFilesPerTree: 1,
+    })).rejects.toThrow("Legacy migration tree file limit exceeded");
+  });
+
+  it("rejects invalid migration file bounds instead of disabling the guard", async () => {
+    const roots = await installFixture();
+
+    await expect(planLegacyProjectStateMigration({
+      legacyProjectSlug: "project-alpha",
+      studyId: "study_alpha",
+      threadId: "thread_alpha",
+      projectsRoot: roots.projectsRoot,
+      brainRoot: roots.brainRoot,
+      stateRoot: roots.stateRoot,
+      generatedAt: "2026-04-26T00:00:00.000Z",
+      maxFilesPerTree: Number.NaN,
+    })).rejects.toThrow("Invalid Study migration file limit");
+  });
 });
 
 describe("Study migration execution", () => {

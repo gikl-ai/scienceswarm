@@ -17,6 +17,7 @@ import {
   readProjectImportSummary,
   type ProjectImportSummary,
 } from "@/lib/state/project-import-summary";
+import { isDefaultScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import { refreshProjectWatchFrontier } from "@/lib/watch";
 import {
   getProjectBrainRootForBrainRoot,
@@ -237,6 +238,11 @@ async function loadProjectManifest(
   config: BrainConfig,
   project: string,
 ): Promise<ProjectManifest> {
+  if (isDefaultScienceSwarmBrainRoot(config.root)) {
+    const canonical = await readProjectManifest(project);
+    if (canonical) return canonical;
+  }
+
   const existing = await readProjectManifest(
     project,
     getProjectStateRootForBrainRoot(project, config.root),
@@ -792,6 +798,13 @@ async function loadProjectImportSummary(
   project: string,
 ): Promise<ProjectImportSummary | null> {
   try {
+    if (isDefaultScienceSwarmBrainRoot(config.root)) {
+      const canonicalSummaryRecord = await readProjectImportSummary(project);
+      if (canonicalSummaryRecord) {
+        return canonicalSummaryRecord.lastImport;
+      }
+    }
+
     const summaryRecord = await readProjectImportSummary(
       project,
       getProjectStateRootForBrainRoot(project, config.root),
