@@ -30,6 +30,7 @@ import type {
   PaperReviewItem,
   PaperReviewItemState,
 } from "@/lib/paper-library/contracts";
+import { computeGraphInsights } from "@/lib/paper-library/graph-insights";
 import { buildWorkspaceHrefForSlug } from "@/lib/project-navigation";
 
 type PaperLibraryStep = "scan" | "review" | "apply" | "graph" | "history";
@@ -1999,60 +2000,15 @@ export function PaperLibraryCommandCenter({
       totalEdgeCount: edges.length,
     };
   }, [graphData, graphNodeFilter, graphPerspective, graphQuery]);
-  const graphInsights = useMemo(() => {
-    const nodes = graphDisplayData?.nodes ?? [];
-    const edges = graphDisplayData?.edges ?? [];
-    const degreeByNodeId = new Map<string, number>();
-    const priorByNodeId = new Map<string, number>();
-    const derivativeByNodeId = new Map<string, number>();
-    for (const node of nodes) {
-      degreeByNodeId.set(node.id, 0);
-      priorByNodeId.set(node.id, 0);
-      derivativeByNodeId.set(node.id, 0);
-    }
-    for (const edge of edges) {
-      degreeByNodeId.set(edge.sourceNodeId, (degreeByNodeId.get(edge.sourceNodeId) ?? 0) + 1);
-      degreeByNodeId.set(edge.targetNodeId, (degreeByNodeId.get(edge.targetNodeId) ?? 0) + 1);
-      if (edge.kind === "references") {
-        priorByNodeId.set(edge.sourceNodeId, (priorByNodeId.get(edge.sourceNodeId) ?? 0) + 1);
-      }
-      if (edge.kind === "cited_by") {
-        derivativeByNodeId.set(edge.sourceNodeId, (derivativeByNodeId.get(edge.sourceNodeId) ?? 0) + 1);
-      }
-    }
-
-    const sortedNodes = [...nodes].sort((left, right) => {
-      if (left.local !== right.local) return left.local ? -1 : 1;
-      const degreeDelta = (degreeByNodeId.get(right.id) ?? 0) - (degreeByNodeId.get(left.id) ?? 0);
-      if (degreeDelta !== 0) return degreeDelta;
-      return graphNodeTitle(left).localeCompare(graphNodeTitle(right));
-    });
-    const selectedNode = selectedGraphNodeId
-      ? (nodes.find((node) => node.id === selectedGraphNodeId) ?? null)
-      : null;
-    const selectedEdges = selectedNode
-      ? edges.filter((edge) => edge.sourceNodeId === selectedNode.id || edge.targetNodeId === selectedNode.id)
-      : [];
-    const neighborIds = new Set(
-      selectedEdges.flatMap((edge) => [
-        edge.sourceNodeId === selectedNode?.id ? edge.targetNodeId : edge.sourceNodeId,
-      ]),
-    );
-    const neighborNodes = sortedNodes.filter((node) => neighborIds.has(node.id)).slice(0, 6);
-
-    return {
-      degreeByNodeId,
-      derivativeByNodeId,
-      externalCount: nodes.filter((node) => !node.local && !node.suggestion && node.kind !== "bridge_suggestion").length,
-      localCount: nodes.filter((node) => node.local).length,
-      neighborNodes,
-      priorByNodeId,
-      selectedEdges,
-      selectedNode,
-      sortedNodes,
-      suggestionCount: nodes.filter((node) => node.suggestion || node.kind === "bridge_suggestion").length,
-    };
-  }, [graphDisplayData, selectedGraphNodeId]);
+  const graphInsights = useMemo(
+    () =>
+      computeGraphInsights({
+        nodes: graphDisplayData?.nodes ?? [],
+        edges: graphDisplayData?.edges ?? [],
+        selectedNodeId: selectedGraphNodeId,
+      }),
+    [graphDisplayData, selectedGraphNodeId],
+  );
   const graphCount = graphData?.filteredCount ?? graphData?.totalCount ?? 0;
   const historyCount = activeManifest?.appliedCount ?? 0;
   const totalGraphEdgeCount = graphData?.totalEdgeCount ?? graphData?.edges.length ?? 0;
@@ -2932,9 +2888,69 @@ export function PaperLibraryCommandCenter({
                             </p>
                           </div>
                         )}
-                        {graphInsights.neighborNodes.length > 0 && (
+                        {graphInsights.derivativeNeighbors.length > 0 && (() => {
+                          const total = graphInsights.derivativeByNodeId.get(selectedNode.id) ?? 0;
+                          const shown = graphInsights.derivativeNeighbors.length;
+                          const truncated = total > shown;
+                          return (
+                            <div className="mt-4">
+                              <p className="text-xs font-semibold text-strong">
+                                Cited by{" "}
+                                <span className="font-mono text-[10px] tabular-nums text-dim">
+                                  {total}
+                                  {truncated ? ` (showing ${shown})` : ""}
+                                </span>
+                              </p>
+                              <p className="mt-1 text-[11px] text-quiet">Papers in the graph that cite this one (forward citations).</p>
+                              <div className="mt-2 space-y-2">
+                                {graphInsights.derivativeNeighbors.map((node) => (
+                                  <button
+                                    className="flex w-full items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-sunk px-2 py-2 text-left text-xs text-dim transition-colors hover:text-strong"
+                                    key={node.id}
+                                    onClick={() => setSelectedGraphNodeId(node.id)}
+                                    type="button"
+                                  >
+                                    <span className="size-2 rounded-full" style={{ backgroundColor: graphNodeFill(node) }} />
+                                    <span className="min-w-0 truncate">{graphNodeTitle(node)}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        {graphInsights.priorNeighbors.length > 0 && (() => {
+                          const total = graphInsights.priorByNodeId.get(selectedNode.id) ?? 0;
+                          const shown = graphInsights.priorNeighbors.length;
+                          const truncated = total > shown;
+                          return (
+                            <div className="mt-4">
+                              <p className="text-xs font-semibold text-strong">
+                                References{" "}
+                                <span className="font-mono text-[10px] tabular-nums text-dim">
+                                  {total}
+                                  {truncated ? ` (showing ${shown})` : ""}
+                                </span>
+                              </p>
+                              <p className="mt-1 text-[11px] text-quiet">Papers this one cites (backward references).</p>
+                              <div className="mt-2 space-y-2">
+                                {graphInsights.priorNeighbors.map((node) => (
+                                  <button
+                                    className="flex w-full items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-sunk px-2 py-2 text-left text-xs text-dim transition-colors hover:text-strong"
+                                    key={node.id}
+                                    onClick={() => setSelectedGraphNodeId(node.id)}
+                                    type="button"
+                                  >
+                                    <span className="size-2 rounded-full" style={{ backgroundColor: graphNodeFill(node) }} />
+                                    <span className="min-w-0 truncate">{graphNodeTitle(node)}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        {graphInsights.priorNeighbors.length === 0 && graphInsights.derivativeNeighbors.length === 0 && graphInsights.neighborNodes.length > 0 && (
                           <div className="mt-4">
-                            <p className="text-xs font-semibold text-strong">Nearest papers</p>
+                            <p className="text-xs font-semibold text-strong">Related papers</p>
                             <div className="mt-2 space-y-2">
                               {graphInsights.neighborNodes.map((node) => (
                                 <button
