@@ -2,17 +2,17 @@
 
 An end-to-end molecular dynamics quickstart that runs on a single
 machine. Wall time is roughly **3.5 h on a laptop CPU** and **~30 min
-on a CUDA GPU** (set `OPENMM_PLATFORM=CUDA` before stage 3). You will
-solvate hen egg-white lysozyme (PDB 1AKI) in explicit TIP3P water with
-0.15 M NaCl, run a brief equilibrium MD with AMBER ff14SB at 300 K,
-repeat the production stage with three random seeds, and verify the
-trajectory's Cα-RMSD plateau lands inside the published reference
+on a CUDA GPU** when the execution agent uses the CUDA OpenMM platform.
+You will solvate hen egg-white lysozyme (PDB 1AKI) in explicit TIP3P
+water with 0.15 M NaCl, run a brief equilibrium MD with AMBER ff14SB at
+300 K, repeat the production stage with three random seeds, and verify
+the trajectory's Cα-RMSD plateau lands inside the published reference
 band.
 
 This tutorial exists to:
 
-- give a copy-paste-runnable proof that you can run real explicit-solvent
-  MD on commodity hardware,
+- give a ScienceSwarm-UI-runnable proof that you can run real
+  explicit-solvent MD on commodity hardware,
 - expose the validation gates that distinguish a real run from a
   pipeline that "completed" but produced nothing meaningful, and
 - serve as the concrete example that the
@@ -36,14 +36,17 @@ rather than novelty.
 | 5. Analyze | `05_analyze.py` | < 30 s | `analysis/{rmsd_ca,rmsf_ca,rg}.png`, `metrics.json` |
 
 GPU users with CUDA can drop production wall time to ~5 min per seed by
-exporting `OPENMM_PLATFORM=CUDA` before stage 4.
+asking ScienceSwarm to use CUDA when OpenMM can see it.
 
 ---
 
 ## Requirements
 
 - macOS, Linux, or Windows (WSL2)
-- Conda or mamba (`miniforge3` recommended)
+- ScienceSwarm with project chat and an execution-capable destination such
+  as OpenHands
+- A local execution runtime that can create Conda or mamba environments
+  (`miniforge3` recommended)
 - ~1 GB free disk for outputs
 - Internet access for one PDB download
 
@@ -53,51 +56,64 @@ No API keys, no cluster, no GPU required.
 
 ## Setup
 
-Create the conda environment from this directory:
+Do this from the ScienceSwarm UI. The Conda environment is an
+implementation detail for the execution agent; users should not have to
+create it by hand.
 
-```bash
-mamba env create -f environment.yml
-# or: conda env create -f environment.yml
-mamba activate scienceswarm-md-quickstart
+1. Start ScienceSwarm and open a project workspace.
+2. Import this checkout, or just the `docs/tutorials/md-quickstart/`
+   folder, into the project so the agent can see `environment.yml` and
+   `scripts/`.
+3. In the project chat composer, select an execution-capable destination
+   such as OpenHands. If the preview asks for an `execution-ok` policy,
+   approve it for this tutorial run.
+4. Send this request:
+
+```text
+Prepare the MD quickstart in docs/tutorials/md-quickstart for execution.
+Use the bundled environment.yml to create or reuse the
+scienceswarm-md-quickstart environment, then verify that OpenMM, MDTraj,
+and pdbfixer import successfully. Keep all generated files inside the
+tutorial folder and stop with a clear error if setup fails.
 ```
 
-Verify the install:
-
-```bash
-python -c "import openmm, mdtraj, pdbfixer; print(openmm.version.full_version, mdtraj.__version__)"
-# expected: 8.x.x and 1.11.x or newer
-```
+ScienceSwarm should report the environment it created or reused, plus the
+OpenMM and MDTraj versions it verified. If the runtime reports missing
+infrastructure, treat that as a ScienceSwarm execution-setup issue and
+fix the destination before rerunning; the tutorial itself should not send
+you to a terminal to recover.
 
 ---
 
 ## Run the pipeline
 
-From `docs/tutorials/md-quickstart/scripts/`:
+Continue in the same ScienceSwarm project chat and send:
 
-```bash
-# 0. fetch the structure
-curl -o 1AKI.pdb https://files.rcsb.org/download/1AKI.pdb
-
-# 1. clean the PDB and add hydrogens
-python 01_prepare.py
-
-# 2. solvate
-python 02_solvate.py
-
-# 3. minimize + equilibrate
-python 03_minimize_equilibrate.py
-
-# 4. three production seeds (sequential — each ~70 min on CPU, ~5 min on GPU)
-python 04_produce.py --seed 11 --ns 1.0
-python 04_produce.py --seed 22 --ns 1.0
-python 04_produce.py --seed 33 --ns 1.0
-
-# 5. analyze
-python 05_analyze.py
+```text
+Run the lysozyme MD quickstart end to end. Fetch PDB 1AKI, run stages
+01 through 05 in order, run production for seeds 11, 22, and 33 at
+1.0 ns each, and stop immediately if any validation gate fails. When it
+finishes, summarize metrics.json and list the generated plots.
 ```
 
+For a CUDA GPU run, add: `Use CUDA if OpenMM can see it; otherwise fall
+back to CPU and say which platform was used.`
+
+The execution agent should perform these implementation steps:
+
+| Stage | Expected action | Output |
+|---|---|---|
+| 0. Fetch | Download PDB 1AKI into `scripts/` | `1AKI.pdb` |
+| 1. Prepare | Clean the PDB and add hydrogens | `prepared.pdb` |
+| 2. Solvate | Add TIP3P water and ions | `solvated.pdb`, `system.xml` |
+| 3. Minimize + equilibrate | Run the 150 ps equilibration gate | `equilibrated.{pdb,xml}` |
+| 4. Production | Run 1 ns each for seeds 11, 22, and 33 | `prod_seed{11,22,33}.dcd` |
+| 5. Analyze | Compute validation metrics and plots | `analysis/`, `metrics.json` |
+
 Each script prints clear diagnostics, fails fast on a bad input, and
-writes its output before exiting.
+writes its output before exiting. The scripts remain in the repository
+so ScienceSwarm has a deterministic execution contract; the user-facing
+workflow is the project chat request above.
 
 ---
 
