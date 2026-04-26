@@ -57,6 +57,10 @@ import {
   type ParsedOpenClawSlashCommand,
 } from "@/lib/openclaw/slash-commands";
 
+const RUNTIME_HOSTS_WITH_NATIVE_SLASH_COMMANDS = new Set<string>([
+  "claude-code",
+]);
+
 export interface RuntimeApiServices {
   sessionStore: RuntimeSessionStore;
   eventStore: RuntimeEventStore;
@@ -229,6 +233,10 @@ export async function expandRuntimeSlashCommandPrompt(
   const commands = buildOpenClawSlashCommands(skills);
   const parsed = parseOpenClawSlashCommandInput(prompt, commands);
   if (!parsed) {
+    if (hostId && RUNTIME_HOSTS_WITH_NATIVE_SLASH_COMMANDS.has(hostId)) {
+      return prompt;
+    }
+
     const commandName = /^\s*\/([a-z0-9][a-z0-9-]*)/i.exec(prompt)?.[1];
     throw runtimeInvalidRequest(
       commandName
