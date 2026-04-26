@@ -106,6 +106,9 @@ describe("ComposerRuntimeSwitcher", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "Change assistant" });
+    expect(trigger).toHaveAttribute("data-testid", "composer-runtime-trigger");
+    expect(trigger).toHaveClass("rounded-[20px]");
+    expect(within(trigger).getByText("Assistant")).toBeInTheDocument();
     expect(trigger).toHaveTextContent("Claude Code");
     expect(trigger).not.toHaveTextContent("Run with");
     expect(trigger).not.toHaveTextContent("Cloud ok");
@@ -128,12 +131,15 @@ describe("ComposerRuntimeSwitcher", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Assistant" });
     expect(dialog).toHaveClass("fixed");
+    expect(dialog).toHaveClass("rounded-[24px]");
     expect(within(dialog).getByText("Assistant")).toBeInTheDocument();
+    expect(within(dialog).getByText("Choose who answers this turn.")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "OpenClaw" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Claude Code" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
+    expect(within(dialog).getByRole("button", { name: "Claude Code" })).toHaveClass("rounded-[18px]");
     expect(within(dialog).getByRole("button", { name: "Codex" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Gemini CLI" })).toBeInTheDocument();
 
