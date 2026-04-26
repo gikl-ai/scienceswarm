@@ -120,7 +120,7 @@ export function ResizableLayout({
   const showLabels = sidebarWidth >= SIDEBAR_LABEL_THRESHOLD;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="fixed inset-0 flex overflow-hidden">
       <div
         className="flex-shrink-0 overflow-hidden"
         style={{ width: sidebarWidth }}
@@ -140,7 +140,7 @@ export function ResizableLayout({
         tabIndex={0}
       />
 
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
     </div>
   );
 }
