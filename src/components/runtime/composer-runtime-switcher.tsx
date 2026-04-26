@@ -183,13 +183,18 @@ export function ComposerRuntimeSwitcher({
       role="dialog"
       aria-label="Assistant"
       data-testid="runtime-switcher-panel"
-      className="fixed z-50 max-h-[min(22rem,calc(100vh-7rem))] overflow-y-auto rounded-xl border border-rule bg-raised py-1.5 text-[15px] shadow-[0_18px_50px_rgba(0,0,0,0.18)]"
+      className="fixed z-50 max-h-[min(22rem,calc(100vh-7rem))] overflow-y-auto rounded-[24px] border border-slate-200 bg-white/95 p-2 text-[15px] shadow-[0_24px_64px_rgba(15,23,42,0.18)] backdrop-blur-sm"
       style={panelPosition}
     >
-      <p className="px-3 pb-1.5 pt-1 text-[13px] font-normal text-muted">
-        Assistant
-      </p>
-      <div className="space-y-0.5 px-1.5">
+      <div className="px-2.5 pb-2 pt-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+          Assistant
+        </p>
+        <p className="mt-1 text-[13px] leading-5 text-muted">
+          Choose who answers this turn.
+        </p>
+      </div>
+      <div className="space-y-1">
         {visibleHosts.map((host) => {
           const disabledReason = runtimeHostDisabledReason({
             host,
@@ -203,12 +208,12 @@ export function ComposerRuntimeSwitcher({
               key={host.profile.id}
               type="button"
               aria-pressed={isSelected}
-              className={`flex h-10 w-full items-center justify-between gap-3 rounded-lg px-3 text-left transition-colors ${
+              className={`flex h-11 w-full items-center justify-between gap-3 rounded-[18px] px-3.5 text-left transition-colors ${
                 isSelected
-                  ? "bg-surface-hover text-strong"
+                  ? "bg-sunk text-strong"
                   : disabled
                     ? "cursor-not-allowed text-dim"
-                    : "text-strong hover:bg-surface-hover"
+                    : "text-strong hover:bg-sunk/70"
               }`}
               disabled={disabled}
               onClick={() => selectAssistant(host)}
@@ -236,7 +241,8 @@ export function ComposerRuntimeSwitcher({
     >
       <button
         type="button"
-        className="inline-flex h-9 max-w-[12rem] items-center gap-1.5 rounded-full border border-rule bg-sunk/75 px-3 text-left text-sm font-medium text-strong shadow-sm transition-colors hover:border-rule-soft hover:bg-raised focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+        data-testid="composer-runtime-trigger"
+        className="inline-flex min-h-11 max-w-[13.5rem] items-center gap-2 rounded-[20px] border border-slate-200 bg-white/88 px-3 py-2 text-left shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-colors hover:border-slate-300 hover:bg-white focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label="Change assistant"
@@ -246,8 +252,13 @@ export function ComposerRuntimeSwitcher({
         {loading && hosts.length === 0 && (
           <CircleNotch size={13} className="shrink-0 animate-spin text-dim" />
         )}
-        <span className="min-w-0 truncate">
-          {selectedHost?.profile.label ?? "Assistant"}
+        <span className="min-w-0 flex-1">
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-quiet">
+            Assistant
+          </span>
+          <span className="block truncate text-sm font-semibold text-strong">
+            {selectedHost?.profile.label ?? "Assistant"}
+          </span>
         </span>
         <CaretDown size={12} className="shrink-0 text-dim" />
       </button>
