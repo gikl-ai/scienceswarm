@@ -294,7 +294,7 @@ function nodeFromSeed(seed: PaperGraphSeed): PaperLibraryGraphNode {
     authors: correctionAuthors(item) ?? candidate.authors,
     year: correctionNumber(item, "year") ?? candidate.year,
     venue: correctionString(item, "venue") ?? candidate.venue,
-    abstract: correctionString(item, "abstract") ?? item.abstract,
+    abstract: normalizeGraphAbstract(correctionString(item, "abstract") ?? item.abstract),
     identifiers,
     local: true,
     suggestion: false,
@@ -646,7 +646,7 @@ async function enrichSeedsFromLocalPdfReferences(input: {
       if (extracted.abstract) {
         const node = input.nodes.get(seed.nodeId);
         if (node && !node.abstract) {
-          input.nodes.set(seed.nodeId, { ...node, abstract: extracted.abstract });
+          input.nodes.set(seed.nodeId, { ...node, abstract: normalizeGraphAbstract(extracted.abstract) });
         }
       }
       const section = findReferenceSection(extracted.text);

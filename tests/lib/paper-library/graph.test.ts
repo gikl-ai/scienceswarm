@@ -353,6 +353,40 @@ describe("paper-library graph", () => {
     })).not.toBeNull();
   });
 
+  it("caps PDF-extracted local abstracts to the graph schema limit", async () => {
+    await seedReviewState([
+      reviewItem({
+        paperId: "source",
+        title: "Source Paper",
+        identifiers: { doi: "10.1000/source" },
+        relativePath: "source.pdf",
+      }),
+    ]);
+    mockExtractPdfText.mockResolvedValue({
+      text: "Source Paper\n\nReferences\n",
+      pageCount: 4,
+      wordCount: 20,
+      firstSentence: "Source Paper",
+      abstract: "B".repeat(5_500),
+    });
+
+    const graph = await buildPaperLibraryGraph({
+      project: "project-alpha",
+      scanId: "scan-1",
+      brainRoot,
+      adapters: [],
+      useCache: false,
+    });
+
+    expect(graph?.nodes.find((node) => node.id === "paper:doi:10.1000/source")?.abstract).toHaveLength(5_000);
+    expect(await getOrBuildPaperLibraryGraph({
+      project: "project-alpha",
+      scanId: "scan-1",
+      brainRoot,
+      adapters: [],
+    })).not.toBeNull();
+  });
+
   it("records failed source runs without blocking the local graph and reuses cached failures", async () => {
     await seedReviewState([
       reviewItem({ paperId: "source", title: "Source Paper", identifiers: { doi: "10.1000/source" } }),
