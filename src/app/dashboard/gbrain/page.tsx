@@ -182,10 +182,10 @@ function GbrainPageContent() {
     }
   }, []);
 
-  const loadBrainMaintenance = useCallback(async () => {
+  const loadBrainMaintenance = useCallback(async (signal?: AbortSignal) => {
     setBrainMaintenanceState({ status: "loading" });
     try {
-      const response = await fetch("/api/brain/maintenance");
+      const response = await fetch("/api/brain/maintenance", { signal });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(
@@ -200,6 +200,9 @@ function GbrainPageContent() {
         structural: parseGbrainStructuralSummary(payload),
       });
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
       setBrainMaintenanceState({
         status: "error",
         message: error instanceof Error ? error.message : "Maintenance status check failed",
@@ -294,7 +297,9 @@ function GbrainPageContent() {
       return;
     }
 
-    void loadBrainMaintenance();
+    const controller = new AbortController();
+    void loadBrainMaintenance(controller.signal);
+    return () => controller.abort();
   }, [activeProjectSlug, activeView, loadBrainMaintenance]);
 
   useEffect(() => {

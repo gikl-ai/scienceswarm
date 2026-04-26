@@ -297,6 +297,7 @@ describe("GET /api/brain/maintenance", () => {
       structuralNavigationAvailable: false,
       package: { binPath: "[redacted]" },
       schema: { missingFields: ["content_chunks.symbol_name"] },
+      blockers: ["local schema is missing required structural fields."],
     });
   });
 
