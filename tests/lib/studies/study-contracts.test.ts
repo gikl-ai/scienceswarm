@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -74,6 +74,11 @@ class OOneStudyStore implements StudyLookupStore {
   async listStudies(): Promise<never> {
     throw new Error("broad scans are forbidden in Study resolution");
   }
+}
+
+function isPathInside(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 }
 
 afterEach(() => {
@@ -157,8 +162,18 @@ describe("Study paths", () => {
       getStudyAgentWorkspaceRoot("study_alpha"),
       getLaunchBundleRoot("run_alpha", "codex"),
     ]) {
-      expect(resolved.startsWith(`${brainRoot}/`)).toBe(false);
+      expect(isPathInside(brainRoot, resolved)).toBe(false);
     }
+  });
+
+  it("rejects runtime host names that end with a hyphen", () => {
+    process.env.SCIENCESWARM_DIR = ROOT;
+
+    expect(getLaunchBundleRoot("run_alpha", "x")).toBe(join(ROOT, "runtime", "runs", "run_alpha", "x"));
+    expect(getLaunchBundleRoot("run_alpha", "claude-code")).toBe(
+      join(ROOT, "runtime", "runs", "run_alpha", "claude-code"),
+    );
+    expect(() => getLaunchBundleRoot("run_alpha", "codex-")).toThrow("Invalid runtime host");
   });
 
   it("does not create legacy project-local .brain directories while resolving paths", () => {
@@ -237,5 +252,39 @@ describe("Study context resolution", () => {
     expect(store.calls).toEqual(["alias:legacy-alpha", "id:study_alpha"]);
     expect(existsSync(join(ROOT, "projects", "legacy-alpha", ".brain"))).toBe(false);
     expect(existsSync(join(ROOT, "projects", "legacy-alpha", ".tombstone"))).toBe(false);
+  });
+
+  it("falls back from a blank legacy project slug to projectId", async () => {
+    const store = new OOneStudyStore(
+      new Map(),
+      new Map([["project-alpha", studyAlpha]]),
+    );
+
+    const result = await resolveLegacyProjectToStudy({
+      projectSlug: " ",
+      projectId: "project-alpha",
+    }, store);
+
+    expect(result).toMatchObject({
+      status: "resolved",
+      source: "legacy-slug-fallback",
+      studyId: "study_alpha",
+    });
+    expect(store.calls).toEqual(["alias:project-alpha", "slug:project-alpha"]);
+  });
+
+  it("exposes resolved context paths as a consistent helper surface", async () => {
+    process.env.SCIENCESWARM_DIR = ROOT;
+    const store = new OOneStudyStore(new Map([["study_alpha", studyAlpha]]));
+
+    const context = await resolveStudyContext({ studyId: "study_alpha" }, store);
+
+    expect(typeof context?.paths.studyStateRoot).toBe("function");
+    expect(typeof context?.paths.agentWorkspaceRoot).toBe("function");
+    expect(typeof context?.paths.threadStateRoot).toBe("function");
+    expect(typeof context?.paths.runStateRoot).toBe("function");
+    expect(typeof context?.paths.launchBundleRoot).toBe("function");
+    expect(context?.paths.studyStateRoot()).toBe(join(ROOT, "state", "studies", "study_alpha"));
+    expect(context?.paths.agentWorkspaceRoot()).toBe(join(ROOT, "workspaces", "studies", "study_alpha"));
   });
 });

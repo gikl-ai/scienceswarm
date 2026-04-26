@@ -43,8 +43,8 @@ export interface StudyContext {
 
 export interface ResolvedResearchContext extends StudyContext {
   paths: {
-    studyStateRoot: string;
-    agentWorkspaceRoot: string;
+    studyStateRoot(): string;
+    agentWorkspaceRoot(): string;
     threadStateRoot(threadId: string): string;
     runStateRoot(runId: string): string;
     launchBundleRoot(runId: string, host: string): string;
@@ -95,6 +95,12 @@ function invalid(
   return { status: "invalid", source, reason };
 }
 
+function firstNonBlank(
+  ...values: Array<string | null | undefined>
+): string | null {
+  return values.find((value) => value?.trim()) ?? null;
+}
+
 async function resolveStudyKnowledge(
   input: ResolveStudyContextInput,
   store: StudyLookupStore,
@@ -118,7 +124,7 @@ async function resolveStudyKnowledge(
     return { result: buildResolvedResult({ source: "study-slug", knowledge: canonical }), knowledge: canonical };
   }
 
-  const projectSlug = parseLegacyProjectSlug(input.projectSlug ?? input.projectId);
+  const projectSlug = parseLegacyProjectSlug(firstNonBlank(input.projectSlug, input.projectId));
   if (!projectSlug.ok) {
     return {
       result: invalid("legacy-project", projectSlug.reason === "missing" ? "Missing Study or project identifier" : "Invalid legacy project slug"),
@@ -183,8 +189,8 @@ export async function resolveStudyContext(
     knowledge,
     resolution: result,
     paths: {
-      studyStateRoot: getStudyStateRoot(result.studyId),
-      agentWorkspaceRoot: getStudyAgentWorkspaceRoot(result.studyId),
+      studyStateRoot: () => getStudyStateRoot(result.studyId),
+      agentWorkspaceRoot: () => getStudyAgentWorkspaceRoot(result.studyId),
       threadStateRoot: getThreadStateRoot,
       runStateRoot: getRunStateRoot,
       launchBundleRoot: getLaunchBundleRoot,

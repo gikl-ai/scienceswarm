@@ -130,7 +130,7 @@ export function getLaunchBundleRoot(
   dataRoot = getScienceSwarmDataRoot(),
 ): string {
   const safeHost = host.trim();
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(safeHost)) {
+  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(safeHost)) {
     throw new Error("Invalid runtime host");
   }
   return path.join(getRuntimeRoot(dataRoot), "runs", assertRunId(runId), safeHost);
