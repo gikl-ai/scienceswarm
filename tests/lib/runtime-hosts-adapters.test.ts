@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createApiKeyRuntimeHostAdapter, createApiKeyRuntimeHostProfile } from "@/lib/runtime-hosts/adapters/api-key";
+import { buildClaudeCodeRuntimeContext } from "@/lib/runtime-hosts/adapters/claude-code-context";
 import { createClaudeCodeRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/claude-code";
 import { createCodexRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/codex";
 import { createGeminiCliRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/gemini-cli";
@@ -34,6 +35,7 @@ import {
   ClaudeCodeStreamAccumulator,
   parseClaudeCodeStreamOutput,
 } from "@/lib/runtime-hosts/transport/claude-code-stream";
+import { runtimeRunIdFromSessionId } from "@/lib/runtime-hosts/workspace";
 import type { SavedLlmRuntimeEnv } from "@/lib/runtime-saved-env";
 
 const noClaudeRuntimeContext = async () => null;
@@ -373,6 +375,11 @@ describe("runtime host adapters", () => {
     expect(transport.requests[1]?.args).not.toContain("--session-id");
   });
 
+  it("normalizes wrapper session ids into schema-safe runtime run ids", () => {
+    expect(runtimeRunIdFromSessionId("My-Session.1")).toBe("run_my-session-1");
+    expect(runtimeRunIdFromSessionId("  Mixed.Case/Session  ")).toBe("run_mixed-case-session");
+  });
+
   it("starts a fresh Claude Code session when an old resume id is missing", async () => {
     const recoveredSessionId = "44444444-4444-4444-8444-444444444444";
     const transport = new FakeCliTransport((request) => {
@@ -576,6 +583,8 @@ describe("runtime host adapters", () => {
       const appendSystemPromptIndex = launch?.args?.indexOf("--append-system-prompt") ?? -1;
       expect(appendSystemPromptIndex).toBeGreaterThanOrEqual(0);
       const appendedPrompt = launch?.args?.[appendSystemPromptIndex + 1] ?? "";
+      expect(appendedPrompt).toContain("# ScienceSwarm Launch Context");
+      expect(appendedPrompt).not.toContain("# SCIENCESWARM.md");
       expect(appendedPrompt).toContain("Current project: `project-alpha`.");
       expect(appendedPrompt).toContain("Use narrow gbrain reads.");
       expect(appendedPrompt).toContain("runtime-scoped MCP server named `scienceswarm`");
@@ -630,6 +639,48 @@ describe("runtime host adapters", () => {
       await expect(readdir(launchBundleRoot)).resolves.not.toContain("CLAUDE.md");
       await expect(readdir(launchBundleRoot)).resolves.not.toContain("SCIENCESWARM.md");
       expect(mcpConfigPathsAtLaunch).toEqual([path.join(launchBundleRoot, "mcp.json")]);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("cleans up Claude runtime MCP config if a later LaunchBundle write fails", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-claude-cleanup-"));
+    try {
+      const dataRoot = path.join(tempRoot, "data");
+      const brainRoot = path.join(dataRoot, "brain");
+      const launchBundleRoot = path.join(
+        dataRoot,
+        "runtime",
+        "runs",
+        "run_cleanup",
+        "claude-code",
+      );
+      await mkdir(brainRoot, { recursive: true });
+      await mkdir(path.join(launchBundleRoot, "prompt.md"), { recursive: true });
+      vi.stubEnv("SCIENCESWARM_DIR", dataRoot);
+      vi.stubEnv("BRAIN_ROOT", brainRoot);
+
+      await expect(buildClaudeCodeRuntimeContext({
+        request: {
+          ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+          runtimeSessionId: "rt-cleanup",
+          conversationId: null,
+        },
+        wrapperSessionId: "rt-cleanup",
+        nativeSessionId: "cleanup-native-session",
+        runId: "run_cleanup",
+        env: {
+          ...process.env,
+          SCIENCESWARM_DIR: dataRoot,
+          BRAIN_ROOT: brainRoot,
+        },
+        repoRoot: process.cwd(),
+        dataRoot,
+      })).rejects.toThrow();
+
+      await expect(readFile(path.join(launchBundleRoot, "mcp.json"), "utf8"))
+        .rejects.toThrow();
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }

@@ -109,56 +109,62 @@ export async function buildClaudeCodeRuntimeContext(
     backend: "agent",
   });
   const brainBrief = await buildCompactBrainBrief(input.request.projectId);
-  const runtimeMcp = input.enableRuntimeMcp === false || !input.request.projectId
-    ? null
-    : await buildRuntimeMcpContext({
-        projectId: projectSlug,
-        runtimeSessionId: input.wrapperSessionId,
-        projectPolicy: input.request.preview.projectPolicy,
-        approvalStateApproved: input.request.approvalState === "approved"
-          || input.request.approvalState === "not-required",
-        repoRoot,
-        mcpConfigPath: workspace.launchBundle.mcpConfigPath,
-        env: runtimeEnv,
-        tokenTtlMs: input.tokenTtlMs ?? DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS,
-      });
+  let runtimeMcp: Awaited<ReturnType<typeof buildRuntimeMcpContext>> | null = null;
+  try {
+    runtimeMcp = input.enableRuntimeMcp === false || !input.request.projectId
+      ? null
+      : await buildRuntimeMcpContext({
+          projectId: projectSlug,
+          runtimeSessionId: input.wrapperSessionId,
+          projectPolicy: input.request.preview.projectPolicy,
+          approvalStateApproved: input.request.approvalState === "approved"
+            || input.request.approvalState === "not-required",
+          repoRoot,
+          mcpConfigPath: workspace.launchBundle.mcpConfigPath,
+          env: runtimeEnv,
+          tokenTtlMs: input.tokenTtlMs ?? DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS,
+        });
 
-  const dynamicPrompt = buildClaudeCodeRuntimePromptMarkdown({
-    projectId: input.request.projectId,
-    loadedProjectGuidance,
-    brainBrief,
-    runtimeMcpInstructions: runtimeMcp?.instructions ?? null,
-  });
-  await writeFile(workspace.launchBundle.promptSnapshotPath, dynamicPrompt, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  await writeRedactedLaunchAudit({
-    runId: input.runId,
-    cwd: workspace.agentWorkspace.cwd,
-    launchBundlePath: workspace.launchBundle.root,
-    prompt: dynamicPrompt,
-    mcpConfigHash: runtimeMcp?.configHash ?? null,
-    hasRuntimeMcpAccessToken: Boolean(runtimeMcp),
-    auditPath: workspace.launchBundle.redactedAuditPath,
-  });
+    const dynamicPrompt = buildClaudeCodeRuntimePromptMarkdown({
+      projectId: input.request.projectId,
+      loadedProjectGuidance,
+      brainBrief,
+      runtimeMcpInstructions: runtimeMcp?.instructions ?? null,
+    });
+    await writeFile(workspace.launchBundle.promptSnapshotPath, dynamicPrompt, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    await writeRedactedLaunchAudit({
+      runId: input.runId,
+      cwd: workspace.agentWorkspace.cwd,
+      launchBundlePath: workspace.launchBundle.root,
+      prompt: dynamicPrompt,
+      mcpConfigHash: runtimeMcp?.configHash ?? null,
+      hasRuntimeMcpAccessToken: Boolean(runtimeMcp),
+      auditPath: workspace.launchBundle.redactedAuditPath,
+    });
 
-  const addDirs = input.request.projectId
-    ? existingDirectories([getScienceSwarmProjectRoot(projectSlug)])
-    : [];
+    const addDirs = input.request.projectId
+      ? existingDirectories([getScienceSwarmProjectRoot(projectSlug)])
+      : [];
 
-  return {
-    cwd: workspace.agentWorkspace.cwd,
-    appendSystemPrompt: dynamicPrompt,
-    addDirs,
-    env: runtimeEnv,
-    mcpConfigPath: runtimeMcp?.configPath,
-    allowedTools: runtimeMcp?.allowedTools,
-    agentWorkspaceId: workspace.agentWorkspace.id,
-    launchBundlePath: workspace.launchBundle.root,
-    runId: input.runId,
-    cleanup: runtimeMcp?.cleanup,
-  };
+    return {
+      cwd: workspace.agentWorkspace.cwd,
+      appendSystemPrompt: dynamicPrompt,
+      addDirs,
+      env: runtimeEnv,
+      mcpConfigPath: runtimeMcp?.configPath,
+      allowedTools: runtimeMcp?.allowedTools,
+      agentWorkspaceId: workspace.agentWorkspace.id,
+      launchBundlePath: workspace.launchBundle.root,
+      runId: input.runId,
+      cleanup: runtimeMcp?.cleanup,
+    };
+  } catch (error) {
+    await runtimeMcp?.cleanup().catch(() => undefined);
+    throw error;
+  }
 }
 
 function buildStableClaudeWorkspaceMarkdown(): string {
@@ -201,7 +207,7 @@ function buildClaudeCodeRuntimePromptMarkdown(input: {
   runtimeMcpInstructions: string | null;
 }): string {
   return [
-    "# SCIENCESWARM.md",
+    "# ScienceSwarm Launch Context",
     "",
     "ScienceSwarm is a local-first research workspace powered by OpenClaw, OpenHands, and gbrain.",
     "",

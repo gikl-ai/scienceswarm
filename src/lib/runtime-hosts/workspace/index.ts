@@ -143,6 +143,6 @@ async function writeFileIfMissing(filePath: string, content: string): Promise<vo
 }
 
 function safeRuntimePathSegment(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120)
+  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120)
     || "session";
 }
