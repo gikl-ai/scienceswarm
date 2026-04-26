@@ -45,10 +45,10 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
     mkdirSync(snakeDir, { recursive: true });
     writeFileSync(
       path.join(snakeDir, "index.html"),
-      "<!doctype html><title>Snake</title><link\nrel=stylesheet\nmedia=print\nhref=./style.css><script\nsrc=./game.js></script foo=\"bar\">",
+      "<!doctype html><title>Snake</title><link\nrel=stylesheet\nmedia=print\nhref=./style.css><script\nsrc=./game.js></script >",
     );
     writeFileSync(path.join(snakeDir, "style.css"), "body { background: black; color: white; }");
-    writeFileSync(path.join(snakeDir, "game.js"), "globalThis.snakeLoaded = true;");
+    writeFileSync(path.join(snakeDir, "game.js"), 'globalThis.snakeLoaded = "</script >";');
 
     const { GET } = await importRawPathRoute();
     const htmlRes = await GET(
@@ -63,7 +63,7 @@ describe("GET /api/workspace/raw/[projectId]/[...file]", () => {
     expect(htmlRes.headers.get("Content-Security-Policy")).toContain("connect-src 'none'");
     const html = await htmlRes.text();
     expect(html).toContain("data-scienceswarm-inlined-asset=\"./game.js\"");
-    expect(html).toContain("globalThis.snakeLoaded = true;");
+    expect(html).toContain('globalThis.snakeLoaded = "<\\/script >";');
     expect(html).toContain("data-scienceswarm-inlined-asset=\"./style.css\"");
     expect(html).toContain("<style media=\"print\"");
     expect(html).toContain("body { background: black; color: white; }");

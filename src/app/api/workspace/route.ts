@@ -1618,6 +1618,88 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function escapeHtmlEndTagPrefix(content: string, tagName: string): string {
+  const lowerContent = content.toLowerCase();
+  const lowerNeedle = `</${tagName.toLowerCase()}`;
+  let escaped = "";
+  let searchIndex = 0;
+
+  while (true) {
+    const matchIndex = lowerContent.indexOf(lowerNeedle, searchIndex);
+    if (matchIndex === -1) {
+      return `${escaped}${content.slice(searchIndex)}`;
+    }
+
+    escaped += `${content.slice(searchIndex, matchIndex)}<\\/${content.slice(
+      matchIndex + 2,
+      matchIndex + lowerNeedle.length,
+    )}`;
+    searchIndex = matchIndex + lowerNeedle.length;
+  }
+}
+
+function isScriptCloseNameBoundary(value: string | undefined): boolean {
+  return value === undefined || value === ">" || value === "/" || /\s/.test(value);
+}
+
+function findScriptCloseTagEnd(html: string, fromIndex: number): number | null {
+  const lowerHtml = html.toLowerCase();
+  let searchIndex = fromIndex;
+
+  while (true) {
+    const closeStart = lowerHtml.indexOf("</script", searchIndex);
+    if (closeStart === -1) return null;
+
+    const afterName = closeStart + "</script".length;
+    if (!isScriptCloseNameBoundary(lowerHtml[afterName])) {
+      searchIndex = afterName;
+      continue;
+    }
+
+    const closeEnd = lowerHtml.indexOf(">", afterName);
+    return closeEnd === -1 ? null : closeEnd + 1;
+  }
+}
+
+async function inlineScriptPreviewAssets(
+  html: string,
+  assetBaseDir: string,
+  scriptExtensions: Set<string>,
+): Promise<string> {
+  const scriptOpenPattern = /<script\b([\s\S]*?)>/gi;
+  let output = "";
+  let readIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = scriptOpenPattern.exec(html)) !== null) {
+    const openStart = match.index;
+    const openEnd = scriptOpenPattern.lastIndex;
+    const closeEnd = findScriptCloseTagEnd(html, openEnd);
+    if (closeEnd === null) continue;
+
+    const attributes = match[1] ?? "";
+    const src = getHtmlAttribute(attributes, "src");
+    if (!src) {
+      scriptOpenPattern.lastIndex = closeEnd;
+      continue;
+    }
+
+    const script = await readPreviewAsset(assetBaseDir, src, scriptExtensions);
+    if (script === null) {
+      scriptOpenPattern.lastIndex = closeEnd;
+      continue;
+    }
+
+    const inlineAttributes = removeHtmlAttribute(attributes, "src");
+    output += html.slice(readIndex, openStart);
+    output += `<script${inlineAttributes ? ` ${inlineAttributes}` : ""} data-scienceswarm-inlined-asset="${escapeHtmlAttribute(src)}">\n${escapeHtmlEndTagPrefix(script, "script")}\n</script>`;
+    readIndex = closeEnd;
+    scriptOpenPattern.lastIndex = closeEnd;
+  }
+
+  return `${output}${html.slice(readIndex)}`;
+}
+
 async function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): Promise<string> {
   if (!assetBaseDir) return html;
   const scriptExtensions = new Set(["js", "mjs", "cjs"]);
@@ -1635,23 +1717,10 @@ async function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): Pro
     if (css === null) return tag;
     const media = getHtmlAttribute(attributes, "media");
     const mediaAttribute = media ? ` media="${escapeHtmlAttribute(media)}"` : "";
-    return `<style${mediaAttribute} data-scienceswarm-inlined-asset="${escapeHtmlAttribute(href)}">\n${css.replace(/<\/style/gi, "<\\/style")}\n</style>`;
+    return `<style${mediaAttribute} data-scienceswarm-inlined-asset="${escapeHtmlAttribute(href)}">\n${escapeHtmlEndTagPrefix(css, "style")}\n</style>`;
   });
 
-  return replaceHtmlMatches(
-    withStyles,
-    /<script\b([\s\S]*?)>\s*<\/script\b[^>]*>/gi,
-    async (match) => {
-      const tag = match[0];
-      const attributes = match[1] ?? "";
-      const src = getHtmlAttribute(attributes, "src");
-      if (!src) return tag;
-      const script = await readPreviewAsset(assetBaseDir, src, scriptExtensions);
-      if (script === null) return tag;
-      const inlineAttributes = removeHtmlAttribute(attributes, "src");
-      return `<script${inlineAttributes ? ` ${inlineAttributes}` : ""} data-scienceswarm-inlined-asset="${escapeHtmlAttribute(src)}">\n${script.replace(/<\/script/gi, "<\\/script")}\n</script>`;
-    },
-  );
+  return inlineScriptPreviewAssets(withStyles, assetBaseDir, scriptExtensions);
 }
 
 async function injectHtmlPreviewShim(html: string, assetBaseDir?: string): Promise<string> {
