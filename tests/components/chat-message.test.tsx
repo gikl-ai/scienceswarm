@@ -513,6 +513,7 @@ describe("ChatMessage", () => {
     expect(progressLog).toHaveTextContent("Checking the imported files...");
     expect(progressLog).toHaveTextContent("└ Read docs/results_table.csv");
     expect(progressLog).toHaveTextContent("Search activityLog in use-unified-chat.ts");
+    expect(screen.getByTestId("assistant-explored-count-1")).toHaveTextContent("2 actions");
     expect(progressLog).toHaveTextContent("Thinking");
     expect(progressLog).toHaveTextContent("Activity");
     expect(screen.queryByText("Thinking Trace")).not.toBeInTheDocument();
@@ -584,6 +585,7 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("log")).toHaveTextContent(
       "Read docs/a.md · docs/b.md · docs/c.md",
     );
+    expect(screen.getByTestId("assistant-explored-count-0")).toHaveTextContent("4 actions");
   });
 
   it("keeps the compact live run-state wrapper on a single spacing system", () => {
