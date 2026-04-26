@@ -48,9 +48,13 @@ describe("paper-library jobs semantic enrichment", () => {
     mockExtractPdfText.mockReset();
     mockExtractPdfText.mockResolvedValue({
       text: [
+        "Abstract",
         "Graph neural networks improve protein folding structure prediction across residue contacts and conformational ensembles.",
         "This paragraph continues with enough words to avoid thin-text heuristics while keeping the signal realistic for clustering.",
+        "Introduction",
+        "The paper body starts here.",
       ].join(" "),
+      abstract: "Graph neural networks improve protein folding structure prediction across residue contacts and conformational ensembles.",
       firstSentence: "Graph neural networks improve protein folding structure prediction across residue contacts and conformational ensembles.",
       pageCount: 12,
       wordCount: 180,
@@ -103,6 +107,7 @@ describe("paper-library jobs semantic enrichment", () => {
       items: Array<{
         semanticText?: string;
         semanticTextHash?: string;
+        abstract?: string;
         firstSentence?: string;
         pageCount?: number;
         wordCount?: number;
@@ -110,6 +115,7 @@ describe("paper-library jobs semantic enrichment", () => {
     };
 
     expect(reviewShard.items[0]).toMatchObject({
+      abstract: "Graph neural networks improve protein folding structure prediction across residue contacts and conformational ensembles.",
       firstSentence: "Graph neural networks improve protein folding structure prediction across residue contacts and conformational ensembles.",
       pageCount: 12,
       wordCount: 180,

@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { extractPdfText } from "@/lib/pdf-text-extractor";
+import { extractAbstractFromPdfText, extractPdfText } from "@/lib/pdf-text-extractor";
 
 const TMP_ROOT = path.join(tmpdir(), "scienceswarm-pdf-extractor-test");
 const FAKE_PDF = path.join(TMP_ROOT, "sample.pdf");
@@ -104,6 +104,71 @@ describe("extractPdfText", () => {
     } finally {
       getTextSpy.mockRestore();
     }
+  });
+
+  it("extracts an abstract section from PDF text", async () => {
+    const { PDFParse } = require("pdf-parse") as {
+      PDFParse: {
+        prototype: {
+          getText: () => Promise<{ text: string; total: number }>;
+        };
+      };
+    };
+    const getTextSpy = vi
+      .spyOn(PDFParse.prototype, "getText")
+      .mockResolvedValueOnce({
+        text: [
+          "A Study of Local Research Graphs",
+          "Abstract",
+          "We introduce a graph interface for inspecting local paper libraries and their citation neighborhoods.",
+          "Introduction",
+          "The rest of the paper starts here.",
+        ].join("\n"),
+        total: 1,
+      });
+
+    try {
+      const result = await extractPdfText(FAKE_PDF);
+      expect(result.abstract).toBe("We introduce a graph interface for inspecting local paper libraries and their citation neighborhoods.");
+    } finally {
+      getTextSpy.mockRestore();
+    }
+  });
+
+  it("stops abstract extraction at keyword or reference headings", () => {
+    expect(extractAbstractFromPdfText([
+      "Title",
+      "Abstract",
+      "This abstract has enough content to be useful for the graph details panel.",
+      "Keywords",
+      "graph, papers",
+    ].join("\n"))).toBe("This abstract has enough content to be useful for the graph details panel.");
+
+    expect(extractAbstractFromPdfText([
+      "Title",
+      "Abstract",
+      "This short note explains the selected paper for a local research graph.",
+      "References",
+      "[1] Later citation.",
+    ].join("\n"))).toBe("This short note explains the selected paper for a local research graph.");
+  });
+
+  it("does not treat decimals inside an abstract as numeric section headings", () => {
+    expect(extractAbstractFromPdfText([
+      "Abstract",
+      "We report a 1.2x improvement for local graph inspection while preserving paper context.",
+      "1. Introduction",
+      "The body starts here.",
+    ].join("\n"))).toBe("We report a 1.2x improvement for local graph inspection while preserving paper context.");
+  });
+
+  it("does not treat keywords or references in prose as section headings", () => {
+    expect(extractAbstractFromPdfText([
+      "Abstract",
+      "We compare keywords and references in normal prose while preserving enough context for selected papers.",
+      "Introduction",
+      "The body starts here.",
+    ].join("\n"))).toBe("We compare keywords and references in normal prose while preserving enough context for selected papers.");
   });
 
   it("throws 'PDF file not found' for a missing path", async () => {

@@ -1841,6 +1841,7 @@ describe("PaperLibraryCommandCenter", () => {
                 paperIds: ["paper-1"],
                 title: "Interesting Paper",
                 authors: ["Smith"],
+                abstract: "This local abstract explains why the selected paper matters for the visible citation neighborhood.",
                 local: true,
                 suggestion: false,
                 sources: ["filename"],
@@ -1906,6 +1907,7 @@ describe("PaperLibraryCommandCenter", () => {
                   paperIds: ["paper-1"],
                   title: "Interesting Paper",
                   authors: ["Smith"],
+                  abstract: "This local abstract explains why the selected paper matters for the visible citation neighborhood.",
                   local: true,
                   suggestion: false,
                   sources: ["filename"],
@@ -1918,6 +1920,7 @@ describe("PaperLibraryCommandCenter", () => {
                   paperIds: ["paper-1"],
                   title: "Interesting Paper",
                   authors: ["Smith"],
+                  abstract: "This local abstract explains why the selected paper matters for the visible citation neighborhood.",
                   local: true,
                   suggestion: false,
                   sources: ["filename"],
@@ -2099,6 +2102,8 @@ describe("PaperLibraryCommandCenter", () => {
 
     expect(await screen.findByText("Citation graph overview")).toBeInTheDocument();
     expect((await screen.findAllByText("Interesting Paper")).length).toBeGreaterThan(0);
+    fireEvent.click(await screen.findByRole("button", { name: "Select Interesting Paper" }));
+    expect(await screen.findByText("This local abstract explains why the selected paper matters for the visible citation neighborhood.")).toBeInTheDocument();
     expect(await screen.findByText("Semantic Scholar paused for this scan.")).toBeInTheDocument();
     expect(await screen.findByText("2 of 2 papers loaded")).toBeInTheDocument();
     expect(await screen.findByText("model unavailable")).toBeInTheDocument();
