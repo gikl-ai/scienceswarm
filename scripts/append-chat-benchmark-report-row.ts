@@ -9,8 +9,6 @@ import {
   type ChatBenchmarkRowCliOptions,
 } from "./benchmark-chat-hi-row";
 
-const DEFAULT_REPORT_PATH = "docs/chat-speed-timing-report.md";
-
 export interface AppendBenchmarkReportOptions {
   rowOptions: ChatBenchmarkRowCliOptions;
   reportPath: string;
@@ -27,7 +25,7 @@ export function appendBenchmarkReportHelpText(): string {
     "Usage: npx tsx scripts/append-chat-benchmark-report-row.ts [row options] [append options]",
     "",
     "Append options:",
-    `  --report <path>         Markdown report file to update (default: ${DEFAULT_REPORT_PATH})`,
+    "  --report <path>         Markdown report file to update (required unless SCIENCESWARM_CHAT_REPORT_PATH is set)",
     "",
     benchmarkRowHelpText(),
   ].join("\n");
@@ -38,7 +36,7 @@ export function parseAppendBenchmarkReportArgs(
   env: Record<string, string | undefined> = process.env,
 ): AppendBenchmarkReportOptions {
   const rowArgv: string[] = [];
-  let reportPath = env.SCIENCESWARM_CHAT_REPORT_PATH ?? DEFAULT_REPORT_PATH;
+  let reportPath = env.SCIENCESWARM_CHAT_REPORT_PATH;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -51,6 +49,12 @@ export function parseAppendBenchmarkReportArgs(
       continue;
     }
     rowArgv.push(arg);
+  }
+
+  if (!reportPath) {
+    throw new Error(
+      "A report path is required. Pass --report <path> or set SCIENCESWARM_CHAT_REPORT_PATH.",
+    );
   }
 
   return {

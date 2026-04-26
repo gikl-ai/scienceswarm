@@ -61,6 +61,21 @@ describe("append-chat-benchmark-report-row", () => {
     ).toThrow("--report requires a path argument");
   });
 
+  it("rejects missing report paths when no env override is set", () => {
+    expect(() =>
+      parseAppendBenchmarkReportArgs([
+        "--url",
+        "http://127.0.0.1:3001/dashboard",
+        "--pr",
+        "#277",
+        "--change-area",
+        "append helper",
+      ]),
+    ).toThrow(
+      "A report path is required. Pass --report <path> or set SCIENCESWARM_CHAT_REPORT_PATH.",
+    );
+  });
+
   it("inserts a new row before the notes section", () => {
     const row =
       "| 2026-04-25 | #277 | append helper | Local `http://localhost:3001` | 40 | 55 | no | 120 | 2 | `Hi there.` | unavailable |";

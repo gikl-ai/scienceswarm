@@ -32,46 +32,6 @@ pushes, but it also blocks merge. Remove `ci-defer` when the PR is ready for
 final validation so CI, dependency review, and any relevant E2E checks run on
 the merge candidate.
 
-If your PR changes chat speed or OpenClaw turn startup behavior, also run the
-local `Hi` benchmark and record the result in
-`docs/chat-speed-timing-report.md`:
-
-```bash
-npx tsx scripts/benchmark-chat-hi.ts \
-  --url http://localhost:3001 \
-  --project project-alpha \
-  --message Hi \
-  --timing-artifact \
-  --json
-```
-
-When you want a paste-ready report row for
-`docs/chat-speed-timing-report.md`, use:
-
-```bash
-npx tsx scripts/benchmark-chat-hi-row.ts \
-  --url http://localhost:3001 \
-  --project project-alpha \
-  --message Hi \
-  --timing-artifact \
-  --pr '#PR' \
-  --change-area 'change-area'
-```
-
-Once `scripts/append-chat-benchmark-report-row.ts` is available on the branch
-you are validating, you can benchmark and update
-`docs/chat-speed-timing-report.md` in one step with:
-
-```bash
-npx tsx scripts/append-chat-benchmark-report-row.ts \
-  --url http://localhost:3001 \
-  --project project-alpha \
-  --message Hi \
-  --timing-artifact \
-  --pr '#PR' \
-  --change-area 'change-area'
-```
-
 ## Contribution rules
 
 - Do not commit secrets, private local paths, or local runtime state.
