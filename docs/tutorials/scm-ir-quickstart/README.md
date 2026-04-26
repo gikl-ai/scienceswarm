@@ -169,8 +169,44 @@ If the run succeeds, Claude Code should list:
 | `output/fits/classic_*.rds` | classic SCM fits and placebo ratios |
 | `output/fits/alternatives_*.rds` | gsynth, synthetic DiD when available, and DR-SC comparisons |
 | `output/inference_summary.{json,md}` | compact placebo-inference summary for the assistant to cite |
-| `output/scm-ir-report.html` | interactive report |
-| `output/lib/` | local Plotly/htmlwidget assets required by the report |
+| `output/scm-ir-report.html` | interactive report (classic stage-6 output) |
+| `output/lib/` | local Plotly/htmlwidget assets required by the classic report |
+
+---
+
+## Modern report (optional)
+
+After the pipeline finishes, a sophisticated *broadsheet*-themed sibling
+report can be produced from the same artifacts using the shared
+`scientific_report` skill (no R round trip needed):
+
+```bash
+# from this tutorial's folder, with output/ already populated
+python -m tooling.scientific_report.exporters.scm_ir \
+  --inference   output/inference_summary.json \
+  --classic-html output/scm-ir-report.html \
+  --out         output/scm-ir-spec.json
+
+python -m tooling.scientific_report \
+  --spec output/scm-ir-spec.json \
+  --out  output/scm-ir-report-modern.html
+```
+
+Outputs:
+
+| Artifact | Meaning |
+|---|---|
+| `output/scm-ir-spec.json` | normalized spec JSON; the renderer consumes this |
+| `output/scm-ir-report-modern.html` | broadsheet-themed sibling report (single self-contained HTML, no `lib/` folder) |
+
+The classic `output/scm-ir-report.html` is the source-of-truth for
+trajectory data and stays the primary deliverable. The modern report is
+a polished re-presentation of the same numbers and cannot disagree with
+the classic report on the underlying values — by construction, since its
+exporter parses the classic report's embedded data.
+
+For the spec format and how to author additional themes, see
+[`tooling/scientific_report/README.md`](../../../tooling/scientific_report/README.md).
 
 ---
 

@@ -1,0 +1,23 @@
+{
+  "slug": "scientific-report-html",
+  "name": "Scientific Report (HTML)",
+  "description": "Render a typed JSON spec into a sophisticated, themed HTML report — magazine-grade typography, embedded interactive Plotly figures, plot/figure captions, validation tables, and glossary. Currently ships a 'broadsheet' theme used by the SCM-IR quickstart; intended as the shared renderer for any ScienceSwarm tutorial that wants a polished output page alongside its raw artifacts.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "scienceswarm",
+    "tutorial",
+    "presentation",
+    "html",
+    "renderer"
+  ],
+  "hosts": [
+    "cli"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Theme-driven HTML report renderer. Consumes a JSON spec and emits a single self-contained interactive report.",
+  "source": {
+    "kind": "local",
+    "path": "tooling/scientific_report"
+  }
+}
