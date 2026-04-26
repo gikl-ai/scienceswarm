@@ -1674,15 +1674,15 @@ function renderContent(
           key: `content-${i}`,
           kind: "flow",
           node: (
-          <div key={i} className="my-2">
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             <iframe
               src={src}
               title={filePath}
-              className="w-full min-w-0 h-[80vh] min-h-[700px] rounded-lg border border-border bg-white"
+              className="block h-[80vh] min-h-[700px] w-full min-w-0 rounded-[1rem] bg-white"
               sandbox="allow-scripts"
             />
             <span className={captionClass}>{filePath}</span>
-          </div>
+          </figure>
           ),
         }];
       }
@@ -1691,15 +1691,15 @@ function renderContent(
           key: `content-${i}`,
           kind: "flow",
           node: (
-          <div key={i} className="my-2">
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             <iframe
               src={src}
               title={filePath}
-              className="w-full min-w-0 h-[80vh] min-h-[600px] rounded-lg border border-border bg-white"
+              className="block h-[80vh] min-h-[600px] w-full min-w-0 rounded-[1rem] bg-white"
               sandbox="allow-same-origin allow-downloads"
             />
             <span className={captionClass}>{filePath}</span>
-          </div>
+          </figure>
           ),
         }];
       }
@@ -1722,12 +1722,12 @@ function renderContent(
           key: `content-${i}`,
           kind: "flow",
           node: (
-          <div key={i} className="my-2">
-            <video controls className="max-w-full max-h-[50vh] rounded-lg border border-border bg-black">
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
+            <video controls className={`${ASSISTANT_MEDIA_FRAME_CLASS} rounded-[1rem] bg-black`}>
               <source src={src} type={getVideoMimeType(ext)} />
             </video>
             <span className={captionClass}>{filePath}</span>
-          </div>
+          </figure>
           ),
         }];
       }
@@ -1736,12 +1736,12 @@ function renderContent(
           key: `content-${i}`,
           kind: "flow",
           node: (
-          <div key={i} className="my-2">
+          <figure key={i} className={`my-2 p-3 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             <audio controls className="w-full">
               <source src={src} type={getAudioMimeType(ext)} />
             </audio>
             <span className={captionClass}>{filePath}</span>
-          </div>
+          </figure>
           ),
         }];
       }
@@ -1831,16 +1831,16 @@ function renderContent(
           key: `content-${i}`,
           kind: "flow",
           node: (
-          <div key={i} className="my-2">
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             <iframe
               src={embedUrl}
               title={embedTitle}
-              className="w-full min-w-0 min-h-[700px] rounded-lg border border-border bg-white"
+              className="block min-h-[700px] w-full min-w-0 rounded-[1rem] bg-white"
               style={{ height: embedHeight }}
               sandbox="allow-scripts"
             />
             <span className={captionClass}>{embedTitle}</span>
-          </div>
+          </figure>
           ),
         }];
       }
