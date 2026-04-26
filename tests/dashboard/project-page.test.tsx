@@ -404,10 +404,11 @@ describe("Project dashboard smoke test", () => {
   it("rotates placeholder prompts only while the composer is empty and unfocused", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
+    vi.useFakeTimers();
 
     render(<ProjectPage />);
 
-    const composer = await screen.findByTestId("project-chat-composer");
+    const composer = screen.getByTestId("project-chat-composer");
     const input = within(composer).getByLabelText("Chat with your project");
 
     expect(input).toHaveAttribute(
@@ -416,23 +417,30 @@ describe("Project dashboard smoke test", () => {
     );
 
     await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 4100));
+      await vi.advanceTimersByTimeAsync(4100);
     });
-    await waitFor(() => {
-      expect(input).toHaveAttribute(
-        "placeholder",
-        "What's still open from last week?",
-      );
-    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "What's still open from last week?",
+    );
 
     fireEvent.focus(input);
     const focusedPlaceholder = input.getAttribute("placeholder");
     await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 4100));
+      await vi.advanceTimersByTimeAsync(4100);
     });
     expect(input).toHaveAttribute(
       "placeholder",
       focusedPlaceholder,
+    );
+
+    fireEvent.blur(input);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4100);
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "Show me unfinished tasks",
     );
   });
 
