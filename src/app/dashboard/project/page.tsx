@@ -18,6 +18,7 @@ import {
   CalendarCheck,
   ChatCircleText,
   FileMagnifyingGlass,
+  PaperPlaneTilt,
   SidebarSimple,
   List,
   X,
@@ -5011,12 +5012,12 @@ function ProjectPageContent() {
                             placeholder={isChatBusy ? "Processing..." : ""}
                             disabled={isChatBusy}
                             rows={2}
-                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[var(--radius-2)] border border-rule-soft bg-sunk/35 py-2.5 pl-3 pr-12 text-[15px] leading-6 text-strong caret-accent placeholder:text-quiet transition-colors focus:border-accent/60 focus:bg-sunk/55 focus:outline-none focus:ring-0 disabled:opacity-50`}
+                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[var(--radius-2)] border border-rule-soft bg-sunk/35 py-2.5 pl-3 pr-20 text-[15px] leading-6 text-strong caret-accent placeholder:text-quiet transition-colors focus:border-accent/60 focus:bg-sunk/55 focus:outline-none focus:ring-0 disabled:opacity-50`}
                           />
                           <button
                             type="button"
                             onPointerDown={handleComposerResizePointerDown}
-                            className="absolute right-1 top-1 z-10 flex h-7 w-7 cursor-ns-resize items-center justify-center rounded-[var(--radius-1)] border border-transparent text-muted transition-colors hover:border-rule hover:bg-raised hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
+                            className="absolute right-10 top-1 z-10 flex h-7 w-7 cursor-ns-resize items-center justify-center rounded-[var(--radius-1)] border border-transparent text-muted transition-colors hover:border-rule hover:bg-raised hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
                             aria-label="Resize message composer"
                             title="Drag up to resize"
                           >
@@ -5026,6 +5027,16 @@ function ProjectPageContent() {
                             >
                               ↕
                             </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSend}
+                            disabled={isChatBusy || input.trim().length === 0}
+                            className="absolute bottom-1.5 right-1.5 z-10 inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-2)] bg-accent text-white shadow-sm transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:bg-sunk disabled:text-quiet disabled:shadow-none"
+                            aria-label="Send message"
+                            title="Send message"
+                          >
+                            <PaperPlaneTilt size={15} weight="fill" />
                           </button>
                         </div>
                       </div>

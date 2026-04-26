@@ -346,7 +346,7 @@ describe("Project dashboard smoke test", () => {
     expect(composer).toHaveClass("shadow-sm");
     expect(input).toHaveClass("py-2.5");
     expect(input).toHaveClass("pl-3");
-    expect(input).toHaveClass("pr-12");
+    expect(input).toHaveClass("pr-20");
     expect(input).toHaveClass("bg-sunk/35");
     expect(input).not.toHaveClass("px-0");
     expect(input).not.toHaveClass("py-1");
@@ -385,7 +385,7 @@ describe("Project dashboard smoke test", () => {
     expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
   });
 
-  it("renders footer controls as one compact row without an idle send button", async () => {
+  it("renders footer controls as one compact row with a visible send button", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -405,7 +405,7 @@ describe("Project dashboard smoke test", () => {
     expect(
       within(guidance).getByText("Enter to send · Shift+Enter for a new line."),
     ).toBeInTheDocument();
-    expect(within(composer).queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "Send message" })).toBeDisabled();
   });
 
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {

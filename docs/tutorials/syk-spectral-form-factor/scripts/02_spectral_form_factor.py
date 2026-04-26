@@ -11,7 +11,8 @@ and computes:
   - the unfolded nearest-neighbor gap ratio
         r_n = min(s_n, s_{n+1}) / max(s_n, s_{n+1}),  s_n = E_{n+1} - E_n,
     which has a parameter-free distribution P(r) (Atas et al. 2013) that
-    distinguishes Poisson, GOE, GUE, and GSE.
+    distinguishes Poisson, GOE, GUE, and GSE.  For GSE spectra, exact
+    two-fold Kramers pairs are collapsed before computing r_n.
   - the spectral density rho(E), averaged over disorder realizations.
 
 Reference values for <r> from the Atas-Bogomolny-Roux-Roy 2013 surmise
@@ -31,6 +32,11 @@ For N = 22 (the default), N mod 8 = 6 -> GUE in the even-parity sector.
 Outputs:
   - sff_data.json (curves and reference overlays for the HTML report)
   - metrics.json  (validation gates; non-zero exit if any gate fails)
+
+For non-degenerate spectra the SFF plateau gate compares against the
+finite-sample average of Z(2 beta) / Z(beta)^2.  For GSE spectra, the plateau
+reference is degeneracy-aware for Kramers pairs; using the naive all-eigenvalue
+ratio would underestimate the physical late-time diagonal contribution.
 """
 
 from __future__ import annotations
@@ -58,7 +64,62 @@ def gap_ratio(eigvals: np.ndarray) -> np.ndarray:
     spacings = np.diff(eigvals, axis=-1)
     s1 = spacings[..., :-1]
     s2 = spacings[..., 1:]
-    return np.minimum(s1, s2) / np.maximum(s1, s2)
+    denominator = np.maximum(s1, s2)
+    return np.minimum(s1, s2) / denominator
+
+
+def collapse_kramers_pairs(eigvals: np.ndarray) -> tuple[np.ndarray, float, float]:
+    """Collapse adjacent two-fold Kramers pairs for GSE gap statistics.
+
+    The physical spectrum still contains the two-fold degeneracy.  The Atas
+    GSE gap-ratio surmise, however, is defined on the sequence of distinct
+    Kramers pairs.  Without this collapse, every other spacing is numerically
+    zero and <r> is forced to zero even when the GSE block is correct.
+    """
+    n_samples, dim = eigvals.shape
+    if dim % 2 != 0:
+        raise ValueError(
+            f"GSE Kramers collapse expected an even spectrum dimension, got {dim}"
+        )
+    pairs = eigvals.reshape(n_samples, dim // 2, 2)
+    pair_splits = np.abs(pairs[..., 1] - pairs[..., 0])
+    scale = max(1.0, float(np.ptp(eigvals)))
+    tolerance = 1e-8 * scale
+    max_split = float(pair_splits.max())
+    if max_split > tolerance:
+        raise ValueError(
+            "GSE Kramers-pair collapse failed: adjacent pair split "
+            f"{max_split:.3e} exceeds tolerance {tolerance:.3e}. "
+            "Check parity projection and eigenvalue ordering."
+        )
+    return pairs.mean(axis=-1), max_split, tolerance
+
+
+def plateau_reference(
+    eigvals: np.ndarray, beta: float, cls: str
+) -> tuple[float, str]:
+    """Return the finite-sample plateau reference for the connected SFF.
+
+    For non-degenerate spectra this is the sample mean of
+    Z(2 beta) / Z(beta)^2.  For GSE, Kramers degeneracy doubles each
+    eigenvalue's multiplicity.  The late-time diagonal contribution is then
+    sum_j d_j^2 exp(-2 beta E_j) / (sum_j d_j exp(-beta E_j))^2, not the
+    naive all-eigenvalue Z(2 beta) / Z(beta)^2, which would be too small by
+    roughly a factor of two.
+    """
+    if cls == "GSE":
+        distinct, _, _ = collapse_kramers_pairs(eigvals)
+        degeneracy = 2.0
+        numerator = (degeneracy**2) * np.exp(-2 * beta * distinct).sum(axis=1)
+        denominator = (degeneracy * np.exp(-beta * distinct).sum(axis=1)) ** 2
+        return (
+            float(np.mean(numerator / denominator)),
+            "degeneracy-aware Kramers-pair time average",
+        )
+
+    numerator = np.exp(-2 * beta * eigvals).sum(axis=1)
+    denominator = np.exp(-beta * eigvals).sum(axis=1) ** 2
+    return float(np.mean(numerator / denominator)), "sample-mean Z(2 beta) / Z(beta)^2"
 
 
 def expected_class(N: int) -> str:
@@ -160,7 +221,22 @@ def main() -> None:
     rho_density = rho_counts / (rho_edges[1] - rho_edges[0])  # per unit E
 
     # ---- Gap ratio statistics --------------------------------------------
-    r_all = gap_ratio(spectra).reshape(-1)
+    gap_spectra = spectra
+    kramers_info: dict[str, float | bool] = {"pairs_collapsed": False}
+    if cls == "GSE":
+        gap_spectra, max_split, pair_tolerance = collapse_kramers_pairs(spectra)
+        kramers_info = {
+            "pairs_collapsed": True,
+            "max_pair_split": max_split,
+            "pair_tolerance": pair_tolerance,
+        }
+        print(
+            "Collapsed Kramers pairs for GSE gap statistics: "
+            f"dim {spectra.shape[1]} -> {gap_spectra.shape[1]}, "
+            f"max pair split {max_split:.3e}"
+        )
+
+    r_all = gap_ratio(gap_spectra).reshape(-1)
     r_mean = float(r_all.mean())
     r_sem = float(r_all.std() / np.sqrt(r_all.size))
     r_hist_counts, r_hist_edges = np.histogram(
@@ -180,11 +256,9 @@ def main() -> None:
     sff = spectral_form_factor(spectra, beta=args.beta, times=times)
     print(f"  done in {time.time() - t0:.1f}s")
 
-    # Plateau reference (theoretical asymptote at t -> infty).  In our
-    # normalization g(t -> inf; beta) -> Z(2 beta) / Z(beta)^2 (annealed).
-    Z_2b = np.exp(-2 * args.beta * spectra).sum(axis=1).mean()
-    Z_b = np.exp(-args.beta * spectra).sum(axis=1).mean()
-    plateau_ref = float(Z_2b / Z_b ** 2)
+    # Plateau reference (finite-sample theoretical asymptote at t -> infty).
+    # For GSE this must account for Kramers degeneracy; see plateau_reference.
+    plateau_ref, plateau_ref_kind = plateau_reference(spectra, args.beta, cls)
 
     # The slope-1 ramp reference: K_RMT(t) ~ t / (pi * Z(beta)^2)? In our
     # normalization (per-sample |Z(beta+it)|^2 / Z(beta)^2 averaged) the
@@ -233,6 +307,7 @@ def main() -> None:
             "r_hist_centers": r_hist_centers.tolist(),
             "r_hist_density": r_hist_counts.tolist(),
             "r_n_pairs": int(r_all.size),
+            "kramers": kramers_info,
         },
         "sff": {
             "times": times.tolist(),
@@ -241,11 +316,12 @@ def main() -> None:
             "g_c": sff["g_c"].tolist(),
             "g_sem": sff["g_sem"].tolist(),
             "plateau_ref": plateau_ref,
+            "plateau_ref_kind": plateau_ref_kind,
             "dip_t": dip_t,
             "dip_g": dip_g,
             "plateau_t": plateau_t,
-            "Z_beta_mean": float(Z_b),
-            "Z_2beta_mean": float(Z_2b),
+            "Z_beta_mean": float(np.exp(-args.beta * spectra).sum(axis=1).mean()),
+            "Z_2beta_mean": float(np.exp(-2 * args.beta * spectra).sum(axis=1).mean()),
         },
     }
 
@@ -276,9 +352,11 @@ def main() -> None:
             "r_reference": r_ref,
             "r_tolerance": r_tol,
             "r_within_tolerance": bool(r_ok),
+            "kramers": kramers_info,
         },
         "sff": {
             "plateau_ref": plateau_ref,
+            "plateau_ref_kind": plateau_ref_kind,
             "plateau_observed_at_tmax": plateau_g,
             "plateau_within_tolerance": bool(plateau_ok),
             "dip_g_c": dip_g,
