@@ -255,12 +255,72 @@ describe("PaperLibraryCommandCenter", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start dry-run scan" }));
 
     await screen.findByText("ready for review");
-    resolveFolderPicker?.(Response.json({ path: "/tmp/picker-library" }));
+    await act(async () => {
+      resolveFolderPicker?.(Response.json({ path: "/tmp/picker-library" }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(scanRequestBodies).toHaveLength(1);
+    expect(scanRequestBodies[0]).toMatchObject({ rootPath: "/tmp/manual-library" });
+  });
+
+  it("ignores a stale folder picker failure after a manual path scan starts", async () => {
+    let rejectFolderPicker: ((error: Error) => void) | undefined;
+    const folderPickerResponse = new Promise<Response>((_, reject) => {
+      rejectFolderPicker = reject;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json(
+          { error: { message: "Paper library scan not found." } },
+          { status: 404 },
+        );
+      }
+
+      if (url === "/api/local-folder-picker" && method === "POST") {
+        return folderPickerResponse;
+      }
+
+      if (url === "/api/brain/paper-library/scan" && method === "POST") {
+        return Response.json({ ok: true, scanId: "scan-1" });
+      }
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({ rootPath: "/tmp/manual-library", rootRealpath: "/tmp/manual-library" }),
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
 
     await waitFor(() => {
-      expect(scanRequestBodies).toHaveLength(1);
+      expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeEnabled();
     });
-    expect(scanRequestBodies[0]).toMatchObject({ rootPath: "/tmp/manual-library" });
+    fireEvent.click(screen.getByRole("button", { name: "Import PDF Folder" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Local folder path" }), {
+      target: { value: "/tmp/manual-library" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start dry-run scan" }));
+
+    await screen.findByText("ready for review");
+    await act(async () => {
+      rejectFolderPicker?.(new Error("stale picker failed"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("stale picker failed")).not.toBeInTheDocument();
+    expect(screen.getByText("ready for review")).toBeInTheDocument();
   });
 
   it("hydrates the latest persisted scan when local storage is empty", async () => {

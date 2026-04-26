@@ -995,6 +995,7 @@ export function PaperLibraryCommandCenter({
   const graphActionMessageTimeoutRef = useRef<number | null>(null);
   const graphMoreRef = useRef<HTMLDivElement>(null);
   const folderPickerRequestSeqRef = useRef(0);
+  const manualRootPathDirtyRef = useRef(false);
   const [session, setSession] = useState<PaperLibrarySession>(() => defaultSession());
   const [restoredProjectSlug, setRestoredProjectSlug] = useState<string | null>(null);
   const sessionRestored = restoredProjectSlug === projectSlug;
@@ -1123,6 +1124,7 @@ export function PaperLibraryCommandCenter({
   useEffect(() => {
     skipLatestRestoreRef.current = false;
     templateSelectionDirtyRef.current = false;
+    manualRootPathDirtyRef.current = false;
     setSession(readStoredSession(projectSlug));
     setScan(null);
     setScanError(null);
@@ -1138,6 +1140,7 @@ export function PaperLibraryCommandCenter({
 
   useEffect(() => {
     if (!sessionRestored) return;
+    if (manualRootPathDirtyRef.current) return;
     setManualRootPath(session.rootPath);
   }, [session.rootPath, sessionRestored]);
 
@@ -1646,9 +1649,12 @@ export function PaperLibraryCommandCenter({
       const rootPath = payload.path?.trim();
       if (!rootPath) throw new Error("Folder picker returned no path.");
       skipLatestRestoreRef.current = true;
+      manualRootPathDirtyRef.current = false;
       await startScanForRoot(rootPath);
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : "Could not choose a PDF folder.");
+      if (folderPickerRequestSeqRef.current === requestSeq) {
+        setCommandError(error instanceof Error ? error.message : "Could not choose a PDF folder.");
+      }
     } finally {
       if (folderPickerRequestSeqRef.current === requestSeq) {
         setFolderPickerLoading(false);
@@ -1666,6 +1672,7 @@ export function PaperLibraryCommandCenter({
 
     setManualScanLoading(true);
     folderPickerRequestSeqRef.current += 1;
+    manualRootPathDirtyRef.current = false;
     setFolderPickerLoading(false);
     skipLatestRestoreRef.current = true;
     try {
@@ -3417,8 +3424,11 @@ export function PaperLibraryCommandCenter({
               <input
                 type="text"
                 value={manualRootPath}
-                onChange={(event) => setManualRootPath(event.target.value)}
-                disabled={scanLoading || isScanInFlight(scan)}
+                onChange={(event) => {
+                  manualRootPathDirtyRef.current = true;
+                  setManualRootPath(event.target.value);
+                }}
+                disabled={manualScanLoading || scanLoading || isScanInFlight(scan)}
                 placeholder="/Users/you/papers"
                 className="mt-2 w-full rounded-lg border border-border bg-white px-3 py-2 font-mono text-sm text-foreground outline-none transition-colors placeholder:text-muted/70 focus:border-accent disabled:opacity-50"
               />
