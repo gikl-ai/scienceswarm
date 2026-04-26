@@ -1761,6 +1761,18 @@ function ProjectPageContent() {
     useState<PendingRuntimeSend | null>(null);
   const [runtimePreviewBusy, setRuntimePreviewBusy] = useState(false);
   const [runtimePreviewError, setRuntimePreviewError] = useState<string | null>(null);
+  const selectedComposerRuntimeHost = useMemo(
+    () =>
+      runtimeHosts.hosts.find((host) => host.profile.id === selectedRuntimeHostId)
+      ?? null,
+    [runtimeHosts.hosts, selectedRuntimeHostId],
+  );
+  const composerModeCopy = useMemo(() => {
+    if (runtimeMode === "compare") {
+      return `Compare ${Math.max(1, compareHostIds.length)} hosts`;
+    }
+    return runtimeMode === "task" ? "Task mode" : "Chat mode";
+  }, [compareHostIds.length, runtimeMode]);
   useEffect(() => {
     if (runtimeMode !== "compare") {
       clearRuntimeCompareResult();
@@ -4958,6 +4970,29 @@ function ProjectPageContent() {
                           </button>
                         </div>
                       )}
+                      <div className="flex flex-col gap-2.5 border-b border-rule/70 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-dim">
+                            Project Chat
+                          </p>
+                          <p className="mt-1 text-[13px] font-medium leading-5 text-strong">
+                            Ask about the project, run a task, or compare runtimes without leaving the thread.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium text-dim">
+                          {activeProjectSlug && (
+                            <span className="inline-flex items-center rounded-full border border-rule bg-sunk px-2.5 py-1">
+                              {activeProjectSlug}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center rounded-full border border-rule bg-sunk px-2.5 py-1">
+                            {selectedComposerRuntimeHost?.profile.label ?? "Runtime"}
+                          </span>
+                          <span className="inline-flex items-center rounded-full border border-rule bg-sunk px-2.5 py-1">
+                            {composerModeCopy}
+                          </span>
+                        </div>
+                      </div>
                       <div className="px-4 pb-2 pt-4">
                         <div className="relative flex-1">
                           <ChatMentionInput
