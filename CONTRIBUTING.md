@@ -44,6 +44,9 @@ SCIENCESWARM_CHAT_TIMING=1 npx tsx scripts/benchmark-chat-hi.ts --timing-artifac
 The helper targets `http://localhost:3001` by default. Use `--url` when your
 local app is bound to a different origin.
 
+For the field-by-field timing guide and JSON inspection examples, see
+[`docs/local-chat-benchmark.md`](docs/local-chat-benchmark.md).
+
 What the key lines mean:
 
 - `Observed split` is the client-visible breakdown from browser request start to
