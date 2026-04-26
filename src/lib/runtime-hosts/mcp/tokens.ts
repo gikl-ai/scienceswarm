@@ -7,6 +7,7 @@ export const RUNTIME_MCP_TOKEN_VERSION = 1;
 export const RUNTIME_MCP_TOOL_NAMES = [
   "gbrain_search",
   "gbrain_read",
+  "gbrain_structural_retrieve",
   "gbrain_capture",
   "project_workspace_read",
   "artifact_import",

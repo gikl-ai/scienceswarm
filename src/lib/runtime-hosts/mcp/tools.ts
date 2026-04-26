@@ -48,6 +48,11 @@ import {
   type RuntimeMcpAccessTokenClaims,
   type RuntimeMcpToolName,
 } from "./tokens";
+import {
+  runtimeStructuralRetrieval,
+  type RuntimeStructuralRetrievalInput,
+  type RuntimeStructuralRetrievalResult,
+} from "./structural-retrieval";
 
 export type RuntimeMcpToolErrorCode =
   | "RUNTIME_MCP_UNAUTHORIZED"
@@ -109,6 +114,18 @@ export interface RuntimeMcpGbrainSearchParams extends RuntimeMcpAuthParams {
 
 export interface RuntimeMcpGbrainReadParams extends RuntimeMcpAuthParams {
   path: string;
+}
+
+export interface RuntimeMcpStructuralRetrievalParams extends RuntimeMcpAuthParams {
+  query: string;
+  studyId?: string;
+  studySlug?: string;
+  legacyProjectSlug?: string;
+  sourceIds?: string[];
+  pageIds?: string[];
+  nearSymbol?: string;
+  walkDepth?: number;
+  limit?: number;
 }
 
 export interface RuntimeMcpGbrainCaptureParams extends RuntimeMcpAuthParams {
@@ -183,6 +200,9 @@ export interface RuntimeMcpToolsetDeps {
   brainRead?: (
     params: Omit<RuntimeMcpGbrainReadParams, keyof RuntimeMcpAuthParams>,
   ) => Promise<unknown>;
+  structuralRetrieval?: (
+    params: RuntimeStructuralRetrievalInput,
+  ) => Promise<RuntimeStructuralRetrievalResult>;
   brainCapture?: (
     params: Omit<RuntimeMcpGbrainCaptureParams, keyof RuntimeMcpAuthParams>
       & {
@@ -530,6 +550,55 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
         () => {
           if (!toolsetDeps.brainRead) toolUnavailable("gbrain_read");
           return toolsetDeps.brainRead({ path: input.path });
+        },
+      );
+    },
+
+    gbrainStructuralRetrieve(
+      input: RuntimeMcpStructuralRetrievalParams,
+    ): Promise<RuntimeStructuralRetrievalResult> {
+      return withRuntimeMcpToolAuthorization(
+        toolsetDeps,
+        {
+          ...input,
+          toolName: "gbrain_structural_retrieve",
+          tokenSecret: toolsetDeps.tokenSecret,
+          now: toolsetDeps.now,
+          dataIncluded: runtimeMcpDataIncluded({
+            toolName: "gbrain_structural_retrieve",
+            label: input.nearSymbol ?? input.query,
+            kind: "gbrain-excerpt",
+          }),
+        },
+        () => {
+          const {
+            projectId,
+            runtimeSessionId,
+            hostId,
+            query,
+            studyId,
+            studySlug,
+            legacyProjectSlug,
+            sourceIds,
+            pageIds,
+            nearSymbol,
+            walkDepth,
+            limit,
+          } = input;
+          return (toolsetDeps.structuralRetrieval ?? runtimeStructuralRetrieval)({
+            projectId,
+            runtimeSessionId,
+            hostId,
+            query,
+            studyId,
+            studySlug,
+            legacyProjectSlug,
+            sourceIds,
+            pageIds,
+            nearSymbol,
+            walkDepth,
+            limit,
+          });
         },
       );
     },

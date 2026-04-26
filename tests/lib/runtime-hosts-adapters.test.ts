@@ -574,6 +574,7 @@ describe("runtime host adapters", () => {
       expect(launch?.args?.[allowedToolsIndex + 1]).toBe([
         "mcp__scienceswarm__gbrain_search",
         "mcp__scienceswarm__gbrain_read",
+        "mcp__scienceswarm__gbrain_structural_retrieve",
         "mcp__scienceswarm__gbrain_capture",
         "mcp__scienceswarm__provenance_log",
         "mcp__scienceswarm__openhands_delegate",

@@ -80,7 +80,8 @@ describe("Codex runtime MCP launch", () => {
       },
     });
     const allowedTools = resolveRuntimeMcpToolProfile("codex").allowedTools;
-    expect(allowedTools).toHaveLength(6);
+    expect(allowedTools).toHaveLength(7);
+    expect(allowedTools).toContain("gbrain_structural_retrieve");
 
     await expect(
       adapter.sendTurn(requestFor(requireRuntimeHostProfile("codex"), "chat")),
