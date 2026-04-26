@@ -380,43 +380,43 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
 
 const PROGRESS_MARKDOWN_COMPONENTS: Components = {
   h1: ({ children }) => (
-    <h1 className="mb-2 text-[14px] font-semibold leading-5 text-strong">
+    <h1 className="mb-2 mt-3 first:mt-0 text-[14px] font-semibold leading-5 text-strong">
       {children}
     </h1>
   ),
   h2: ({ children }) => (
-    <h2 className="mb-2 text-[14px] font-semibold leading-5 text-strong">
+    <h2 className="mb-2 mt-3 first:mt-0 text-[14px] font-semibold leading-5 text-strong">
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="mb-2 text-[13px] font-semibold leading-5 text-strong">
+    <h3 className="mb-2 mt-3 first:mt-0 text-[13px] font-semibold leading-5 text-strong">
       {children}
     </h3>
   ),
   h4: ({ children }) => (
-    <h4 className="mb-2 text-[13px] font-semibold leading-5 text-strong">
+    <h4 className="mb-2 mt-3 first:mt-0 text-[13px] font-semibold leading-5 text-strong">
       {children}
     </h4>
   ),
   h5: ({ children }) => (
-    <h5 className="mb-2 text-[13px] font-semibold leading-5 text-strong">
+    <h5 className="mb-2 mt-3 first:mt-0 text-[13px] font-semibold leading-5 text-strong">
       {children}
     </h5>
   ),
   h6: ({ children }) => (
-    <h6 className="mb-2 text-[13px] font-semibold leading-5 text-strong">
+    <h6 className="mb-2 mt-3 first:mt-0 text-[13px] font-semibold leading-5 text-strong">
       {children}
     </h6>
   ),
-  p: ({ children }) => <p className="m-0 text-inherit">{children}</p>,
+  p: ({ children }) => <p className="m-0 mt-2 first:mt-0 text-inherit">{children}</p>,
   ul: ({ children }) => (
-    <ul className="m-0 list-disc space-y-1.5 pl-4 text-inherit marker:text-quiet">
+    <ul className="m-0 mt-2 list-disc space-y-1.5 pl-4 text-inherit marker:text-quiet">
       {children}
     </ul>
   ),
   ol: ({ children }) => (
-    <ol className="m-0 list-decimal space-y-1.5 pl-4 text-inherit marker:text-dim">
+    <ol className="m-0 mt-2 list-decimal space-y-1.5 pl-4 text-inherit marker:text-dim">
       {children}
     </ol>
   ),
@@ -424,13 +424,13 @@ const PROGRESS_MARKDOWN_COMPONENTS: Components = {
     <li className={`pl-1${className ? ` ${className}` : ""}`}>{children}</li>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="m-0 border-l-2 border-rule pl-3 italic text-body">
+    <blockquote className="m-0 mt-2 border-l-2 border-rule pl-3 italic text-body">
       {children}
     </blockquote>
   ),
-  hr: () => <hr className="my-3 border-0 border-t border-rule" />,
+  hr: () => <hr className="my-4 border-0 border-t border-rule" />,
   table: ({ children }) => (
-    <div className={PROGRESS_TABLE_WRAPPER_CLASS}>
+    <div className={`mt-2 ${PROGRESS_TABLE_WRAPPER_CLASS}`}>
       <table className={PROGRESS_TABLE_CLASS}>{children}</table>
     </div>
   ),
@@ -443,7 +443,7 @@ const PROGRESS_MARKDOWN_COMPONENTS: Components = {
   ),
   td: ({ children, style }) => <td className={PROGRESS_TABLE_CELL_CLASS} style={style}>{children}</td>,
   pre: ({ children }) => (
-    <pre className="m-0 overflow-x-auto rounded-2xl border border-rule bg-ink px-4 py-3 text-[12px] leading-5 text-quiet">
+    <pre className="m-0 mt-2 overflow-x-auto rounded-2xl border border-rule bg-ink px-4 py-3 text-[12px] leading-5 text-quiet">
       {children}
     </pre>
   ),
