@@ -56,6 +56,7 @@ export interface PaperLibraryExternalPaper {
   authors?: string[];
   year?: number;
   venue?: string;
+  abstract?: string;
   identifiers?: PaperIdentifier;
   evidence?: string[];
   referenceCount?: number;
@@ -212,6 +213,7 @@ function upsertNode(nodes: Map<string, PaperLibraryGraphNode>, next: PaperLibrar
     authors: existing.authors.length > 0 ? existing.authors : next.authors,
     year: existing.year ?? next.year,
     venue: existing.venue ?? next.venue,
+    abstract: existing.abstract ?? next.abstract,
     identifiers: mergeIdentifiers(existing.identifiers, next.identifiers),
     local,
     suggestion,
@@ -286,6 +288,7 @@ function nodeFromSeed(seed: PaperGraphSeed): PaperLibraryGraphNode {
     authors: correctionAuthors(item) ?? candidate.authors,
     year: correctionNumber(item, "year") ?? candidate.year,
     venue: correctionString(item, "venue") ?? candidate.venue,
+    abstract: correctionString(item, "abstract") ?? item.abstract,
     identifiers,
     local: true,
     suggestion: false,
@@ -634,6 +637,12 @@ async function enrichSeedsFromLocalPdfReferences(input: {
 
     try {
       const extracted = await extractPdfText(pdfPath);
+      if (extracted.abstract) {
+        const node = input.nodes.get(seed.nodeId);
+        if (node && !node.abstract) {
+          input.nodes.set(seed.nodeId, { ...node, abstract: extracted.abstract });
+        }
+      }
       const section = findReferenceSection(extracted.text);
       if (!section) {
         input.sourceRuns.push(sourceRun({
@@ -842,6 +851,7 @@ function applyRelations(input: {
       suggestion: kind === "bridge_suggestion",
       sources: [input.adapterSource],
       evidence: mergeUnique(paper.evidence, [`${input.adapterSource}:${kind}`]),
+      abstract: paper.abstract,
       referenceCount: paper.referenceCount,
       citationCount: paper.citationCount,
     });
@@ -1123,6 +1133,7 @@ export async function buildPaperLibraryGraph(input: BuildPaperLibraryGraphInput)
     scanId: input.scanId,
     createdAt,
     updatedAt: createdAt,
+    abstractsExtracted: true,
     nodes: Array.from(nodes.values()).sort((left, right) => left.id.localeCompare(right.id)),
     edges: Array.from(edges.values()).sort((left, right) => left.id.localeCompare(right.id)),
     sourceRuns,
@@ -1158,7 +1169,7 @@ export async function getOrBuildPaperLibraryGraph(input: BuildPaperLibraryGraphI
         const graph = normalizeGraph(raw);
         const scan = await readPaperLibraryScan(input.project, input.scanId, input.brainRoot);
         if (!scan) return null;
-        if (Date.parse(graph.updatedAt) >= Date.parse(scan.updatedAt)) return graph;
+        if (graph.abstractsExtracted && Date.parse(graph.updatedAt) >= Date.parse(scan.updatedAt)) return graph;
       } catch {
         // Malformed or version-mismatched graph cache falls through to a rebuild.
       }
@@ -1234,6 +1245,7 @@ const SEMANTIC_SCHOLAR_GRAPH_FIELDS = [
   "paperId",
   "externalIds",
   "title",
+  "abstract",
   "year",
   "venue",
   "referenceCount",
@@ -1241,11 +1253,13 @@ const SEMANTIC_SCHOLAR_GRAPH_FIELDS = [
   "references.paperId",
   "references.externalIds",
   "references.title",
+  "references.abstract",
   "references.year",
   "references.venue",
   "citations.paperId",
   "citations.externalIds",
   "citations.title",
+  "citations.abstract",
   "citations.year",
   "citations.venue",
 ].join(",");
@@ -1374,6 +1388,7 @@ function parseSemanticScholarPaper(value: unknown): PaperLibraryExternalPaper | 
   return {
     sourceId,
     title: readString(paper.title),
+    abstract: readString(paper.abstract),
     year: readNumber(paper.year),
     venue: readString(paper.venue),
     identifiers,

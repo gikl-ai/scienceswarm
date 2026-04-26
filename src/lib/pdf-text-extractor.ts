@@ -16,11 +16,13 @@ export interface PdfExtractResult {
   pageCount: number;
   wordCount: number;
   firstSentence: string;
+  abstract?: string;
   info?: Record<string, unknown>;
 }
 
 const FIRST_SENTENCE_MAX = 300;
 const FIRST_SENTENCE_FALLBACK = 160;
+const ABSTRACT_MAX = 2_000;
 const PDF_NULL_BYTE_RE = /\u0000/g;
 const PDF_CONTROL_CHAR_RE = /[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
@@ -79,6 +81,29 @@ function computeFirstSentence(text: string): string {
   return previewSource.slice(0, FIRST_SENTENCE_FALLBACK);
 }
 
+export function extractAbstractFromPdfText(text: string): string | undefined {
+  if (!text.trim()) return undefined;
+  const normalized = text.replace(/\r\n?/g, "\n");
+  const patterns = [
+    /\bAbstract\b[:\s.\-—]*\n?\s*([\s\S]{20,2000}?)(?=\n\s*\n|\n\s*(?:1\s|1\.|I\.|Introduction|Keywords|References)\b)/i,
+    /\bAbstract\b[:\s.\-—]*\n?\s*([\s\S]{20,2000}?)\s*(?:Introduction|1\.|I\.)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    const candidate = match?.[1]
+      ?.replace(/\s+/g, " ")
+      .trim()
+      .replace(/^Abstract[:\s.\-—]*/i, "")
+      .trim();
+    if (candidate && candidate.length >= 20) {
+      return candidate.slice(0, ABSTRACT_MAX);
+    }
+  }
+
+  return undefined;
+}
+
 export async function extractPdfText(pdfPath: string): Promise<PdfExtractResult> {
   if (!(await fileExists(pdfPath))) {
     throw new PdfExtractError("not_found", "PDF file not found");
@@ -113,6 +138,7 @@ export async function extractPdfText(pdfPath: string): Promise<PdfExtractResult>
   const pageCount = data.total ?? infoData?.total ?? 0;
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const firstSentence = computeFirstSentence(text);
+  const abstract = extractAbstractFromPdfText(text);
 
   const result: PdfExtractResult = {
     text,
@@ -120,6 +146,9 @@ export async function extractPdfText(pdfPath: string): Promise<PdfExtractResult>
     wordCount,
     firstSentence,
   };
+  if (abstract) {
+    result.abstract = abstract;
+  }
   if (infoData?.info !== undefined) {
     result.info = infoData.info;
   }

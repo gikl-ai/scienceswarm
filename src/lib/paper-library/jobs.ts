@@ -56,13 +56,15 @@ function hashSemanticText(value: string): string {
 
 function buildSemanticText(input: {
   title?: string;
+  abstract?: string;
   firstSentence?: string;
   venue?: string;
   identifiers?: { doi?: string; arxivId?: string; pmid?: string };
 }): string | undefined {
+  const abstractOrPreview = input.abstract?.trim() || input.firstSentence?.trim();
   const segments = [
     input.title?.trim(),
-    input.firstSentence?.trim(),
+    abstractOrPreview,
     input.venue?.trim(),
     input.identifiers?.doi ? `doi ${input.identifiers.doi}` : undefined,
     input.identifiers?.arxivId ? `arxiv ${input.identifiers.arxivId}` : undefined,
@@ -387,6 +389,7 @@ export async function runPaperLibraryScanJob(
       });
       const semanticText = buildSemanticText({
         title: candidate.title,
+        abstract: extracted?.abstract,
         firstSentence: extracted?.firstSentence,
         venue: candidate.venue,
         identifiers: candidate.identifiers,
@@ -407,6 +410,7 @@ export async function runPaperLibraryScanJob(
         version: 0,
         semanticText,
         semanticTextHash: semanticText ? hashSemanticText(semanticText) : undefined,
+        abstract: extracted?.abstract || undefined,
         firstSentence: extracted?.firstSentence || undefined,
         pageCount: extracted?.pageCount,
         wordCount: extracted?.wordCount,

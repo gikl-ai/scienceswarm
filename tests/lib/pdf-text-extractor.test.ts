@@ -106,6 +106,35 @@ describe("extractPdfText", () => {
     }
   });
 
+  it("extracts an abstract section from PDF text", async () => {
+    const { PDFParse } = require("pdf-parse") as {
+      PDFParse: {
+        prototype: {
+          getText: () => Promise<{ text: string; total: number }>;
+        };
+      };
+    };
+    const getTextSpy = vi
+      .spyOn(PDFParse.prototype, "getText")
+      .mockResolvedValueOnce({
+        text: [
+          "A Study of Local Research Graphs",
+          "Abstract",
+          "We introduce a graph interface for inspecting local paper libraries and their citation neighborhoods.",
+          "Introduction",
+          "The rest of the paper starts here.",
+        ].join("\n"),
+        total: 1,
+      });
+
+    try {
+      const result = await extractPdfText(FAKE_PDF);
+      expect(result.abstract).toBe("We introduce a graph interface for inspecting local paper libraries and their citation neighborhoods.");
+    } finally {
+      getTextSpy.mockRestore();
+    }
+  });
+
   it("throws 'PDF file not found' for a missing path", async () => {
     await expect(extractPdfText(MISSING_PDF)).rejects.toThrow(/^PDF file not found$/);
   });

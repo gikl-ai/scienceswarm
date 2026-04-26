@@ -468,6 +468,11 @@ function graphNodeIdentifier(node: GraphMapNode): string {
   return node.id;
 }
 
+function graphNodeAbstract(node: GraphMapNode): string | null {
+  const abstract = node.abstract?.trim();
+  return abstract && abstract.length > 0 ? abstract : null;
+}
+
 function graphNodeMatchesFilter(node: GraphMapNode, filter: GraphNodeFilter): boolean {
   if (filter === "all") return true;
   if (filter === "local") return node.local;
@@ -2555,6 +2560,7 @@ export function PaperLibraryCommandCenter({
         return <EmptyState title="No scan selected" body="Run a scan first so ScienceSwarm can build a local citation and topic view." />;
       }
       const selectedNode = graphInsights.selectedNode;
+      const selectedNodeAbstract = selectedNode ? graphNodeAbstract(selectedNode) : null;
 
       return (
         <div className="bg-ink px-4 py-4 text-body">
@@ -2918,6 +2924,14 @@ export function PaperLibraryCommandCenter({
                           <p className="text-xs text-dim">{graphNodeMeta(selectedNode)}</p>
                           <p className="mt-2 break-all font-mono text-[11px] text-quiet">{graphNodeIdentifier(selectedNode)}</p>
                         </div>
+                        {selectedNodeAbstract && (
+                          <div className="mt-4 border-t border-rule pt-4">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-dim">Abstract</p>
+                            <p className="mt-2 max-h-64 overflow-y-auto pr-1 text-sm leading-6 text-strong">
+                              {selectedNodeAbstract}
+                            </p>
+                          </div>
+                        )}
                         {graphInsights.neighborNodes.length > 0 && (
                           <div className="mt-4">
                             <p className="text-xs font-semibold text-strong">Nearest papers</p>

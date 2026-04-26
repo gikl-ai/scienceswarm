@@ -41,6 +41,7 @@ function reviewItem(input: {
   paperId: string;
   title: string;
   identifiers: PaperIdentifier;
+  abstract?: string;
   relativePath?: string;
   state?: PaperReviewItem["state"];
 }): PaperReviewItem {
@@ -73,6 +74,7 @@ function reviewItem(input: {
       conflicts: [],
     }],
     selectedCandidateId: candidateId,
+    abstract: input.abstract,
     version: 0,
     updatedAt: now(),
   };
@@ -167,6 +169,9 @@ describe("paper-library graph", () => {
       pageCount: 8,
       wordCount: 120,
       firstSentence: "Local paper",
+      abstract: pdfPath.endsWith("godel-poetry.pdf")
+        ? "We connect proof assistants to mechanized poetry."
+        : undefined,
     }));
 
     const graph = await buildPaperLibraryGraph({
@@ -178,7 +183,11 @@ describe("paper-library graph", () => {
     });
 
     expect(graph).not.toBeNull();
+    expect(graph!.abstractsExtracted).toBe(true);
     const sourceNodeId = "paper:arxiv:2512.00001";
+    expect(graph!.nodes.find((node) => node.id === sourceNodeId)).toMatchObject({
+      abstract: "We connect proof assistants to mechanized poetry.",
+    });
     expect(graph!.sourceRuns.find((run) => run.paperId === "godel-poetry")).toMatchObject({
       source: "pdf_text",
       status: "success",
@@ -428,6 +437,52 @@ describe("paper-library graph", () => {
       adapters: [],
     });
     expect(rebuilt?.nodes[0]?.title).toBe("Corrected Source Title");
+  });
+
+  it("rebuilds persisted graphs that predate abstract extraction", async () => {
+    await seedReviewState([
+      reviewItem({
+        paperId: "source",
+        title: "Source With Abstract",
+        identifiers: { doi: "10.1000/source" },
+        abstract: "Cached graphs from before abstract extraction should rebuild once.",
+      }),
+    ]);
+    await mkdir(path.dirname(getPaperLibraryGraphPath("project-alpha", "scan-1", stateRoot())), { recursive: true });
+    await writeFile(getPaperLibraryGraphPath("project-alpha", "scan-1", stateRoot()), JSON.stringify({
+      version: 1,
+      project: "project-alpha",
+      scanId: "scan-1",
+      createdAt: now(),
+      updatedAt: "2999-01-01T00:00:00.000Z",
+      nodes: [{
+        id: "paper:doi:10.1000/source",
+        kind: "local_paper",
+        paperIds: ["source"],
+        title: "Stale Cached Source",
+        authors: [],
+        identifiers: { doi: "10.1000/source" },
+        local: true,
+        suggestion: false,
+        sources: ["filename"],
+        evidence: [],
+      }],
+      edges: [],
+      sourceRuns: [],
+      warnings: [],
+    }), "utf-8");
+
+    const graph = await getOrBuildPaperLibraryGraph({
+      project: "project-alpha",
+      scanId: "scan-1",
+      brainRoot,
+      adapters: [],
+    });
+    expect(graph?.abstractsExtracted).toBe(true);
+    expect(graph?.nodes[0]).toMatchObject({
+      title: "Source With Abstract",
+      abstract: "Cached graphs from before abstract extraction should rebuild once.",
+    });
   });
 
   it("rebuilds instead of throwing when a persisted graph cache is malformed or from an old version", async () => {
