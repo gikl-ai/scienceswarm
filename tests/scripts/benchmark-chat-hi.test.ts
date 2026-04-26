@@ -266,6 +266,9 @@ describe("benchmark-chat-hi", () => {
     });
     expect(formattedWithTiming).toContain("Total: 100 ms");
     expect(formattedWithTiming).toContain(
+      "Observed split: browser->server headers 5 ms, server->first chunk 5 ms, first chunk->complete 90 ms",
+    );
+    expect(formattedWithTiming).toContain(
       "Timing phases: project_materialization skipped, chat_readiness 7 ms (inferred)",
     );
     expect(formattedWithTiming).toContain(
@@ -374,6 +377,27 @@ describe("benchmark-chat-hi", () => {
         timingArtifact: null,
       }),
     ).toContain("Timing artifact: unavailable");
+    expect(
+      formatBenchmarkSummary({
+        status: 200,
+        ok: true,
+        backend: "openclaw",
+        contentType: "text/event-stream",
+        conversationId: "bench-fixed",
+        headersMs: 5,
+        firstChunkMs: null,
+        firstChunkSharedHeadersTick: false,
+        totalMs: 100,
+        bytes: 200,
+        eventCount: 3,
+        progressEventCount: 1,
+        finalEventCount: 1,
+        finalTextSample: "Hello.",
+        timingArtifact: null,
+      }),
+    ).toContain(
+      "Observed split: browser->server headers 5 ms, server->first chunk n/a, first chunk->complete n/a",
+    );
   });
 
   it("formats a markdown timing report row from a benchmark summary", () => {
