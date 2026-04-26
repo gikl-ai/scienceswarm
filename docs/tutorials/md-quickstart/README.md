@@ -67,7 +67,9 @@ create it by hand or paste shell commands.
 4. Return to the project chat and send this request:
 
 ```text
-Prepare the MD quickstart in docs/tutorials/md-quickstart for execution.
+Prepare the MD quickstart for execution. If the full ScienceSwarm checkout is
+imported, use docs/tutorials/md-quickstart/. If only this tutorial folder is
+imported, use the current project folder.
 Use the bundled environment.yml as the dependency contract. First check
 whether python3 can already import OpenMM, MDTraj, pdbfixer, NumPy, and
 Matplotlib. If that works, reuse that environment and report the versions.
