@@ -40,6 +40,7 @@ export interface ChatBenchmarkSummary {
   firstChunkMs: number | null;
   firstChunkSharedHeadersTick: boolean;
   totalMs: number;
+  observedLatencySplit?: ChatBenchmarkObservedLatencySplit;
   bytes: number;
   eventCount: number;
   progressEventCount: number;
@@ -71,6 +72,12 @@ export interface ChatBenchmarkObservedSplit {
   requestToFirstGatewayEventMs: number | null;
   requestToFirstAssistantTextMs: number | null;
   requestToFinalAssistantTextMs: number | null;
+}
+
+export interface ChatBenchmarkObservedLatencySplit {
+  browserToServerHeadersMs: number;
+  serverToFirstChunkMs: number | null;
+  firstChunkToCompleteMs: number | null;
 }
 
 export interface ChatBenchmarkTimingArtifactSummary {
@@ -236,6 +243,17 @@ export function summarizeChatBenchmarkResponse(params: {
     typeof params.firstChunkMs === "number"
       ? Math.round(params.firstChunkMs)
       : null;
+  const observedLatencySplit: ChatBenchmarkObservedLatencySplit = {
+    browserToServerHeadersMs: roundedHeadersMs,
+    serverToFirstChunkMs:
+      roundedFirstChunkMs === null
+        ? null
+        : Math.max(0, roundedFirstChunkMs - roundedHeadersMs),
+    firstChunkToCompleteMs:
+      roundedFirstChunkMs === null
+        ? null
+        : Math.max(0, Math.round(params.totalMs) - roundedFirstChunkMs),
+  };
 
   return {
     status: params.status,
@@ -248,6 +266,7 @@ export function summarizeChatBenchmarkResponse(params: {
     firstChunkSharedHeadersTick:
       roundedFirstChunkMs !== null && roundedFirstChunkMs === roundedHeadersMs,
     totalMs: Math.round(params.totalMs),
+    observedLatencySplit,
     bytes: params.bytes,
     eventCount: events.length,
     progressEventCount,
@@ -472,23 +491,29 @@ function formatTimingArtifactUnavailableReason(
 }
 
 function formatObservedLatencySplit(summary: ChatBenchmarkSummary): string {
-  const browserToServerMs = summary.headersMs;
-  const serverToFirstChunkMs =
-    typeof summary.firstChunkMs === "number"
-      ? Math.max(0, summary.firstChunkMs - summary.headersMs)
-      : null;
-  const firstChunkToCompleteMs =
-    typeof summary.firstChunkMs === "number"
-      ? Math.max(0, summary.totalMs - summary.firstChunkMs)
-      : null;
+  const observedLatencySplit = summary.observedLatencySplit ?? {
+    browserToServerHeadersMs: summary.headersMs,
+    serverToFirstChunkMs:
+      typeof summary.firstChunkMs === "number"
+        ? Math.max(0, summary.firstChunkMs - summary.headersMs)
+        : null,
+    firstChunkToCompleteMs:
+      typeof summary.firstChunkMs === "number"
+        ? Math.max(0, summary.totalMs - summary.firstChunkMs)
+        : null,
+  };
 
   return [
-    `browser->server headers ${browserToServerMs} ms`,
+    `browser->server headers ${observedLatencySplit.browserToServerHeadersMs} ms`,
     `server->first chunk ${
-      serverToFirstChunkMs === null ? "n/a" : `${serverToFirstChunkMs} ms`
+      observedLatencySplit.serverToFirstChunkMs === null
+        ? "n/a"
+        : `${observedLatencySplit.serverToFirstChunkMs} ms`
     }`,
     `first chunk->complete ${
-      firstChunkToCompleteMs === null ? "n/a" : `${firstChunkToCompleteMs} ms`
+      observedLatencySplit.firstChunkToCompleteMs === null
+        ? "n/a"
+        : `${observedLatencySplit.firstChunkToCompleteMs} ms`
     }`,
   ].join(", ");
 }
