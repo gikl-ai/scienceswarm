@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
+  ArrowsClockwise,
   ArrowSquareOut,
   CheckCircle,
   ClockCounterClockwise,
+  DotsThree,
+  FunnelSimple,
   FolderOpen,
   Graph,
+  ListBullets,
+  MagnifyingGlass,
+  ShareNetwork,
   SpinnerGap,
 } from "@phosphor-icons/react";
 import type {
@@ -30,6 +36,8 @@ type PaperLibraryStep = "scan" | "review" | "apply" | "graph" | "history";
 type ReviewFilter = Extract<PaperReviewItemState, "needs_review" | "accepted" | "ignored" | "unresolved">;
 const DEFAULT_REVIEW_FILTER: ReviewFilter = "needs_review";
 type GapFilter = GapSuggestionState | "all";
+type GraphPerspective = "all" | "prior" | "derivative";
+type GraphNodeFilter = "all" | "local" | "external" | "bridge";
 
 interface PaperLibrarySession {
   step: PaperLibraryStep;
@@ -94,6 +102,15 @@ const DEFAULT_TEMPLATE = "{year} - {title}.pdf";
 const GRAPH_MAP_NODE_LIMIT = 24;
 const GRAPH_OVERVIEW_THRESHOLD = 80;
 const GRAPH_OVERVIEW_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const CITATION_GRAPH_STYLE = {
+  "--citation-graph-node-local": "var(--chart-ocean-2)",
+  "--citation-graph-node-external": "var(--chart-amber)",
+  "--citation-graph-node-bridge": "var(--chart-violet)",
+  "--citation-graph-edge-pdf": "var(--chart-mint)",
+  "--citation-graph-edge-reference": "var(--chart-ocean-4)",
+  "--citation-graph-edge-identity": "var(--chart-amber)",
+  "--citation-graph-edge-bridge": "var(--chart-violet)",
+} as CSSProperties;
 
 const RENAME_TEMPLATE_OPTIONS = [
   {
@@ -391,10 +408,10 @@ interface GraphOverviewPoint {
 }
 
 function graphEdgeColor(edge: GraphMapEdge): string {
-  if (edge.source === "pdf_text") return "#0f766e";
-  if (edge.kind === "same_identity") return "#b45309";
-  if (edge.kind === "bridge_suggestion") return "#7c3aed";
-  return "#2563eb";
+  if (edge.source === "pdf_text") return "var(--citation-graph-edge-pdf)";
+  if (edge.kind === "same_identity") return "var(--citation-graph-edge-identity)";
+  if (edge.kind === "bridge_suggestion") return "var(--citation-graph-edge-bridge)";
+  return "var(--citation-graph-edge-reference)";
 }
 
 function graphEdgeDash(edge: GraphMapEdge): string | undefined {
@@ -411,6 +428,77 @@ function stableGraphHash(value: string): number {
   return hash;
 }
 
+function graphNodeTitle(node: GraphMapNode): string {
+  return node.title?.trim() || node.id;
+}
+
+function graphNodeFill(node: GraphMapNode): string {
+  if (node.local) return "var(--citation-graph-node-local)";
+  if (node.suggestion || node.kind === "bridge_suggestion") return "var(--citation-graph-node-bridge)";
+  return "var(--citation-graph-node-external)";
+}
+
+function graphNodeKindLabel(node: GraphMapNode): string {
+  if (node.local) return "local PDF";
+  if (node.suggestion || node.kind === "bridge_suggestion") return "bridge";
+  return "reference";
+}
+
+function graphNodeAuthors(node: GraphMapNode): string {
+  const authors = node.authors.map((author) => author.trim()).filter(Boolean);
+  if (authors.length === 0) return "Unknown authors";
+  if (authors.length <= 3) return authors.join(", ");
+  return `${authors.slice(0, 3).join(", ")} +${authors.length - 3}`;
+}
+
+function graphNodeMeta(node: GraphMapNode): string {
+  return [
+    graphNodeKindLabel(node),
+    node.year ? String(node.year) : undefined,
+    node.venue?.trim() || undefined,
+  ].filter(Boolean).join(" / ");
+}
+
+function graphNodeIdentifier(node: GraphMapNode): string {
+  const identifiers = node.identifiers ?? {};
+  if (identifiers.doi) return `doi:${identifiers.doi}`;
+  if (identifiers.arxivId) return `arxiv:${identifiers.arxivId}`;
+  if (identifiers.pmid) return `pmid:${identifiers.pmid}`;
+  if (identifiers.openAlexId) return `openalex:${identifiers.openAlexId}`;
+  return node.id;
+}
+
+function graphNodeMatchesFilter(node: GraphMapNode, filter: GraphNodeFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "local") return node.local;
+  if (filter === "bridge") return node.suggestion || node.kind === "bridge_suggestion";
+  return !node.local && !node.suggestion && node.kind !== "bridge_suggestion";
+}
+
+function graphNodeMatchesQuery(node: GraphMapNode, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  const haystack = [
+    node.id,
+    node.title,
+    node.venue,
+    node.year ? String(node.year) : undefined,
+    ...node.authors,
+    ...node.paperIds,
+    node.identifiers?.doi,
+    node.identifiers?.arxivId,
+    node.identifiers?.pmid,
+    node.identifiers?.openAlexId,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return haystack.includes(normalizedQuery);
+}
+
+function graphEdgeMatchesPerspective(edge: GraphMapEdge, perspective: GraphPerspective): boolean {
+  if (perspective === "prior") return edge.kind === "references";
+  if (perspective === "derivative") return edge.kind === "cited_by";
+  return true;
+}
+
 function summarizeGraphWarnings(warnings: string[]): string[] {
   const cappedWarnings = warnings.filter((warning) => warning.toLowerCase().includes("local reference extraction capped at 250 references"));
   const remaining = warnings.filter((warning) => !warning.toLowerCase().includes("local reference extraction capped at 250 references"));
@@ -423,8 +511,12 @@ function summarizeGraphWarnings(warnings: string[]): string[] {
 
 function CitationGraphDetailMap({
   graphPage,
+  onSelectNode,
+  selectedNodeId,
 }: {
   graphPage: PaperLibraryGraphResponse | null;
+  onSelectNode?: (nodeId: string) => void;
+  selectedNodeId?: string | null;
 }) {
   const layout = useMemo(() => {
     const nodes = graphPage?.nodes ?? [];
@@ -514,14 +606,14 @@ function CitationGraphDetailMap({
 
   if (layout.nodes.length === 0) {
     return (
-      <div className="flex h-[32rem] items-center justify-center rounded-lg border border-dashed border-border bg-surface text-sm text-muted">
+      <div className="flex h-[32rem] items-center justify-center rounded-[var(--radius-2)] border border-dashed border-rule bg-sunk text-sm text-dim">
         The citation map appears after graph data is available.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+    <div className="overflow-hidden rounded-[var(--radius-2)] border border-rule bg-raised" style={CITATION_GRAPH_STYLE}>
       <svg
         aria-label="Citation graph map"
         className="h-[32rem] w-full"
@@ -530,17 +622,17 @@ function CitationGraphDetailMap({
       >
         <defs>
           <radialGradient cx="50%" cy="48%" id="citation-map-bg" r="70%">
-            <stop offset="0%" stopColor="#ffffff" />
-            <stop offset="65%" stopColor="#f7fafc" />
-            <stop offset="100%" stopColor="#eef2f7" />
+            <stop offset="0%" stopColor="var(--surface-raised)" />
+            <stop offset="65%" stopColor="var(--surface-ink)" />
+            <stop offset="100%" stopColor="var(--surface-sunk)" />
           </radialGradient>
           <filter id="node-shadow" x="-30%" y="-30%" width="160%" height="160%">
-            <feDropShadow dx="0" dy="5" floodColor="#0f172a" floodOpacity="0.12" stdDeviation="5" />
+            <feDropShadow dx="0" dy="5" floodColor="var(--surface-ink)" floodOpacity="0.22" stdDeviation="5" />
           </filter>
         </defs>
         <rect width="920" height="520" fill="url(#citation-map-bg)" />
-        <ellipse cx="460" cy="245" fill="none" rx="238" ry="151" stroke="#d7dee8" strokeDasharray="5 9" />
-        <ellipse cx="460" cy="245" fill="none" rx="368" ry="213" stroke="#e1e7ef" strokeDasharray="3 12" />
+        <ellipse cx="460" cy="245" fill="none" rx="238" ry="151" stroke="var(--rule-soft)" strokeDasharray="5 9" />
+        <ellipse cx="460" cy="245" fill="none" rx="368" ry="213" stroke="var(--rule-hair)" strokeDasharray="3 12" />
         {layout.edges.map((edge, index) => {
           const source = layout.positions.get(edge.sourceNodeId);
           const target = layout.positions.get(edge.targetNodeId);
@@ -570,21 +662,32 @@ function CitationGraphDetailMap({
             anchor: "middle" as const,
             radius: 8,
           };
-          const fill = node.local
-            ? "#2563eb"
-            : node.suggestion
-              ? "#7c3aed"
-              : "#f59e0b";
+          const fill = graphNodeFill(node);
           const degree = layout.degreeByNodeId.get(node.id) ?? 0;
+          const selected = selectedNodeId === node.id;
           return (
-            <g key={node.id}>
-              <title>{node.title ?? node.id}</title>
+            <g
+              aria-label={`Select ${graphNodeTitle(node)}`}
+              className="cursor-pointer outline-none"
+              key={node.id}
+              onClick={() => onSelectNode?.(node.id)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                onSelectNode?.(node.id);
+              }}
+              role="button"
+              tabIndex={0}
+            >
+              <title>{graphNodeTitle(node)}</title>
               <circle
                 cx={point.x}
                 cy={point.y}
-                fill="#ffffff"
+                fill={selected ? "var(--accent-faint)" : "var(--surface-raised)"}
                 filter="url(#node-shadow)"
-                r={point.radius + 5}
+                r={point.radius + (selected ? 9 : 5)}
+                stroke={selected ? "var(--accent)" : "transparent"}
+                strokeWidth={selected ? 2 : 0}
               />
               <circle
                 cx={point.x}
@@ -592,13 +695,13 @@ function CitationGraphDetailMap({
                 fill={fill}
                 opacity={node.local ? 0.95 : 0.88}
                 r={point.radius}
-                stroke="#ffffff"
+                stroke="var(--surface-raised)"
                 strokeWidth={3}
               />
               {degree > 1 && (
                 <text
                   dominantBaseline="middle"
-                  fill="#ffffff"
+                  fill="var(--accent-fg)"
                   fontSize="9"
                   fontWeight="700"
                   textAnchor="middle"
@@ -609,7 +712,7 @@ function CitationGraphDetailMap({
                 </text>
               )}
               <text
-                fill="#172033"
+                fill="var(--text-strong)"
                 fontSize="12"
                 fontWeight={node.local ? 700 : 600}
                 textAnchor={point.anchor}
@@ -619,23 +722,23 @@ function CitationGraphDetailMap({
                 {truncateGraphLabel(node.title, node.id, point.anchor === "middle" ? 30 : 34)}
               </text>
               <text
-                fill="#697587"
+                fill="var(--text-dim)"
                 fontSize="10"
                 textAnchor={point.anchor}
                 x={point.labelX}
                 y={point.labelY + 15}
               >
-                {node.local ? "local PDF" : node.suggestion ? "bridge" : "reference"}
+                {graphNodeKindLabel(node)}
                 {node.year ? ` • ${node.year}` : ""}
               </text>
             </g>
           );
         })}
       </svg>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-white px-4 py-3 text-xs text-muted">
-        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#2563eb]" />Local PDFs</span>
-        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#f59e0b]" />Referenced papers</span>
-        <span className="inline-flex items-center gap-2"><span className="h-0.5 w-7 rounded bg-[#0f766e]" />PDF reference links</span>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-rule bg-sunk px-4 py-3 text-xs text-dim">
+        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full" style={{ backgroundColor: "var(--citation-graph-node-local)" }} />Local PDFs</span>
+        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full" style={{ backgroundColor: "var(--citation-graph-node-external)" }} />Referenced papers</span>
+        <span className="inline-flex items-center gap-2"><span className="h-0.5 w-7 rounded" style={{ backgroundColor: "var(--citation-graph-edge-pdf)" }} />PDF reference links</span>
       </div>
     </div>
   );
@@ -643,8 +746,12 @@ function CitationGraphDetailMap({
 
 function CitationGraphOverviewMap({
   graphPage,
+  onSelectNode,
+  selectedNodeId,
 }: {
   graphPage: PaperLibraryGraphResponse | null;
+  onSelectNode?: (nodeId: string) => void;
+  selectedNodeId?: string | null;
 }) {
   const layout = useMemo(() => {
     const nodes = graphPage?.nodes ?? [];
@@ -733,14 +840,14 @@ function CitationGraphOverviewMap({
 
   if (layout.nodes.length === 0) {
     return (
-      <div className="flex h-[40rem] items-center justify-center rounded-lg border border-dashed border-border bg-surface text-sm text-muted">
+      <div className="flex h-[40rem] items-center justify-center rounded-[var(--radius-2)] border border-dashed border-rule bg-sunk text-sm text-dim">
         The citation graph appears after graph data is available.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+    <div className="overflow-hidden rounded-[var(--radius-2)] border border-rule bg-raised" style={CITATION_GRAPH_STYLE}>
       <svg
         aria-label="Citation graph map"
         className="h-[40rem] w-full"
@@ -749,14 +856,14 @@ function CitationGraphOverviewMap({
       >
         <defs>
           <linearGradient id="citation-overview-bg" x1="0%" x2="100%" y1="0%" y2="100%">
-            <stop offset="0%" stopColor="#fcfdff" />
-            <stop offset="100%" stopColor="#eef4fb" />
+            <stop offset="0%" stopColor="var(--surface-raised)" />
+            <stop offset="100%" stopColor="var(--surface-sunk)" />
           </linearGradient>
         </defs>
         <rect width="1400" height="900" fill="url(#citation-overview-bg)" />
-        <ellipse cx="700" cy="430" fill="none" rx="190" ry="132" stroke="#d7dee8" strokeDasharray="3 7" />
-        <ellipse cx="700" cy="430" fill="none" rx="360" ry="246" stroke="#dfe6ef" strokeDasharray="2 10" />
-        <ellipse cx="700" cy="430" fill="none" rx="515" ry="356" stroke="#e7edf5" strokeDasharray="2 12" />
+        <ellipse cx="700" cy="430" fill="none" rx="190" ry="132" stroke="var(--rule-soft)" strokeDasharray="3 7" />
+        <ellipse cx="700" cy="430" fill="none" rx="360" ry="246" stroke="var(--rule-hair)" strokeDasharray="2 10" />
+        <ellipse cx="700" cy="430" fill="none" rx="515" ry="356" stroke="var(--rule-hair)" strokeDasharray="2 12" />
         {layout.edges.map((edge) => {
           const source = layout.positions.get(edge.sourceNodeId);
           const target = layout.positions.get(edge.targetNodeId);
@@ -777,27 +884,46 @@ function CitationGraphOverviewMap({
         {layout.nodes.map((node) => {
           const point = layout.positions.get(node.id);
           if (!point) return null;
-          const fill = node.local
-            ? "#2563eb"
-            : node.suggestion
-              ? "#7c3aed"
-              : "#f59e0b";
+          const fill = graphNodeFill(node);
+          const selected = selectedNodeId === node.id;
           return (
-            <g key={node.id}>
-              <title>{node.title ?? node.id}</title>
+            <g
+              aria-label={`Select ${graphNodeTitle(node)}`}
+              className="cursor-pointer outline-none"
+              key={node.id}
+              onClick={() => onSelectNode?.(node.id)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                onSelectNode?.(node.id);
+              }}
+              role="button"
+              tabIndex={0}
+            >
+              <title>{graphNodeTitle(node)}</title>
+              {selected && (
+                <circle
+                  cx={point.x}
+                  cy={point.y}
+                  fill="var(--accent-faint)"
+                  r={point.radius + 8}
+                  stroke="var(--accent)"
+                  strokeWidth={2}
+                />
+              )}
               <circle
                 cx={point.x}
                 cy={point.y}
                 fill={fill}
                 opacity={node.local ? 0.95 : 0.78}
                 r={point.radius}
-                stroke="#ffffff"
+                stroke="var(--surface-raised)"
                 strokeWidth={node.local ? 1.8 : 0.9}
               />
               {layout.labeledIds.has(node.id) && (
                 <>
                   <text
-                    fill="#102033"
+                    fill="var(--text-strong)"
                     fontSize="12"
                     fontWeight="700"
                     textAnchor={point.x < 700 ? "end" : "start"}
@@ -807,7 +933,7 @@ function CitationGraphOverviewMap({
                     {truncateGraphLabel(node.title, node.id, 34)}
                   </text>
                   <text
-                    fill="#5f6f82"
+                    fill="var(--text-dim)"
                     fontSize="10"
                     textAnchor={point.x < 700 ? "end" : "start"}
                     x={point.x < 700 ? point.x - 10 : point.x + 10}
@@ -821,11 +947,11 @@ function CitationGraphOverviewMap({
           );
         })}
       </svg>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-white px-4 py-3 text-xs text-muted">
-        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#2563eb]" />Local PDFs</span>
-        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#f59e0b]" />Referenced papers</span>
-        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#7c3aed]" />Bridge suggestions</span>
-        <span className="inline-flex items-center gap-2"><span className="h-0.5 w-7 rounded bg-[#0f766e]" />PDF-derived citation edges</span>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-rule bg-sunk px-4 py-3 text-xs text-dim">
+        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full" style={{ backgroundColor: "var(--citation-graph-node-local)" }} />Local PDFs</span>
+        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full" style={{ backgroundColor: "var(--citation-graph-node-external)" }} />Referenced papers</span>
+        <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full" style={{ backgroundColor: "var(--citation-graph-node-bridge)" }} />Bridge suggestions</span>
+        <span className="inline-flex items-center gap-2"><span className="h-0.5 w-7 rounded" style={{ backgroundColor: "var(--citation-graph-edge-pdf)" }} />PDF-derived citation edges</span>
       </div>
     </div>
   );
@@ -833,14 +959,30 @@ function CitationGraphOverviewMap({
 
 function CitationGraphMap({
   graphPage,
+  onSelectNode,
+  selectedNodeId,
 }: {
   graphPage: PaperLibraryGraphResponse | null;
+  onSelectNode?: (nodeId: string) => void;
+  selectedNodeId?: string | null;
 }) {
   const nodeCount = graphPage?.nodes.length ?? 0;
   if (nodeCount > GRAPH_OVERVIEW_THRESHOLD) {
-    return <CitationGraphOverviewMap graphPage={graphPage} />;
+    return (
+      <CitationGraphOverviewMap
+        graphPage={graphPage}
+        onSelectNode={onSelectNode}
+        selectedNodeId={selectedNodeId}
+      />
+    );
   }
-  return <CitationGraphDetailMap graphPage={graphPage} />;
+  return (
+    <CitationGraphDetailMap
+      graphPage={graphPage}
+      onSelectNode={onSelectNode}
+      selectedNodeId={selectedNodeId}
+    />
+  );
 }
 
 export function PaperLibraryCommandCenter({
@@ -888,6 +1030,13 @@ export function PaperLibraryCommandCenter({
   const [graphOverviewLoading, setGraphOverviewLoading] = useState(false);
   const [graphPage, setGraphPage] = useState<PaperLibraryGraphResponse | null>(null);
   const [graphLoadingMore, setGraphLoadingMore] = useState(false);
+  const [graphPerspective, setGraphPerspective] = useState<GraphPerspective>("all");
+  const [graphNodeFilter, setGraphNodeFilter] = useState<GraphNodeFilter>("all");
+  const [graphQuery, setGraphQuery] = useState("");
+  const [graphListView, setGraphListView] = useState(false);
+  const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
+  const [graphMoreOpen, setGraphMoreOpen] = useState(false);
+  const [graphActionMessage, setGraphActionMessage] = useState<string | null>(null);
 
   const [clustersLoading, setClustersLoading] = useState(false);
   const [clustersError, setClustersError] = useState<string | null>(null);
@@ -916,6 +1065,13 @@ export function PaperLibraryCommandCenter({
     setGraphOverview(null);
     setGraphPage(null);
     setGraphError(null);
+    setGraphPerspective("all");
+    setGraphNodeFilter("all");
+    setGraphQuery("");
+    setGraphListView(false);
+    setSelectedGraphNodeId(null);
+    setGraphMoreOpen(false);
+    setGraphActionMessage(null);
     setClustersPage(null);
     setClustersError(null);
     setGapPage(null);
@@ -1315,7 +1471,7 @@ export function PaperLibraryCommandCenter({
       if (!scan || isScanInFlight(scan)) return;
     }
     void loadLatestScan();
-  }, [loadLatestScan, scan?.createdAt, scan?.id, scan?.updatedAt, session.scanId, session.step, sessionRestored]);
+  }, [loadLatestScan, scan, session.scanId, session.step, sessionRestored]);
 
   useEffect(() => {
     if (!sessionRestored) return;
@@ -1732,9 +1888,87 @@ export function PaperLibraryCommandCenter({
   const reviewNeededCount = scan?.counters.needsReview ?? 0;
   const applyReadyCount = activePlan?.operationCount ?? scan?.counters.readyForApply ?? 0;
   const graphData = graphOverview ?? graphPage;
+  const graphDisplayData = useMemo<PaperLibraryGraphResponse | null>(() => {
+    if (!graphData) return null;
+    const nodes = graphData.nodes.filter((node) => (
+      graphNodeMatchesFilter(node, graphNodeFilter)
+      && graphNodeMatchesQuery(node, graphQuery)
+    ));
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    const edges = graphData.edges
+      .filter((edge) => graphEdgeMatchesPerspective(edge, graphPerspective))
+      .filter((edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId));
+    return {
+      ...graphData,
+      nodes,
+      edges,
+      loadedNodeCount: nodes.length,
+      filteredCount: nodes.length,
+      totalEdgeCount: edges.length,
+    };
+  }, [graphData, graphNodeFilter, graphPerspective, graphQuery]);
+  const graphInsights = useMemo(() => {
+    const nodes = graphDisplayData?.nodes ?? [];
+    const edges = graphDisplayData?.edges ?? [];
+    const degreeByNodeId = new Map<string, number>();
+    const priorByNodeId = new Map<string, number>();
+    const derivativeByNodeId = new Map<string, number>();
+    for (const node of nodes) {
+      degreeByNodeId.set(node.id, 0);
+      priorByNodeId.set(node.id, 0);
+      derivativeByNodeId.set(node.id, 0);
+    }
+    for (const edge of edges) {
+      degreeByNodeId.set(edge.sourceNodeId, (degreeByNodeId.get(edge.sourceNodeId) ?? 0) + 1);
+      degreeByNodeId.set(edge.targetNodeId, (degreeByNodeId.get(edge.targetNodeId) ?? 0) + 1);
+      if (edge.kind === "references") {
+        priorByNodeId.set(edge.sourceNodeId, (priorByNodeId.get(edge.sourceNodeId) ?? 0) + 1);
+        priorByNodeId.set(edge.targetNodeId, (priorByNodeId.get(edge.targetNodeId) ?? 0) + 1);
+      }
+      if (edge.kind === "cited_by") {
+        derivativeByNodeId.set(edge.sourceNodeId, (derivativeByNodeId.get(edge.sourceNodeId) ?? 0) + 1);
+        derivativeByNodeId.set(edge.targetNodeId, (derivativeByNodeId.get(edge.targetNodeId) ?? 0) + 1);
+      }
+    }
+
+    const sortedNodes = [...nodes].sort((left, right) => {
+      if (left.local !== right.local) return left.local ? -1 : 1;
+      const degreeDelta = (degreeByNodeId.get(right.id) ?? 0) - (degreeByNodeId.get(left.id) ?? 0);
+      if (degreeDelta !== 0) return degreeDelta;
+      return graphNodeTitle(left).localeCompare(graphNodeTitle(right));
+    });
+    const selectedNode = (
+      selectedGraphNodeId
+        ? nodes.find((node) => node.id === selectedGraphNodeId)
+        : undefined
+    ) ?? sortedNodes[0] ?? null;
+    const selectedEdges = selectedNode
+      ? edges.filter((edge) => edge.sourceNodeId === selectedNode.id || edge.targetNodeId === selectedNode.id)
+      : [];
+    const neighborIds = new Set(
+      selectedEdges.flatMap((edge) => [
+        edge.sourceNodeId === selectedNode?.id ? edge.targetNodeId : edge.sourceNodeId,
+      ]),
+    );
+    const neighborNodes = sortedNodes.filter((node) => neighborIds.has(node.id)).slice(0, 6);
+
+    return {
+      degreeByNodeId,
+      derivativeByNodeId,
+      externalCount: nodes.filter((node) => !node.local && !node.suggestion && node.kind !== "bridge_suggestion").length,
+      localCount: nodes.filter((node) => node.local).length,
+      neighborNodes,
+      priorByNodeId,
+      selectedEdges,
+      selectedNode,
+      sortedNodes,
+      suggestionCount: nodes.filter((node) => node.suggestion || node.kind === "bridge_suggestion").length,
+    };
+  }, [graphDisplayData, selectedGraphNodeId]);
   const graphCount = graphData?.filteredCount ?? graphData?.totalCount ?? 0;
   const historyCount = activeManifest?.appliedCount ?? 0;
   const totalGraphEdgeCount = graphData?.totalEdgeCount ?? graphData?.edges.length ?? 0;
+  const displayedGraphEdgeCount = graphDisplayData?.totalEdgeCount ?? graphDisplayData?.edges.length ?? 0;
   const graphSourceRunCount = graphData?.sourceRuns.length ?? 0;
   const graphSuccessfulRuns = graphData?.sourceRuns.filter((run) => run.status === "success").length ?? 0;
   const graphNoIdentifierRuns = graphData?.sourceRuns.filter((run) => (
@@ -1748,7 +1982,41 @@ export function PaperLibraryCommandCenter({
     .filter((run) => run.source === "pdf_text")
     .reduce((total, run) => total + run.fetchedCount, 0) ?? 0;
   const graphHasPdfTextEdges = graphData?.edges.some((edge) => edge.source === "pdf_text") ?? false;
-  const graphWarnings = graphData ? summarizeGraphWarnings(graphData.warnings) : [];
+  const graphWarnings = useMemo(() => (
+    graphData ? summarizeGraphWarnings(graphData.warnings) : []
+  ), [graphData]);
+  const handleCopyGraphLink = useCallback(async (node?: GraphMapNode | null) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", "paper-library");
+    url.hash = node ? `citation-graph:${encodeURIComponent(node.id)}` : "citation-graph";
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard unavailable");
+      }
+      await navigator.clipboard.writeText(url.toString());
+      setGraphActionMessage(node ? "Copied selected paper link." : "Copied graph link.");
+    } catch {
+      setGraphActionMessage(node ? "Selected paper link is ready in the address bar." : "Graph link is ready in the address bar.");
+      window.history.replaceState(null, "", url.toString());
+    }
+  }, []);
+  const handleResetGraphView = useCallback(() => {
+    setGraphPerspective("all");
+    setGraphNodeFilter("all");
+    setGraphQuery("");
+    setGraphListView(false);
+    setSelectedGraphNodeId(null);
+    setGraphMoreOpen(false);
+    setGraphActionMessage("Graph filters reset.");
+  }, []);
+  const handleSelectMostConnectedGraphNode = useCallback(() => {
+    const node = graphInsights.sortedNodes[0];
+    if (!node) return;
+    setSelectedGraphNodeId(node.id);
+    setGraphMoreOpen(false);
+    setGraphActionMessage("Selected the most connected paper.");
+  }, [graphInsights.sortedNodes]);
   const approvalTokenExpired = approvalToken
     ? Date.parse(approvalToken.expiresAt) <= Date.now()
     : false;
@@ -2188,15 +2456,16 @@ export function PaperLibraryCommandCenter({
       if (!session.scanId) {
         return <EmptyState title="No scan selected" body="Run a scan first so ScienceSwarm can build a local citation and topic view." />;
       }
+      const selectedNode = graphInsights.selectedNode;
 
       return (
-        <div className="px-4 py-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Graph</p>
-              <h3 className="mt-1 text-lg font-semibold text-foreground">Citation graph and semantic organization</h3>
-              <p className="mt-1 max-w-2xl text-sm text-muted">
-                Browse the connected paper graph, inspect source-run status, and regenerate local topic clusters without rewriting durable paper identity.
+        <div className="bg-ink px-4 py-4 text-body">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-dim">Graph</p>
+              <h3 className="mt-1 text-xl font-semibold text-strong">Citation graph overview</h3>
+              <p className="mt-1 max-w-3xl text-sm text-dim">
+                A local map of scanned papers, cited work, derivative links, semantic clusters, and gap candidates.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -2206,21 +2475,22 @@ export function PaperLibraryCommandCenter({
                   void loadGraphOverview({ refresh: true });
                   void loadGraph({ refresh: true });
                 }}
-                className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+                className="inline-flex items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-raised px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent"
               >
+                <ArrowsClockwise size={14} />
                 Refresh graph
               </button>
               <button
                 type="button"
                 onClick={() => void loadClusters({ refresh: true })}
-                className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+                className="rounded-[var(--radius-1)] border border-rule bg-raised px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent"
               >
                 Refresh clusters
               </button>
               <button
                 type="button"
                 onClick={() => void loadGaps({ refresh: true })}
-                className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+                className="rounded-[var(--radius-1)] border border-rule bg-raised px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent"
               >
                 Refresh gaps
               </button>
@@ -2228,42 +2498,272 @@ export function PaperLibraryCommandCenter({
           </div>
 
           {graphError && (
-            <div role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+            <div role="alert" className="mt-4 rounded-[var(--radius-2)] border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {graphError}
             </div>
           )}
 
           {clustersError && (
-            <div role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+            <div role="alert" className="mt-4 rounded-[var(--radius-2)] border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {clustersError}
             </div>
           )}
 
           {gapsError && (
-            <div role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+            <div role="alert" className="mt-4 rounded-[var(--radius-2)] border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {gapsError}
             </div>
           )}
 
           {((graphLoading || graphOverviewLoading) && !graphData) ? (
-            <div className="flex items-center gap-2 px-1 py-6 text-sm text-muted">
+            <div className="flex items-center gap-2 px-1 py-6 text-sm text-dim">
               <SpinnerGap className="animate-spin" size={16} />
               Loading graph...
             </div>
           ) : (
-            <div className="grid gap-6 py-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-              <section className="space-y-4">
-                <div className="rounded-xl border border-border bg-white p-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <StatusBadge tone="neutral" value={`${graphData?.nodes.length ?? 0}_visible_nodes`} />
-                    <StatusBadge tone={totalGraphEdgeCount > 0 ? "success" : "warning"} value={`${totalGraphEdgeCount}_citation_edges`} />
-                    <span className="text-sm text-muted">
-                      {graphSourceRunCount} source checks
-                      {graphSuccessfulRuns > 0 ? ` • ${graphSuccessfulRuns} with relations` : ""}
-                    </span>
+            <div className="space-y-4 py-4">
+              <div className="grid gap-3 md:grid-cols-[minmax(16rem,0.9fr)_minmax(18rem,1.4fr)_minmax(16rem,0.95fr)]">
+                <div className="rounded-[var(--radius-2)] border border-rule bg-raised p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">Window</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-strong">{graphDisplayData?.nodes.length ?? 0}</p>
+                  <p className="text-xs text-dim">visible papers</p>
+                </div>
+                <div className="rounded-[var(--radius-2)] border border-rule bg-raised p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">Connections</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-strong">{displayedGraphEdgeCount}</p>
+                  <p className="text-xs text-dim">{totalGraphEdgeCount} total citation edges</p>
+                </div>
+                <div className="rounded-[var(--radius-2)] border border-rule bg-raised p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">Sources</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-strong">{graphSourceRunCount}</p>
+                  <p className="text-xs text-dim">{graphSuccessfulRuns} with relations</p>
+                </div>
+              </div>
+
+              <div className="rounded-[var(--radius-2)] border border-rule bg-raised p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative min-w-64 flex-1">
+                    <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-dim" size={15} />
+                    <input
+                      aria-label="Search graph papers"
+                      className="h-9 w-full rounded-[var(--radius-1)] border border-rule bg-sunk pl-9 pr-3 text-sm text-strong outline-none transition-colors placeholder:text-quiet focus:border-accent focus:ring-2 focus:ring-accent/20"
+                      onChange={(event) => setGraphQuery(event.target.value)}
+                      placeholder="Search papers, authors, identifiers"
+                      type="search"
+                      value={graphQuery}
+                    />
                   </div>
+                  {([
+                    ["all", "All links"],
+                    ["prior", "Prior works"],
+                    ["derivative", "Derivative works"],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      aria-pressed={graphPerspective === value}
+                      className={`rounded-[var(--radius-1)] border px-3 py-2 text-xs font-semibold transition-colors ${
+                        graphPerspective === value
+                          ? "border-accent bg-accent-faint text-strong"
+                          : "border-rule bg-sunk text-dim hover:text-strong"
+                      }`}
+                      key={value}
+                      onClick={() => setGraphPerspective(value)}
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    aria-pressed={graphListView}
+                    className={`inline-flex items-center gap-2 rounded-[var(--radius-1)] border px-3 py-2 text-xs font-semibold transition-colors ${
+                      graphListView
+                        ? "border-accent bg-accent-faint text-strong"
+                        : "border-rule bg-sunk text-dim hover:text-strong"
+                    }`}
+                    onClick={() => setGraphListView((current) => !current)}
+                    type="button"
+                  >
+                    <ListBullets size={14} />
+                    List view
+                  </button>
+                  <div className="inline-flex items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-sunk px-2 py-1.5">
+                    <FunnelSimple size={14} className="text-dim" />
+                    {([
+                      ["all", "All"],
+                      ["local", "Local"],
+                      ["external", "References"],
+                      ["bridge", "Bridge"],
+                    ] as const).map(([value, label]) => (
+                      <button
+                        aria-pressed={graphNodeFilter === value}
+                        className={`rounded-[var(--radius-1)] px-2 py-1 text-[11px] font-semibold transition-colors ${
+                          graphNodeFilter === value ? "bg-raised text-strong" : "text-dim hover:text-strong"
+                        }`}
+                        key={value}
+                        onClick={() => setGraphNodeFilter(value)}
+                        type="button"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative">
+                    <button
+                      aria-expanded={graphMoreOpen}
+                      aria-label="More graph actions"
+                      className="inline-grid h-9 w-9 place-items-center rounded-[var(--radius-1)] border border-rule bg-sunk text-dim transition-colors hover:text-strong"
+                      onClick={() => setGraphMoreOpen((current) => !current)}
+                      title="More graph actions"
+                      type="button"
+                    >
+                      <DotsThree size={18} weight="bold" />
+                    </button>
+                    {graphMoreOpen && (
+                      <div className="absolute right-0 top-10 z-20 w-56 overflow-hidden rounded-[var(--radius-2)] border border-rule bg-raised shadow-[var(--shadow-2)]">
+                        <button
+                          className="block w-full px-3 py-2 text-left text-xs font-semibold text-strong transition-colors hover:bg-sunk"
+                          onClick={handleSelectMostConnectedGraphNode}
+                          type="button"
+                        >
+                          Select most connected
+                        </button>
+                        <button
+                          className="block w-full px-3 py-2 text-left text-xs font-semibold text-strong transition-colors hover:bg-sunk"
+                          onClick={handleResetGraphView}
+                          type="button"
+                        >
+                          Reset graph view
+                        </button>
+                        <button
+                          className="block w-full px-3 py-2 text-left text-xs font-semibold text-strong transition-colors hover:bg-sunk"
+                          onClick={() => void handleCopyGraphLink()}
+                          type="button"
+                        >
+                          Copy graph link
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {graphActionMessage && (
+                  <p className="mt-2 text-xs font-medium text-dim" role="status">
+                    {graphActionMessage}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1fr)_22rem]">
+                <aside className="min-h-0 rounded-[var(--radius-2)] border border-rule bg-raised">
+                  <div className="border-b border-rule px-4 py-3">
+                    <p className="text-sm font-semibold text-strong">Papers in this graph window</p>
+                    <p className="mt-1 text-xs text-dim">
+                      {graphData
+                        ? `${graphData.loadedNodeCount ?? graphData.nodes.length} of ${graphData.filteredCount} papers loaded`
+                        : "No graph loaded"}
+                    </p>
+                  </div>
+                  <div className="max-h-[42rem] divide-y divide-rule overflow-y-auto">
+                    {graphInsights.sortedNodes.slice(0, 36).map((node) => {
+                      const selected = selectedNode?.id === node.id;
+                      return (
+                        <button
+                          className={`block w-full px-4 py-3 text-left transition-colors ${
+                            selected
+                              ? "bg-accent-faint"
+                              : "hover:bg-sunk"
+                          }`}
+                          key={node.id}
+                          onClick={() => setSelectedGraphNodeId(node.id)}
+                          type="button"
+                        >
+                          <span className="flex items-start gap-3">
+                            <span
+                              className="mt-1 size-2.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: graphNodeFill(node) }}
+                            />
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-semibold text-strong">{graphNodeTitle(node)}</span>
+                              <span className="mt-1 block truncate text-xs text-dim">{graphNodeMeta(node)}</span>
+                              <span className="mt-2 inline-flex items-center rounded-[var(--radius-1)] border border-rule bg-sunk px-2 py-0.5 font-mono text-[10px] text-quiet">
+                                {graphInsights.degreeByNodeId.get(node.id) ?? 0} links
+                              </span>
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {graphPage?.nextCursor && (
+                    <div className="border-t border-rule px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => void loadGraph({ cursor: graphPage.nextCursor, append: true })}
+                        disabled={graphLoadingMore}
+                        className="rounded-[var(--radius-1)] border border-rule bg-sunk px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                      >
+                        {graphLoadingMore ? "Loading..." : "Load more nodes"}
+                      </button>
+                    </div>
+                  )}
+                </aside>
+
+                <section className="min-w-0 space-y-4">
+                  <div className="rounded-[var(--radius-2)] border border-rule bg-raised">
+                    <div className="border-b border-rule px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-strong">Citation graph overview</p>
+                          <p className="mt-1 text-xs text-dim">
+                            {graphData && (graphData.loadedNodeCount ?? graphData.nodes.length) >= graphData.filteredCount
+                              ? "Showing every loaded paper node and citation edge, including references extracted from scanned PDFs."
+                              : "Showing connected neighbors with each loaded node so citation edges stay visible in context."}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusBadge tone="neutral" value={`${graphDisplayData?.nodes.length ?? 0}_visible_nodes`} />
+                          <StatusBadge tone={displayedGraphEdgeCount > 0 ? "success" : "warning"} value={`${displayedGraphEdgeCount}_citation_edges`} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-4">
+                      {graphListView ? (
+                        <div className="overflow-hidden rounded-[var(--radius-2)] border border-rule">
+                          <div className="grid grid-cols-[minmax(0,1.3fr)_7rem_7rem_7rem] border-b border-rule bg-sunk px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-dim">
+                            <span>Paper</span>
+                            <span>Kind</span>
+                            <span>Prior</span>
+                            <span>Derivative</span>
+                          </div>
+                          <div className="max-h-[32rem] divide-y divide-rule overflow-y-auto bg-raised">
+                            {graphInsights.sortedNodes.map((node) => (
+                              <button
+                                className="grid w-full grid-cols-[minmax(0,1.3fr)_7rem_7rem_7rem] gap-3 px-3 py-3 text-left text-sm transition-colors hover:bg-sunk"
+                                key={node.id}
+                                onClick={() => setSelectedGraphNodeId(node.id)}
+                                type="button"
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate font-semibold text-strong">{graphNodeTitle(node)}</span>
+                                  <span className="block truncate text-xs text-dim">{graphNodeAuthors(node)}</span>
+                                </span>
+                                <span className="text-xs text-dim">{graphNodeKindLabel(node)}</span>
+                                <span className="font-mono text-xs tabular-nums text-strong">{graphInsights.priorByNodeId.get(node.id) ?? 0}</span>
+                                <span className="font-mono text-xs tabular-nums text-strong">{graphInsights.derivativeByNodeId.get(node.id) ?? 0}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <CitationGraphMap
+                          graphPage={graphDisplayData}
+                          onSelectNode={setSelectedGraphNodeId}
+                          selectedNodeId={selectedNode?.id}
+                        />
+                      )}
+                    </div>
+                  </div>
+
                   {graphData && totalGraphEdgeCount === 0 && (
-                    <div className="mt-3 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
+                    <div className="rounded-[var(--radius-2)] border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
                       No citation edges yet. {graphPdfTextRuns > 0
                         ? `Local PDF reference extraction checked ${graphPdfTextRuns} papers and found ${graphPdfTextReferenceCount} references; review missing titles or identifiers if none match the library.`
                         : graphNoIdentifierRuns > 0
@@ -2272,86 +2772,100 @@ export function PaperLibraryCommandCenter({
                     </div>
                   )}
                   {graphData && totalGraphEdgeCount > 0 && graphHasPdfTextEdges && (
-                    <div className="mt-3 rounded-lg border border-ok/30 bg-ok/10 px-3 py-2 text-sm text-ok">
+                    <div className="rounded-[var(--radius-2)] border border-ok/30 bg-ok/10 px-3 py-2 text-sm text-ok">
                       Local PDF extraction found {graphPdfTextReferenceCount} references across {graphPdfTextSuccessfulRuns} papers and connected the citation map.
                     </div>
                   )}
                   {graphWarnings.length ? (
-                    <div className="mt-3 space-y-2">
+                    <div className="space-y-2">
                       {graphWarnings.map((warning) => (
-                        <div key={warning} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
+                        <div key={warning} className="rounded-[var(--radius-2)] border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
                           {warning}
                         </div>
                       ))}
                     </div>
                   ) : null}
-                </div>
+                </section>
 
-                <div className="rounded-xl border border-border bg-white">
-                  <div className="border-b border-border px-4 py-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">Citation graph overview</p>
-                        <p className="mt-1 text-xs text-muted">
-                          {graphData && (graphData.loadedNodeCount ?? graphData.nodes.length) >= graphData.filteredCount
-                            ? "Showing every paper node and every loaded citation edge in the graph, including the union of references extracted from the scanned PDFs."
-                            : "Showing connected neighbors with each loaded node so citation edges are visible in context."}
-                        </p>
-                      </div>
-                      {graphData && (
-                        <span className="text-xs text-muted">
-                          {graphData.loadedNodeCount ?? graphData.nodes.length} of {graphData.filteredCount} papers loaded
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="p-4">
-                    <CitationGraphMap graphPage={graphData} />
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border bg-white">
-                  <div className="border-b border-border px-4 py-3">
-                    <p className="text-sm font-semibold text-foreground">Papers in this graph window</p>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {graphPage?.nodes.map((node) => (
-                      <div key={node.id} className="px-4 py-3">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">{node.title ?? node.id}</p>
-                            <p className="mt-1 text-xs text-muted">
-                              {formatStatus(node.kind)} • {node.local ? "local" : "external"}
-                              {node.suggestion ? " • suggestion" : ""}
-                            </p>
+                <aside className="space-y-4">
+                  <div className="rounded-[var(--radius-2)] border border-rule bg-raised p-4">
+                    {selectedNode ? (
+                      <>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">Selected paper</p>
+                            <h4 className="mt-2 text-base font-semibold leading-tight text-strong">{graphNodeTitle(selectedNode)}</h4>
+                            <p className="mt-2 text-xs text-dim">{graphNodeAuthors(selectedNode)}</p>
                           </div>
-                          <div className="text-xs text-muted">
-                            {node.referenceCount ?? 0} refs • {node.citationCount ?? 0} cites
-                          </div>
+                          <span
+                            className="mt-1 size-3 shrink-0 rounded-full"
+                            style={{ backgroundColor: graphNodeFill(selectedNode) }}
+                          />
                         </div>
-                      </div>
-                    ))}
+                        <dl className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                          <div className="rounded-[var(--radius-1)] border border-rule bg-sunk p-2">
+                            <dt className="text-dim">Links</dt>
+                            <dd className="mt-1 font-mono text-sm tabular-nums text-strong">{graphInsights.degreeByNodeId.get(selectedNode.id) ?? 0}</dd>
+                          </div>
+                          <div className="rounded-[var(--radius-1)] border border-rule bg-sunk p-2">
+                            <dt className="text-dim">Refs</dt>
+                            <dd className="mt-1 font-mono text-sm tabular-nums text-strong">{selectedNode.referenceCount ?? 0}</dd>
+                          </div>
+                          <div className="rounded-[var(--radius-1)] border border-rule bg-sunk p-2">
+                            <dt className="text-dim">Cites</dt>
+                            <dd className="mt-1 font-mono text-sm tabular-nums text-strong">{selectedNode.citationCount ?? 0}</dd>
+                          </div>
+                        </dl>
+                        <div className="mt-4 rounded-[var(--radius-1)] border border-rule bg-sunk p-3">
+                          <p className="text-xs text-dim">{graphNodeMeta(selectedNode)}</p>
+                          <p className="mt-2 break-all font-mono text-[11px] text-quiet">{graphNodeIdentifier(selectedNode)}</p>
+                        </div>
+                        {graphInsights.neighborNodes.length > 0 && (
+                          <div className="mt-4">
+                            <p className="text-xs font-semibold text-strong">Nearest papers</p>
+                            <div className="mt-2 space-y-2">
+                              {graphInsights.neighborNodes.map((node) => (
+                                <button
+                                  className="flex w-full items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-sunk px-2 py-2 text-left text-xs text-dim transition-colors hover:text-strong"
+                                  key={node.id}
+                                  onClick={() => setSelectedGraphNodeId(node.id)}
+                                  type="button"
+                                >
+                                  <span className="size-2 rounded-full" style={{ backgroundColor: graphNodeFill(node) }} />
+                                  <span className="min-w-0 truncate">{graphNodeTitle(node)}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            className="inline-flex items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-sunk px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent"
+                            onClick={() => setGraphQuery(graphNodeTitle(selectedNode))}
+                            type="button"
+                          >
+                            <MagnifyingGlass size={13} />
+                            Isolate
+                          </button>
+                          <button
+                            className="inline-flex items-center gap-2 rounded-[var(--radius-1)] border border-rule bg-sunk px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent"
+                            onClick={() => void handleCopyGraphLink(selectedNode)}
+                            type="button"
+                          >
+                            <ShareNetwork size={13} />
+                            Share
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-dim">Select a graph node to inspect paper metadata and local citation context.</p>
+                    )}
                   </div>
-                  {graphPage?.nextCursor && (
-                    <div className="border-t border-border px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => void loadGraph({ cursor: graphPage.nextCursor, append: true })}
-                        disabled={graphLoadingMore}
-                        className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-                      >
-                        {graphLoadingMore ? "Loading..." : "Load more nodes"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </section>
 
-              <section className="space-y-4">
-                <div className="rounded-xl border border-border bg-white p-4">
-                  <p className="text-sm font-semibold text-foreground">Semantic clusters</p>
+                  <div className="rounded-[var(--radius-2)] border border-rule bg-raised p-4">
+                    <p className="text-sm font-semibold text-strong">Semantic clusters</p>
                   {clustersLoading && !clustersPage ? (
-                    <div className="mt-3 flex items-center gap-2 text-sm text-muted">
+                    <div className="mt-3 flex items-center gap-2 text-sm text-dim">
                       <SpinnerGap className="animate-spin" size={16} />
                       Loading clusters...
                     </div>
@@ -2368,14 +2882,14 @@ export function PaperLibraryCommandCenter({
                           }
                           value={clustersPage.model.status}
                         />
-                        <span className="text-sm text-muted">
+                        <span className="text-sm text-dim">
                           {clustersPage.clusters.length} clusters • {clustersPage.unclusteredCount} unclustered papers
                         </span>
                       </div>
                       {clustersPage.warnings.length ? (
                         <div className="mt-3 space-y-2">
                           {clustersPage.warnings.map((warning) => (
-                            <div key={warning} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
+                            <div key={warning} className="rounded-[var(--radius-1)] border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
                               {warning}
                             </div>
                           ))}
@@ -2383,27 +2897,27 @@ export function PaperLibraryCommandCenter({
                       ) : null}
                     </>
                   ) : (
-                    <p className="mt-3 text-sm text-muted">
+                    <p className="mt-3 text-sm text-dim">
                       Semantic organization appears here after a completed scan.
                     </p>
                   )}
                 </div>
 
                 {clustersPage?.clusters.map((cluster) => (
-                  <div key={cluster.id} className="rounded-xl border border-border bg-white p-4">
+                  <div key={cluster.id} className="rounded-[var(--radius-2)] border border-rule bg-raised p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-foreground">{cluster.label}</p>
-                        <p className="mt-1 text-xs text-muted">
+                        <p className="text-sm font-semibold text-strong">{cluster.label}</p>
+                        <p className="mt-1 text-xs text-dim">
                           folder token {cluster.folderName} • confidence {Math.round(cluster.confidence * 100)}%
                         </p>
                       </div>
-                      <span className="text-xs text-muted">{cluster.memberCount} papers</span>
+                      <span className="text-xs text-dim">{cluster.memberCount} papers</span>
                     </div>
                     {cluster.keywords.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {cluster.keywords.map((keyword) => (
-                          <span key={keyword} className="rounded-full border border-border bg-surface px-2 py-1 text-[11px] font-semibold text-muted">
+                          <span key={keyword} className="rounded-full border border-rule bg-sunk px-2 py-1 text-[11px] font-semibold text-dim">
                             {keyword}
                           </span>
                         ))}
@@ -2417,22 +2931,22 @@ export function PaperLibraryCommandCenter({
                     type="button"
                     onClick={() => void loadClusters({ cursor: clustersPage.nextCursor, append: true })}
                     disabled={clustersLoadingMore}
-                    className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                    className="rounded-[var(--radius-1)] border border-rule bg-raised px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                   >
                     {clustersLoadingMore ? "Loading..." : "Load more clusters"}
                   </button>
                 )}
 
-                <div className="rounded-xl border border-border bg-white p-4">
+                <div className="rounded-[var(--radius-2)] border border-rule bg-raised p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Gap suggestions</p>
-                      <p className="mt-1 text-xs text-muted">
+                      <p className="text-sm font-semibold text-strong">Gap suggestions</p>
+                      <p className="mt-1 text-xs text-dim">
                         Missing seminal papers ranked from your local citation graph, cluster coverage, and recency cues.
                       </p>
                     </div>
                     {gapPage && (
-                      <span className="text-xs text-muted">
+                      <span className="text-xs text-dim">
                         {gapPage.filteredCount} shown • {gapPage.totalCount} total
                       </span>
                     )}
@@ -2453,8 +2967,8 @@ export function PaperLibraryCommandCenter({
                         onClick={() => setGapFilter(value)}
                         className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
                           gapFilter === value
-                            ? "border-accent bg-white text-foreground"
-                            : "border-border bg-surface text-muted hover:text-foreground"
+                            ? "border-accent bg-accent-faint text-strong"
+                            : "border-rule bg-sunk text-dim hover:text-strong"
                         }`}
                       >
                         {value.replaceAll("_", " ")} {count}
@@ -2463,7 +2977,7 @@ export function PaperLibraryCommandCenter({
                   </div>
 
                   {gapsLoading && !gapPage ? (
-                    <div className="mt-4 flex items-center gap-2 text-sm text-muted">
+                    <div className="mt-4 flex items-center gap-2 text-sm text-dim">
                       <SpinnerGap className="animate-spin" size={16} />
                       Loading gap suggestions...
                     </div>
@@ -2472,7 +2986,7 @@ export function PaperLibraryCommandCenter({
                       {gapPage.warnings.length > 0 && (
                         <div className="mt-4 space-y-2">
                           {gapPage.warnings.map((warning) => (
-                            <div key={warning} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
+                            <div key={warning} className="rounded-[var(--radius-1)] border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
                               {warning}
                             </div>
                           ))}
@@ -2482,14 +2996,14 @@ export function PaperLibraryCommandCenter({
                       {gapPage.suggestions.length > 0 ? (
                         <div className="mt-4 space-y-3">
                           {gapPage.suggestions.map((suggestion) => (
-                            <div key={suggestion.id} className="rounded-xl border border-border bg-surface p-4">
+                            <div key={suggestion.id} className="rounded-[var(--radius-2)] border border-rule bg-sunk p-4">
                               <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
-                                  <p className="text-sm font-semibold text-foreground">
+                                  <p className="text-sm font-semibold text-strong">
                                     {suggestion.title}
                                     {suggestion.year ? ` (${suggestion.year})` : ""}
                                   </p>
-                                  <p className="mt-1 text-xs text-muted">
+                                  <p className="mt-1 text-xs text-dim">
                                     score {Math.round(suggestion.score.overall * 100)}% • {suggestion.localConnectionCount} local links
                                   </p>
                                 </div>
@@ -2507,13 +3021,13 @@ export function PaperLibraryCommandCenter({
 
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {suggestion.reasonCodes.map((reason) => (
-                                  <span key={reason} className="rounded-full border border-border bg-white px-2 py-1 text-[11px] font-semibold text-muted">
+                                  <span key={reason} className="rounded-full border border-rule bg-raised px-2 py-1 text-[11px] font-semibold text-dim">
                                     {reason.replaceAll("_", " ")}
                                   </span>
                                 ))}
                               </div>
 
-                              <p className="mt-3 text-xs text-muted">
+                              <p className="mt-3 text-xs text-dim">
                                 Evidence papers: {suggestion.evidencePaperIds.join(", ") || "none"}
                               </p>
 
@@ -2523,7 +3037,7 @@ export function PaperLibraryCommandCenter({
                                     type="button"
                                     onClick={() => void handleGapAction(suggestion.id, "watch")}
                                     disabled={gapActionSuggestionId === suggestion.id}
-                                    className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                                    className="rounded-[var(--radius-1)] border border-rule bg-raised px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                                   >
                                     Watch
                                   </button>
@@ -2533,7 +3047,7 @@ export function PaperLibraryCommandCenter({
                                     type="button"
                                     onClick={() => void handleGapAction(suggestion.id, "ignore")}
                                     disabled={gapActionSuggestionId === suggestion.id}
-                                    className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                                    className="rounded-[var(--radius-1)] border border-rule bg-raised px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                                   >
                                     Ignore
                                   </button>
@@ -2543,7 +3057,7 @@ export function PaperLibraryCommandCenter({
                                     type="button"
                                     onClick={() => void handleGapAction(suggestion.id, "save")}
                                     disabled={gapActionSuggestionId === suggestion.id}
-                                    className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                                    className="rounded-[var(--radius-1)] border border-rule bg-raised px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                                   >
                                     Save
                                   </button>
@@ -2553,7 +3067,7 @@ export function PaperLibraryCommandCenter({
                                     type="button"
                                     onClick={() => void handleGapAction(suggestion.id, "import")}
                                     disabled={gapActionSuggestionId === suggestion.id}
-                                    className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                                    className="rounded-[var(--radius-1)] bg-accent px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
                                   >
                                     Mark imported
                                   </button>
@@ -2563,7 +3077,7 @@ export function PaperLibraryCommandCenter({
                                     type="button"
                                     onClick={() => void handleGapAction(suggestion.id, "reopen")}
                                     disabled={gapActionSuggestionId === suggestion.id}
-                                    className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                                    className="rounded-[var(--radius-1)] border border-rule bg-raised px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                                   >
                                     Reopen
                                   </button>
@@ -2573,7 +3087,7 @@ export function PaperLibraryCommandCenter({
                           ))}
                         </div>
                       ) : (
-                        <p className="mt-4 text-sm text-muted">
+                        <p className="mt-4 text-sm text-dim">
                           No gap suggestions match this filter yet.
                         </p>
                       )}
@@ -2583,19 +3097,20 @@ export function PaperLibraryCommandCenter({
                           type="button"
                           onClick={() => void loadGaps({ cursor: gapPage.nextCursor, append: true })}
                           disabled={gapsLoadingMore}
-                          className="mt-4 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                          className="mt-4 rounded-[var(--radius-1)] border border-rule bg-raised px-3 py-2 text-xs font-semibold text-strong transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                         >
                           {gapsLoadingMore ? "Loading..." : "Load more suggestions"}
                         </button>
                       )}
                     </>
                   ) : (
-                    <p className="mt-4 text-sm text-muted">
+                    <p className="mt-4 text-sm text-dim">
                       Gap suggestions appear here after graph enrichment and clustering finish.
                     </p>
                   )}
                 </div>
-              </section>
+                </aside>
+              </div>
             </div>
           )}
         </div>
@@ -2936,21 +3451,37 @@ export function PaperLibraryCommandCenter({
     gapsLoading,
     gapsLoadingMore,
     graphError,
+    graphActionMessage,
+    graphData,
+    graphDisplayData,
+    graphHasPdfTextEdges,
+    graphInsights,
+    graphListView,
     graphLoading,
     graphLoadingMore,
+    graphMoreOpen,
     graphNoIdentifierRuns,
-    graphOverview,
+    graphNodeFilter,
     graphOverviewLoading,
     graphPage,
+    graphPdfTextReferenceCount,
+    graphPdfTextRuns,
+    graphPdfTextSuccessfulRuns,
+    graphPerspective,
     graphSourceRunCount,
     graphSuccessfulRuns,
+    graphQuery,
+    graphWarnings,
     handleApproveAndApplyPlan,
     handleCancelScan,
+    handleCopyGraphLink,
     handleCreateApplyPlan,
     handleGapAction,
     handleImportPdfFolder,
     handleRepairManifest,
     handleReviewAction,
+    handleResetGraphView,
+    handleSelectMostConnectedGraphNode,
     handleSelectTemplateFormat,
     handleUndo,
     folderPickerLoading,
@@ -2977,6 +3508,7 @@ export function PaperLibraryCommandCenter({
     scanError,
     scanLoading,
     session,
+    displayedGraphEdgeCount,
     totalGraphEdgeCount,
     undoing,
   ]);
