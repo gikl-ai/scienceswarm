@@ -335,11 +335,13 @@ describe("Project dashboard smoke test", () => {
     const input = within(composer).getByLabelText("Chat with your project");
 
     expect(input).toHaveAttribute("placeholder", "");
-    expect(input).toHaveClass("py-2");
-    expect(input).toHaveClass("pl-2");
+    expect(input).toHaveClass("py-2.5");
+    expect(input).toHaveClass("pl-2.5");
     expect(input).toHaveClass("pr-12");
     expect(input).not.toHaveClass("px-0");
     expect(input).not.toHaveClass("py-1");
+    expect(composer).toHaveClass("rounded-[30px]");
+    expect(composer).toHaveClass("backdrop-blur-sm");
     expect(within(composer).getByText("Project Chat")).toBeInTheDocument();
     expect(
       within(composer).getByText("Keep the next turn grounded in this workspace."),
@@ -378,13 +380,17 @@ describe("Project dashboard smoke test", () => {
     render(<ProjectPage />);
 
     const composer = await screen.findByTestId("project-chat-composer");
+    const guidance = within(composer).getByTestId("composer-guidance-row");
     const sendButton = within(composer).getByRole("button", { name: "Send" });
 
+    expect(within(guidance).getByText("Drop files")).toHaveClass("rounded-full");
+    expect(within(guidance).getByText("Mention files")).toBeInTheDocument();
+    expect(within(guidance).getByText("Commands")).toBeInTheDocument();
+    expect(within(guidance).getByText("@")).toHaveClass("font-mono");
+    expect(within(guidance).getByText("/")).toHaveClass("font-mono");
     expect(
-      within(composer).getByText("Drop files here,", { exact: false }),
+      within(guidance).getByText("Enter to send · Shift+Enter for a new line."),
     ).toBeInTheDocument();
-    expect(within(composer).getByText("@")).toHaveClass("font-mono");
-    expect(within(composer).getByText("/")).toHaveClass("font-mono");
     expect(sendButton).toHaveClass("bg-slate-950");
     expect(sendButton).toHaveClass("text-white");
     expect(sendButton).not.toHaveClass("border-accent/30");
