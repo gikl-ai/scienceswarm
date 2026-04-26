@@ -333,7 +333,7 @@ describe("Project dashboard smoke test", () => {
     expect(column).toHaveClass("gap-6");
   });
 
-  it("renders a tokenized composer surface without redundant context chrome", async () => {
+  it("renders subtle project context above the composer", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -357,12 +357,15 @@ describe("Project dashboard smoke test", () => {
     expect(composer).toHaveClass("bg-raised");
     expect(composer).toHaveClass("border-rule");
     expect(within(composer).getByTestId("composer-footer")).toHaveClass("border-rule/70");
-    expect(within(composer).queryByText("Project Chat")).not.toBeInTheDocument();
+    expect(within(composer).getByText("Project Chat")).toBeInTheDocument();
     expect(
-      within(composer).queryByText("Keep the next turn grounded in this workspace."),
-    ).not.toBeInTheDocument();
+      within(composer).getByText(
+        "Ask about the project, run a task, or compare runtimes without leaving the thread.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(composer).getByText("demo-project")).toBeInTheDocument();
     expect(within(composer).getByText("OpenClaw")).toBeInTheDocument();
-    expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
+    expect(within(composer).getByText("Chat mode")).toBeInTheDocument();
   });
 
   it("reflects the selected runtime host in the composer runtime switcher", async () => {
@@ -385,7 +388,7 @@ describe("Project dashboard smoke test", () => {
     await waitFor(() => {
       expect(within(composer).getByText("Codex")).toBeInTheDocument();
     });
-    expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
+    expect(within(composer).getByText("demo-project")).toBeInTheDocument();
   });
 
   it("renders footer controls as one compact row with a disabled idle send button", async () => {
