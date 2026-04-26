@@ -350,7 +350,14 @@ describe("paper-library graph", () => {
       scanId: "scan-1",
       brainRoot,
       adapters: [],
-    })).not.toBeNull();
+    })).toMatchObject({
+      nodes: expect.arrayContaining([
+        expect.objectContaining({
+          id: "paper:doi:10.3000/long-abstract",
+          abstract: "A".repeat(5_000),
+        }),
+      ]),
+    });
   });
 
   it("caps PDF-extracted local abstracts to the graph schema limit", async () => {
@@ -384,7 +391,14 @@ describe("paper-library graph", () => {
       scanId: "scan-1",
       brainRoot,
       adapters: [],
-    })).not.toBeNull();
+    })).toMatchObject({
+      nodes: expect.arrayContaining([
+        expect.objectContaining({
+          id: "paper:doi:10.1000/source",
+          abstract: "B".repeat(5_000),
+        }),
+      ]),
+    });
   });
 
   it("records failed source runs without blocking the local graph and reuses cached failures", async () => {
