@@ -58,6 +58,11 @@ What the key lines mean:
   milestones, including readiness, connect/auth, send acknowledgement, and the
   first OpenClaw or assistant events.
 
+If `Observed split` is slow before the first streamed chunk, investigate the
+local ScienceSwarm route path first. If `Server timing` is slow after send
+acknowledgement or the first gateway event, the delay is downstream in
+OpenClaw or model execution.
+
 If you include benchmark numbers in a PR body, note the local environment, the
 final text sample, and whether timing artifacts were enabled for that run.
 
