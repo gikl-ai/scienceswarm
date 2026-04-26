@@ -3,7 +3,16 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowSquareOut, Brain, CalendarCheck, Database, SpinnerGap } from "@phosphor-icons/react";
+import {
+  ArrowSquareOut,
+  Brain,
+  CalendarCheck,
+  CheckCircle,
+  Database,
+  GitBranch,
+  SpinnerGap,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import { OpenClawSkillsBrowser } from "@/components/openclaw/skills-browser";
 import { InstalledMarketPluginsBrowser } from "@/components/skills/installed-market-browser";
 import { WorkspaceSkillsBrowser } from "@/components/skills/workspace-browser";
@@ -46,6 +55,24 @@ type BrainArtifactState =
   | { status: "ready"; slug: string; page: CompiledPageRead }
   | { status: "error"; slug: string; message: string };
 
+type BrainMaintenanceState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; structural: GbrainStructuralSummary | null }
+  | { status: "error"; message: string };
+
+type GbrainStructuralSummary = {
+  ready: boolean;
+  blockers: string[];
+  packageInstalledVersion: string | null;
+  packageRequiredVersion: string | null;
+  packageInSync: boolean | null;
+  missingOperations: string[];
+  missingSchemaFields: string[];
+  reindexStatus: string | null;
+  reindexReason: string | null;
+};
+
 type GbrainView = "pages" | "skills" | "paper-library";
 type GbrainSkillsCatalog = "workspace" | "openclaw" | "installed";
 
@@ -73,6 +100,7 @@ function GbrainPageContent() {
   );
   const [brainBootstrapState, setBrainBootstrapState] = useState<BrainBootstrapState>({ status: "loading" });
   const [selectedArtifact, setSelectedArtifact] = useState<BrainArtifactState>({ status: "idle" });
+  const [brainMaintenanceState, setBrainMaintenanceState] = useState<BrainMaintenanceState>({ status: "idle" });
 
   useEffect(() => {
     if (activeProjectSlug) {
@@ -114,6 +142,10 @@ function GbrainPageContent() {
         throw new Error(typeof data.error === "string" ? data.error : "Brain status check failed");
       }
 
+      if (data.ok === false) {
+        throw new Error(typeof data.error === "string" ? data.error : "Brain status check failed");
+      }
+
       let radar: BrainRadarStatus | null = null;
       if (data.radar && typeof data.radar === "object") {
         const candidate = data.radar as Partial<BrainRadarStatus>;
@@ -146,6 +178,34 @@ function GbrainPageContent() {
       setBrainBootstrapState({
         status: "error",
         message: error instanceof Error ? error.message : "Brain status check failed",
+      });
+    }
+  }, []);
+
+  const loadBrainMaintenance = useCallback(async (signal?: AbortSignal) => {
+    setBrainMaintenanceState({ status: "loading" });
+    try {
+      const response = await fetch("/api/brain/maintenance", { signal });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string"
+            ? payload.error
+            : "Maintenance status check failed",
+        );
+      }
+
+      setBrainMaintenanceState({
+        status: "ready",
+        structural: parseGbrainStructuralSummary(payload),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+      setBrainMaintenanceState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Maintenance status check failed",
       });
     }
   }, []);
@@ -230,6 +290,17 @@ function GbrainPageContent() {
   useEffect(() => {
     void loadBrainStatus();
   }, [loadBrainStatus]);
+
+  useEffect(() => {
+    if (activeView !== "pages" || !activeProjectSlug) {
+      setBrainMaintenanceState({ status: "idle" });
+      return;
+    }
+
+    const controller = new AbortController();
+    void loadBrainMaintenance(controller.signal);
+    return () => controller.abort();
+  }, [activeProjectSlug, activeView, loadBrainMaintenance]);
 
   useEffect(() => {
     if (brainBootstrapState.status === "missing" && activeView === "pages") {
@@ -473,10 +544,16 @@ function GbrainPageContent() {
           )}
 
           {activeProjectSlug && (
-            <BrainSearchPanel
-              enabled={brainBootstrapState.status === "ready"}
-              onOpenResult={handleNavigateBrainPage}
-            />
+            <>
+              <StructuralRetrievalStatusPanel
+                state={brainMaintenanceState}
+                onRetry={() => { void loadBrainMaintenance(); }}
+              />
+              <BrainSearchPanel
+                enabled={brainBootstrapState.status === "ready"}
+                onOpenResult={handleNavigateBrainPage}
+              />
+            </>
           )}
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 md:p-4">
@@ -604,6 +681,126 @@ function BrainArtifactPanel({
   );
 }
 
+function StructuralRetrievalStatusPanel({
+  state,
+  onRetry,
+}: {
+  state: BrainMaintenanceState;
+  onRetry: () => void;
+}) {
+  if (state.status === "idle") {
+    return null;
+  }
+
+  if (state.status === "loading") {
+    return (
+      <section
+        role="status"
+        className="border-b border-border bg-white px-4 py-3 text-sm text-muted"
+      >
+        <div className="flex items-center gap-2">
+          <Spinner size="h-4 w-4" />
+          Checking structural retrieval...
+        </div>
+      </section>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <section className="border-b border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="flex items-center gap-2 font-semibold">
+              <WarningCircle size={15} />
+              Structural retrieval status unavailable.
+            </p>
+            <p className="mt-1 text-xs leading-5 text-warn">{state.message}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex h-8 shrink-0 items-center justify-center rounded border border-warn/40 bg-raised px-3 text-xs font-semibold text-warn transition-colors hover:border-warn"
+          >
+            Retry structural status
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (!state.structural) {
+    return (
+      <section className="border-b border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="flex items-center gap-2 font-semibold">
+              <WarningCircle size={15} />
+              Structural retrieval status unavailable.
+            </p>
+            <p className="mt-1 text-xs leading-5 text-warn">
+              Maintenance did not return gbrain capability details.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex h-8 shrink-0 items-center justify-center rounded border border-warn/40 bg-raised px-3 text-xs font-semibold text-warn transition-colors hover:border-warn"
+          >
+            Retry structural status
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  const summary = state.structural;
+  const detailItems = structuralStatusDetails(summary);
+  const statusClass = summary.ready
+    ? "border-border bg-white text-foreground"
+    : "border-warn/30 bg-warn/10 text-warn";
+  const Icon = summary.ready ? CheckCircle : WarningCircle;
+
+  return (
+    <section className={`border-b px-4 py-3 text-sm ${statusClass}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-semibold">
+            <Icon size={15} />
+            {summary.ready ? "Structural retrieval ready" : "Structural retrieval degraded"}
+          </p>
+          <p className={`mt-1 text-xs leading-5 ${summary.ready ? "text-muted" : "text-warn"}`}>
+            {summary.ready
+              ? "Runtime agents can use gbrain code-definition and reference navigation for this project."
+              : "Runtime agents will fall back to search and read-only gbrain context until these blockers are cleared."}
+          </p>
+          {detailItems.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs leading-5">
+              {detailItems.map((item, index) => (
+                <li key={`${index}-${item}`} className="flex gap-2">
+                  <GitBranch size={13} className="mt-0.5 shrink-0" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          className={`inline-flex h-8 shrink-0 items-center justify-center rounded border bg-raised px-3 text-xs font-semibold transition-colors ${
+            summary.ready
+              ? "border-border text-foreground hover:border-accent hover:text-accent"
+              : "border-warn/40 text-warn hover:border-warn"
+          }`}
+        >
+          Refresh structural status
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function normalizeBrainArtifactSlug(slug: string | null | undefined): string | null {
   const trimmed = slug?.trim().replace(/^gbrain:/, "");
   if (!trimmed) return null;
@@ -677,6 +874,110 @@ function hasCompiledPayload(page: CompiledPageRead): boolean {
       Array.isArray(page.backlinks)
     ),
   );
+}
+
+function structuralStatusDetails(summary: GbrainStructuralSummary): string[] {
+  const details: string[] = [];
+
+  if (summary.packageInstalledVersion || summary.packageRequiredVersion) {
+    const installed = summary.packageInstalledVersion ?? "unknown";
+    const required = summary.packageRequiredVersion ?? "unknown";
+    const syncSuffix =
+      summary.packageInSync === false
+        ? ", package pin is out of sync"
+        : summary.packageInSync === true
+          ? ", package pin is in sync"
+          : "";
+    details.push(`gbrain package: ${installed} installed, ${required} required${syncSuffix}.`);
+  }
+
+  if (summary.ready) {
+    if (summary.reindexStatus === "not-required") {
+      details.push("Reindex not required for the current structural schema.");
+    }
+    return dedupeStrings(details).slice(0, 4);
+  }
+
+  details.push(...summary.blockers.slice(0, 3));
+
+  if (summary.missingOperations.length > 0) {
+    details.push(`Missing gbrain operations: ${summary.missingOperations.slice(0, 5).join(", ")}.`);
+  }
+
+  if (summary.reindexStatus && summary.reindexStatus !== "not-required") {
+    details.push(
+      `${formatReindexStatus(summary.reindexStatus)}${
+        summary.reindexReason ? `: ${summary.reindexReason}` : ""
+      }`,
+    );
+  }
+
+  if (summary.missingSchemaFields.length > 0) {
+    details.push(
+      `Missing schema fields: ${summary.missingSchemaFields.slice(0, 4).join(", ")}${
+        summary.missingSchemaFields.length > 4 ? ", ..." : ""
+      }.`,
+    );
+  }
+
+  return dedupeStrings(details).slice(0, 7);
+}
+
+function parseGbrainStructuralSummary(payload: unknown): GbrainStructuralSummary | null {
+  const payloadRecord = asRecord(payload);
+  const signals = asRecord(payloadRecord?.signals);
+  const capabilities = asRecord(signals?.gbrainCapabilities);
+  if (!capabilities) return null;
+
+  const structuralNavigationAvailable = readBoolean(capabilities.structuralNavigationAvailable);
+  if (structuralNavigationAvailable === null) return null;
+
+  const packageState = asRecord(capabilities.package);
+  const operations = asRecord(capabilities.operations);
+  const schema = asRecord(capabilities.schema);
+  const reindex = asRecord(capabilities.reindex);
+
+  return {
+    ready: structuralNavigationAvailable,
+    blockers: readStringArray(capabilities.blockers),
+    packageInstalledVersion: readNullableString(packageState?.installedVersion),
+    packageRequiredVersion: readNullableString(packageState?.requiredVersion),
+    packageInSync: readBoolean(packageState?.inSync),
+    missingOperations: readStringArray(operations?.missing),
+    missingSchemaFields: readStringArray(schema?.missingFields),
+    reindexStatus: readNullableString(reindex?.status),
+    reindexReason: readNullableString(reindex?.reason),
+  };
+}
+
+function formatReindexStatus(status: string): string {
+  if (status === "unavailable") return "Reindex unavailable";
+  if (status === "required") return "Reindex required";
+  if (status === "unknown") return "Reindex status unknown";
+  return `Reindex ${status}`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function readBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function readNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
 export default function GbrainPage() {

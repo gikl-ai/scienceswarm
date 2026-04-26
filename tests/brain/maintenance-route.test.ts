@@ -233,6 +233,74 @@ describe("GET /api/brain/maintenance", () => {
     );
   });
 
+  it("keeps structural capability blockers visible when health falls back to disk", async () => {
+    const config = makeConfig();
+    roots.push(config.root);
+    mockLoadBrainConfig.mockReturnValue(config);
+    mockGenerateHealthReportWithGbrain.mockResolvedValue(makeReport({
+      source: "disk-fallback",
+      score: 60,
+    }));
+    mockProbeGbrainCapabilities.mockResolvedValue({
+      structuralNavigationAvailable: false,
+      package: {
+        requiredVersion: "0.21.0",
+        requiredCommit: "f718c595b3a382b2a9a6a1f6553448ad047b5e94",
+        expectedVersion: "0.21.0",
+        expectedResolved: "git+ssh://git@github.com/garrytan/gbrain.git#f718c595b3a382b2a9a6a1f6553448ad047b5e94",
+        installedVersion: "0.21.0",
+        installedName: "gbrain",
+        binPath: "/repo/node_modules/.bin/gbrain",
+        binExists: true,
+        inSync: true,
+        ready: true,
+      },
+      doctor: {
+        ok: false,
+        schemaVersion: null,
+        rawStatus: "unknown",
+        message: "column \"symbol_name\" does not exist",
+      },
+      schema: {
+        requiredVersion: 28,
+        observedVersion: null,
+        requiredFieldsPresent: false,
+        missingFields: ["content_chunks.symbol_name"],
+        rawStatus: "unknown",
+      },
+      operations: {
+        required: ["code-def", "code-refs", "code-callers", "code-callees", "reindex-code"],
+        available: ["code-def", "code-refs", "code-callers", "code-callees", "reindex-code"],
+        missing: [],
+        rawStatus: "ready",
+      },
+      chunker: {
+        requiredVersion: "4",
+        sourceVersions: [],
+        supported: true,
+        rawStatus: "ready",
+      },
+      reindex: {
+        status: "unknown",
+        reason: "Local gbrain schema metadata was unavailable.",
+      },
+      blockers: ["local schema is missing required structural fields."],
+    });
+    const { GET } = await import("@/app/api/brain/maintenance/route");
+
+    const response = await GET(makeGetRequest());
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.source).toBe("disk-fallback");
+    expect(body.signals.gbrainCapabilities).toMatchObject({
+      structuralNavigationAvailable: false,
+      package: { binPath: "[redacted]" },
+      schema: { missingFields: ["content_chunks.symbol_name"] },
+      blockers: ["local schema is missing required structural fields."],
+    });
+  });
+
   it("does not leak internal errors from maintenance plan generation", async () => {
     const config = makeConfig();
     roots.push(config.root);
