@@ -288,11 +288,7 @@ export const ChatMentionInput = forwardRef<
         }
       }
       if (slashOpen && filteredSlashCommands.length === 0) {
-        if (
-          (event.key === "Enter" && !event.shiftKey) ||
-          event.key === "ArrowDown" ||
-          event.key === "ArrowUp"
-        ) {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault();
           return;
         }

@@ -42,7 +42,13 @@ const SAMPLE_SLASH_COMMANDS: SlashCommandOption[] = [
   },
 ];
 
-function Harness({ initial = "" }: { initial?: string }) {
+function Harness({
+  initial = "",
+  onKeyDown,
+}: {
+  initial?: string;
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+}) {
   const [value, setValue] = useState(initial);
   return (
     <div>
@@ -51,6 +57,7 @@ function Harness({ initial = "" }: { initial?: string }) {
         onValueChange={setValue}
         mentionFiles={SAMPLE_FILES}
         slashCommands={SAMPLE_SLASH_COMMANDS}
+        onKeyDown={onKeyDown}
         data-testid="chat-input"
         rows={2}
       />
@@ -279,7 +286,23 @@ describe("ChatMentionInput slash-command autocomplete", () => {
     );
   });
 
-  it("suppresses submit/navigation keys while slash commands are still loading", () => {
+  it("lets Enter submit when slash text has no matching command", () => {
+    const onKeyDown = vi.fn();
+    render(<Harness onKeyDown={onKeyDown} />);
+    const textarea = screen.getByTestId("chat-input") as HTMLTextAreaElement;
+
+    fireEvent.change(textarea, { target: { value: "/tmp" } });
+    textarea.setSelectionRange(4, 4);
+    fireEvent.keyUp(textarea);
+
+    const enterEvent = createEvent.keyDown(textarea, { key: "Enter" });
+    fireEvent(textarea, enterEvent);
+
+    expect(enterEvent.defaultPrevented).toBe(false);
+    expect(onKeyDown).toHaveBeenCalledOnce();
+  });
+
+  it("lets Enter submit while slash commands load but keeps navigation inside the menu", () => {
     const onKeyDown = vi.fn();
     render(<HarnessWithSlashLoading onKeyDown={onKeyDown} />);
     const textarea = screen.getByTestId("chat-input") as HTMLTextAreaElement;
@@ -295,12 +318,13 @@ describe("ChatMentionInput slash-command autocomplete", () => {
 
     const enterEvent = createEvent.keyDown(textarea, { key: "Enter" });
     fireEvent(textarea, enterEvent);
-    expect(enterEvent.defaultPrevented).toBe(true);
+    expect(enterEvent.defaultPrevented).toBe(false);
+    expect(onKeyDown).toHaveBeenCalledOnce();
 
     const arrowEvent = createEvent.keyDown(textarea, { key: "ArrowDown" });
     fireEvent(textarea, arrowEvent);
     expect(arrowEvent.defaultPrevented).toBe(true);
-    expect(onKeyDown).not.toHaveBeenCalled();
+    expect(onKeyDown).toHaveBeenCalledOnce();
     expect(screen.getByTestId("current-value").textContent).toBe("/cap");
   });
 });

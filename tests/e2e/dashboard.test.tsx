@@ -85,13 +85,16 @@ describe("Dashboard e2e flow", () => {
   });
 
 
-  it("renders the Send button in the chat area", async () => {
+  it("renders compact composer controls without an idle Send button", async () => {
     vi.stubGlobal("fetch", stubHealthyFetch());
     render(<ProjectPage />);
 
     await screen.findByText(/Research workspace ready for/i);
 
-    expect(screen.getByRole("button", { name: /Send/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Change response destination" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Send/i })).not.toBeInTheDocument();
   });
 
   it("renders chat input textarea", async () => {
