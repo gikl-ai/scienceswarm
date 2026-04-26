@@ -33,7 +33,7 @@ rather than novelty.
 | 2. Solvate | `02_solvate.py` | < 30 s | `solvated.pdb`, `system.xml` |
 | 3. Minimize + equilibrate (150 ps) | `03_minimize_equilibrate.py` | ~6 min | `equilibrated.{pdb,xml}` |
 | 4. Production × 3 seeds (1 ns each) | `04_produce.py` × 3 | ~70 min × 3 | `prod_seed{11,22,33}.dcd` |
-| 5. Analyze | `05_analyze.py` | < 30 s | `analysis/{rmsd_ca,rmsf_ca,rg}.png`, `metrics.json` |
+| 5. Analyze | `05_analyze.py` | < 30 s | `analysis/metrics.json`, `analysis/*.png` |
 
 GPU users with CUDA can drop production wall time to ~5 min per seed by
 asking ScienceSwarm to use CUDA when OpenMM can see it.
@@ -64,10 +64,10 @@ create it by hand.
 2. Import this checkout, or just the `docs/tutorials/md-quickstart/`
    folder, into the project so the agent can see `environment.yml` and
    `scripts/`.
-3. In the project chat composer, select an execution-capable destination
-   such as OpenHands. If the preview asks for an `execution-ok` policy,
-   approve it for this tutorial run.
-4. Send this request:
+3. Open Settings > Project AI destinations for the same project. Set
+   `Project policy` to `Execution ok`, `Mode` to `Task`, and
+   `Destination` to `OpenHands`.
+4. Return to the project chat and send this request:
 
 ```text
 Prepare the MD quickstart in docs/tutorials/md-quickstart for execution.
@@ -93,7 +93,7 @@ Continue in the same ScienceSwarm project chat and send:
 Run the lysozyme MD quickstart end to end. Fetch PDB 1AKI, run stages
 01 through 05 in order, run production for seeds 11, 22, and 33 at
 1.0 ns each, and stop immediately if any validation gate fails. When it
-finishes, summarize metrics.json and list the generated plots.
+finishes, summarize analysis/metrics.json and list the generated plots.
 ```
 
 For a CUDA GPU run, add: `Use CUDA if OpenMM can see it; otherwise fall
@@ -108,7 +108,7 @@ The execution agent should perform these implementation steps:
 | 2. Solvate | Add TIP3P water and ions | `solvated.pdb`, `system.xml` |
 | 3. Minimize + equilibrate | Run the 150 ps equilibration gate | `equilibrated.{pdb,xml}` |
 | 4. Production | Run 1 ns each for seeds 11, 22, and 33 | `prod_seed{11,22,33}.dcd` |
-| 5. Analyze | Compute validation metrics and plots | `analysis/`, `metrics.json` |
+| 5. Analyze | Compute validation metrics and plots | `analysis/metrics.json`, `analysis/*.png` |
 
 Each script prints clear diagnostics, fails fast on a bad input, and
 writes its output before exiting. The scripts remain in the repository
@@ -153,7 +153,7 @@ extending production is the first thing to try.
 
 ## Reading the output
 
-A typical converged `metrics.json` has this shape:
+A typical converged `analysis/metrics.json` has this shape:
 
 ```json
 {
