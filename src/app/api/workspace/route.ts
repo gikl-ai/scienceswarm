@@ -1596,8 +1596,9 @@ async function replaceHtmlMatches(
 }
 
 function getHtmlAttribute(attributes: string, name: string): string | null {
+  const escapedName = escapeRegExp(name);
   const pattern = new RegExp(
-    `\\b${name}\\s*=\\s*(?:(["'])(.*?)\\1|([^\\s>"'=]+))`,
+    `\\b${escapedName}\\s*=\\s*(?:(["'])(.*?)\\1|([^\\s>"'=]+))`,
     "i",
   );
   const match = attributes.match(pattern);
@@ -1605,11 +1606,16 @@ function getHtmlAttribute(attributes: string, name: string): string | null {
 }
 
 function removeHtmlAttribute(attributes: string, name: string): string {
+  const escapedName = escapeRegExp(name);
   const pattern = new RegExp(
-    `\\s*\\b${name}\\s*=\\s*(?:(["']).*?\\1|[^\\s>"'=]+)`,
+    `\\s*\\b${escapedName}\\s*=\\s*(?:(["']).*?\\1|[^\\s>"'=]+)`,
     "i",
   );
   return attributes.replace(pattern, "").replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): Promise<string> {
@@ -1617,7 +1623,7 @@ async function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): Pro
   const scriptExtensions = new Set(["js", "mjs", "cjs"]);
   const styleExtensions = new Set(["css"]);
 
-  const withStyles = await replaceHtmlMatches(html, /<link\b([^>]*)>/gi, async (match) => {
+  const withStyles = await replaceHtmlMatches(html, /<link\b([\s\S]*?)>/gi, async (match) => {
     const tag = match[0];
     const attributes = match[1] ?? "";
     const rel = getHtmlAttribute(attributes, "rel");
@@ -1634,7 +1640,7 @@ async function inlineHtmlPreviewAssets(html: string, assetBaseDir?: string): Pro
 
   return replaceHtmlMatches(
     withStyles,
-    /<script\b([^>]*)>\s*<\/script>/gi,
+    /<script\b([^>]*)>\s*<\/script\s*>/gi,
     async (match) => {
       const tag = match[0];
       const attributes = match[1] ?? "";
