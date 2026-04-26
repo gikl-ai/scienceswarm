@@ -1181,6 +1181,22 @@ describe("ChatMessage", () => {
     );
   });
 
+  it("renders MEDIA paths that contain spaces", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={"MEDIA:figures/summary chart final.png"}
+        projectId="project-alpha"
+        timestamp={new Date("2026-04-21T10:00:10.000Z")}
+      />,
+    );
+
+    expect(screen.getByAltText("figures/summary chart final.png")).toHaveAttribute(
+      "src",
+      "/api/workspace?action=raw&file=figures%2Fsummary%20chart%20final.png&projectId=project-alpha",
+    );
+  });
+
   it("renders AVIF MEDIA references as inline image", () => {
     render(
       <ChatMessage

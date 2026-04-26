@@ -1542,13 +1542,13 @@ function renderContent(
   { assistantTypography = false }: { assistantTypography?: boolean } = {},
 ) {
   // Split on MEDIA references, embed tags, and markdown images.
-  const parts = content.split(/(MEDIA:[^\s\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gi);
+  const parts = content.split(/(MEDIA:[^\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gi);
   const renderedParts = parts.flatMap<RenderedContentPart>((part, i) => {
     const captionClass = assistantTypography
       ? ASSISTANT_CAPTION_CLASS
       : "mt-1 block font-mono text-[10px] text-muted";
-    if (part.startsWith("MEDIA:")) {
-      const filePath = part.slice(6).trim();
+    if (/^MEDIA:/i.test(part)) {
+      const filePath = part.replace(/^MEDIA:/i, "").trim();
       const workspaceFilePath = normalizeMediaWorkspacePath(filePath);
       const ext = workspaceFilePath.split(".").pop()?.toLowerCase() || "";
       const src = buildWorkspaceRawPreviewUrl(workspaceFilePath, projectId, {
