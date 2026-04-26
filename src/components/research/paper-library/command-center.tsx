@@ -1971,11 +1971,9 @@ export function PaperLibraryCommandCenter({
       degreeByNodeId.set(edge.targetNodeId, (degreeByNodeId.get(edge.targetNodeId) ?? 0) + 1);
       if (edge.kind === "references") {
         priorByNodeId.set(edge.sourceNodeId, (priorByNodeId.get(edge.sourceNodeId) ?? 0) + 1);
-        priorByNodeId.set(edge.targetNodeId, (priorByNodeId.get(edge.targetNodeId) ?? 0) + 1);
       }
       if (edge.kind === "cited_by") {
         derivativeByNodeId.set(edge.sourceNodeId, (derivativeByNodeId.get(edge.sourceNodeId) ?? 0) + 1);
-        derivativeByNodeId.set(edge.targetNodeId, (derivativeByNodeId.get(edge.targetNodeId) ?? 0) + 1);
       }
     }
 
@@ -2723,7 +2721,7 @@ export function PaperLibraryCommandCenter({
                     </p>
                   </div>
                   <div className="max-h-[42rem] divide-y divide-rule overflow-y-auto">
-                    {graphInsights.sortedNodes.slice(0, 36).map((node) => {
+                    {graphInsights.sortedNodes.map((node) => {
                       const selected = selectedNode?.id === node.id;
                       return (
                         <button
