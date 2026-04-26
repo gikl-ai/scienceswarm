@@ -168,6 +168,13 @@ type SlashCommandStatus = "idle" | "loading" | "ready" | "error";
 
 const DEFAULT_CHAT_SLASH_COMMANDS: SlashCommandOption[] =
   buildOpenClawSlashCommands([]);
+const RUNTIME_HOST_LABELS: Record<string, string> = {
+  openclaw: "OpenClaw",
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  "gemini-cli": "Gemini CLI",
+  openhands: "OpenHands",
+};
 
 // Radar runner freshness (Phase C / TODO #2). The skill runner writes
 // a `.radar-last-run.json` pointer into the brain root every cycle;
@@ -1767,6 +1774,16 @@ function ProjectPageContent() {
       clearRuntimeCompareResult();
     }
   }, [clearRuntimeCompareResult, runtimeMode]);
+  const selectedRuntimeHostLabel = useMemo(() => {
+    const selectedHost = runtimeHosts.hosts.find(
+      (host) => host.profile.id === selectedRuntimeHostId,
+    );
+    return (
+      selectedHost?.profile.label
+      ?? RUNTIME_HOST_LABELS[selectedRuntimeHostId]
+      ?? "OpenClaw"
+    );
+  }, [runtimeHosts.hosts, selectedRuntimeHostId]);
   const activeAssistantMessageId = isStreaming
     ? [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null
     : null;
@@ -4961,21 +4978,21 @@ function ProjectPageContent() {
                       )}
                       <div className="flex flex-wrap items-start justify-between gap-3 px-4 pb-2 pt-4">
                         <div className="min-w-0 space-y-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
                             Project Chat
                           </p>
-                          <p className="text-[13px] leading-5 text-slate-500">
+                          <p className="text-[13px] leading-5 text-muted">
                             Keep the next turn grounded in this workspace.
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
                           {activeProjectSlug && (
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                            <span className="inline-flex items-center rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-foreground">
                               {activeProjectSlug}
                             </span>
                           )}
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                            OpenClaw
+                          <span className="inline-flex items-center rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-muted">
+                            {selectedRuntimeHostLabel}
                           </span>
                         </div>
                       </div>

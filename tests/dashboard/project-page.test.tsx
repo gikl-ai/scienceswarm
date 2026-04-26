@@ -348,6 +348,29 @@ describe("Project dashboard smoke test", () => {
     expect(within(composer).getByText("demo-project")).toBeInTheDocument();
   });
 
+  it("reflects the selected runtime host in the composer context chip", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    window.localStorage.setItem(
+      "scienceswarm.runtime.project.demo-project",
+      JSON.stringify({
+        projectPolicy: "cloud-ok",
+        mode: "chat",
+        selectedHostId: "codex",
+        compareHostIds: ["openclaw"],
+      }),
+    );
+
+    render(<ProjectPage />);
+
+    const composer = await screen.findByTestId("project-chat-composer");
+    await screen.findByTestId("composer-runtime-switcher");
+    await waitFor(() => {
+      expect(within(composer).getByText("Codex")).toBeInTheDocument();
+    });
+    expect(within(composer).getByText("demo-project")).toBeInTheDocument();
+  });
+
   it("renders footer guidance copy and a prominent send button", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
