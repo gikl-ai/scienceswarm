@@ -186,6 +186,13 @@ describe("benchmark-chat-hi", () => {
     });
   });
 
+  it("defaults the benchmark base URL to localhost for local browser access", () => {
+    expect(parseBenchmarkArgs([], {})).toMatchObject({
+      baseUrl: "http://localhost:3001",
+    });
+    expect(benchmarkHelpText()).toContain("default: http://localhost:3001");
+  });
+
   it("parses CLI flags and formats stable output", () => {
     const options = parseBenchmarkArgs(
       [
