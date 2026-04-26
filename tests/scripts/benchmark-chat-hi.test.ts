@@ -74,6 +74,11 @@ describe("benchmark-chat-hi", () => {
       firstChunkMs: 25,
       firstChunkSharedHeadersTick: false,
       totalMs: 1234,
+      observedLatencySplit: {
+        browserToServerHeadersMs: 13,
+        serverToFirstChunkMs: 12,
+        firstChunkToCompleteMs: 1209,
+      },
       bytes: 321,
       eventCount: 3,
       progressEventCount: 2,
@@ -111,6 +116,11 @@ describe("benchmark-chat-hi", () => {
       finalEventCount: 1,
       finalTextSample: "Hello there.",
       firstChunkSharedHeadersTick: false,
+      observedLatencySplit: {
+        browserToServerHeadersMs: 10,
+        serverToFirstChunkMs: 10,
+        firstChunkToCompleteMs: 80,
+      },
     });
   });
 
@@ -132,6 +142,11 @@ describe("benchmark-chat-hi", () => {
       headersMs: 58,
       firstChunkMs: 58,
       firstChunkSharedHeadersTick: true,
+      observedLatencySplit: {
+        browserToServerHeadersMs: 58,
+        serverToFirstChunkMs: 0,
+        firstChunkToCompleteMs: 62,
+      },
       finalTextSample: "Done.",
     });
   });
@@ -161,6 +176,11 @@ describe("benchmark-chat-hi", () => {
       progressEventCount: 1,
       finalEventCount: 1,
       finalTextSample: "Done.",
+      observedLatencySplit: {
+        browserToServerHeadersMs: 10,
+        serverToFirstChunkMs: 10,
+        firstChunkToCompleteMs: 80,
+      },
     });
   });
 
@@ -183,6 +203,11 @@ describe("benchmark-chat-hi", () => {
       progressEventCount: 0,
       finalEventCount: 0,
       finalTextSample: "Hello from JSON.",
+      observedLatencySplit: {
+        browserToServerHeadersMs: 10,
+        serverToFirstChunkMs: null,
+        firstChunkToCompleteMs: null,
+      },
     });
   });
 
