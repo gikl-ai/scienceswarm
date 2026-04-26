@@ -7,6 +7,7 @@ import type { BrainHealthReport } from "@/brain/brain-health";
 
 const mockLoadBrainConfig = vi.hoisted(() => vi.fn());
 const mockGenerateHealthReportWithGbrain = vi.hoisted(() => vi.fn());
+const mockProbeGbrainCapabilities = vi.hoisted(() => vi.fn());
 
 vi.mock("@/brain/config", () => ({
   loadBrainConfig: mockLoadBrainConfig,
@@ -14,6 +15,10 @@ vi.mock("@/brain/config", () => ({
 
 vi.mock("@/brain/brain-health", () => ({
   generateHealthReportWithGbrain: mockGenerateHealthReportWithGbrain,
+}));
+
+vi.mock("@/brain/gbrain-capabilities", () => ({
+  probeGbrainCapabilities: mockProbeGbrainCapabilities,
 }));
 
 function makeConfig(): BrainConfig {
@@ -77,6 +82,8 @@ describe("GET /api/brain/maintenance", () => {
     vi.resetModules();
     mockLoadBrainConfig.mockReset();
     mockGenerateHealthReportWithGbrain.mockReset();
+    mockProbeGbrainCapabilities.mockReset();
+    mockProbeGbrainCapabilities.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -157,6 +164,71 @@ describe("GET /api/brain/maintenance", () => {
         expect.objectContaining({ id: "refresh-embeddings" }),
         expect.objectContaining({ id: "extract-links" }),
       ]),
+    );
+  });
+
+  it("exposes structural capability state without enabling controls unless all gates pass", async () => {
+    const config = makeConfig();
+    roots.push(config.root);
+    mockLoadBrainConfig.mockReturnValue(config);
+    mockGenerateHealthReportWithGbrain.mockResolvedValue(makeReport());
+    mockProbeGbrainCapabilities.mockResolvedValue({
+      structuralNavigationAvailable: false,
+      package: {
+        requiredVersion: "0.21.0",
+        requiredCommit: "f718c595b3a382b2a9a6a1f6553448ad047b5e94",
+        expectedVersion: "0.21.0",
+        expectedResolved: "git+ssh://git@github.com/garrytan/gbrain.git#f718c595b3a382b2a9a6a1f6553448ad047b5e94",
+        installedVersion: "0.21.0",
+        installedName: "gbrain",
+        binPath: "/repo/node_modules/.bin/gbrain",
+        binExists: true,
+        inSync: true,
+        ready: true,
+      },
+      doctor: {
+        ok: true,
+        schemaVersion: 29,
+        rawStatus: "ready",
+        message: "Version 29 (latest: 29)",
+      },
+      schema: {
+        requiredVersion: 28,
+        observedVersion: 29,
+        requiredFieldsPresent: true,
+        missingFields: [],
+        rawStatus: "ready",
+      },
+      operations: {
+        required: ["code-def", "code-refs", "code-callers", "code-callees", "reindex-code"],
+        available: ["code-def", "code-refs", "code-callers", "code-callees", "reindex-code"],
+        missing: [],
+        rawStatus: "ready",
+      },
+      chunker: {
+        requiredVersion: "4",
+        sourceVersions: ["3"],
+        supported: false,
+        rawStatus: "degraded",
+      },
+      reindex: {
+        status: "required",
+        reason: "At least one source reports an older chunker version.",
+      },
+      blockers: ["one or more sources need explicit code reindexing."],
+    });
+    const { GET } = await import("@/app/api/brain/maintenance/route");
+
+    const response = await GET(makeGetRequest());
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.signals.gbrainCapabilities).toMatchObject({
+      structuralNavigationAvailable: false,
+      reindex: { status: "required" },
+    });
+    expect(body.signals.gbrainCapabilities.blockers).toContain(
+      "one or more sources need explicit code reindexing.",
     );
   });
 

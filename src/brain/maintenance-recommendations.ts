@@ -1,4 +1,5 @@
 import type { BrainHealthReport } from "./brain-health";
+import type { GbrainCapabilities } from "./gbrain-capabilities";
 import type { ResearchLayoutMigrationPreview } from "./research-migration";
 
 export type MaintenancePriority = "critical" | "high" | "medium" | "low";
@@ -34,6 +35,7 @@ export interface BrainMaintenanceContext {
   integrations?: BrainMaintenanceIntegrationSignal[];
   syncConfigured?: boolean;
   researchLayout?: ResearchLayoutMigrationPreview;
+  gbrainCapabilities?: GbrainCapabilities;
 }
 
 export interface BrainMaintenanceSignals {
@@ -55,6 +57,7 @@ export interface BrainMaintenanceSignals {
   unconfiguredIntegrations: string[];
   syncConfigured?: boolean;
   source: BrainHealthReport["source"];
+  gbrainCapabilities?: GbrainCapabilities;
 }
 
 export interface BrainMaintenanceRecommendation {
@@ -136,6 +139,7 @@ function buildSignals(
     unconfiguredIntegrations,
     syncConfigured,
     source: report.source,
+    gbrainCapabilities: context.gbrainCapabilities,
   };
 }
 

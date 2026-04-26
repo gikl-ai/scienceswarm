@@ -1,4 +1,5 @@
 import type { BrainHealthReport } from "./brain-health";
+import type { GbrainCapabilities } from "./gbrain-capabilities";
 import type { BrainMaintenanceContext } from "./maintenance-recommendations";
 import { previewResearchLayoutMigration } from "./research-migration";
 
@@ -8,6 +9,7 @@ export function buildScienceSwarmMaintenanceContext(
   report: BrainHealthReport,
   env: EnvLike = process.env,
   brainRoot = process.env.BRAIN_ROOT,
+  gbrainCapabilities?: GbrainCapabilities,
 ): BrainMaintenanceContext {
   const syncRepoPath = report.stats?.syncRepoPath;
   const researchLayout =
@@ -45,5 +47,7 @@ export function buildScienceSwarmMaintenanceContext(
       researchLayout && researchLayout.legacyHomesDetected > 0
         ? researchLayout
         : undefined,
+    gbrainCapabilities:
+      report.source === "gbrain" ? gbrainCapabilities : undefined,
   };
 }
