@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-26T05:53:47.315Z",
+  "generatedAt": "2026-04-26T06:00:10.764Z",
   "skills": [
     {
       "slug": "db-arxiv",
@@ -610,7 +610,7 @@
     {
       "slug": "scienceswarm-scm-results-rendering",
       "name": "ScienceSwarm SCM Results Rendering",
-      "description": "Render the synthetic-control results as a single interactive HTML report with animated counterfactual trajectory, donor weights, placebo distribution, what-if falsification chart, multi-outcome panel, methodology modal, and an auto-generated paper-ready Methods paragraph.",
+      "description": "Render the synthetic-control results as a single interactive HTML report with animated counterfactual trajectory, donor weights, placebo distribution, what-if falsification chart, method-comparison forest plot, methodology modal, and an auto-generated paper-ready Methods paragraph.",
       "tags": [
         "science",
         "synthetic-control",

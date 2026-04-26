@@ -7,7 +7,7 @@
 #   2. Donor weight bar chart with hover/click highlighting
 #   3. Placebo distribution of post/pre RMSPE ratios, treated highlighted
 #   4. "What-if" treatment-year falsification chart (in-time placebo)
-#   5. Multi-outcome panel (GDP, trade, investment, FX)
+#   5. Method-comparison forest plot (classic SCM vs gsynth vs synthetic DiD vs DR-SC)
 #   6. Method-comparison forest plot (classic SC vs gsynth vs SDID vs DR-SC)
 #
 # Plus, page-level:

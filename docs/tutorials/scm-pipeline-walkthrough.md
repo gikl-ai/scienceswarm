@@ -139,7 +139,7 @@ embedded Plotly assets) containing, per case:
 2. Donor weight bar chart with hover/click
 3. Placebo distribution of post/pre RMSPE ratios
 4. What-if treatment-year falsification chart (in-time placebo)
-5. Multi-outcome panel
+5. Method-comparison forest plot
 6. Method-comparison forest plot
 7. Auto-generated paper-ready Methods paragraph
 

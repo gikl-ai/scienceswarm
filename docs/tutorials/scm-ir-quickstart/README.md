@@ -56,7 +56,7 @@ correctly when opened directly from disk. The HTML includes:
 - Placebo distribution plot (RMSPE post/pre ratios, treated unit
   highlighted in red)
 - "What-if" treatment-year falsification chart (in-time placebo)
-- Multi-outcome panel (GDP per capita, trade openness, investment, FX)
+- Method-comparison forest plot (classic SCM vs gsynth vs synthetic DiD vs DR-SC, with 95% CIs)
 - Methodology explainer modal (toggleable, written for non-experts)
 - Auto-generated Methods paragraph ready to paste into a paper
 
@@ -176,7 +176,7 @@ or exceeds the treated unit's — a non-parametric exact test.
 | Pre-period RMSPE assertion fails | Donor pool too narrow, predictors poorly chosen | Widen donor pool in `02_prepare_panels.R`; revisit predictor list |
 | All methods disagree on sign | Treatment effect is genuinely small/null relative to noise | Honest finding — report null with placebo distribution |
 | Russia case shows NA in 2024 | World Bank lag for recent years | Acceptable; treatment effect is still estimable on 2022–2023 window |
-| HTML renders but charts are blank | Plotly assets did not embed | Re-run `05_render_html.R`; check `htmlwidgets::saveWidget` selfcontained=TRUE |
+| HTML renders but charts are blank | Plotly assets in `output/lib/` are missing or not co-located with the HTML | Re-run `05_render_html.R`; verify `output/lib/plotly-main-*` exists alongside `output/scm-ir-report.html` |
 
 ---
 

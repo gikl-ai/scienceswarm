@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-scm-results-rendering
-description: Render the synthetic-control results as a single interactive HTML report with animated counterfactual trajectory, donor weights, placebo distribution, what-if falsification chart, multi-outcome panel, methodology modal, and an auto-generated paper-ready Methods paragraph.
+description: Render the synthetic-control results as a single interactive HTML report with animated counterfactual trajectory, donor weights, placebo distribution, what-if falsification chart, method-comparison forest plot, methodology modal, and an auto-generated paper-ready Methods paragraph.
 ---
 
 # ScienceSwarm SCM Results Rendering
@@ -18,7 +18,7 @@ policy memo.
    - Donor weight bar chart with hover/click highlighting
    - Placebo distribution of post/pre RMSPE ratios (treated highlighted)
    - "What-if" treatment-year falsification chart (in-time placebo)
-   - Multi-outcome panel for secondary outcomes
+   - Method-comparison forest plot for secondary outcomes
    - Method-comparison forest plot (ATT with 95% CI per method)
    - Auto-generated Methods paragraph with all reportable numbers
 2. Add a page-level toggleable Methodology Explainer modal aimed at

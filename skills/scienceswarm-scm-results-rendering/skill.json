@@ -1,7 +1,7 @@
 {
   "slug": "scienceswarm-scm-results-rendering",
   "name": "ScienceSwarm SCM Results Rendering",
-  "description": "Render the synthetic-control results as a single interactive HTML report with animated counterfactual trajectory, donor weights, placebo distribution, what-if falsification chart, multi-outcome panel, methodology modal, and an auto-generated paper-ready Methods paragraph.",
+  "description": "Render the synthetic-control results as a single interactive HTML report with animated counterfactual trajectory, donor weights, placebo distribution, what-if falsification chart, method-comparison forest plot, methodology modal, and an auto-generated paper-ready Methods paragraph.",
   "visibility": "public",
   "status": "ready",
   "tags": [
