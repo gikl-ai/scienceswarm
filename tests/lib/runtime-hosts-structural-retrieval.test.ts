@@ -189,6 +189,43 @@ describe("runtime structural retrieval", () => {
     expect(serialized).not.toContain(baseInput.runtimeSessionId);
   });
 
+  it("escapes structural query wildcards and refuses blank enumeration queries", async () => {
+    const db = {
+      query: vi.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] })),
+    };
+    const store = {
+      engine: { db },
+      search: vi.fn(async () => []),
+    } as unknown as BrainStore;
+    const handler = createRuntimeStructuralRetrievalHandler({
+      probeCapabilities: async () => capabilities(true),
+      ensureReady: async () => {},
+      getStore: () => store,
+    });
+
+    await handler({
+      ...baseInput,
+      query: "%_!",
+      studySlug: "project-alpha",
+    });
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain("ESCAPE '!'");
+    expect(params?.[1]).toBe("%!%!_!!%");
+
+    db.query.mockClear();
+    (store.search as ReturnType<typeof vi.fn>).mockClear();
+    const blank = await handler({
+      ...baseInput,
+      query: "   ",
+      studySlug: "project-alpha",
+    });
+
+    expect(blank.records).toEqual([]);
+    expect(db.query).not.toHaveBeenCalled();
+    expect(store.search).not.toHaveBeenCalled();
+  });
+
   it("falls back to compact keyword records when structural rows are unavailable", async () => {
     const store = {
       engine: {},
@@ -225,6 +262,11 @@ describe("runtime structural retrieval", () => {
       pageId: "wiki/projects/project-alpha/assay.md",
       chunkId: "7",
       provenance: { retrieval: "keyword-fallback" },
+    });
+    expect(store.search).toHaveBeenCalledWith({
+      query: baseInput.query,
+      limit: 32,
+      detail: "low",
     });
     expect(JSON.stringify(result)).not.toContain("full keyword snippet must not leak");
     expect(JSON.stringify(result)).not.toContain("page body must not leak");

@@ -142,6 +142,11 @@ function boundedWalkDepth(value: number | undefined): number {
   return Math.max(0, Math.min(3, Math.trunc(value ?? 1)));
 }
 
+function escapedLikePattern(value: string): string {
+  const escaped = value.toLowerCase().replace(/[!%_]/g, "!$&");
+  return `%${escaped}%`;
+}
+
 function assertScope(input: RuntimeStructuralRetrievalInput): void {
   const projectId = input.projectId.trim();
   const studyId = input.studyId?.trim();
@@ -368,7 +373,7 @@ async function queryStructuralRows(input: {
   limit: number;
   walkDepth: number;
 }): Promise<RuntimeStructuralRetrievalRecord[]> {
-  const queryPattern = `%${input.params.query.toLowerCase()}%`;
+  const queryPattern = escapedLikePattern(input.params.query);
   const rows = await input.db.query(
     `SELECT
        p.slug AS page_id,
@@ -385,22 +390,22 @@ async function queryStructuralRows(input: {
        COALESCE(out_edges.edge_count, 0) AS outgoing_edges
      FROM content_chunks c
      JOIN pages p ON p.id = c.page_id
-     LEFT JOIN (
-       SELECT to_chunk_id, COUNT(*) AS edge_count
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*) AS edge_count
        FROM code_edges_chunk
-       GROUP BY to_chunk_id
-     ) in_edges ON in_edges.to_chunk_id = c.id
-     LEFT JOIN (
-       SELECT from_chunk_id, COUNT(*) AS edge_count
+       WHERE to_chunk_id = c.id
+     ) in_edges ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*) AS edge_count
        FROM code_edges_chunk
-       GROUP BY from_chunk_id
-     ) out_edges ON out_edges.from_chunk_id = c.id
+       WHERE from_chunk_id = c.id
+     ) out_edges ON TRUE
      WHERE ${projectMatchSql("p")}
        AND (
-         LOWER(p.title) LIKE $2
-         OR LOWER(c.symbol_name) LIKE $2
-         OR LOWER(c.symbol_name_qualified) LIKE $2
-         OR LOWER(c.parent_symbol_path) LIKE $2
+         LOWER(p.title) LIKE $2 ESCAPE '!'
+         OR LOWER(c.symbol_name) LIKE $2 ESCAPE '!'
+         OR LOWER(c.symbol_name_qualified) LIKE $2 ESCAPE '!'
+         OR LOWER(c.parent_symbol_path) LIKE $2 ESCAPE '!'
        )
        AND ($3::text[] IS NULL OR c.source_id = ANY($3::text[]))
        AND ($4::text[] IS NULL OR p.slug = ANY($4::text[]))
@@ -456,6 +461,7 @@ export function createRuntimeStructuralRetrievalHandler(
     const pageIds = cleanStringArray(params.pageIds);
     const nearSymbol = cleanString(params.nearSymbol);
     const capabilities = await (deps.probeCapabilities ?? probeGbrainCapabilities)();
+    const query = cleanString(params.query);
 
     if (!capabilities.structuralNavigationAvailable) {
       return resultEnvelope({
@@ -463,6 +469,20 @@ export function createRuntimeStructuralRetrievalHandler(
         capabilities,
         records: [],
         degraded: true,
+        limit,
+        walkDepth,
+        sourceIds,
+        pageIds,
+        nearSymbol,
+      });
+    }
+
+    if (!query) {
+      return resultEnvelope({
+        params,
+        capabilities,
+        records: [],
+        degraded: false,
         limit,
         walkDepth,
         sourceIds,
@@ -479,7 +499,7 @@ export function createRuntimeStructuralRetrievalHandler(
     if (db) {
       records = await queryStructuralRows({
         db,
-        params,
+        params: { ...params, query },
         sourceIds,
         pageIds,
         nearSymbol,
@@ -490,8 +510,8 @@ export function createRuntimeStructuralRetrievalHandler(
 
     if (records.length === 0) {
       const fallback = await store.search({
-        query: params.query,
-        limit,
+        query,
+        limit: limit * 4,
         detail: "low",
       });
       const scopedFallback = await filterSearchResultsByRuntimeScope({
