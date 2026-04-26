@@ -148,6 +148,121 @@ describe("PaperLibraryCommandCenter", () => {
     expect(await screen.findByText("2024 - Smith - Interesting Paper.pdf")).toBeInTheDocument();
   });
 
+  it("starts a dry-run scan from a pasted local folder path", async () => {
+    let scanRequestBody: Record<string, unknown> | undefined;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json(
+          { error: { message: "Paper library scan not found." } },
+          { status: 404 },
+        );
+      }
+
+      if (url === "/api/brain/paper-library/scan" && method === "POST") {
+        scanRequestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return Response.json({ ok: true, scanId: "scan-1" });
+      }
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({ rootPath: "/tmp/manual-library", rootRealpath: "/tmp/manual-library" }),
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    const pathInput = await screen.findByRole("textbox", { name: "Local folder path" });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeEnabled();
+    });
+
+    fireEvent.change(pathInput, { target: { value: "  /tmp/manual-library  " } });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Start dry-run scan" })).toBeEnabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start dry-run scan" }));
+
+    await waitFor(() => {
+      expect(scanRequestBody).toMatchObject({
+        action: "start",
+        project: "demo-project",
+        rootPath: "/tmp/manual-library",
+        mode: "dry-run",
+      });
+    });
+    expect(await screen.findByText("ready for review")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([request]) => String(request) === "/api/local-folder-picker"),
+    ).toBe(false);
+  });
+
+  it("ignores a stale folder picker result after a manual path scan starts", async () => {
+    let resolveFolderPicker: ((response: Response) => void) | undefined;
+    const folderPickerResponse = new Promise<Response>((resolve) => {
+      resolveFolderPicker = resolve;
+    });
+    const scanRequestBodies: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+        return Response.json(
+          { error: { message: "Paper library scan not found." } },
+          { status: 404 },
+        );
+      }
+
+      if (url === "/api/local-folder-picker" && method === "POST") {
+        return folderPickerResponse;
+      }
+
+      if (url === "/api/brain/paper-library/scan" && method === "POST") {
+        scanRequestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return Response.json({ ok: true, scanId: "scan-1" });
+      }
+
+      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+        return Response.json({
+          ok: true,
+          scan: baseScan({ rootPath: "/tmp/manual-library", rootRealpath: "/tmp/manual-library" }),
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PaperLibraryCommandCenter projectSlug="demo-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeEnabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import PDF Folder" }));
+
+    const pathInput = screen.getByRole("textbox", { name: "Local folder path" });
+    fireEvent.change(pathInput, { target: { value: "/tmp/manual-library" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start dry-run scan" }));
+
+    await screen.findByText("ready for review");
+    resolveFolderPicker?.(Response.json({ path: "/tmp/picker-library" }));
+
+    await waitFor(() => {
+      expect(scanRequestBodies).toHaveLength(1);
+    });
+    expect(scanRequestBodies[0]).toMatchObject({ rootPath: "/tmp/manual-library" });
+  });
+
   it("hydrates the latest persisted scan when local storage is empty", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
