@@ -783,13 +783,6 @@ function buildCaptureConfirmationMessage(
 
 // ── Voice Button ──────────────────────────────────────────────
 
-const VOICE_LABELS: Record<VoiceState, string> = {
-  idle: "Voice",
-  recording: "Listening…",
-  transcribing: "Transcribing…",
-  speaking: "Mute",
-};
-
 const VOICE_ARIA: Record<VoiceState, string> = {
   idle: "Start voice input",
   recording: "Listening. Click to stop recording.",
@@ -805,13 +798,14 @@ const VOICE_TITLES: Record<VoiceState, string> = {
 };
 
 const VOICE_STYLES: Record<VoiceState, string> = {
-  idle: "bg-surface border-2 border-border text-muted hover:text-accent hover:border-accent",
-  recording: "bg-danger border-2 border-danger text-strong",
-  transcribing: "bg-warn/10 border-2 border-warn/50 text-warn",
-  speaking: "bg-accent/10 border-2 border-accent text-accent",
+  idle: "border border-rule bg-sunk/75 text-muted hover:border-rule-soft hover:bg-raised hover:text-strong",
+  recording: "border border-danger bg-danger text-white ring-2 ring-danger/20",
+  transcribing: "border border-warn/50 bg-warn/10 text-warn",
+  speaking: "border border-accent/50 bg-accent/10 text-accent",
 };
 
-const VOICE_ERROR_STYLE = "bg-danger/10 border-2 border-danger text-danger";
+const VOICE_ERROR_STYLE = "border border-danger bg-danger/10 text-danger";
+const VOICE_UNSUPPORTED_STYLE = "border border-rule bg-sunk/55 text-quiet";
 
 function MicIcon({ className }: { className?: string }) {
   return (
@@ -844,6 +838,7 @@ function PulsingDot() {
 function VoiceButton({
   voiceState,
   voiceError,
+  unsupported = false,
   onClearError,
   disabled,
   onStart,
@@ -851,6 +846,7 @@ function VoiceButton({
 }: {
   voiceState: VoiceState;
   voiceError: string | null;
+  unsupported?: boolean;
   onClearError: () => void;
   disabled: boolean;
   onStart: () => void;
@@ -886,9 +882,16 @@ function VoiceButton({
     return () => window.clearTimeout(t);
   }, [voiceError, onClearError]);
 
-  const showError = Boolean(voiceError) && voiceState === "idle";
-  const appliedStyle = showError ? VOICE_ERROR_STYLE : VOICE_STYLES[voiceState];
-  const ariaLabel = showError
+  const isUnsupported = unsupported && voiceState === "idle";
+  const showError = Boolean(voiceError) && voiceState === "idle" && !isUnsupported;
+  const appliedStyle = isUnsupported
+    ? VOICE_UNSUPPORTED_STYLE
+    : showError
+      ? VOICE_ERROR_STYLE
+      : VOICE_STYLES[voiceState];
+  const ariaLabel = isUnsupported
+    ? "Voice input is not supported in this browser"
+    : showError
     ? `Voice error: ${errorMessage}`
     : VOICE_ARIA[voiceState];
 
@@ -899,25 +902,24 @@ function VoiceButton({
         onClick={isActive ? onStop : onStart}
         disabled={disabled || isBusy}
         title={
-          showError ? (errorMessage ?? "Voice error") : VOICE_TITLES[voiceState]
+          isUnsupported
+            ? "Voice input is not supported in this browser"
+            : showError
+              ? (errorMessage ?? "Voice error")
+              : VOICE_TITLES[voiceState]
         }
         aria-label={ariaLabel}
         aria-live={voiceState === "recording" ? "polite" : undefined}
         aria-busy={isBusy || undefined}
-        className={`inline-flex items-center gap-2 rounded-xl px-3 py-3 text-sm font-medium transition-colors disabled:opacity-50 ${appliedStyle}`}
+        className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-sm transition-colors disabled:opacity-50 ${appliedStyle}`}
       >
         {voiceState === "recording" ? (
           <PulsingDot />
         ) : voiceState === "transcribing" ? (
           <Spinner />
         ) : (
-          <MicIcon />
+          <MicIcon className="h-5 w-5" />
         )}
-        <span>
-          {showError
-            ? (errorMessage ?? "Voice error")
-            : VOICE_LABELS[voiceState]}
-        </span>
       </button>
       {/* Accessible, polite announcement for transient errors. */}
       <div role="status" aria-live="polite" className="sr-only">
@@ -5029,82 +5031,72 @@ function ProjectPageContent() {
                       </div>
                       <div
                         data-testid="composer-footer"
-                        className="flex flex-col gap-3 border-t border-rule/70 px-4 py-3 sm:flex-row sm:items-end sm:justify-between"
+                        className="flex flex-wrap items-center gap-2 border-t border-rule/70 px-4 py-2.5"
                       >
-                        <div className="flex min-w-0 flex-col gap-2">
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            <ComposerRuntimeSwitcher
-                              hosts={runtimeHosts.hosts}
-                              selectedHostId={selectedRuntimeHostId}
-                              projectPolicy={runtimeProjectPolicy}
-                              mode={runtimeMode}
-                              compareHostIds={compareHostIds}
-                              loading={runtimeHosts.loading}
-                              error={runtimeHosts.error}
-                              open={runtimeSwitcherOpen}
-                              onOpenChange={setRuntimeSwitcherOpen}
-                              onSelectedHostIdChange={setSelectedRuntimeHostId}
-                              onProjectPolicyChange={setRuntimeProjectPolicy}
-                              onModeChange={setRuntimeMode}
-                              onCompareHostIdsChange={setRuntimeCompareHostIds}
-                            />
-                            {voiceSupported && (
-                              <VoiceButton
-                                voiceState={voiceState}
-                                voiceError={voiceError}
-                                onClearError={clearVoiceError}
-                                disabled={isChatBusy}
-                                onStart={startRecording}
-                                onStop={() => {
-                                  if (voiceState === "recording") stopRecording();
-                                  else if (voiceState === "speaking") stopPlayback();
-                                }}
-                              />
-                            )}
-                          </div>
-                          <div
-                            data-testid="composer-guidance-row"
-                            className="flex flex-wrap items-center gap-2 text-[11px] leading-5 text-dim"
-                          >
-                            <span className="inline-flex items-center rounded-[var(--radius-1)] border border-rule bg-sunk px-2.5 py-1 text-dim">
-                              Drop files
-                            </span>
-                            <span className="inline-flex items-center gap-1 rounded-[var(--radius-1)] border border-rule bg-sunk px-2.5 py-1 text-dim">
-                              <code className="rounded-[var(--radius-1)] bg-raised px-1 py-0.5 font-mono text-[10px] text-strong">
-                                @
-                              </code>
-                              <span>Mention files</span>
-                            </span>
-                            <span className="inline-flex items-center gap-1 rounded-[var(--radius-1)] border border-rule bg-sunk px-2.5 py-1 text-dim">
-                              <code className="rounded-[var(--radius-1)] bg-raised px-1 py-0.5 font-mono text-[10px] text-strong">
-                                /
-                              </code>
-                              <span>Commands</span>
-                            </span>
-                            <span className="text-quiet">
-                              Enter to send · Shift+Enter for a new line.
-                            </span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={isStreaming && canCancelActiveTurn
-                            ? () => {
-                                void cancelActiveTurn();
-                              }
-                            : handleSend}
-                          disabled={
-                            isStreaming
-                              ? !canCancelActiveTurn
-                              : isChatBusy || !input.trim()
-                          }
-                          className={`inline-flex h-11 shrink-0 items-center justify-center rounded-[var(--radius-2)] px-5 text-sm font-semibold shadow-none transition-colors disabled:cursor-not-allowed disabled:border disabled:border-rule disabled:bg-sunk disabled:text-quiet disabled:opacity-100 disabled:hover:bg-sunk ${
-                            isStreaming
-                              ? "border border-rule bg-raised text-strong hover:bg-sunk"
-                              : "bg-accent text-white hover:bg-accent-dim"
-                          }`}
+                        <ComposerRuntimeSwitcher
+                          hosts={runtimeHosts.hosts}
+                          selectedHostId={selectedRuntimeHostId}
+                          projectPolicy={runtimeProjectPolicy}
+                          mode={runtimeMode}
+                          compareHostIds={compareHostIds}
+                          loading={runtimeHosts.loading}
+                          error={runtimeHosts.error}
+                          open={runtimeSwitcherOpen}
+                          onOpenChange={setRuntimeSwitcherOpen}
+                          onSelectedHostIdChange={setSelectedRuntimeHostId}
+                          onProjectPolicyChange={setRuntimeProjectPolicy}
+                          onModeChange={setRuntimeMode}
+                          onCompareHostIdsChange={setRuntimeCompareHostIds}
+                        />
+                        <div
+                          data-testid="composer-guidance-row"
+                          className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-[11px] leading-5 text-dim"
                         >
-                          {isStreaming ? "Stop" : "Send"}
-                        </button>
+                          <span className="inline-flex h-8 items-center rounded-full border border-rule bg-sunk px-2.5 text-dim">
+                            Drop files
+                          </span>
+                          <span className="inline-flex h-8 items-center gap-1 rounded-full border border-rule bg-sunk px-2.5 text-dim">
+                            <code className="rounded-[var(--radius-1)] bg-raised px-1 py-0.5 font-mono text-[10px] text-strong">
+                              @
+                            </code>
+                            <span>Mention files</span>
+                          </span>
+                          <span className="inline-flex h-8 items-center gap-1 rounded-full border border-rule bg-sunk px-2.5 text-dim">
+                            <code className="rounded-[var(--radius-1)] bg-raised px-1 py-0.5 font-mono text-[10px] text-strong">
+                              /
+                            </code>
+                            <span>Commands</span>
+                          </span>
+                          <span className="hidden text-quiet md:inline">
+                            Enter to send · Shift+Enter for a new line.
+                          </span>
+                        </div>
+                        {isStreaming && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void cancelActiveTurn();
+                            }}
+                            disabled={!canCancelActiveTurn}
+                            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-rule bg-raised px-4 text-sm font-semibold text-strong shadow-none transition-colors hover:bg-sunk disabled:cursor-not-allowed disabled:bg-sunk disabled:text-quiet disabled:opacity-100"
+                          >
+                            Stop
+                          </button>
+                        )}
+                        <div className="ml-auto">
+                          <VoiceButton
+                            voiceState={voiceState}
+                            voiceError={voiceError}
+                            unsupported={!voiceSupported}
+                            onClearError={clearVoiceError}
+                            disabled={isChatBusy || !voiceSupported}
+                            onStart={startRecording}
+                            onStop={() => {
+                              if (voiceState === "recording") stopRecording();
+                              else if (voiceState === "speaking") stopPlayback();
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

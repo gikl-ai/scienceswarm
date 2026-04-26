@@ -94,6 +94,14 @@ async function expandAllFolders() {
   fireEvent.click(await screen.findByRole("button", { name: "Expand all folders" }));
 }
 
+function submitComposerWithEnter() {
+  fireEvent.keyDown(screen.getByTestId("chat-input"), {
+    key: "Enter",
+    code: "Enter",
+    charCode: 13,
+  });
+}
+
 describe("Project dashboard smoke test", () => {
   beforeAll(() => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -377,17 +385,19 @@ describe("Project dashboard smoke test", () => {
     expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
   });
 
-  it("renders footer guidance copy and a prominent send button", async () => {
+  it("renders footer controls as one compact row without an idle send button", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ProjectPage />);
 
     const composer = await screen.findByTestId("project-chat-composer");
+    const footer = within(composer).getByTestId("composer-footer");
     const guidance = within(composer).getByTestId("composer-guidance-row");
-    const sendButton = within(composer).getByRole("button", { name: "Send" });
 
-    expect(within(guidance).getByText("Drop files")).toHaveClass("rounded-[var(--radius-1)]");
+    expect(footer).toHaveClass("items-center");
+    expect(footer).toHaveClass("py-2.5");
+    expect(within(guidance).getByText("Drop files")).toHaveClass("rounded-full");
     expect(within(guidance).getByText("Mention files")).toBeInTheDocument();
     expect(within(guidance).getByText("Commands")).toBeInTheDocument();
     expect(within(guidance).getByText("@")).toHaveClass("font-mono");
@@ -395,9 +405,7 @@ describe("Project dashboard smoke test", () => {
     expect(
       within(guidance).getByText("Enter to send · Shift+Enter for a new line."),
     ).toBeInTheDocument();
-    expect(sendButton).toHaveClass("bg-accent");
-    expect(sendButton).toHaveClass("text-white");
-    expect(sendButton).not.toHaveClass("border-accent/30");
+    expect(within(composer).queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
   });
 
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
@@ -1095,7 +1103,7 @@ describe("Project dashboard smoke test", () => {
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "/capture note this result" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByText("captured via command route")).toBeInTheDocument();
     expect(postEndpoints).toEqual(["/api/chat/command"]);
@@ -1218,7 +1226,7 @@ describe("Project dashboard smoke test", () => {
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "/tmp" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByText("ordinary slash text")).toBeInTheDocument();
     expect(postEndpoints).toEqual(["/api/chat/command"]);
@@ -1504,7 +1512,7 @@ describe("Project dashboard smoke test", () => {
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "Talk to Codex directly" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     const previewDialog = await screen.findByRole("dialog", {
       name: "Reminder: your data will be sent to a third party",
@@ -1549,7 +1557,7 @@ describe("Project dashboard smoke test", () => {
       expect(input).toHaveValue("Talk to Codex directly");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     await waitFor(() => {
       expect(runtimePreviewBodies).toHaveLength(2);
@@ -1571,7 +1579,7 @@ describe("Project dashboard smoke test", () => {
       }),
     ]));
     fireEvent.change(input, { target: { value: "Follow up without interruption" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     await waitFor(() => {
       expect(runtimePreviewBodies).toHaveLength(3);
@@ -1843,7 +1851,7 @@ describe("Project dashboard smoke test", () => {
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "Talk to Codex with auto approval" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByText("Codex auto-approved answer")).toBeInTheDocument();
     expect(runtimePreviewBodies).toEqual([
@@ -2545,7 +2553,7 @@ describe("Project dashboard smoke test", () => {
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "summarize the selected file" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
     expect(await screen.findByText("answer-1")).toBeInTheDocument();
 
     // The visible preview is active context, but it is not added as a persistent context chip.
@@ -3083,7 +3091,7 @@ describe("Project dashboard smoke test", () => {
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "refresh the selected summary" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByText("Updated summary saved.")).toBeInTheDocument();
     await waitFor(() => {
@@ -3315,7 +3323,7 @@ describe("Project dashboard smoke test", () => {
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "keep streaming" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByTestId("chat-streaming-spinner")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-activity-spinner")).not.toBeInTheDocument();
@@ -3432,7 +3440,7 @@ describe("Project dashboard smoke test", () => {
 
     const input = await screen.findByLabelText("Chat with your project");
     fireEvent.change(input, { target: { value: "keep streaming" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByTestId("chat-streaming-spinner")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
@@ -3543,11 +3551,11 @@ describe("Project dashboard smoke test", () => {
     const input = await screen.findByLabelText("Chat with your project");
 
     fireEvent.change(input, { target: { value: "first prompt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
     expect(await screen.findByText("response-1")).toBeInTheDocument();
 
     fireEvent.change(input, { target: { value: "second prompt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
     expect(await screen.findByText("response-2")).toBeInTheDocument();
 
     fireEvent.change(input, { target: { value: "draft prompt" } });
@@ -3648,7 +3656,7 @@ describe("Project dashboard smoke test", () => {
     const input = await screen.findByLabelText("Chat with your project");
 
     fireEvent.change(input, { target: { value: "clear me after send" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     await waitFor(() => {
       expect(
@@ -3802,7 +3810,7 @@ describe("Project dashboard smoke test", () => {
     const input = await screen.findByLabelText("Chat with your project");
 
     fireEvent.change(input, { target: { value: "original prompt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     await waitFor(() => {
       expect(input).toHaveValue("");
@@ -3958,7 +3966,7 @@ describe("Project dashboard smoke test", () => {
     const input = await screen.findByLabelText("Chat with your project");
 
     fireEvent.change(input, { target: { value: "history prompt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByText("history answer")).toBeInTheDocument();
     fireEvent.change(input, { target: { value: "stale demo draft" } });
@@ -4129,7 +4137,7 @@ describe("Project dashboard smoke test", () => {
       const input = await screen.findByLabelText("Chat with your project");
 
       fireEvent.change(input, { target: { value: "history prompt" } });
-      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      submitComposerWithEnter();
 
       expect(await screen.findByText("history answer")).toBeInTheDocument();
 
@@ -4307,7 +4315,7 @@ describe("Project dashboard smoke test", () => {
       const input = await screen.findByLabelText("Chat with your project");
 
       fireEvent.change(input, { target: { value: "history prompt" } });
-      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      submitComposerWithEnter();
 
       expect(await screen.findByText("history answer")).toBeInTheDocument();
       fireEvent.change(input, { target: { value: "stale demo draft" } });
@@ -4507,7 +4515,7 @@ describe("Project dashboard smoke test", () => {
     const input = await screen.findByLabelText("Chat with your project");
 
     fireEvent.change(input, { target: { value: "first prompt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
     expect(await screen.findByText("response-1")).toBeInTheDocument();
 
     fireEvent.change(input, { target: { value: "draft prompt" } });
@@ -4697,7 +4705,7 @@ describe("Project dashboard smoke test", () => {
       screen.getByLabelText("Chat with your project"),
       { target: { value: "hi" } },
     );
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByText("Persisted answer")).toBeInTheDocument();
     expectUserMessage();
@@ -4984,7 +4992,7 @@ describe("Project dashboard smoke test", () => {
       screen.getByLabelText("Chat with your project"),
       { target: { value: "note: signal drift fixed by fresh batch" } },
     );
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByText(/Brain capture saved/i)).toBeInTheDocument();
     expect(screen.getByText(/Project: demo-project/i)).toBeInTheDocument();
@@ -5105,7 +5113,7 @@ describe("Project dashboard smoke test", () => {
       screen.getByLabelText("Chat with your project"),
       { target: { value: "packet: retained 12 exact-title matches after dedupe" } },
     );
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByText(/Brain capture saved/i)).toBeInTheDocument();
     expect(screen.getByText(/Kind: Research packet/i)).toBeInTheDocument();
@@ -5234,7 +5242,7 @@ describe("Project dashboard smoke test", () => {
       screen.getByLabelText("Chat with your project"),
       { target: { value: "note: signal drift fixed by fresh batch" } },
     );
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    submitComposerWithEnter();
 
     expect(await screen.findByRole("button", { name: "alpha" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "alpha" }));
