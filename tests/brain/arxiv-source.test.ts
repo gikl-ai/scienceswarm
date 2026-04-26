@@ -132,6 +132,34 @@ describe("extractArxivSource", () => {
     expect(result.files.tex.length).toBeGreaterThanOrEqual(2);
     expect(result.files.bib.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("skips symlinks when listing extracted source files", async () => {
+    // Build an extraction directory by hand and drop a symlink in it,
+    // then call extractArxivSource against a payload that lands files
+    // alongside the symlink. We use a tar.gz that tar will happily
+    // extract, then verify the post-walk file lists exclude the
+    // symlink we pre-seeded.
+    const dest = tmpPath("out-symlink");
+    mkdirSync(dest, { recursive: true });
+    // Pre-seed a symlink inside dest pointing outside it.
+    const outsideTarget = tmpPath("__outside_target.bbl");
+    writeFileSync(outsideTarget, "outside-bibliography");
+    const { symlinkSync } = await import("fs");
+    symlinkSync(outsideTarget, join(dest, "leak.bbl"));
+
+    // Now drop a real .tex via the bare-gzip path. extractArxivSource
+    // walks dest after writing the .tex file; the symlink should NOT
+    // appear in result.files.bbl even though it has a .bbl extension.
+    const tex = "\\documentclass{article}";
+    const eprint = tmpPath("symtest.eprint.bin");
+    writeFileSync(eprint, gzipSync(Buffer.from(tex, "utf8")));
+
+    const result = extractArxivSource("symtest", eprint, dest);
+
+    expect(result.files.tex).toEqual([join(dest, "symtest.tex")]);
+    // The pre-seeded symlink is filtered out by the lstat-based walk.
+    expect(result.files.bbl).toEqual([]);
+  });
 });
 
 // ── downloadArxivSource ──────────────────────────────
@@ -284,7 +312,9 @@ describe("ArxivSourceError", () => {
 // ── assertSafeTarListing ─────────────────────────────
 
 describe("assertSafeTarListing", () => {
-  it("accepts a clean listing", () => {
+  // Bare `tar -tf` listings (paths only).
+
+  it("accepts a clean bare listing", () => {
     expect(() =>
       assertSafeTarListing("paper.tex\nrefs.bib\nfigures/fig1.pdf\n"),
     ).not.toThrow();
@@ -312,5 +342,45 @@ describe("assertSafeTarListing", () => {
     expect(() =>
       assertSafeTarListing("\npaper.tex\n\nrefs.bib\n\n"),
     ).not.toThrow();
+  });
+
+  // Verbose `tar -tvf` listings (with permission prefix and symlink targets).
+
+  it("accepts a clean verbose listing", () => {
+    const listing = [
+      "-rw-r--r-- 0/0 100 2026-01-01 00:00 paper.tex",
+      "-rw-r--r-- 0/0  50 2026-01-01 00:00 refs.bib",
+    ].join("\n");
+    expect(() => assertSafeTarListing(listing)).not.toThrow();
+  });
+
+  it("accepts a verbose symlink whose target stays inside the destination", () => {
+    const listing = [
+      "-rw-r--r-- 0/0 100 2026-01-01 00:00 paper.tex",
+      "lrwxrwxrwx 0/0   0 2026-01-01 00:00 paper-link.tex -> paper.tex",
+    ].join("\n");
+    expect(() => assertSafeTarListing(listing)).not.toThrow();
+  });
+
+  it("rejects a verbose symlink whose target is absolute", () => {
+    const listing = [
+      "-rw-r--r-- 0/0 100 2026-01-01 00:00 paper.tex",
+      "lrwxrwxrwx 0/0   0 2026-01-01 00:00 evil.bbl -> /etc/shadow",
+    ].join("\n");
+    expect(() => assertSafeTarListing(listing)).toThrow(/symlink.*evil\.bbl/i);
+  });
+
+  it("rejects a verbose symlink whose target traverses out via `..`", () => {
+    const listing = [
+      "-rw-r--r-- 0/0 100 2026-01-01 00:00 paper.tex",
+      "lrwxrwxrwx 0/0   0 2026-01-01 00:00 escape.bbl -> ../../etc/passwd",
+    ].join("\n");
+    expect(() => assertSafeTarListing(listing)).toThrow(/symlink.*escape\.bbl/i);
+  });
+
+  it("rejects a verbose entry path that is absolute even when listed verbosely", () => {
+    const listing =
+      "-rw-r--r-- 0/0 100 2026-01-01 00:00 /etc/passwd_x";
+    expect(() => assertSafeTarListing(listing)).toThrow(/suspect path/i);
   });
 });

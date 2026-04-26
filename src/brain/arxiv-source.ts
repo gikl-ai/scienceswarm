@@ -17,12 +17,18 @@
  *   2. A single gzipped .tex file
  *   3. A bare PDF when the author withheld source — rejected
  *
- * The kind is sniffed from the response bytes (gzip magic 1f 8b, ustar
- * magic at offset 257, %PDF magic), then dispatched to the appropriate
- * extractor. Tarballs are extracted via the system `tar` (the same tool
- * used elsewhere in this repo for subprocess work) but only after the
- * archive listing is checked for absolute or `..`-traversing paths so a
- * malicious archive cannot escape the destination directory.
+ * The kind is sniffed by gunzipping the payload and inspecting the
+ * first 512 bytes (gzip magic 1f 8b on the wire, ustar magic at offset
+ * 257 of the gunzipped tar, %PDF magic if the author shipped a bare
+ * PDF), then dispatched to the appropriate extractor. Tarballs are
+ * extracted via the same `execFile`-based subprocess pattern used
+ * elsewhere in this repo, but only after a verbose archive listing is
+ * checked for absolute / `..`-traversing entry paths *and* symlink
+ * targets, so a hostile archive cannot tar-slip out of the destination
+ * directory through either vector. The post-extraction file walker
+ * uses `lstatSync` and skips symlinks entirely, so a same-name symlink
+ * that the listing missed cannot smuggle a path outside `destDir` into
+ * the returned `files.tex` / `.bbl` / `.bib` list.
  *
  * No new npm dependencies: the module relies only on Node's built-in
  * `node:zlib`, `node:child_process`, and `node:fs`.
@@ -30,9 +36,13 @@
 
 import { execFileSync } from "child_process";
 import {
+  closeSync,
   existsSync,
+  lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   readdirSync,
   statSync,
   writeFileSync,
@@ -40,7 +50,11 @@ import {
 import { join, resolve } from "path";
 import { gunzipSync } from "zlib";
 
-import { resolveArxivSource } from "./arxiv-download";
+import {
+  applyArxivRateLimit,
+  resolveArxivSource,
+  resetRateLimit as resetArxivDownloadRateLimit,
+} from "./arxiv-download";
 
 // ── Public API ────────────────────────────────────────
 
@@ -77,11 +91,8 @@ export interface DownloadArxivSourceOptions {
   rateLimitMs?: number;
 }
 
-const ARXIV_SOURCE_RATE_LIMIT_MS = 3000;
 const ARXIV_SOURCE_TIMEOUT_MS = 30_000;
 const TAR_TIMEOUT_MS = 60_000;
-
-let lastDownloadTime = 0;
 
 /**
  * Download an arXiv e-print and unpack the LaTeX source files into
@@ -116,7 +127,7 @@ export async function downloadArxivSource(
     return extractArxivSource(bareId, eprintPath, destDir);
   }
 
-  await applyRateLimit(opts.rateLimitMs ?? ARXIV_SOURCE_RATE_LIMIT_MS);
+  await applyArxivRateLimit({ rateLimitMs: opts.rateLimitMs });
 
   const eprintUrl = `https://arxiv.org/e-print/${bareId}`;
   const timeoutMs = opts.timeoutMs ?? ARXIV_SOURCE_TIMEOUT_MS;
@@ -229,10 +240,12 @@ export class ArxivSourceError extends Error {
 }
 
 /**
- * Reset the cooperative rate-limit timer. Test-only.
+ * Reset the cooperative arxiv.org rate-limit timer. Test-only; defers
+ * to the shared timer in `arxiv-download.ts` so PDF and e-print tests
+ * stay in lockstep.
  */
 export function resetArxivSourceRateLimit(): void {
-  lastDownloadTime = 0;
+  resetArxivDownloadRateLimit();
 }
 
 // ── Internal helpers ──────────────────────────────────
@@ -246,11 +259,14 @@ function classifyPayload(head: Buffer): PayloadKind {
   if (head.length >= 5 && head.subarray(0, 5).toString("ascii") === "%PDF-") {
     return "pdf";
   }
-  if (
-    head.length >= 263 &&
-    head.subarray(257, 263).toString("ascii") === "ustar\0"
-  ) {
-    return "tar";
+  if (head.length >= 263) {
+    // POSIX writes `ustar\0`, GNU writes `ustar ` (trailing space).
+    // Accept either so uncompressed GNU tarballs aren't silently
+    // rejected as "unknown".
+    const magic = head.subarray(257, 263).toString("ascii");
+    if (magic === "ustar\0" || magic === "ustar ") {
+      return "tar";
+    }
   }
   // Heuristic: ASCII-printable with a TeX-y prefix.
   if (looksLikeTex(head)) {
@@ -269,9 +285,21 @@ function looksLikeTex(head: Buffer): boolean {
   );
 }
 
+/**
+ * Read up to `count` bytes from the start of `filePath`. Uses an
+ * explicit `openSync` + `readSync` pair rather than `readFileSync` so
+ * arXiv tarballs that include figures (often tens of MB) don't get
+ * fully materialised into memory just to sniff their magic bytes.
+ */
 function readHeadBytes(filePath: string, count: number): Buffer {
-  const all = readFileSync(filePath);
-  return all.subarray(0, Math.min(count, all.length));
+  const fd = openSync(filePath, "r");
+  try {
+    const buf = Buffer.alloc(count);
+    const n = readSync(fd, buf, 0, count, 0);
+    return buf.subarray(0, n);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function extractGzipPayload(
@@ -279,12 +307,13 @@ function extractGzipPayload(
   eprintPath: string,
   destDir: string,
 ): ArxivSourceKind {
-  // gzip-compressed payload may be either a tar.gz or a single .tex.gz.
-  // Try tar first; fall back to a bare gunzip on failure.
-  if (isGzippedTar(eprintPath)) {
-    extractTarball(eprintPath, destDir, /* gzipped */ true);
-    return "tarball";
-  }
+  // Decompress the payload once and inspect the first 512 bytes of
+  // the gunzipped result. This is more reliable than asking `tar
+  // -tzf` whether the archive is a tarball — different tar
+  // implementations disagree on what to do when handed a bare-gzip
+  // non-tar payload (BSD tar errors out, GNU tar may silently
+  // misbehave), and we'd rather decide it ourselves from magic
+  // bytes than depend on the host tool's tolerance.
   const gunzipped = gunzipSync(readFileSync(eprintPath));
   const sub = classifyPayload(gunzipped.subarray(0, 512));
   if (sub === "pdf") {
@@ -293,20 +322,17 @@ function extractGzipPayload(
       bareId,
     );
   }
-  // Treat anything that is not a tar or PDF as a bare .tex file.
+  if (sub === "tar") {
+    // It's a tar.gz — let `tar` extract it directly from the still-
+    // compressed payload on disk so we don't have to rewrite a temp
+    // uncompressed copy.
+    extractTarball(eprintPath, destDir, /* gzipped */ true);
+    return "tarball";
+  }
+  // Anything else (TeX, plain text, "unknown") gets written as a bare
+  // .tex named after the arxiv id.
   writeFileSync(join(destDir, `${bareId}.tex`), gunzipped);
   return "gzipped-tex";
-}
-
-function isGzippedTar(eprintPath: string): boolean {
-  try {
-    // `tar -tzf` on macOS BSD-tar and GNU-tar both list entries from a
-    // gzipped tar; non-tar gzip payloads exit non-zero.
-    runBinary("tar", ["-tzf", eprintPath]);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function extractTarball(
@@ -314,29 +340,72 @@ function extractTarball(
   destDir: string,
   gzipped: boolean,
 ): void {
-  // Defensive listing pass: refuse any entry whose name is absolute or
-  // contains `..` so a hostile archive cannot tar-slip out of destDir.
-  const listFlags = gzipped ? "-tzf" : "-tf";
+  // Verbose listing so we can see symlink targets ("name -> target")
+  // and reject hostile entries before any byte hits disk.
+  const listFlags = gzipped ? "-tvzf" : "-tvf";
   const listing = runBinary("tar", [listFlags, archivePath]);
   assertSafeTarListing(listing);
-  const extractFlags = gzipped ? ["--no-same-owner", "-xzf"] : ["--no-same-owner", "-xf"];
+  const extractFlags = gzipped
+    ? ["--no-same-owner", "-xzf"]
+    : ["--no-same-owner", "-xf"];
   runBinary("tar", [...extractFlags, archivePath, "-C", destDir]);
 }
 
 /**
- * Throw if any line in a `tar -tf` listing is an absolute path or
- * contains a `..` segment. Exported so tests can exercise the policy
- * without having to hand-build a malicious tarball.
+ * Throw if any line in a `tar -tvf` listing is suspect — either an
+ * absolute path / `..`-traversing entry name, or a symlink whose
+ * target is absolute or `..`-traversing. Exported so tests can
+ * exercise the policy without having to hand-build a malicious
+ * tarball. Accepts both verbose listings (with permission prefix and
+ * `name -> target` for symlinks) and bare `tar -tf` listings (paths
+ * only) so older callers and tests keep working.
  */
 export function assertSafeTarListing(listing: string): void {
   for (const line of listing.split(/\r?\n/)) {
-    const entry = line.trim();
-    if (!entry) continue;
-    if (entry.startsWith("/") || entry.split("/").some((part) => part === "..")) {
-      throw new Error(
-        `Refusing to extract suspect path '${entry}' from arXiv e-print`,
-      );
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parsed = parseTarListingLine(trimmed);
+    rejectIfSuspectPath(parsed.entry);
+    if (parsed.linkTarget !== undefined) {
+      rejectIfSuspectPath(parsed.linkTarget, parsed.entry);
     }
+  }
+}
+
+interface ParsedTarListingLine {
+  entry: string;
+  linkTarget?: string;
+}
+
+function parseTarListingLine(line: string): ParsedTarListingLine {
+  // Verbose lines start with a 10-char `[lLcbpd-][rwxsStT-]{9}` mode
+  // string. Bare `-t` lines do not — they are just the entry path.
+  if (!/^[lLcbpd-][rwxsStT-]{9}/.test(line)) {
+    return { entry: line };
+  }
+  // Verbose. The entry name is the last whitespace-separated token,
+  // optionally followed by " -> target" for symlinks.
+  const arrowIdx = line.indexOf(" -> ");
+  if (line.startsWith("l") && arrowIdx > 0) {
+    const before = line.slice(0, arrowIdx);
+    const beforeTokens = before.split(/\s+/);
+    const entry = beforeTokens[beforeTokens.length - 1];
+    const linkTarget = line.slice(arrowIdx + 4).trim();
+    return { entry, linkTarget };
+  }
+  const tokens = line.split(/\s+/);
+  return { entry: tokens[tokens.length - 1] };
+}
+
+function rejectIfSuspectPath(value: string, owningEntry?: string): void {
+  if (
+    value.startsWith("/") ||
+    value.split("/").some((part) => part === "..")
+  ) {
+    const where = owningEntry
+      ? `symlink '${owningEntry}' with target '${value}'`
+      : `path '${value}'`;
+    throw new Error(`Refusing to extract suspect ${where} from arXiv e-print`);
   }
 }
 
@@ -368,10 +437,21 @@ function listSourceFiles(destDir: string): ArxivSourceFiles {
     }
     for (const name of entries) {
       const abs = resolve(dir, name);
-      let st: ReturnType<typeof statSync>;
+      let st: ReturnType<typeof lstatSync>;
       try {
-        st = statSync(abs);
+        // `lstatSync` does NOT follow symlinks. The tar listing pass
+        // above rejects symlinks whose targets escape the destination,
+        // but a defence-in-depth read here means even a same-name
+        // symlink that slipped past listing-level checks won't have
+        // its target included in the returned file lists.
+        st = lstatSync(abs);
       } catch {
+        continue;
+      }
+      if (st.isSymbolicLink()) {
+        // Symlinks are never trusted as source files. The verbatim
+        // e-print payload is still on disk for callers that want to
+        // handle them with their own policy.
         continue;
       }
       if (st.isDirectory()) {
@@ -391,15 +471,6 @@ function listSourceFiles(destDir: string): ArxivSourceFiles {
   bbl.sort();
   bib.sort();
   return { tex, bbl, bib };
-}
-
-async function applyRateLimit(rateLimitMs: number): Promise<void> {
-  const now = Date.now();
-  const elapsed = now - lastDownloadTime;
-  if (lastDownloadTime > 0 && elapsed < rateLimitMs) {
-    await new Promise<void>((res) => setTimeout(res, rateLimitMs - elapsed));
-  }
-  lastDownloadTime = Date.now();
 }
 
 function isRequestTimeout(error: unknown): boolean {
