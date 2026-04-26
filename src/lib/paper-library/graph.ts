@@ -1169,7 +1169,11 @@ export async function getOrBuildPaperLibraryGraph(input: BuildPaperLibraryGraphI
         const graph = normalizeGraph(raw);
         const scan = await readPaperLibraryScan(input.project, input.scanId, input.brainRoot);
         if (!scan) return null;
-        if (graph.abstractsExtracted && Date.parse(graph.updatedAt) >= Date.parse(scan.updatedAt)) return graph;
+        if (Date.parse(graph.updatedAt) >= Date.parse(scan.updatedAt)) {
+          if (graph.abstractsExtracted) return graph;
+          const review = await readAllPaperReviewItems(input.project, input.scanId, input.brainRoot);
+          if (!review || review.items.length === 0) return graph;
+        }
       } catch {
         // Malformed or version-mismatched graph cache falls through to a rebuild.
       }
@@ -1253,13 +1257,11 @@ const SEMANTIC_SCHOLAR_GRAPH_FIELDS = [
   "references.paperId",
   "references.externalIds",
   "references.title",
-  "references.abstract",
   "references.year",
   "references.venue",
   "citations.paperId",
   "citations.externalIds",
   "citations.title",
-  "citations.abstract",
   "citations.year",
   "citations.venue",
 ].join(",");
