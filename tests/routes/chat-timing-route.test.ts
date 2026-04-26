@@ -13,12 +13,14 @@ import {
   CHAT_TIMING_ARTIFACT_LIMIT,
   clearChatTimingArtifactsForTests,
   recordChatTimingArtifact,
+  type ChatTimingPhaseRecord,
   type ChatTimingLogPayload,
 } from "@/lib/chat-timing-telemetry";
 
 function timingPayload(
   turnId: string,
   detail: Record<string, string | number | boolean | null> = {},
+  phases?: ChatTimingPhaseRecord[],
 ): ChatTimingLogPayload {
   return {
     event: "scienceswarm.chat.timing",
@@ -27,7 +29,7 @@ function timingPayload(
     totalDurationMs: 123,
     outcome: "completed",
     status: 200,
-    phases: [{
+    phases: phases ?? [{
       name: "request_parse",
       order: 1,
       startedAtMs: 10,
@@ -108,8 +110,106 @@ describe("GET /api/chat/timing", () => {
           detail: { raw_prompt: "[redacted]" },
         }],
       }],
+      summaries: [{
+        turnId: "turn-safe-1",
+        totalDurationMs: 123,
+        observedSplit: {
+          chatReadinessDurationMs: null,
+          gatewayConnectAuthDurationMs: null,
+          requestToSendAckMs: null,
+          requestToFirstGatewayEventMs: null,
+          requestToFirstAssistantTextMs: null,
+          requestToFinalAssistantTextMs: null,
+        },
+        skippedPhaseNames: [],
+      }],
     });
     expect(JSON.stringify(body)).not.toContain("Secret prompt");
+  });
+
+  it("returns derived observed split summaries for retained timing phases", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    recordChatTimingArtifact(
+      timingPayload(
+        "turn-phase-split",
+        {},
+        [
+          {
+            name: "request_parse",
+            order: 1,
+            startedAtMs: 100,
+            endedAtMs: 110,
+            durationMs: 10,
+          },
+          {
+            name: "chat_readiness",
+            order: 2,
+            startedAtMs: 110,
+            endedAtMs: 125,
+            durationMs: 15,
+          },
+          {
+            name: "gateway_connect_auth",
+            order: 3,
+            startedAtMs: 126,
+            endedAtMs: 140,
+            durationMs: 14,
+          },
+          {
+            name: "chat_send_ack",
+            order: 4,
+            startedAtMs: 142,
+            endedAtMs: 142,
+            durationMs: 0,
+          },
+          {
+            name: "first_gateway_event",
+            order: 5,
+            startedAtMs: 168,
+            endedAtMs: 168,
+            durationMs: 0,
+          },
+          {
+            name: "first_assistant_text",
+            order: 6,
+            startedAtMs: 180,
+            endedAtMs: 180,
+            durationMs: 0,
+          },
+          {
+            name: "final_assistant_text",
+            order: 7,
+            startedAtMs: 250,
+            endedAtMs: 250,
+            durationMs: 0,
+          },
+          {
+            name: "artifact_import_repair",
+            order: 8,
+            startedAtMs: 251,
+            endedAtMs: 251,
+            durationMs: 0,
+            skipped: true,
+          },
+        ],
+      ),
+    );
+
+    const response = await GET(new Request("http://localhost/api/chat/timing"));
+    const body = await response.json();
+
+    expect(body.summaries).toMatchObject([{
+      turnId: "turn-phase-split",
+      observedSplit: {
+        chatReadinessDurationMs: 15,
+        gatewayConnectAuthDurationMs: 14,
+        requestToSendAckMs: 42,
+        requestToFirstGatewayEventMs: 68,
+        requestToFirstAssistantTextMs: 80,
+        requestToFinalAssistantTextMs: 150,
+      },
+      skippedPhaseNames: ["artifact_import_repair"],
+    }]);
   });
 
   it("retains only the most recent bounded timing artifacts", async () => {

@@ -48,6 +48,24 @@ export interface ChatTimingLogPayload {
   promptCharCounts: PromptSizeBuckets;
 }
 
+export interface ChatTimingObservedSplit {
+  chatReadinessDurationMs: number | null;
+  gatewayConnectAuthDurationMs: number | null;
+  requestToSendAckMs: number | null;
+  requestToFirstGatewayEventMs: number | null;
+  requestToFirstAssistantTextMs: number | null;
+  requestToFinalAssistantTextMs: number | null;
+}
+
+export interface ChatTimingArtifactSummary {
+  turnId: string;
+  totalDurationMs: number;
+  outcome?: string;
+  status?: number;
+  observedSplit: ChatTimingObservedSplit;
+  skippedPhaseNames: ChatTimingPhaseName[];
+}
+
 type Logger = (payload: ChatTimingLogPayload) => void;
 
 interface ActivePhase {
@@ -140,6 +158,50 @@ function cloneTimingArtifact(payload: ChatTimingLogPayload): ChatTimingLogPayloa
   };
 }
 
+function firstPhaseStartedAtMs(phases: ChatTimingPhaseRecord[]): number | null {
+  let earliest: number | null = null;
+  for (const phase of phases) {
+    if (!Number.isFinite(phase.startedAtMs)) {
+      continue;
+    }
+    earliest =
+      earliest === null ? phase.startedAtMs : Math.min(earliest, phase.startedAtMs);
+  }
+  return earliest;
+}
+
+function phaseByName(
+  phases: ChatTimingPhaseRecord[],
+  name: ChatTimingPhaseName,
+): ChatTimingPhaseRecord | null {
+  for (const phase of phases) {
+    if (phase.name === name) {
+      return phase;
+    }
+  }
+  return null;
+}
+
+function phaseDurationMs(
+  phases: ChatTimingPhaseRecord[],
+  name: ChatTimingPhaseName,
+): number | null {
+  const phase = phaseByName(phases, name);
+  return phase ? Math.round(phase.durationMs) : null;
+}
+
+function phaseEndedOffsetMs(
+  phases: ChatTimingPhaseRecord[],
+  name: ChatTimingPhaseName,
+): number | null {
+  const requestStartedAtMs = firstPhaseStartedAtMs(phases);
+  const phase = phaseByName(phases, name);
+  if (requestStartedAtMs === null || !phase || !Number.isFinite(phase.endedAtMs)) {
+    return null;
+  }
+  return Math.max(0, Math.round(phase.endedAtMs - requestStartedAtMs));
+}
+
 export function recordChatTimingArtifact(payload: ChatTimingLogPayload): void {
   recentChatTimingArtifacts.push(sanitizeTimingArtifact(payload));
   if (recentChatTimingArtifacts.length > CHAT_TIMING_ARTIFACT_LIMIT) {
@@ -152,6 +214,40 @@ export function recordChatTimingArtifact(payload: ChatTimingLogPayload): void {
 
 export function getRecentChatTimingArtifacts(): ChatTimingLogPayload[] {
   return recentChatTimingArtifacts.map((payload) => cloneTimingArtifact(payload));
+}
+
+export function summarizeChatTimingArtifact(
+  payload: ChatTimingLogPayload,
+): ChatTimingArtifactSummary {
+  return {
+    turnId: payload.turnId,
+    totalDurationMs: payload.totalDurationMs,
+    outcome: payload.outcome,
+    status: payload.status,
+    observedSplit: {
+      chatReadinessDurationMs: phaseDurationMs(payload.phases, "chat_readiness"),
+      gatewayConnectAuthDurationMs: phaseDurationMs(
+        payload.phases,
+        "gateway_connect_auth",
+      ),
+      requestToSendAckMs: phaseEndedOffsetMs(payload.phases, "chat_send_ack"),
+      requestToFirstGatewayEventMs: phaseEndedOffsetMs(
+        payload.phases,
+        "first_gateway_event",
+      ),
+      requestToFirstAssistantTextMs: phaseEndedOffsetMs(
+        payload.phases,
+        "first_assistant_text",
+      ),
+      requestToFinalAssistantTextMs: phaseEndedOffsetMs(
+        payload.phases,
+        "final_assistant_text",
+      ),
+    },
+    skippedPhaseNames: payload.phases
+      .filter((phase) => phase.skipped)
+      .map((phase) => phase.name),
+  };
 }
 
 export function clearChatTimingArtifactsForTests(): void {
