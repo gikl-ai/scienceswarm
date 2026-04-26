@@ -857,6 +857,8 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Metric" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "6677 ms" })).toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("text-[12px]");
+    expect(screen.getByRole("table").parentElement).toHaveClass("rounded-2xl");
     expect(screen.getByTestId("assistant-run-state")).not.toHaveTextContent("| Metric | Value |");
   });
 
@@ -880,7 +882,11 @@ describe("ChatMessage", () => {
     );
 
     expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Metric" })).toHaveStyle({ textAlign: "left" });
+    expect(screen.getByRole("columnheader", { name: "Value" })).toHaveStyle({ textAlign: "right" });
+    expect(screen.getByRole("columnheader", { name: "Metric" })).toHaveAttribute("scope", "col");
     expect(screen.getByRole("cell", { name: "58 ms" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "58 ms" })).toHaveStyle({ textAlign: "right" });
   });
 
   it("does not treat blank-line separated pseudo-tables as markdown tables", () => {

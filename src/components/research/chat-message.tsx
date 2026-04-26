@@ -254,6 +254,15 @@ const ASSISTANT_TABLE_ROW_CLASS = "border-t border-rule first:border-t-0 even:bg
 const ASSISTANT_TABLE_HEADER_CELL_CLASS =
   "border-b border-rule px-4 py-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-dim";
 const ASSISTANT_TABLE_CELL_CLASS = "px-4 py-3 align-top";
+const PROGRESS_TABLE_WRAPPER_CLASS =
+  "my-3 overflow-x-auto rounded-2xl border border-rule/80 bg-sunk/45 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.35)]";
+const PROGRESS_TABLE_CLASS =
+  "min-w-full border-collapse text-left text-[12px] leading-5 text-body";
+const PROGRESS_TABLE_HEAD_CLASS = "bg-sunk/75 text-strong";
+const PROGRESS_TABLE_ROW_CLASS = "border-t border-rule/80 first:border-t-0";
+const PROGRESS_TABLE_HEADER_CELL_CLASS =
+  "border-b border-rule/80 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-dim";
+const PROGRESS_TABLE_CELL_CLASS = "px-3 py-2 align-top";
 const ASSISTANT_MEDIA_CARD_CLASS =
   "overflow-hidden rounded-[1.35rem] border border-rule/90 bg-raised shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]";
 const ASSISTANT_MEDIA_FRAME_CLASS =
@@ -397,6 +406,19 @@ const PROGRESS_MARKDOWN_COMPONENTS: Components = {
     </blockquote>
   ),
   hr: () => <hr className="my-3 border-0 border-t border-rule" />,
+  table: ({ children }) => (
+    <div className={PROGRESS_TABLE_WRAPPER_CLASS}>
+      <table className={PROGRESS_TABLE_CLASS}>{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className={PROGRESS_TABLE_HEAD_CLASS}>{children}</thead>,
+  tr: ({ children }) => <tr className={PROGRESS_TABLE_ROW_CLASS}>{children}</tr>,
+  th: ({ children, scope, style }) => (
+    <th className={PROGRESS_TABLE_HEADER_CELL_CLASS} scope={scope ?? "col"} style={style}>
+      {children}
+    </th>
+  ),
+  td: ({ children, style }) => <td className={PROGRESS_TABLE_CELL_CLASS} style={style}>{children}</td>,
   pre: ({ children }) => (
     <pre className="m-0 overflow-x-auto rounded-2xl border border-rule bg-ink px-4 py-3 text-[12px] leading-5 text-quiet">
       {children}
