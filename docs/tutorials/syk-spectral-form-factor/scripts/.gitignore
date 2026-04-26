@@ -1,0 +1,7 @@
+spectra.npz
+sff_data.json
+metrics.json
+report.html
+analysis/
+__pycache__/
+*.pyc
