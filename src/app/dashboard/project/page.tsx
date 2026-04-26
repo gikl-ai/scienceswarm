@@ -1770,20 +1770,21 @@ function ProjectPageContent() {
     useState<PendingRuntimeSend | null>(null);
   const [runtimePreviewBusy, setRuntimePreviewBusy] = useState(false);
   const [runtimePreviewError, setRuntimePreviewError] = useState<string | null>(null);
+  const hasComposerInput = input.length > 0;
   useEffect(() => {
     if (runtimeMode !== "compare") {
       clearRuntimeCompareResult();
     }
   }, [clearRuntimeCompareResult, runtimeMode]);
   useEffect(() => {
-    if (chatInputFocused || input.length > 0) {
+    if (chatInputFocused || hasComposerInput) {
       return undefined;
     }
     const interval = window.setInterval(() => {
       setPlaceholderIndex((current) => (current + 1) % CHAT_PLACEHOLDER_PROMPTS.length);
     }, CHAT_PLACEHOLDER_ROTATE_MS);
     return () => window.clearInterval(interval);
-  }, [chatInputFocused, input]);
+  }, [chatInputFocused, hasComposerInput]);
   const activeAssistantMessageId = isStreaming
     ? [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null
     : null;
