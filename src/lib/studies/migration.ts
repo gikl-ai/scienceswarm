@@ -83,6 +83,7 @@ export interface PlanStudyMigrationInput {
   brainRoot?: string;
   stateRoot?: string;
   generatedAt?: string;
+  maxFilesPerTree?: number;
 }
 
 export interface ExecuteStudyMigrationOptions {
@@ -139,6 +140,8 @@ interface Checkpoint {
   completedEntryIds: string[];
   updatedAt: string;
 }
+
+const DEFAULT_MAX_MIGRATION_FILES_PER_TREE = 5_000;
 
 function assertStudyMigrationInput(input: PlanStudyMigrationInput): {
   legacyProjectSlug: StudySlug;
@@ -227,7 +230,13 @@ async function readJsonOrJsonlIfPresent(filePath: string): Promise<unknown | nul
     .map((line) => JSON.parse(line) as unknown);
 }
 
-async function listFilesRecursive(root: string): Promise<string[]> {
+async function listFilesRecursive(
+  root: string,
+  maxFiles: number,
+): Promise<string[]> {
+  const limit = Math.max(1, Math.trunc(maxFiles));
+  let visitedFiles = 0;
+
   async function walk(dir: string): Promise<string[]> {
     const entries = await readdir(dir, { withFileTypes: true });
 
@@ -237,6 +246,10 @@ async function listFilesRecursive(root: string): Promise<string[]> {
       if (entry.isDirectory()) {
         files.push(...await walk(absolute));
       } else if (entry.isFile()) {
+        visitedFiles += 1;
+        if (visitedFiles > limit) {
+          throw new Error(`Legacy migration tree file limit exceeded for ${root}.`);
+        }
         files.push(absolute);
       }
     }
@@ -336,6 +349,7 @@ async function addWikiCandidates(input: {
   wikiPaths: string[];
   sourceRoots: string[];
   destinationRoot: string;
+  maxFilesPerTree: number;
 }): Promise<void> {
   for (const relativePath of input.wikiPaths) {
     let found = false;
@@ -355,7 +369,7 @@ async function addWikiCandidates(input: {
         break;
       }
       if (sourceStats.isDirectory) {
-        const files = await listFilesRecursive(sourcePath);
+        const files = await listFilesRecursive(sourcePath, input.maxFilesPerTree);
         for (const filePath of files) {
           const childRelative = `${relativePath}/${relativePortable(sourcePath, filePath)}`;
           input.candidates.push({
@@ -385,13 +399,14 @@ async function addWikiCandidates(input: {
 async function addPaperLibraryInventory(input: {
   candidates: CandidateFile[];
   roots: string[];
+  maxFilesPerTree: number;
 }): Promise<void> {
   const seenRoots = new Set<string>();
   for (const root of input.roots) {
     const resolved = path.resolve(root);
     if (seenRoots.has(resolved) || !(await directoryExists(root))) continue;
     seenRoots.add(resolved);
-    const files = await listFilesRecursive(root);
+    const files = await listFilesRecursive(root, input.maxFilesPerTree);
     for (const sourcePath of files) {
       input.candidates.push({
         classification: "paper-library-inventory",
@@ -488,6 +503,7 @@ export async function planLegacyProjectStateMigration(input: PlanStudyMigrationI
   const projectsRoot = input.projectsRoot ?? getScienceSwarmProjectsRoot();
   const brainRoot = input.brainRoot ?? getScienceSwarmBrainRoot();
   const stateRoot = input.stateRoot;
+  const maxFilesPerTree = input.maxFilesPerTree ?? DEFAULT_MAX_MIGRATION_FILES_PER_TREE;
   const studyRoot = getStudyStateRoot(studyId, stateRoot);
   const legacyCopyRoot = path.join(studyRoot, "legacy-project", legacyProjectSlug);
   const legacyGlobalStateRoot = path.join(brainRoot, "state");
@@ -540,6 +556,7 @@ export async function planLegacyProjectStateMigration(input: PlanStudyMigrationI
     wikiPaths: referencedWikiPaths(manifest),
     sourceRoots: [getProjectBrainRootPath(legacyProjectSlug, projectsRoot), brainRoot],
     destinationRoot: legacyCopyRoot,
+    maxFilesPerTree,
   });
 
   await addPaperLibraryInventory({
@@ -549,6 +566,7 @@ export async function planLegacyProjectStateMigration(input: PlanStudyMigrationI
       path.join(getLegacyProjectStateDir(legacyProjectSlug, legacyGlobalStateRoot), "paper-library"),
       path.join(legacyGlobalStateRoot, "paper-library"),
     ],
+    maxFilesPerTree,
   });
 
   const uniqueCandidates = [...new Map(candidates.map((candidate) => [dedupeKey(candidate), candidate])).values()]

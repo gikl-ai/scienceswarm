@@ -13,6 +13,7 @@ import {
 import type { GbrainClient } from "@/brain/gbrain-client";
 import { initBrain } from "@/brain/init";
 import type { IngestService } from "@/brain/ingest/service";
+import { getLegacyProjectStudyFilePath } from "@/lib/studies/state";
 
 const mockIsLocal = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
 const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
@@ -164,14 +165,14 @@ describe("background import project job route", () => {
     expect(persistedJob).toContain("\"duplicateGroups\": 1");
 
     const importSummary = await readFile(
-      path.join(dataRoot, "projects", "project-alpha", ".brain", "state", "import-summary.json"),
+      getLegacyProjectStudyFilePath("project-alpha", "import-summary.json"),
       "utf-8",
     );
     expect(importSummary).toContain("\"preparedFiles\": 2");
     expect(importSummary).toContain("\"source\": \"background-local-import\"");
 
     const importSource = await readFile(
-      path.join(dataRoot, "projects", "project-alpha", ".brain", "state", "import-source.json"),
+      getLegacyProjectStudyFilePath("project-alpha", "import-source.json"),
       "utf-8",
     );
     expect(importSource).toContain(`"folderPath": ${JSON.stringify(importRoot)}`);

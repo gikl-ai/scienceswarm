@@ -2042,9 +2042,7 @@ describe("POST /api/brain/import-project", () => {
     expect(data.sourcePagePaths).toEqual([
       `wiki/resources/imports/alpha-project/notes-summary-${hashContent("notes/summary.md").slice(0, 8)}.md`,
     ]);
-    expect(
-      readFileSync(join(TEST_ROOT, "projects", "alpha-project", ".brain", data.projectPagePath), "utf-8"),
-    ).toContain("Alpha Project");
+    expect(readFileSync(join(TEST_ROOT, "brain", data.projectPagePath), "utf-8")).toContain("Alpha Project");
     expect(readFileSync(data.manifestPath, "utf-8")).toContain('"slug": "alpha-project"');
   });
 
@@ -2242,9 +2240,7 @@ describe("POST /api/brain/import-project", () => {
       durationMs: 0,
       mode: "gbrain-direct",
     });
-    expect(
-      readFileSync(join(TEST_ROOT, "projects", "alpha-project", ".brain", data.projectPagePath), "utf-8"),
-    ).toContain("Alpha Project");
+    expect(readFileSync(join(TEST_ROOT, "brain", data.projectPagePath), "utf-8")).toContain("Alpha Project");
   });
 
   it("does not re-import the legacy disk corpus after direct gbrain commit", async () => {
@@ -2312,9 +2308,7 @@ describe("POST /api/brain/import-project", () => {
       durationMs: 0,
       mode: "gbrain-direct",
     });
-    expect(
-      readFileSync(join(TEST_ROOT, "projects", "alpha-project", ".brain", data.projectPagePath), "utf-8"),
-    ).toContain("Alpha Project");
+    expect(readFileSync(join(TEST_ROOT, "brain", data.projectPagePath), "utf-8")).toContain("Alpha Project");
   });
 });
 

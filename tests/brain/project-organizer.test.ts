@@ -11,6 +11,8 @@ import { writeProjectImportSummary } from "@/lib/state/project-import-summary";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 let testRoot = "";
+const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
+const ORIGINAL_BRAIN_ROOT = process.env.BRAIN_ROOT;
 
 function makeConfig(root: string): BrainConfig {
   return {
@@ -58,6 +60,16 @@ afterEach(async () => {
     await rm(testRoot, { recursive: true, force: true });
   }
   testRoot = "";
+  if (ORIGINAL_SCIENCESWARM_DIR === undefined) {
+    delete process.env.SCIENCESWARM_DIR;
+  } else {
+    process.env.SCIENCESWARM_DIR = ORIGINAL_SCIENCESWARM_DIR;
+  }
+  if (ORIGINAL_BRAIN_ROOT === undefined) {
+    delete process.env.BRAIN_ROOT;
+  } else {
+    process.env.BRAIN_ROOT = ORIGINAL_BRAIN_ROOT;
+  }
 });
 
 describe("buildProjectOrganizerReadout", () => {
@@ -206,5 +218,34 @@ describe("buildProjectOrganizerReadout", () => {
       }),
     ]);
     expect(readout.suggestedPrompts.length).toBeGreaterThan(0);
+  });
+
+  it("reads canonical Study import summaries for the default brain root", async () => {
+    testRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-project-organizer-study-"));
+    process.env.SCIENCESWARM_DIR = path.join(testRoot, "data");
+    delete process.env.BRAIN_ROOT;
+
+    await writeProjectImportSummary("alpha", {
+      name: "canonical-alpha-archive",
+      preparedFiles: 9,
+      detectedItems: 9,
+      duplicateGroups: 0,
+      duplicateGroupDetails: [],
+      generatedAt: "2026-04-26T12:00:00.000Z",
+      source: "background-local-import",
+    });
+
+    const readout = await buildProjectOrganizerReadout({
+      config: makeConfig(path.join(testRoot, "data", "brain")),
+      project: "alpha",
+      store: makeStore([]),
+    });
+
+    expect(readout.importSummary).toEqual(
+      expect.objectContaining({
+        name: "canonical-alpha-archive",
+        preparedFiles: 9,
+      }),
+    );
   });
 });

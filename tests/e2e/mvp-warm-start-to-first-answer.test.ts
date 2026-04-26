@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initBrain } from "@/brain/init";
 import type { ImportPreview } from "@/brain/types";
-import { getProjectAbsoluteWikiPath } from "@/lib/state/project-storage";
 
 const DATA_ROOT = path.join(tmpdir(), "scienceswarm-mvp-warm-start");
 const BRAIN_ROOT = path.join(DATA_ROOT, "brain");
@@ -106,7 +105,7 @@ describe("MVP warm-start to first answer", () => {
     const importBody = await importResponse.json();
     expect(importBody.project).toBe("alpha-project");
     expect(importBody.projectPagePath).toBe("wiki/projects/alpha-project.md");
-    expect(readFileSync(getProjectAbsoluteWikiPath("alpha-project", importBody.projectPagePath), "utf-8")).toContain("Approved import preview");
+    expect(readFileSync(path.join(BRAIN_ROOT, importBody.projectPagePath), "utf-8")).toContain("Approved import preview");
 
     const briefResponse = await briefProject(
       new Request("http://localhost/api/brain/brief?project=alpha-project"),

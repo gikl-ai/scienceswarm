@@ -14,6 +14,8 @@ import { writeProjectImportSummary } from "@/lib/state/project-import-summary";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 let testRoot = "";
+const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
+const ORIGINAL_BRAIN_ROOT = process.env.BRAIN_ROOT;
 
 function makeConfig(root: string): BrainConfig {
   return {
@@ -61,6 +63,16 @@ afterEach(async () => {
     await rm(testRoot, { recursive: true, force: true });
   }
   testRoot = "";
+  if (ORIGINAL_SCIENCESWARM_DIR === undefined) {
+    delete process.env.SCIENCESWARM_DIR;
+  } else {
+    process.env.SCIENCESWARM_DIR = ORIGINAL_SCIENCESWARM_DIR;
+  }
+  if (ORIGINAL_BRAIN_ROOT === undefined) {
+    delete process.env.BRAIN_ROOT;
+  } else {
+    process.env.BRAIN_ROOT = ORIGINAL_BRAIN_ROOT;
+  }
 });
 
 describe("buildProjectImportRegistry", () => {
@@ -225,6 +237,69 @@ describe("buildProjectImportRegistry", () => {
     });
 
     expect(registry.duplicateGroups).toEqual([]);
+  });
+
+  it("reads canonical Study import summaries for the default brain root", async () => {
+    testRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-import-registry-study-"));
+    process.env.SCIENCESWARM_DIR = path.join(testRoot, "data");
+    delete process.env.BRAIN_ROOT;
+
+    await writeProjectImportSummary("alpha", {
+      name: "canonical-alpha-archive",
+      preparedFiles: 3,
+      detectedItems: 3,
+      duplicateGroups: 0,
+      duplicateGroupDetails: [],
+      generatedAt: "2026-04-26T12:00:00.000Z",
+      source: "background-local-import",
+    });
+
+    const registry = await buildProjectImportRegistry({
+      config: makeConfig(path.join(testRoot, "data", "brain")),
+      project: "alpha",
+      store: makeStore([]),
+    });
+
+    expect(registry.detectedItemCount).toBe(3);
+  });
+
+  it("does not read default Study summaries for a custom brain root", async () => {
+    testRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-import-registry-custom-root-"));
+    process.env.SCIENCESWARM_DIR = path.join(testRoot, "data");
+    delete process.env.BRAIN_ROOT;
+
+    await writeProjectImportSummary("alpha", {
+      name: "default-alpha-archive",
+      preparedFiles: 99,
+      detectedItems: 99,
+      duplicateGroups: 0,
+      duplicateGroupDetails: [],
+      generatedAt: "2026-04-26T12:00:00.000Z",
+      source: "background-local-import",
+    });
+
+    const customBrainRoot = path.join(testRoot, "custom-brain");
+    await writeProjectImportSummary(
+      "alpha",
+      {
+        name: "custom-alpha-archive",
+        preparedFiles: 4,
+        detectedItems: 4,
+        duplicateGroups: 0,
+        duplicateGroupDetails: [],
+        generatedAt: "2026-04-26T12:30:00.000Z",
+        source: "background-local-import",
+      },
+      path.join(customBrainRoot, "state"),
+    );
+
+    const registry = await buildProjectImportRegistry({
+      config: makeConfig(customBrainRoot),
+      project: "alpha",
+      store: makeStore([]),
+    });
+
+    expect(registry.detectedItemCount).toBe(4);
   });
 
   it("warns when the registry scan hits the page scan limit", async () => {
