@@ -53,6 +53,7 @@ bench-stdout.log
 .playwright-mcp/
 .gstack/
 .uat/
+.local/
 .scienceswarm/
 .codex/skills/
 .claude/skills/
