@@ -7,6 +7,7 @@ import { writeProjectImportSummary } from "@/lib/state/project-import-summary";
 
 let tempDir: string | null = null;
 let originalBrainRoot: string | undefined;
+let originalScienceSwarmDir: string | undefined;
 
 async function createBrainRoot(): Promise<string> {
   const tmpRoot = os.tmpdir();
@@ -23,6 +24,12 @@ afterEach(async () => {
     process.env.BRAIN_ROOT = originalBrainRoot;
   }
   originalBrainRoot = undefined;
+  if (originalScienceSwarmDir === undefined) {
+    delete process.env.SCIENCESWARM_DIR;
+  } else {
+    process.env.SCIENCESWARM_DIR = originalScienceSwarmDir;
+  }
+  originalScienceSwarmDir = undefined;
 
   if (tempDir) {
     await rm(tempDir, { recursive: true, force: true });
@@ -83,5 +90,52 @@ describe("GET /api/brain/brief", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: "project must be a safe bare slug",
     });
+  });
+
+  it("uses explicit BRAIN_ROOT state instead of stale default Study summaries", async () => {
+    const tmpRoot = os.tmpdir();
+    tempDir = await mkdtemp(path.join(tmpRoot, "scienceswarm-api-brief-custom-root-"));
+    originalBrainRoot = process.env.BRAIN_ROOT;
+    originalScienceSwarmDir = process.env.SCIENCESWARM_DIR;
+    process.env.SCIENCESWARM_DIR = path.join(tempDir, "data");
+    process.env.BRAIN_ROOT = path.join(tempDir, "custom-brain");
+    initBrain({ root: process.env.BRAIN_ROOT, name: "Test Researcher" });
+
+    await writeProjectImportSummary("alpha-project", {
+      name: "Stale Default Alpha Project",
+      preparedFiles: 99,
+      detectedItems: 99,
+      duplicateGroups: 0,
+      generatedAt: "2026-04-10T00:00:00.000Z",
+      source: "default-study-state",
+    });
+    await writeProjectImportSummary(
+      "alpha-project",
+      {
+        name: "Custom Alpha Project",
+        preparedFiles: 4,
+        detectedItems: 4,
+        duplicateGroups: 0,
+        generatedAt: "2026-04-11T00:00:00.000Z",
+        source: "custom-brain-root",
+      },
+      path.join(process.env.BRAIN_ROOT, "state"),
+    );
+
+    const { GET } = await import("@/app/api/brain/brief/route");
+    const response = await GET(
+      new Request("http://localhost/api/brain/brief?project=alpha-project"),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.topMatters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          summary: expect.stringContaining("Latest import: Custom Alpha Project"),
+        }),
+      ]),
+    );
+    expect(JSON.stringify(body)).not.toContain("Stale Default Alpha Project");
   });
 });

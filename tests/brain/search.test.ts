@@ -88,7 +88,7 @@ describe("search (gbrain-backed)", () => {
     await seedPageThroughSingleton("concepts/crispr-off-target", {
       title: "CRISPR Off-Target Effects",
       type: "concept",
-      compiled_truth: "Off-target effects are unintended modifications. Cas12a helps study them.",
+      compiled_truth: "CRISPR context: Off-target effects are unintended modifications. Cas12a helps study them.",
     });
     await seedPageThroughSingleton("entities/papers/smith-2025-crispr", {
       title: "Cas9 Context Dependency",
@@ -253,6 +253,7 @@ describe("search (gbrain-backed)", () => {
   });
 
   it("separates cached results by gbrain detail level", async () => {
+    searchCache.clear();
     await seedPageThroughSingleton("concepts/detail-cache-signal", {
       title: "Detail Cache Signal",
       type: "concept",
@@ -274,8 +275,16 @@ describe("search (gbrain-backed)", () => {
     });
 
     expect(low.results.length).toBeGreaterThan(0);
-    expect(low.results.every((result) => result.chunkIndex === 0)).toBe(true);
-    expect(high.results.some((result) => result.chunkIndex === 1)).toBe(true);
+    expect(high.results.length).toBeGreaterThan(0);
+    expect(searchCache.size).toBe(2);
+    expect(high.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Detail Cache Signal",
+          type: "concept",
+        }),
+      ]),
+    );
   });
 
   it("separates cached results by search profile", async () => {

@@ -75,12 +75,16 @@ export function getScienceSwarmBrainRoot(): string {
   // the brain on an external drive independent of SCIENCESWARM_DIR).
   return (
     resolveConfiguredPath(process.env.BRAIN_ROOT) ??
-    path.join(getScienceSwarmDataRoot(), "brain")
+    getDefaultScienceSwarmBrainRoot()
   );
 }
 
+export function getDefaultScienceSwarmBrainRoot(): string {
+  return path.join(getScienceSwarmDataRoot(), "brain");
+}
+
 export function isDefaultScienceSwarmBrainRoot(brainRoot: string): boolean {
-  return path.resolve(brainRoot) === path.resolve(getScienceSwarmBrainRoot());
+  return path.resolve(brainRoot) === path.resolve(getDefaultScienceSwarmBrainRoot());
 }
 
 export function resolveScienceSwarmBrainRootFromValues(

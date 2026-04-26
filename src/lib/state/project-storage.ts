@@ -5,6 +5,7 @@ import type { ProjectManifest } from "@/brain/types";
 import {
   getScienceSwarmBrainRoot,
   getScienceSwarmProjectsRoot,
+  isDefaultScienceSwarmBrainRoot,
 } from "@/lib/scienceswarm-paths";
 import { readJsonFile } from "./atomic-json";
 
@@ -162,7 +163,7 @@ export function getLegacyProjectChatPath(slug: string, stateRoot: string): strin
 }
 
 export function isDefaultGlobalBrainRoot(brainRoot: string): boolean {
-  return resolve(brainRoot) === resolve(getScienceSwarmBrainRoot());
+  return isDefaultScienceSwarmBrainRoot(brainRoot);
 }
 
 export function isDefaultGlobalStateRoot(stateRoot: string): boolean {

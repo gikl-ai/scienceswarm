@@ -275,4 +275,44 @@ describe("GET /api/projects/[slug]/import-summary", () => {
       },
     });
   });
+
+  it("does not let stale default Study state override an explicit BRAIN_ROOT", async () => {
+    const root = await createRoot();
+    originalBrainRoot = process.env.BRAIN_ROOT;
+    originalScienceSwarmDir = process.env.SCIENCESWARM_DIR;
+    process.env.SCIENCESWARM_DIR = path.join(root, "data");
+    process.env.BRAIN_ROOT = path.join(root, "custom-brain");
+
+    await writeProjectImportSummary("alpha-project", {
+      name: "Stale Default Alpha Project",
+      preparedFiles: 99,
+      generatedAt: "2026-04-10T00:00:00.000Z",
+      source: "default-study-state",
+    });
+    await writeProjectImportSummary(
+      "alpha-project",
+      {
+        name: "Custom Alpha Project",
+        preparedFiles: 3,
+        generatedAt: "2026-04-11T12:00:00.000Z",
+        source: "custom-brain-root",
+      },
+      path.join(process.env.BRAIN_ROOT, "state"),
+    );
+
+    const { GET } = await import("@/app/api/projects/[slug]/import-summary/route");
+    const response = await GET(new Request("http://localhost/api/projects/alpha-project/import-summary"), {
+      params: Promise.resolve({ slug: "alpha-project" }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      project: "alpha-project",
+      lastImport: {
+        name: "Custom Alpha Project",
+        preparedFiles: 3,
+        source: "custom-brain-root",
+      },
+    });
+  });
 });
