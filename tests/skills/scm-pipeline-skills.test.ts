@@ -64,7 +64,9 @@ describe("SCM pipeline skill pack", () => {
       });
       expect(manifest.tags).toContain("synthetic-control");
       expect(manifest.hosts).toEqual([...HOSTS]);
-      expect(publicBySlug.get(skill.slug)?.hosts).toEqual([...HOSTS]);
+      const publicEntry = publicBySlug.get(skill.slug);
+      expect(publicEntry, `${skill.slug} missing from public index`).toBeDefined();
+      expect(publicEntry!.hosts).toEqual([...HOSTS]);
 
       for (const host of HOSTS) {
         const adapterPath = path.join(

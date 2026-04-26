@@ -46,7 +46,7 @@ fmt_num <- function(x, digits = 2L) {
 top_placebos <- function(fit, n = 5L) {
   fit$significance %>%
     filter(type != "Treated") %>%
-    mutate(ratio = post_mspe / pre_mspe) %>%
+    mutate(ratio = ifelse(!is.finite(pre_mspe) | pre_mspe <= 0, NA_real_, post_mspe / pre_mspe)) %>%
     arrange(desc(ratio)) %>%
     head(n) %>%
     transmute(
@@ -60,14 +60,15 @@ top_placebos <- function(fit, n = 5L) {
 interpret_case <- function(case_id, fit) {
   ratio <- fit$summary$post_pre_rmspe_ratio
   p_value <- fit$summary$placebo_p_value
+  metric_phrase <- sprintf(" (ratio %.2f, placebo p-value %.3f)", ratio, p_value)
   if (case_id == "brexit") {
-    return("Treated ratio is well into the placebo right tail; supports a detectable post-2016 deviation, with top-donor sensitivity still worth checking.")
+    return(paste0("Treated ratio is well into the placebo right tail; supports a detectable post-2016 deviation, with top-donor sensitivity still worth checking.", metric_phrase))
   }
   if (case_id == "russia") {
-    return("Treated ratio is inside the donor placebo cloud; do not interpret the two-year post-window as a sanctions effect.")
+    return(paste0("Treated ratio is inside the donor placebo cloud; do not interpret the two-year post-window as a sanctions effect.", metric_phrase))
   }
   if (case_id == "basque") {
-    return("Large treated gap, but several small-region placebos have larger ratios because their pre-MSPE is tiny; present the trajectory and rank plot, not the p-value alone.")
+    return(paste0("Large treated gap, but several small-region placebos have larger ratios because their pre-MSPE is tiny; present the trajectory and rank plot, not the p-value alone.", metric_phrase))
   }
   sprintf("Post/pre ratio %.2f and placebo p-value %.3f.", ratio, p_value)
 }

@@ -88,9 +88,30 @@ fetch_world_bank_indicator <- function(iso3_codes, indicator_code, value_name,
     stop("World Bank API returned 0 rows for ", indicator_code)
   }
 
+  country_names <- if ("country.value" %in% names(rows)) {
+    rows[["country.value"]]
+  } else if ("country$value" %in% names(rows)) {
+    rows[["country$value"]]
+  } else if ("country" %in% names(rows) && is.data.frame(rows$country) && "value" %in% names(rows$country)) {
+    rows$country$value
+  } else if ("country" %in% names(rows) && is.list(rows$country)) {
+    unlist(lapply(rows$country, function(x) {
+      if (is.list(x) && "value" %in% names(x)) x$value else NA_character_
+    }))
+  } else {
+    NULL
+  }
+
+  if (is.null(country_names) || all(is.na(country_names))) {
+    stop(
+      "Unexpected World Bank response schema for ", indicator_code,
+      ": missing country name field"
+    )
+  }
+
   out <- tibble(
     iso3c = rows$countryiso3code,
-    country = rows[["country.value"]],
+    country = country_names,
     year = as.integer(rows$date),
     value = as.numeric(rows$value)
   )
