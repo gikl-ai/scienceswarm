@@ -4927,10 +4927,10 @@ function ProjectPageContent() {
                   <div className="mx-auto w-full max-w-[60rem]">
                     <div
                       data-testid="project-chat-composer"
-                      className={`rounded-[28px] border bg-white shadow-[0_16px_32px_rgba(15,23,42,0.06)] transition-colors ${
+                      className={`rounded-[30px] border border-slate-200/90 bg-white/96 shadow-[0_20px_48px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-colors ${
                         chatInputDragOver
                           ? "border-accent ring-4 ring-accent/10"
-                          : "border-rule focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
+                          : "focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
                       }`}
                     >
                       {chatContextItems.length > 0 && (
@@ -4976,7 +4976,7 @@ function ProjectPageContent() {
                           </button>
                         </div>
                       )}
-                      <div className="flex flex-wrap items-start justify-between gap-3 px-4 pb-2 pt-4">
+                      <div className="flex flex-wrap items-start justify-between gap-4 px-4 pb-2 pt-4 sm:items-center">
                         <div className="min-w-0 space-y-1">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
                             Project Chat
@@ -5047,7 +5047,7 @@ function ProjectPageContent() {
                             placeholder={isChatBusy ? "Processing..." : ""}
                             disabled={isChatBusy}
                             rows={2}
-                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[22px] border-0 bg-transparent py-2 pl-2 pr-12 text-[15px] leading-6 text-strong placeholder:text-quiet focus:outline-none focus:ring-0 disabled:opacity-50`}
+                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[24px] border-0 bg-transparent py-2.5 pl-2.5 pr-12 text-[15px] leading-6 text-strong placeholder:text-quiet focus:outline-none focus:ring-0 disabled:opacity-50`}
                           />
                           <button
                             type="button"
@@ -5065,7 +5065,7 @@ function ProjectPageContent() {
                           </button>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-3 border-t border-rule/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-3 border-t border-rule/80 px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
                         <div className="flex min-w-0 flex-col gap-2">
                           <div className="flex flex-wrap items-center gap-2.5">
                             <ComposerRuntimeSwitcher
@@ -5097,17 +5097,29 @@ function ProjectPageContent() {
                               />
                             )}
                           </div>
-                          <p className="text-[11px] leading-5 text-slate-500">
-                            Drop files here, type{" "}
-                            <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[10px] text-slate-700">
-                              @
-                            </code>{" "}
-                            to mention workspace files, or{" "}
-                            <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[10px] text-slate-700">
-                              /
-                            </code>{" "}
-                            for commands.
-                          </p>
+                          <div
+                            data-testid="composer-guidance-row"
+                            className="flex flex-wrap items-center gap-2 text-[11px] leading-5 text-slate-500"
+                          >
+                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50/85 px-2.5 py-1 text-slate-600">
+                              Drop files
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50/85 px-2.5 py-1 text-slate-600">
+                              <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px] text-slate-700">
+                                @
+                              </code>
+                              Mention files
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50/85 px-2.5 py-1 text-slate-600">
+                              <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px] text-slate-700">
+                                /
+                              </code>
+                              Commands
+                            </span>
+                            <span className="text-slate-400">
+                              Enter to send · Shift+Enter for a new line.
+                            </span>
+                          </div>
                         </div>
                         <button
                           onClick={isStreaming && canCancelActiveTurn
