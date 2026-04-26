@@ -6,7 +6,7 @@
 #   1. Animated counterfactual trajectory (gap fills in over post-period)
 #   2. Donor weight bar chart with hover/click highlighting
 #   3. Placebo distribution of post/pre RMSPE ratios, treated highlighted
-#   4. "What-if" treatment-year slider (in-time falsification)
+#   4. "What-if" treatment-year falsification chart (in-time placebo)
 #   5. Multi-outcome panel (GDP, trade, investment, FX)
 #   6. Method-comparison forest plot (classic SC vs gsynth vs SDID vs DR-SC)
 #
@@ -14,7 +14,7 @@
 #
 #   * Toggleable methodology explainer modal (plain HTML/CSS/JS)
 #   * Auto-generated Methods paragraph ready to paste into a paper
-#   * Case-tab switcher (Brexit / Russia / German reunification)
+#   * Case-tab switcher (Brexit / Russia / Basque)
 #
 # Run:  Rscript 05_render_html.R
 

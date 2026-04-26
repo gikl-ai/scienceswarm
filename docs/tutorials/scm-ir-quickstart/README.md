@@ -55,7 +55,7 @@ correctly when opened directly from disk. The HTML includes:
 - Donor-weight bar chart with click-to-highlight country selection
 - Placebo distribution plot (RMSPE post/pre ratios, treated unit
   highlighted in red)
-- "What-if" treatment-year slider (in-time placebo / falsification test)
+- "What-if" treatment-year falsification chart (in-time placebo)
 - Multi-outcome panel (GDP per capita, trade openness, investment, FX)
 - Methodology explainer modal (toggleable, written for non-experts)
 - Auto-generated Methods paragraph ready to paste into a paper
