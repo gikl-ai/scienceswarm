@@ -1414,12 +1414,14 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
 function hasProgressMarkdownTable(value: string): boolean {
   const lines = value
     .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+    .map((line) => line.trim());
 
   for (let index = 0; index < lines.length - 1; index += 1) {
     const header = lines[index];
     const separator = lines[index + 1];
+    if (!header || !separator) {
+      continue;
+    }
     const headerCells = header.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
     const separatorCells = separator.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
 
@@ -1427,7 +1429,7 @@ function hasProgressMarkdownTable(value: string): boolean {
       continue;
     }
 
-    if (separatorCells.every((cell) => /^:?-{3,}:?$/.test(cell))) {
+    if (separatorCells.every((cell) => /^:?-+:?$/.test(cell))) {
       return true;
     }
   }

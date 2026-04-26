@@ -817,6 +817,52 @@ describe("ChatMessage", () => {
     expect(screen.getByTestId("assistant-run-state")).not.toHaveTextContent("| Metric | Value |");
   });
 
+  it("detects aligned GFM tables with short delimiter cells", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "thinking",
+            text:
+              "| Metric | Value |\n" +
+              "| :- | -: |\n" +
+              "| First chunk | 58 ms |",
+          },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "58 ms" })).toBeInTheDocument();
+  });
+
+  it("does not treat blank-line separated pseudo-tables as markdown tables", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "thinking",
+            text:
+              "| Metric | Value |\n\n" +
+              "| --- | --- |\n" +
+              "| First chunk | 58 ms |",
+          },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByTestId("assistant-progress-transcript")).toHaveTextContent("| Metric | Value |");
+  });
+
   it("renders thematic breaks when a progress row carries markdown dividers", () => {
     const { container } = render(
       <ChatMessage
