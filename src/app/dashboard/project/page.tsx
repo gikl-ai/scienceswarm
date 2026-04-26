@@ -1781,7 +1781,8 @@ function ProjectPageContent() {
   );
   const composerModeCopy = useMemo(() => {
     if (runtimeMode === "compare") {
-      return `Compare ${Math.max(1, compareHostIds.length)} hosts`;
+      const hostCount = Math.max(1, compareHostIds.length);
+      return `Compare ${hostCount} ${hostCount === 1 ? "host" : "hosts"}`;
     }
     return runtimeMode === "task" ? "Task mode" : "Chat mode";
   }, [compareHostIds.length, runtimeMode]);
