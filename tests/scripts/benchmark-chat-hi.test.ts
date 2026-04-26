@@ -261,6 +261,7 @@ describe("benchmark-chat-hi", () => {
       "http://localhost:4000/api/chat/unified",
     );
     expect(benchmarkHelpText()).toContain("path/query/hash are stripped");
+    expect(benchmarkHelpText()).toContain("observedLatencySplit");
     const formattedWithTiming = formatBenchmarkSummary({
       status: 200,
       ok: true,
