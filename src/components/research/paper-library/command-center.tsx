@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import {
   ArrowsClockwise,
   ArrowSquareOut,
@@ -994,6 +994,8 @@ export function PaperLibraryCommandCenter({
   const templateSelectionDirtyRef = useRef(false);
   const graphActionMessageTimeoutRef = useRef<number | null>(null);
   const graphMoreRef = useRef<HTMLDivElement>(null);
+  const folderPickerRequestSeqRef = useRef(0);
+  const manualRootPathDirtyRef = useRef(false);
   const [session, setSession] = useState<PaperLibrarySession>(() => defaultSession());
   const [restoredProjectSlug, setRestoredProjectSlug] = useState<string | null>(null);
   const sessionRestored = restoredProjectSlug === projectSlug;
@@ -1004,6 +1006,8 @@ export function PaperLibraryCommandCenter({
   const [scanError, setScanError] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [folderPickerLoading, setFolderPickerLoading] = useState(false);
+  const [manualRootPath, setManualRootPath] = useState("");
+  const [manualScanLoading, setManualScanLoading] = useState(false);
 
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>(DEFAULT_REVIEW_FILTER);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -1120,6 +1124,7 @@ export function PaperLibraryCommandCenter({
   useEffect(() => {
     skipLatestRestoreRef.current = false;
     templateSelectionDirtyRef.current = false;
+    manualRootPathDirtyRef.current = false;
     setSession(readStoredSession(projectSlug));
     setScan(null);
     setScanError(null);
@@ -1132,6 +1137,12 @@ export function PaperLibraryCommandCenter({
     if (!sessionRestored) return;
     persistStoredSession(projectSlug, session);
   }, [projectSlug, session, sessionRestored]);
+
+  useEffect(() => {
+    if (!sessionRestored) return;
+    if (manualRootPathDirtyRef.current) return;
+    setManualRootPath(session.rootPath);
+  }, [session.rootPath, sessionRestored]);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -1623,6 +1634,8 @@ export function PaperLibraryCommandCenter({
   }, [patchSession, projectSlug, resetDownstreamState]);
 
   const handleImportPdfFolder = useCallback(async () => {
+    const requestSeq = folderPickerRequestSeqRef.current + 1;
+    folderPickerRequestSeqRef.current = requestSeq;
     setFolderPickerLoading(true);
     setCommandError(null);
     setScanError(null);
@@ -1631,17 +1644,43 @@ export function PaperLibraryCommandCenter({
         "/api/local-folder-picker",
         { method: "POST" },
       );
+      if (folderPickerRequestSeqRef.current !== requestSeq) return;
       if (payload.cancelled) return;
       const rootPath = payload.path?.trim();
       if (!rootPath) throw new Error("Folder picker returned no path.");
       skipLatestRestoreRef.current = true;
+      manualRootPathDirtyRef.current = false;
       await startScanForRoot(rootPath);
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : "Could not choose a PDF folder.");
+      if (folderPickerRequestSeqRef.current === requestSeq) {
+        setCommandError(error instanceof Error ? error.message : "Could not choose a PDF folder.");
+      }
     } finally {
-      setFolderPickerLoading(false);
+      if (folderPickerRequestSeqRef.current === requestSeq) {
+        setFolderPickerLoading(false);
+      }
     }
   }, [startScanForRoot]);
+
+  const handleManualRootPathSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const rootPath = manualRootPath.trim();
+    if (!rootPath) {
+      setCommandError("Enter a local PDF folder path to start a dry-run scan.");
+      return;
+    }
+
+    setManualScanLoading(true);
+    folderPickerRequestSeqRef.current += 1;
+    manualRootPathDirtyRef.current = false;
+    setFolderPickerLoading(false);
+    skipLatestRestoreRef.current = true;
+    try {
+      await startScanForRoot(rootPath);
+    } finally {
+      setManualScanLoading(false);
+    }
+  }, [manualRootPath, startScanForRoot]);
 
   const handleCancelScan = useCallback(async () => {
     if (!session.scanId) return;
@@ -3376,6 +3415,33 @@ export function PaperLibraryCommandCenter({
               </span>
             )}
           </div>
+          <form
+            className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
+            onSubmit={(event) => void handleManualRootPathSubmit(event)}
+          >
+            <label className="min-w-0 flex-1">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Local folder path</span>
+              <input
+                type="text"
+                value={manualRootPath}
+                onChange={(event) => {
+                  manualRootPathDirtyRef.current = true;
+                  setManualRootPath(event.target.value);
+                }}
+                disabled={manualScanLoading || scanLoading || isScanInFlight(scan)}
+                placeholder="/Users/you/papers"
+                className="mt-2 w-full rounded-lg border border-border bg-white px-3 py-2 font-mono text-sm text-foreground outline-none transition-colors placeholder:text-muted/70 focus:border-accent disabled:opacity-50"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={manualScanLoading || scanLoading || isScanInFlight(scan) || manualRootPath.trim().length === 0}
+              className="inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+            >
+              {manualScanLoading ? <SpinnerGap className="animate-spin" size={16} /> : <FolderOpen size={16} />}
+              Start dry-run scan
+            </button>
+          </form>
         </div>
 
         {scanError && (
@@ -3480,7 +3546,7 @@ export function PaperLibraryCommandCenter({
         ) : (
           <EmptyState
             title="No paper-library scan yet"
-            body="Use Import PDF Folder to choose a local archive. The first pass is dry-run only and creates review, rename, graph, and history previews."
+            body="Choose or paste a local PDF archive path. The first pass is dry-run only and creates review, rename, graph, and history previews."
           />
         )}
       </div>
@@ -3537,6 +3603,7 @@ export function PaperLibraryCommandCenter({
     handleCreateApplyPlan,
     handleGapAction,
     handleImportPdfFolder,
+    handleManualRootPathSubmit,
     handleRepairManifest,
     handleReviewAction,
     handleResetGraphView,
@@ -3544,6 +3611,8 @@ export function PaperLibraryCommandCenter({
     handleSelectTemplateFormat,
     handleUndo,
     folderPickerLoading,
+    manualRootPath,
+    manualScanLoading,
     loadApplyPlan,
     loadClusters,
     loadGaps,
