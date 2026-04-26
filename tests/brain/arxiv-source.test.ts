@@ -383,4 +383,43 @@ describe("assertSafeTarListing", () => {
       "-rw-r--r-- 0/0 100 2026-01-01 00:00 /etc/passwd_x";
     expect(() => assertSafeTarListing(listing)).toThrow(/suspect path/i);
   });
+
+  // Paths with spaces — the failure mode is a naive last-token split
+  // dropping leading directory segments, which would let a crafted
+  // entry like `../../etc passwd.tex` slip past traversal checks.
+
+  it("accepts a verbose listing whose entry path contains spaces", () => {
+    const listing = [
+      "-rw-r--r-- 0/0 100 2026-01-01 00:00 my paper/main.tex",
+      "-rw-r--r-- 0/0  50 2026-01-01 00:00 my paper/refs.bib",
+    ].join("\n");
+    expect(() => assertSafeTarListing(listing)).not.toThrow();
+  });
+
+  it("rejects a verbose `..`-traversing entry path that contains a space", () => {
+    const listing =
+      "-rw-r--r-- 0/0 100 2026-01-01 00:00 ../../etc passwd.tex";
+    expect(() => assertSafeTarListing(listing)).toThrow(/suspect path/i);
+  });
+
+  it("rejects a verbose absolute entry path that contains a space", () => {
+    const listing =
+      "-rw-r--r-- 0/0 100 2026-01-01 00:00 /tmp evil.tex";
+    expect(() => assertSafeTarListing(listing)).toThrow(/suspect path/i);
+  });
+
+  it("accepts a BSD-tar-style verbose listing", () => {
+    // BSD tar: `-rw-r--r-- 0 user user 100 Jan 01 00:00 paper.tex`
+    const listing = [
+      "-rw-r--r-- 0 user user 100 Jan 01 00:00 paper.tex",
+      "lrwxrwxrwx 0 user user   0 Jan 01 00:00 link.tex -> paper.tex",
+    ].join("\n");
+    expect(() => assertSafeTarListing(listing)).not.toThrow();
+  });
+
+  it("rejects a BSD-tar-style symlink whose target traverses out", () => {
+    const listing =
+      "lrwxrwxrwx 0 user user 0 Jan 01 00:00 leak.bbl -> ../../etc/shadow";
+    expect(() => assertSafeTarListing(listing)).toThrow(/symlink.*leak\.bbl/i);
+  });
 });

@@ -378,21 +378,29 @@ interface ParsedTarListingLine {
 }
 
 function parseTarListingLine(line: string): ParsedTarListingLine {
-  // Verbose lines start with a 10-char `[lLcbpd-][rwxsStT-]{9}` mode
-  // string. Bare `-t` lines do not — they are just the entry path.
+  // Bare `tar -tf` listings have no permission prefix; the whole
+  // line is the entry path.
   if (!/^[lLcbpd-][rwxsStT-]{9}/.test(line)) {
     return { entry: line };
   }
-  // Verbose. The entry name is the last whitespace-separated token,
-  // optionally followed by " -> target" for symlinks.
-  const arrowIdx = line.indexOf(" -> ");
-  if (line.startsWith("l") && arrowIdx > 0) {
-    const before = line.slice(0, arrowIdx);
-    const beforeTokens = before.split(/\s+/);
-    const entry = beforeTokens[beforeTokens.length - 1];
-    const linkTarget = line.slice(arrowIdx + 4).trim();
-    return { entry, linkTarget };
+  // Verbose lines from GNU tar (`-rw-r--r-- user/user 100 2026-01-01
+  // 00:00 paper.tex`) and BSD tar (`-rw-r--r-- 0 user user 100 Jan
+  // 01 00:00 paper.tex`) both end with the entry path after a final
+  // `HH:MM` time field. Anchor on that time pattern so paths
+  // containing spaces (e.g. `my paper/main.tex`, or a malicious
+  // `../../../etc main.tex`) are captured intact rather than reduced
+  // to their last whitespace-separated token. Symlinks append
+  // ` -> target` after the path.
+  const match = line.match(
+    /^[lLcbpd-][rwxsStT-]{9}\s.*\s\d{1,2}:\d{2}\s+(.+?)(?:\s+->\s+(.+))?$/,
+  );
+  if (match) {
+    return { entry: match[1], linkTarget: match[2] };
   }
+  // Unfamiliar verbose dialect — fall back to last-token. The
+  // assertSafeTarListing caller validates whatever we return, so a
+  // best-effort parse is still safer than crashing on an unknown
+  // listing format.
   const tokens = line.split(/\s+/);
   return { entry: tokens[tokens.length - 1] };
 }
