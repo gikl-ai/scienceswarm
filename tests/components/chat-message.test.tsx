@@ -180,10 +180,12 @@ describe("ChatMessage", () => {
     );
 
     expect(screen.getByText("docs/results_chart.png")).toHaveClass("text-[11px]");
-    expect(screen.getByText(expectedFooter)).toHaveClass("text-quiet");
-    expect(screen.getByText(expectedFooter)).toHaveClass("bg-sunk/85");
+    expect(screen.getByText(expectedFooter)).toHaveClass("text-[9px]");
+    expect(screen.getByText(expectedFooter)).toHaveClass("border-rule/60");
     expect(screen.getByTestId("assistant-reply-surface")).toHaveClass("group/assistant");
-    expect(screen.getByRole("button", { name: "Copy message" })).toHaveClass("opacity-0");
+    expect(screen.getByTestId("assistant-metadata-bar")).toHaveClass("border-rule/70");
+    expect(screen.getByRole("button", { name: "Copy message" })).toHaveClass("h-6");
+    expect(screen.getByRole("button", { name: "Copy message" })).not.toHaveClass("opacity-0");
   });
 
   it("keeps system-message copy actions visible without assistant hover chrome", () => {
