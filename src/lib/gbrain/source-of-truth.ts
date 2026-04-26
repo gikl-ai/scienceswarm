@@ -101,7 +101,7 @@ export function resolveScienceSwarmRuntimeAppOrigin(
 
   const port = env.FRONTEND_PORT ?? env.PORT;
   if (!port || !/^\d+$/.test(port.trim())) return null;
-  return `http://127.0.0.1:${port.trim()}`;
+  return `http://localhost:${port.trim()}`;
 }
 
 function normalizeLocalAppOrigin(value: string | undefined): string | null {

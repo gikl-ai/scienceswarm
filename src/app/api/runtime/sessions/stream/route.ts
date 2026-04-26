@@ -50,7 +50,7 @@ function sseFrame(data: unknown): string {
 export async function POST(request: Request): Promise<Response> {
   let sessionId: string | null = null;
   try {
-    await assertRuntimeApiLocalRequest(request);
+    const appOrigin = await assertRuntimeApiLocalRequest(request);
     const body = await parseJsonObject(request);
     const services = getRuntimeApiServices();
     const mode = turnModeFromBody(body, "chat");
@@ -170,6 +170,7 @@ export async function POST(request: Request): Promise<Response> {
           inputFileRefs,
           approvalState,
           preview,
+          appOrigin,
           onEvent: appendEvent,
         });
         const result = mode === "task"

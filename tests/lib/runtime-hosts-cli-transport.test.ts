@@ -249,7 +249,8 @@ describe("runtime host CLI transport", () => {
     });
 
     expect(Date.now() - startedAt).toBeGreaterThanOrEqual(70);
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBeNull();
+    expect(result.signal).toBe("SIGTERM");
     expect(result.output.lines).toEqual(["startup", "result"]);
   });
 

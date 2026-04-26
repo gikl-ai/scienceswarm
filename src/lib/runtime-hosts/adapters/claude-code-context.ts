@@ -8,7 +8,10 @@ import { loadBrainConfig } from "@/brain/config";
 import {
   getScienceSwarmProjectRoot,
 } from "@/lib/scienceswarm-paths";
-import { buildScienceSwarmGbrainEnv } from "@/lib/gbrain/source-of-truth";
+import {
+  SCIENCESWARM_RUNTIME_APP_ORIGIN_ENV,
+  buildScienceSwarmGbrainEnv,
+} from "@/lib/gbrain/source-of-truth";
 import { buildScienceSwarmPromptContextText } from "@/lib/scienceswarm-prompt-config";
 import type {
   RuntimeDataIncluded,
@@ -27,9 +30,9 @@ import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
 // Claude Code turns can spend most of their wall clock inside scientific
 // tools before the final gbrain write. Keep the scoped MCP token alive longer
-// than the adapter timeout so final provenance writes do not fail after a
-// successful long-running run.
-const DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
+// than the 30 minute adapter timeout without making it a general long-lived
+// credential.
+const DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS = 45 * 60 * 1000;
 const MAX_BRAIN_MD_CHARS = 4_000;
 
 export interface ClaudeCodeInvocationContext {
@@ -94,7 +97,13 @@ export async function buildClaudeCodeRuntimeContext(
     ? assertSafeProjectSlug(input.request.projectId)
     : "global";
   const repoRoot = path.resolve(input.repoRoot ?? process.cwd());
-  const runtimeEnv = buildScienceSwarmGbrainEnv(input.env, repoRoot);
+  const baseEnv = input.request.appOrigin
+    ? {
+        ...input.env,
+        [SCIENCESWARM_RUNTIME_APP_ORIGIN_ENV]: input.request.appOrigin,
+      }
+    : input.env;
+  const runtimeEnv = buildScienceSwarmGbrainEnv(baseEnv, repoRoot);
   const workspace = resolveRuntimeWorkspace({
     projectId: input.request.projectId,
     runId: input.runId,

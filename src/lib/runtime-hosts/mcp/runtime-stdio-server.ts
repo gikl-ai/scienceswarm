@@ -70,6 +70,17 @@ const RUNTIME_APP_FETCH_TIMEOUT_MS = 10_000;
 const RUNTIME_MCP_IDLE_EXIT_MS = 20_000;
 const PROJECT_SEARCH_SCAN_LIMIT = 50;
 
+function rejectJavaScriptFrontmatter(): Record<string, never> {
+  throw new Error("JavaScript frontmatter is not supported for gbrain pages");
+}
+
+const SAFE_GRAY_MATTER_OPTIONS = {
+  engines: {
+    js: rejectJavaScriptFrontmatter,
+    javascript: rejectJavaScriptFrontmatter,
+  },
+};
+
 function runtimeApprovalStateFromEnv(value: string | undefined): RuntimeApprovalState {
   if (
     value === "not-required"
@@ -201,7 +212,7 @@ function responseBelongsToProject(
 ): boolean {
   if (pathLooksProjectScoped(pagePath, projectId)) return true;
   try {
-    const parsed = matter(responseText);
+    const parsed = matter(responseText, SAFE_GRAY_MATTER_OPTIONS);
     return frontmatterProjectMatches(parsed.data as Record<string, unknown>, projectId);
   } catch {
     return false;
@@ -277,10 +288,7 @@ function formatRuntimeAppPageForMcpRead(
     type: page.frontmatter.type ?? page.type,
     title: page.frontmatter.title ?? page.title,
   };
-  return [
-    `<!-- gbrain page: ${page.path} -->`,
-    matter.stringify(page.content, frontmatter).trim(),
-  ].join("\n");
+  return matter.stringify(page.content, frontmatter).trim();
 }
 
 async function readRuntimeAppBrainPage(

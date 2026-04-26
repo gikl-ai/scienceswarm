@@ -191,7 +191,10 @@ async function readRuntimeHostSkillInstructions(
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
-        throw error;
+        console.warn(
+          `Skipping malformed host skill instructions for ${skillSlug}/${hostDirectory}:`,
+          error,
+        );
       }
     }
   }
@@ -236,10 +239,9 @@ export async function expandRuntimeSlashCommandPrompt(
 
 export async function assertRuntimeApiLocalRequest(
   request: Request,
-): Promise<void> {
+): Promise<string | null> {
   if (await isLocalRequest(request)) {
-    rememberRuntimeAppOrigin(request);
-    return;
+    return runtimeAppOriginFromRequest(request);
   }
 
   throw new RuntimeHostError({
@@ -252,15 +254,16 @@ export async function assertRuntimeApiLocalRequest(
   });
 }
 
-function rememberRuntimeAppOrigin(request: Request): void {
+function runtimeAppOriginFromRequest(request: Request): string | null {
   try {
     const origin = new URL(request.url).origin;
     if (origin.startsWith("http://") || origin.startsWith("https://")) {
-      process.env.SCIENCESWARM_RUNTIME_APP_ORIGIN = origin;
+      return origin;
     }
   } catch {
     // Best effort only. Runtime MCP can still fall back to direct gbrain.
   }
+  return null;
 }
 
 export async function parseJsonObject(
@@ -589,6 +592,7 @@ export function buildRuntimeTurnRequest(input: {
   inputFileRefs?: string[];
   approvalState: RuntimeApprovalState;
   preview: TurnPreview;
+  appOrigin?: string | null;
   onEvent?: (event: RuntimeEvent) => void;
 }): RuntimeTurnRequest {
   return {
@@ -603,6 +607,7 @@ export function buildRuntimeTurnRequest(input: {
     dataIncluded: input.preview.dataIncluded,
     approvalState: input.approvalState,
     preview: input.preview,
+    appOrigin: input.appOrigin ?? null,
     onEvent: input.onEvent,
   };
 }

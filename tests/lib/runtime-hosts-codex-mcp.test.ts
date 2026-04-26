@@ -116,7 +116,7 @@ describe("Codex runtime MCP launch", () => {
     expect(token).toEqual(expect.any(String));
     expect(launch?.env?.BRAIN_ROOT).toBe("/tmp/scienceswarm-brain");
     expect(launch?.env?.SCIENCESWARM_DIR).toBe("/tmp/scienceswarm-data");
-    expect(launch?.env?.SCIENCESWARM_RUNTIME_APP_ORIGIN).toBe("http://127.0.0.1:3129");
+    expect(launch?.env?.SCIENCESWARM_RUNTIME_APP_ORIGIN).toBe("http://localhost:3129");
     expect(launch?.env?.SCIENCESWARM_REPO_ROOT).toBe("/tmp/scienceswarm-repo");
     expect(launch?.env?.SCIENCESWARM_GBRAIN_BIN).toBe(
       `/tmp/scienceswarm-repo/node_modules/.bin/${process.platform === "win32" ? "gbrain.cmd" : "gbrain"}`,

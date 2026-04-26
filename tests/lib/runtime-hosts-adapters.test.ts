@@ -615,7 +615,7 @@ describe("runtime host adapters", () => {
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_GBRAIN_BIN).toBe(repoGbrainBin);
       expect(mcpConfig.mcpServers.scienceswarm.env.GBRAIN_BIN).toBe(repoGbrainBin);
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_APP_ORIGIN)
-        .toBe("http://127.0.0.1:3129");
+        .toBe("http://localhost:3129");
       expect(mcpConfig.mcpServers.scienceswarm.env.PATH.split(path.delimiter)[0]).toBe(repoBinDir);
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET)
         .toBeUndefined();
@@ -627,7 +627,7 @@ describe("runtime host adapters", () => {
       expect(
         Date.parse(String(tokenClaims.expiresAt))
           - Date.parse(String(tokenClaims.issuedAt)),
-      ).toBe(2 * 60 * 60 * 1000);
+      ).toBe(45 * 60 * 1000);
       expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET).toBeUndefined();
       expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN).toBeUndefined();
       expect(launch?.env?.SCIENCESWARM_REPO_ROOT).toBe(repoRoot);

@@ -35,7 +35,10 @@ import {
 } from "../transport/cli";
 import { buildSubscriptionNativeCliEnv } from "../transport/subscription-env";
 import { assertSafeProjectSlug } from "../../state/project-manifests";
-import { buildScienceSwarmGbrainEnv } from "@/lib/gbrain/source-of-truth";
+import {
+  SCIENCESWARM_RUNTIME_APP_ORIGIN_ENV,
+  buildScienceSwarmGbrainEnv,
+} from "@/lib/gbrain/source-of-truth";
 
 // Codex task turns can span several MCP calls; keep the token alive longer
 // than the shared 5 minute default without changing other runtime hosts.
@@ -329,7 +332,13 @@ export function buildCodexRuntimeMcpContext(input: {
   }
 
   const repoRoot = path.resolve(input.repoRoot ?? process.cwd());
-  const runtimeEnv = buildScienceSwarmGbrainEnv(input.env, repoRoot);
+  const baseEnv = input.request.appOrigin
+    ? {
+        ...input.env,
+        [SCIENCESWARM_RUNTIME_APP_ORIGIN_ENV]: input.request.appOrigin,
+      }
+    : input.env;
+  const runtimeEnv = buildScienceSwarmGbrainEnv(baseEnv, repoRoot);
   const projectId = assertSafeProjectSlug(input.request.projectId);
   const runtimeSessionId = assertSingleLineRuntimeMcpField(
     "runtimeSessionId",

@@ -246,4 +246,29 @@ describe("POST /api/runtime/compare", () => {
     expect(response.status).toBe(200);
     expect(childConversationIds).toEqual([null, null]);
   });
+
+  it("expands slash commands with each compare child's host instructions", async () => {
+    const childTurns = new Map<string, RuntimeTurnRequest>();
+    installAdapters([
+      adapter(requireRuntimeHostProfile("openclaw"), {
+        onTurn: (turn) => childTurns.set(turn.hostId, turn),
+      }),
+      adapter(requireRuntimeHostProfile("claude-code"), {
+        onTurn: (turn) => childTurns.set(turn.hostId, turn),
+      }),
+    ]);
+
+    const response = await POST(request({
+      projectId: "project-alpha",
+      projectPolicy: "cloud-ok",
+      selectedHostIds: ["openclaw", "claude-code"],
+      prompt: "/md-study lysozyme stability",
+      approvalState: "approved",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(childTurns.get("openclaw")?.prompt).toContain("## Core Rules");
+    expect(childTurns.get("claude-code")?.prompt).toContain("gbrain_capture");
+    expect(childTurns.get("claude-code")?.appOrigin).toBe("http://localhost");
+  });
 });

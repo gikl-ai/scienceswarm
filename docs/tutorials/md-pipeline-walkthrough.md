@@ -216,7 +216,7 @@ workspace.
 
 Use the approved MD Execution Handoff Plan from this project and the imported
 tutorial files under the project workspace. The scripts live in scripts/ and
-the environment file is config/environment.yml. First check whether python3 can
+the environment file is environment.yml. First check whether python3 can
 already import OpenMM, PDBFixer, MDTraj, NumPy, and Matplotlib. If that works,
 reuse that environment and report the versions. If it does not work and
 ScienceSwarm is allowed to install tools, create or reuse a managed

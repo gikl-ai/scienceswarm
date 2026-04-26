@@ -90,7 +90,7 @@ describe("ScienceSwarm gbrain source of truth", () => {
       PATH: "/usr/bin",
     }, "/tmp/scienceswarm");
 
-    expect(env.SCIENCESWARM_RUNTIME_APP_ORIGIN).toBe("http://127.0.0.1:3129");
+    expect(env.SCIENCESWARM_RUNTIME_APP_ORIGIN).toBe("http://localhost:3129");
     expect(resolveScienceSwarmRuntimeAppOrigin({
       NODE_ENV: "test",
       SCIENCESWARM_RUNTIME_APP_ORIGIN: "http://localhost:4173/dashboard",
@@ -99,7 +99,7 @@ describe("ScienceSwarm gbrain source of truth", () => {
       NODE_ENV: "test",
       SCIENCESWARM_RUNTIME_APP_ORIGIN: "https://example.com",
       FRONTEND_PORT: "3129",
-    })).toBe("http://127.0.0.1:3129");
+    })).toBe("http://localhost:3129");
   });
 
   it("reports stale node_modules when installed gbrain differs from package-lock", async () => {

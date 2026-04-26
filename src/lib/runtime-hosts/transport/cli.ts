@@ -246,9 +246,10 @@ export class LocalCliTransport implements CliTransport {
         child.kill("SIGTERM");
         forceKillTimer = setTimeout(() => child.kill("SIGKILL"), 250);
         forceKillTimer.unref?.();
-        finishResolve(0, null, output);
+        finishResolve(null, "SIGTERM", output);
       };
       const scheduleStdoutIdle = () => {
+        if (settled) return;
         if (!request.settleAfterStdoutIdleMs || request.settleAfterStdoutIdleMs <= 0) {
           return;
         }
