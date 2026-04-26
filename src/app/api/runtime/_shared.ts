@@ -164,6 +164,17 @@ function hostSkillDirectory(hostId: string | null | undefined): string | null {
   }
 }
 
+function rejectJavaScriptFrontmatter(): Record<string, never> {
+  throw new Error("JavaScript frontmatter is not supported for skill files");
+}
+
+const SAFE_GRAY_MATTER_OPTIONS = {
+  engines: {
+    js: rejectJavaScriptFrontmatter,
+    javascript: rejectJavaScriptFrontmatter,
+  },
+};
+
 async function readRuntimeHostSkillInstructions(
   parsed: ParsedOpenClawSlashCommand,
   hostId: string | null | undefined,
@@ -185,7 +196,7 @@ async function readRuntimeHostSkillInstructions(
         ),
         "utf-8",
       );
-      const parsedMarkdown = matter(rawMarkdown);
+      const parsedMarkdown = matter(rawMarkdown, SAFE_GRAY_MATTER_OPTIONS);
       if (parsedMarkdown.content.trim()) {
         return parsedMarkdown.content.trim();
       }

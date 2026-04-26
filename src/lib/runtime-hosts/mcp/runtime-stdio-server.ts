@@ -597,8 +597,6 @@ function createIdleExitController(): {
     timer = setTimeout(() => process.exit(0), RUNTIME_MCP_IDLE_EXIT_MS);
   };
 
-  schedule();
-
   return {
     async run<T>(operation: () => Promise<T>): Promise<T> {
       active += 1;
