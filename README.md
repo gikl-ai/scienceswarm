@@ -238,43 +238,6 @@ policy shows a preview and approval gate, destination health renders missing or
 not-authenticated CLIs without crashing settings, and historical sessions remain
 readable.
 
-For chat-speed changes, also run the local `Hi` benchmark and append the result
-to [`docs/chat-speed-timing-report.md`](docs/chat-speed-timing-report.md):
-
-```bash
-npx tsx scripts/benchmark-chat-hi.ts \
-  --url http://localhost:3001 \
-  --project project-alpha \
-  --message Hi \
-  --timing-artifact \
-  --json
-```
-
-To generate a paste-ready table row for that report, use:
-
-```bash
-npx tsx scripts/benchmark-chat-hi-row.ts \
-  --url http://localhost:3001 \
-  --project project-alpha \
-  --message Hi \
-  --timing-artifact \
-  --pr '#PR' \
-  --change-area 'change-area'
-```
-
-To benchmark and append the new row to `docs/chat-speed-timing-report.md`
-directly, use:
-
-```bash
-npx tsx scripts/append-chat-benchmark-report-row.ts \
-  --url http://localhost:3001 \
-  --project project-alpha \
-  --message Hi \
-  --timing-artifact \
-  --pr '#PR' \
-  --change-area 'change-area'
-```
-
 ### Private Market Plugins
 
 ScienceSwarm keeps two distinct skill/plugin surfaces:
