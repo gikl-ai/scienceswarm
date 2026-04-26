@@ -85,7 +85,7 @@ describe("Dashboard e2e flow", () => {
   });
 
 
-  it("renders compact composer controls without an idle Send button", async () => {
+  it("renders compact composer controls with a disabled idle Send button", async () => {
     vi.stubGlobal("fetch", stubHealthyFetch());
     render(<ProjectPage />);
 
@@ -94,7 +94,7 @@ describe("Dashboard e2e flow", () => {
     expect(
       screen.getByRole("button", { name: "Change response destination" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Send/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
   it("renders chat input textarea", async () => {
