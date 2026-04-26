@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createApiKeyRuntimeHostAdapter, createApiKeyRuntimeHostProfile } from "@/lib/runtime-hosts/adapters/api-key";
@@ -289,11 +289,12 @@ describe("runtime host adapters", () => {
     expect(transport.requests.at(-1)?.args).not.toContain("--session-id");
   });
 
-  it("uses the native Claude Code session id as the reusable capsule directory", async () => {
+  it("keeps wrapper, native, run, and workspace identities distinct for Claude Code", async () => {
     const generatedSessionId = "33333333-3333-4333-8333-333333333333";
     const contextLaunches: Array<{
       wrapperSessionId: string;
-      capsuleSessionId?: string;
+      nativeSessionId: string;
+      runId: string;
     }> = [];
     const transport = new FakeCliTransport((request) => {
       const sessionIdIndex = request.args?.indexOf("--session-id") ?? -1;
@@ -315,10 +316,13 @@ describe("runtime host adapters", () => {
       contextBuilder: async (input) => {
         contextLaunches.push({
           wrapperSessionId: input.wrapperSessionId,
-          capsuleSessionId: input.capsuleSessionId,
+          nativeSessionId: input.nativeSessionId,
+          runId: input.runId,
         });
         return {
-          cwd: `/tmp/scienceswarm/${input.capsuleSessionId ?? input.wrapperSessionId}`,
+          cwd: "/tmp/scienceswarm/workspaces/studies/study_project-alpha",
+          launchBundlePath: `/tmp/scienceswarm/runtime/runs/${input.runId}/claude-code`,
+          agentWorkspaceId: "workspace_project-alpha",
         };
       },
     });
@@ -347,19 +351,21 @@ describe("runtime host adapters", () => {
     expect(contextLaunches).toEqual([
       {
         wrapperSessionId: "rt-session-first",
-        capsuleSessionId: generatedSessionId,
+        nativeSessionId: generatedSessionId,
+        runId: "run_rt-session-first",
       },
       {
         wrapperSessionId: "rt-session-second",
-        capsuleSessionId: generatedSessionId,
+        nativeSessionId: generatedSessionId,
+        runId: "run_rt-session-second",
       },
     ]);
-    expect(transport.requests[0]?.cwd).toBe(`/tmp/scienceswarm/${generatedSessionId}`);
+    expect(transport.requests[0]?.cwd).toBe("/tmp/scienceswarm/workspaces/studies/study_project-alpha");
     expect(transport.requests[0]?.args).toEqual(expect.arrayContaining([
       "--session-id",
       generatedSessionId,
     ]));
-    expect(transport.requests[1]?.cwd).toBe(`/tmp/scienceswarm/${generatedSessionId}`);
+    expect(transport.requests[1]?.cwd).toBe("/tmp/scienceswarm/workspaces/studies/study_project-alpha");
     expect(transport.requests[1]?.args).toEqual(expect.arrayContaining([
       "--resume",
       generatedSessionId,
@@ -459,13 +465,12 @@ describe("runtime host adapters", () => {
     expect(transport.requests.at(-1)?.args).not.toContain("--resume");
   });
 
-  it("launches Claude Code from a generated ScienceSwarm session capsule", async () => {
+  it("launches Claude Code from a stable Study workspace with per-run LaunchBundles", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-claude-context-"));
     try {
       const dataRoot = path.join(tempRoot, "data");
       const brainRoot = path.join(dataRoot, "brain");
       const projectRoot = path.join(dataRoot, "projects", "project-alpha");
-      const sessionRoot = path.join(tempRoot, "sessions");
       const nativeSessionId = "55555555-5555-4555-8555-555555555555";
       await mkdir(projectRoot, { recursive: true });
       await mkdir(brainRoot, { recursive: true });
@@ -505,11 +510,13 @@ describe("runtime host adapters", () => {
           };
         };
       };
-      let mcpConfigAtLaunch: CapturedMcpConfig | null = null;
+      const mcpConfigsAtLaunch: CapturedMcpConfig[] = [];
+      const mcpConfigPathsAtLaunch: string[] = [];
       const transport = new FakeCliTransport(async (request) => {
         const mcpConfigIndex = request.args?.indexOf("--mcp-config") ?? -1;
         const mcpConfigPath = request.args?.[mcpConfigIndex + 1] ?? "";
-        mcpConfigAtLaunch = JSON.parse(await readFile(mcpConfigPath, "utf8"));
+        mcpConfigPathsAtLaunch.push(mcpConfigPath);
+        mcpConfigsAtLaunch.push(JSON.parse(await readFile(mcpConfigPath, "utf8")));
         return fakeResult(
           request,
           `{"type":"result","result":"Capsule answer","session_id":"${nativeSessionId}"}`,
@@ -517,7 +524,7 @@ describe("runtime host adapters", () => {
       });
       const adapter = createClaudeCodeRuntimeHostAdapter({
         transport,
-        sessionRoot,
+        dataRoot,
         repoRoot,
         sessionIdGenerator: () => nativeSessionId,
         env: {
@@ -539,7 +546,15 @@ describe("runtime host adapters", () => {
       });
 
       const launch = transport.requests.at(-1);
-      expect(launch?.cwd).toBe(path.join(sessionRoot, "project-alpha", nativeSessionId));
+      const workspaceRoot = path.join(dataRoot, "workspaces", "studies", "study_project-alpha");
+      const launchBundleRoot = path.join(
+        dataRoot,
+        "runtime",
+        "runs",
+        "run_rt-session-claude",
+        "claude-code",
+      );
+      expect(launch?.cwd).toBe(workspaceRoot);
       expect(launch?.args).toEqual(expect.arrayContaining([
         "--session-id",
         nativeSessionId,
@@ -570,8 +585,9 @@ describe("runtime host adapters", () => {
       const mcpConfigIndex = launch?.args?.indexOf("--mcp-config") ?? -1;
       expect(mcpConfigIndex).toBeGreaterThanOrEqual(0);
       const mcpConfigPath = launch?.args?.[mcpConfigIndex + 1] ?? "";
-      expect(mcpConfigAtLaunch).not.toBeNull();
-      const mcpConfig = mcpConfigAtLaunch as unknown as CapturedMcpConfig;
+      expect(mcpConfigPath).toBe(path.join(launchBundleRoot, "mcp.json"));
+      expect(mcpConfigsAtLaunch).toHaveLength(1);
+      const mcpConfig = mcpConfigsAtLaunch[0] as CapturedMcpConfig;
       expect(mcpConfig.mcpServers.scienceswarm.command).toBe("/bin/sh");
       expect(mcpConfig.mcpServers.scienceswarm.args.join(" ")).toContain(
         "src/lib/runtime-hosts/mcp/runtime-stdio-server.ts",
@@ -594,16 +610,96 @@ describe("runtime host adapters", () => {
       expect((launch?.env?.PATH ?? "").split(path.delimiter)[0]).toBe(repoBinDir);
       await expect(readFile(mcpConfigPath, "utf8")).rejects.toThrow();
 
-      await expect(readFile(path.join(launch?.cwd ?? "", "CLAUDE.md"), "utf8"))
-        .resolves.toContain("Read `SCIENCESWARM.md` first");
-      await expect(readFile(path.join(launch?.cwd ?? "", "SCIENCESWARM.md"), "utf8"))
-        .resolves.toContain("ScienceSwarm is a local-first research workspace");
-      await expect(stat(path.join(launch?.cwd ?? "", ".remember", "logs"))
-        .then((entry) => entry.isDirectory())).resolves.toBe(true);
-      await expect(stat(path.join(launch?.cwd ?? "", ".remember", "logs", "autonomous"))
-        .then((entry) => entry.isDirectory())).resolves.toBe(true);
-      await expect(stat(path.join(launch?.cwd ?? "", ".remember", "tmp"))
-        .then((entry) => entry.isDirectory())).resolves.toBe(true);
+      const stableClaude = await readFile(path.join(workspaceRoot, "CLAUDE.md"), "utf8");
+      const stableScienceSwarm = await readFile(path.join(workspaceRoot, "SCIENCESWARM.md"), "utf8");
+      expect(stableClaude).toContain("stable ScienceSwarm AgentWorkspace");
+      expect(stableScienceSwarm).toContain("ScienceSwarm is a local-first research workspace");
+      for (const stableShim of [stableClaude, stableScienceSwarm]) {
+        expect(stableShim).not.toContain("Summarize project-alpha.");
+        expect(stableShim).not.toContain("Current project:");
+        expect(stableShim).not.toContain("runtime-scoped MCP server");
+        expect(stableShim).not.toContain("SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN");
+      }
+      await expect(readFile(path.join(launchBundleRoot, "prompt.md"), "utf8"))
+        .resolves.toContain("Current project: `project-alpha`.");
+      const audit = await readFile(path.join(launchBundleRoot, "launch-audit.redacted.json"), "utf8");
+      expect(audit).toContain("\"redacted\": true");
+      expect(audit).not.toContain("SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN");
+      expect(audit).not.toContain(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN);
+      await expect(stat(path.join(workspaceRoot, ".remember"))).rejects.toThrow();
+      await expect(readdir(launchBundleRoot)).resolves.not.toContain("CLAUDE.md");
+      await expect(readdir(launchBundleRoot)).resolves.not.toContain("SCIENCESWARM.md");
+      expect(mcpConfigPathsAtLaunch).toEqual([path.join(launchBundleRoot, "mcp.json")]);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reuses the Study workspace while giving sibling Claude runs distinct LaunchBundle paths", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-claude-workspace-"));
+    try {
+      const dataRoot = path.join(tempRoot, "data");
+      const brainRoot = path.join(dataRoot, "brain");
+      await mkdir(brainRoot, { recursive: true });
+      vi.stubEnv("SCIENCESWARM_DIR", dataRoot);
+      vi.stubEnv("BRAIN_ROOT", brainRoot);
+      const generatedSessionIds = [
+        "77777777-7777-4777-8777-777777777777",
+        "88888888-8888-4888-8888-888888888888",
+      ];
+      const transport = new FakeCliTransport((request) => {
+        const sessionIdIndex = request.args?.indexOf("--session-id") ?? -1;
+        const sessionId = request.args?.[sessionIdIndex + 1] ?? "missing-native-session";
+        return fakeResult(
+          request,
+          JSON.stringify({
+            type: "result",
+            result: `Answer from ${request.sessionId}`,
+            session_id: sessionId,
+          }),
+        );
+      });
+      const adapter = createClaudeCodeRuntimeHostAdapter({
+        transport,
+        dataRoot,
+        repoRoot: process.cwd(),
+        enableRuntimeMcp: false,
+        sessionIdGenerator: () => generatedSessionIds.shift() ?? "99999999-9999-4999-8999-999999999999",
+        env: {
+          ...process.env,
+          SCIENCESWARM_DIR: dataRoot,
+          BRAIN_ROOT: brainRoot,
+        },
+      });
+
+      await adapter.sendTurn({
+        ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+        runtimeSessionId: "rt-sibling-one",
+        conversationId: null,
+      });
+      await adapter.sendTurn({
+        ...requestFor(requireRuntimeHostProfile("claude-code"), "chat"),
+        runtimeSessionId: "rt-sibling-two",
+        conversationId: null,
+      });
+
+      const workspaceRoot = path.join(dataRoot, "workspaces", "studies", "study_project-alpha");
+      expect(transport.requests).toHaveLength(2);
+      expect(transport.requests[0]?.cwd).toBe(workspaceRoot);
+      expect(transport.requests[1]?.cwd).toBe(workspaceRoot);
+      await expect(readFile(
+        path.join(dataRoot, "runtime", "runs", "run_rt-sibling-one", "claude-code", "prompt.md"),
+        "utf8",
+      )).resolves.toContain("Current project: `project-alpha`.");
+      await expect(readFile(
+        path.join(dataRoot, "runtime", "runs", "run_rt-sibling-two", "claude-code", "prompt.md"),
+        "utf8",
+      )).resolves.toContain("Current project: `project-alpha`.");
+      await expect(stat(path.join(workspaceRoot, ".remember"))).rejects.toThrow();
+      await expect(readdir(path.join(dataRoot, "runtime", "runs", "run_rt-sibling-one", "claude-code")))
+        .resolves.not.toContain("SCIENCESWARM.md");
+      await expect(readdir(path.join(dataRoot, "runtime", "runs", "run_rt-sibling-two", "claude-code")))
+        .resolves.not.toContain("CLAUDE.md");
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }

@@ -1,12 +1,11 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { buildProjectBrief } from "@/brain/briefing";
 import { loadBrainConfig } from "@/brain/config";
 import {
-  getScienceSwarmDataRoot,
   getScienceSwarmProjectRoot,
 } from "@/lib/scienceswarm-paths";
 import { buildScienceSwarmGbrainEnv } from "@/lib/gbrain/source-of-truth";
@@ -19,6 +18,11 @@ import type {
 import { resolveRuntimeMcpToolProfile } from "@/lib/runtime-hosts/mcp/tool-profiles";
 import { mintRuntimeMcpAccessToken } from "@/lib/runtime-hosts/mcp/tokens";
 import type { RuntimeMcpToolName } from "@/lib/runtime-hosts/mcp/tokens";
+import { LaunchAuditStateSchema } from "@/lib/studies";
+import {
+  ensureRuntimeWorkspace,
+  resolveRuntimeWorkspace,
+} from "@/lib/runtime-hosts/workspace";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
 const DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -31,16 +35,20 @@ export interface ClaudeCodeInvocationContext {
   env?: NodeJS.ProcessEnv;
   mcpConfigPath?: string;
   allowedTools?: string[];
+  agentWorkspaceId?: string;
+  launchBundlePath?: string;
+  runId?: string;
   cleanup?: () => Promise<void>;
 }
 
 export interface ClaudeCodeRuntimeContextBuilderInput {
   request: RuntimeTurnRequest;
   wrapperSessionId: string;
-  capsuleSessionId?: string;
+  nativeSessionId: string;
+  runId: string;
   env: NodeJS.ProcessEnv;
   repoRoot?: string;
-  sessionRoot?: string;
+  dataRoot?: string;
   enableRuntimeMcp?: boolean;
   tokenTtlMs?: number;
 }
@@ -83,21 +91,18 @@ export async function buildClaudeCodeRuntimeContext(
     : "global";
   const repoRoot = path.resolve(input.repoRoot ?? process.cwd());
   const runtimeEnv = buildScienceSwarmGbrainEnv(input.env, repoRoot);
-  const sessionRoot = path.resolve(
-    input.sessionRoot
-      ?? path.join(getScienceSwarmDataRoot(), "runtime", "claude-code"),
-  );
-  const capsuleSessionId = input.capsuleSessionId ?? input.wrapperSessionId;
-  const sessionDir = path.join(
-    sessionRoot,
-    projectSlug,
-    safePathSegment(capsuleSessionId),
-  );
-  await mkdir(sessionDir, { recursive: true });
-  await Promise.all([
-    mkdir(path.join(sessionDir, ".remember", "logs", "autonomous"), { recursive: true }),
-    mkdir(path.join(sessionDir, ".remember", "tmp"), { recursive: true }),
-  ]);
+  const workspace = resolveRuntimeWorkspace({
+    projectId: input.request.projectId,
+    runId: input.runId,
+    host: "claude-code",
+    dataRoot: input.dataRoot,
+  });
+  await ensureRuntimeWorkspace({
+    agentWorkspace: workspace.agentWorkspace,
+    launchBundle: workspace.launchBundle,
+    stableScienceSwarmMarkdown: buildStableScienceSwarmWorkspaceMarkdown(),
+    stableClaudeMarkdown: buildStableClaudeWorkspaceMarkdown(),
+  });
 
   const loadedProjectGuidance = await buildScienceSwarmPromptContextText({
     projectId: input.request.projectId,
@@ -113,50 +118,83 @@ export async function buildClaudeCodeRuntimeContext(
         approvalStateApproved: input.request.approvalState === "approved"
           || input.request.approvalState === "not-required",
         repoRoot,
-        sessionDir,
+        mcpConfigPath: workspace.launchBundle.mcpConfigPath,
         env: runtimeEnv,
         tokenTtlMs: input.tokenTtlMs ?? DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS,
       });
 
-  const scienceswarmMd = buildScienceSwarmRuntimeMarkdown({
+  const dynamicPrompt = buildClaudeCodeRuntimePromptMarkdown({
     projectId: input.request.projectId,
     loadedProjectGuidance,
     brainBrief,
     runtimeMcpInstructions: runtimeMcp?.instructions ?? null,
   });
-  const claudeMd = [
-    "# CLAUDE.md",
-    "",
-    "This is a generated ScienceSwarm runtime capsule for Claude Code.",
-    "",
-    "Read `SCIENCESWARM.md` first. It contains the product orientation, current",
-    "project/brain context, and the selective gbrain access rules for this session.",
-    "",
-    "Do not infer ScienceSwarm product behavior from the app source repository unless",
-    "the user explicitly asks to work on ScienceSwarm itself.",
-  ].join("\n");
-
-  await Promise.all([
-    writeFile(path.join(sessionDir, "SCIENCESWARM.md"), scienceswarmMd, "utf8"),
-    writeFile(path.join(sessionDir, "CLAUDE.md"), claudeMd, "utf8"),
-  ]);
+  await writeFile(workspace.launchBundle.promptSnapshotPath, dynamicPrompt, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  await writeRedactedLaunchAudit({
+    runId: input.runId,
+    cwd: workspace.agentWorkspace.cwd,
+    launchBundlePath: workspace.launchBundle.root,
+    prompt: dynamicPrompt,
+    mcpConfigHash: runtimeMcp?.configHash ?? null,
+    hasRuntimeMcpAccessToken: Boolean(runtimeMcp),
+    auditPath: workspace.launchBundle.redactedAuditPath,
+  });
 
   const addDirs = input.request.projectId
     ? existingDirectories([getScienceSwarmProjectRoot(projectSlug)])
     : [];
 
   return {
-    cwd: sessionDir,
-    appendSystemPrompt: scienceswarmMd,
+    cwd: workspace.agentWorkspace.cwd,
+    appendSystemPrompt: dynamicPrompt,
     addDirs,
     env: runtimeEnv,
     mcpConfigPath: runtimeMcp?.configPath,
     allowedTools: runtimeMcp?.allowedTools,
+    agentWorkspaceId: workspace.agentWorkspace.id,
+    launchBundlePath: workspace.launchBundle.root,
+    runId: input.runId,
     cleanup: runtimeMcp?.cleanup,
   };
 }
 
-function buildScienceSwarmRuntimeMarkdown(input: {
+function buildStableClaudeWorkspaceMarkdown(): string {
+  return [
+    "# CLAUDE.md",
+    "",
+    "This is a stable ScienceSwarm AgentWorkspace for Claude Code.",
+    "",
+    "Read `SCIENCESWARM.md` first for durable workspace orientation.",
+    "",
+    "Run-specific prompts, current user requests, runtime MCP configuration,",
+    "model policy, and auth material are injected at launch time and do not",
+    "belong in this file.",
+    "",
+    "Do not infer ScienceSwarm product behavior from the app source repository unless",
+    "the user explicitly asks to work on ScienceSwarm itself.",
+  ].join("\n");
+}
+
+function buildStableScienceSwarmWorkspaceMarkdown(): string {
+  return [
+    "# SCIENCESWARM.md",
+    "",
+    "ScienceSwarm is a local-first research workspace powered by OpenClaw, OpenHands, and gbrain.",
+    "",
+    "- gbrain is the durable research-memory layer and source of truth.",
+    "- OpenClaw is the user-facing manager and communication layer.",
+    "- OpenHands is the execution agent for heavier implementation tasks.",
+    "- This directory is the stable AgentWorkspace for a ScienceSwarm research context.",
+    "",
+    "Current run context, compact brain briefs, MCP access, and user requests are",
+    "delivered through the launch prompt and LaunchBundle, not stable workspace shims.",
+  ].join("\n");
+}
+
+function buildClaudeCodeRuntimePromptMarkdown(input: {
   projectId: string | null;
   loadedProjectGuidance: string | null;
   brainBrief: string | null;
@@ -170,7 +208,8 @@ function buildScienceSwarmRuntimeMarkdown(input: {
     "- gbrain is the durable research-memory layer and source of truth.",
     "- OpenClaw is the user-facing manager and communication layer.",
     "- OpenHands is the execution agent for heavier implementation tasks.",
-    "- Claude Code is running inside a generated ScienceSwarm session capsule, not inside the ScienceSwarm app source checkout.",
+    "- Claude Code is running from a stable ScienceSwarm AgentWorkspace, not from a per-run capsule or the ScienceSwarm app source checkout.",
+    "- Per-run prompt snapshots and MCP configuration live in the ScienceSwarm LaunchBundle for this run.",
     "",
     input.projectId ? `Current project: \`${input.projectId}\`.` : "No project is currently scoped.",
     "",
@@ -274,11 +313,12 @@ async function buildRuntimeMcpContext(input: {
   projectPolicy: RuntimeProjectPolicy;
   approvalStateApproved: boolean;
   repoRoot: string;
-  sessionDir: string;
+  mcpConfigPath: string;
   env: NodeJS.ProcessEnv;
   tokenTtlMs: number;
 }): Promise<{
   configPath: string;
+  configHash: string;
   allowedTools: string[];
   instructions: string;
   env: Record<string, string>;
@@ -294,7 +334,6 @@ async function buildRuntimeMcpContext(input: {
     ttlMs: input.tokenTtlMs,
     secret,
   });
-  const configPath = path.join(input.sessionDir, "scienceswarm-mcp.json");
   const shell = input.env.SCIENCESWARM_RUNTIME_MCP_SHELL ?? "/bin/sh";
   const command = [
     "cd",
@@ -325,13 +364,15 @@ async function buildRuntimeMcpContext(input: {
       },
     },
   };
-  await writeFile(configPath, JSON.stringify(mcpConfig, null, 2), {
+  const mcpConfigJson = JSON.stringify(mcpConfig, null, 2);
+  await writeFile(input.mcpConfigPath, mcpConfigJson, {
     encoding: "utf8",
     mode: 0o600,
   });
 
   return {
-    configPath,
+    configPath: input.mcpConfigPath,
+    configHash: contentSha256(mcpConfigJson),
     allowedTools: claudeMcpToolNames("scienceswarm", allowedTools),
     instructions: [
       "A runtime-scoped MCP server named `scienceswarm` is available for selective gbrain access.",
@@ -352,9 +393,47 @@ async function buildRuntimeMcpContext(input: {
     ].join("\n"),
     env: {},
     cleanup: async () => {
-      await unlink(configPath).catch(ignoreMissingFile);
+      await unlink(input.mcpConfigPath).catch(ignoreMissingFile);
     },
   };
+}
+
+async function writeRedactedLaunchAudit(input: {
+  runId: string;
+  cwd: string;
+  launchBundlePath: string;
+  prompt: string;
+  mcpConfigHash: string | null;
+  hasRuntimeMcpAccessToken: boolean;
+  auditPath: string;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  const audit = LaunchAuditStateSchema.parse({
+    version: 1,
+    runId: input.runId,
+    host: "claude-code",
+    launchBundlePath: input.launchBundlePath,
+    cwd: input.cwd,
+    redactedEnv: {},
+    promptHash: contentSha256(input.prompt),
+    ...(input.mcpConfigHash ? { mcpConfigHash: input.mcpConfigHash } : {}),
+    tokenMaterial: [
+      {
+        label: "runtime MCP access token",
+        present: input.hasRuntimeMcpAccessToken,
+        redacted: true,
+      },
+    ],
+    createdAt: now,
+  });
+  await writeFile(input.auditPath, JSON.stringify(audit, null, 2), {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+}
+
+function contentSha256(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
 function claudeMcpToolNames(
@@ -380,11 +459,6 @@ function trimForPrompt(value: string, maxChars: number): string {
   const normalized = value.replace(/\r\n/g, "\n").trim();
   if (normalized.length <= maxChars) return normalized;
   return `${normalized.slice(0, maxChars).trimEnd()}\n[truncated]`;
-}
-
-function safePathSegment(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120)
-    || "session";
 }
 
 function existingDirectories(paths: string[]): string[] {
