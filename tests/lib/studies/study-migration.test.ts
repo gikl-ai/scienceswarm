@@ -174,6 +174,21 @@ describe("Study migration planning", () => {
       maxFilesPerTree: 1,
     })).rejects.toThrow("Legacy migration tree file limit exceeded");
   });
+
+  it("rejects invalid migration file bounds instead of disabling the guard", async () => {
+    const roots = await installFixture();
+
+    await expect(planLegacyProjectStateMigration({
+      legacyProjectSlug: "project-alpha",
+      studyId: "study_alpha",
+      threadId: "thread_alpha",
+      projectsRoot: roots.projectsRoot,
+      brainRoot: roots.brainRoot,
+      stateRoot: roots.stateRoot,
+      generatedAt: "2026-04-26T00:00:00.000Z",
+      maxFilesPerTree: Number.NaN,
+    })).rejects.toThrow("Invalid Study migration file limit");
+  });
 });
 
 describe("Study migration execution", () => {

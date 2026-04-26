@@ -143,6 +143,14 @@ interface Checkpoint {
 
 const DEFAULT_MAX_MIGRATION_FILES_PER_TREE = 5_000;
 
+function normalizeMaxFilesPerTree(maxFiles: number | undefined): number {
+  if (maxFiles === undefined) return DEFAULT_MAX_MIGRATION_FILES_PER_TREE;
+  if (!Number.isFinite(maxFiles) || maxFiles < 1) {
+    throw new Error("Invalid Study migration file limit");
+  }
+  return Math.trunc(maxFiles);
+}
+
 function assertStudyMigrationInput(input: PlanStudyMigrationInput): {
   legacyProjectSlug: StudySlug;
   studyId: StudyId;
@@ -234,7 +242,7 @@ async function listFilesRecursive(
   root: string,
   maxFiles: number,
 ): Promise<string[]> {
-  const limit = Math.max(1, Math.trunc(maxFiles));
+  const limit = normalizeMaxFilesPerTree(maxFiles);
   let visitedFiles = 0;
 
   async function walk(dir: string): Promise<string[]> {
@@ -503,7 +511,7 @@ export async function planLegacyProjectStateMigration(input: PlanStudyMigrationI
   const projectsRoot = input.projectsRoot ?? getScienceSwarmProjectsRoot();
   const brainRoot = input.brainRoot ?? getScienceSwarmBrainRoot();
   const stateRoot = input.stateRoot;
-  const maxFilesPerTree = input.maxFilesPerTree ?? DEFAULT_MAX_MIGRATION_FILES_PER_TREE;
+  const maxFilesPerTree = normalizeMaxFilesPerTree(input.maxFilesPerTree);
   const studyRoot = getStudyStateRoot(studyId, stateRoot);
   const legacyCopyRoot = path.join(studyRoot, "legacy-project", legacyProjectSlug);
   const legacyGlobalStateRoot = path.join(brainRoot, "state");
