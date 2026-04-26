@@ -433,7 +433,6 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
     `First chunk: ${
       summary.firstChunkMs === null ? "n/a" : `${summary.firstChunkMs} ms`
     }`,
-    `Shared timing tick: ${summary.firstChunkSharedHeadersTick ? "yes" : "no"}`,
     `Total: ${summary.totalMs} ms`,
     `Bytes: ${summary.bytes}`,
     `Events: ${summary.eventCount} (${summary.progressEventCount} progress, ${summary.finalEventCount} final)`,
