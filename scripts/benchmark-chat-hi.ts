@@ -354,32 +354,30 @@ function timingPhaseByName(
   name: string,
 ): ChatBenchmarkTimingPhaseSummary | null {
   for (const phase of phases) {
-    if (phase.name === name) {
+    if (phase.name === name && !phase.skipped) {
       return phase;
     }
   }
   return null;
 }
 
-function earliestPhaseStartedAtMs(
+function timingPhaseStartAnchorMs(
   phases: ChatBenchmarkTimingPhaseSummary[],
 ): number | null {
-  let earliest: number | null = null;
   for (const phase of phases) {
     if (typeof phase.startedAtMs !== "number") {
       continue;
     }
-    earliest =
-      earliest === null ? phase.startedAtMs : Math.min(earliest, phase.startedAtMs);
+    return phase.startedAtMs;
   }
-  return earliest;
+  return null;
 }
 
 function phaseEndedOffsetMs(
   phases: ChatBenchmarkTimingPhaseSummary[],
   name: string,
 ): number | null {
-  const requestStartedAtMs = earliestPhaseStartedAtMs(phases);
+  const requestStartedAtMs = timingPhaseStartAnchorMs(phases);
   const phase = timingPhaseByName(phases, name);
   if (
     requestStartedAtMs === null ||
