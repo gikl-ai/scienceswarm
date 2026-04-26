@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -12,6 +12,7 @@ import {
   getShikiLanguageForPath,
   type FilePreviewState,
 } from "@/lib/file-visualization";
+import { cn } from "@/lib/utils";
 
 const HIGHLIGHT_SIZE_LIMIT_BYTES = 300 * 1024;
 const SHIKI_CACHE_MAX_ENTRIES = 100;
@@ -59,6 +60,24 @@ const markdownSanitizeSchema = {
       ["encoding"],
     ],
   },
+};
+
+const FILE_MARKDOWN_COMPONENTS: Components = {
+  ul: ({ className, node: _node, ...props }) => (
+    <ul
+      {...props}
+      className={cn("list-disc space-y-1 pl-5 marker:text-quiet", className)}
+    />
+  ),
+  ol: ({ className, node: _node, ...props }) => (
+    <ol
+      {...props}
+      className={cn("list-decimal space-y-1 pl-5 marker:font-medium marker:text-dim", className)}
+    />
+  ),
+  li: ({ className, node: _node, ...props }) => (
+    <li {...props} className={cn("pl-1", className)} />
+  ),
 };
 
 function cheapHash(value: string): string {
@@ -249,6 +268,7 @@ export function MarkdownRenderer({ content }: { content: string }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypeKatex, { strict: false }], [rehypeSanitize, markdownSanitizeSchema]]}
+        components={FILE_MARKDOWN_COMPONENTS}
       >
         {content}
       </ReactMarkdown>
