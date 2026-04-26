@@ -69,3 +69,6 @@ bench-stdout.log
 # Design-system bootstrap log (generated, not tracked)
 .scienceswarm-design.log
 .worktrees/
+
+# local-only planning scratch should never ship in public docs
+docs/*-plan.md
