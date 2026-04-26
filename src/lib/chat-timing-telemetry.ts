@@ -175,7 +175,7 @@ function phaseByName(
   name: ChatTimingPhaseName,
 ): ChatTimingPhaseRecord | null {
   for (const phase of phases) {
-    if (phase.name === name) {
+    if (phase.name === name && !phase.skipped) {
       return phase;
     }
   }

@@ -212,6 +212,53 @@ describe("GET /api/chat/timing", () => {
     }]);
   });
 
+  it("treats skipped readiness and gateway phases as absent in observed split summaries", async () => {
+    vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
+    recordChatTimingArtifact(
+      timingPayload(
+        "turn-skipped-split",
+        {},
+        [
+          {
+            name: "request_parse",
+            order: 1,
+            startedAtMs: 100,
+            endedAtMs: 110,
+            durationMs: 10,
+          },
+          {
+            name: "chat_readiness",
+            order: 2,
+            startedAtMs: 110,
+            endedAtMs: 110,
+            durationMs: 0,
+            skipped: true,
+          },
+          {
+            name: "gateway_connect_auth",
+            order: 3,
+            startedAtMs: 110,
+            endedAtMs: 110,
+            durationMs: 0,
+            skipped: true,
+          },
+        ],
+      ),
+    );
+
+    const response = await GET(new Request("http://localhost/api/chat/timing"));
+    const body = await response.json();
+
+    expect(body.summaries).toMatchObject([{
+      turnId: "turn-skipped-split",
+      observedSplit: {
+        chatReadinessDurationMs: null,
+        gatewayConnectAuthDurationMs: null,
+      },
+      skippedPhaseNames: ["chat_readiness", "gateway_connect_auth"],
+    }]);
+  });
+
   it("retains only the most recent bounded timing artifacts", async () => {
     vi.stubEnv("SCIENCESWARM_CHAT_TIMING", "1");
     for (let index = 0; index < CHAT_TIMING_ARTIFACT_LIMIT + 3; index += 1) {
