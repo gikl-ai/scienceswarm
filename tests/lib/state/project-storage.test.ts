@@ -7,6 +7,7 @@ const ROOT = join(tmpdir(), "scienceswarm-state-project-storage");
 
 afterEach(() => {
   delete process.env.SCIENCESWARM_DIR;
+  delete process.env.BRAIN_ROOT;
   rmSync(ROOT, { recursive: true, force: true });
   vi.resetModules();
   vi.doUnmock("node:fs/promises");
@@ -80,5 +81,33 @@ describe("project-storage", () => {
 
     const canonicalStateRoot = getProjectLocalStateRoot("project-alpha", join(ROOT, "custom-projects"));
     expect(getLegacyProjectStateDir("project-alpha", canonicalStateRoot)).toBe(canonicalStateRoot);
+  });
+
+  it("does not classify an explicit BRAIN_ROOT as the default project-local state root", async () => {
+    process.env.SCIENCESWARM_DIR = ROOT;
+    process.env.BRAIN_ROOT = join(ROOT, "custom-brain");
+
+    const {
+      getProjectLocalImportSummaryPath,
+      getProjectStateRootForBrainRoot,
+    } = await import("@/lib/state/project-storage");
+
+    mkdirSync(join(ROOT, "projects", "project-alpha", ".brain", "state"), { recursive: true });
+    writeFileSync(
+      getProjectLocalImportSummaryPath("project-alpha"),
+      JSON.stringify({
+        project: "project-alpha",
+        lastImport: {
+          name: "Stale default import",
+          preparedFiles: 99,
+          generatedAt: "2026-04-10T00:00:00.000Z",
+          source: "default-study-state",
+        },
+      }),
+    );
+
+    expect(getProjectStateRootForBrainRoot("project-alpha", process.env.BRAIN_ROOT)).toBe(
+      join(process.env.BRAIN_ROOT, "state"),
+    );
   });
 });
