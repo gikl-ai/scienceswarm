@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 import type { BrainConfig } from "./types";
 import type { BrainPage, BrainStore } from "./store";
@@ -9,7 +9,7 @@ import {
   readProjectImportSummary,
   type ProjectImportSummary,
 } from "@/lib/state/project-import-summary";
-import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
+import { isDefaultScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 import { buildArtifactSourceSnapshotFromPage } from "@/lib/artifact-source-snapshots";
 import { normalizeArtifactSourceSnapshots } from "@/lib/artifact-provenance";
@@ -62,10 +62,6 @@ const GENERIC_THREAD_KEYWORDS = new Set([
 ]);
 
 const PROJECT_ORGANIZER_PAGE_SCAN_LIMIT = 5000;
-
-function usesDefaultBrainRoot(config: BrainConfig): boolean {
-  return resolve(config.root) === resolve(getScienceSwarmBrainRoot());
-}
 
 function normalizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -335,7 +331,7 @@ async function loadProjectImportSummaryForConfig(
   project: string,
 ): Promise<ProjectImportSummary | null> {
   try {
-    if (usesDefaultBrainRoot(config)) {
+    if (isDefaultScienceSwarmBrainRoot(config.root)) {
       const canonicalSummaryRecord = await readProjectImportSummary(project);
       if (canonicalSummaryRecord) {
         return canonicalSummaryRecord.lastImport;

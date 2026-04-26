@@ -17,7 +17,7 @@ import {
   readProjectImportSummary,
   type ProjectImportSummary,
 } from "@/lib/state/project-import-summary";
-import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
+import { isDefaultScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import { refreshProjectWatchFrontier } from "@/lib/watch";
 import {
   getProjectBrainRootForBrainRoot,
@@ -44,10 +44,6 @@ interface BriefingPage {
   summary: string;
   content: string;
   status?: string;
-}
-
-function usesDefaultBrainRoot(config: BrainConfig): boolean {
-  return resolve(config.root) === resolve(getScienceSwarmBrainRoot());
 }
 
 interface ProjectBriefingInput {
@@ -242,7 +238,7 @@ async function loadProjectManifest(
   config: BrainConfig,
   project: string,
 ): Promise<ProjectManifest> {
-  if (usesDefaultBrainRoot(config)) {
+  if (isDefaultScienceSwarmBrainRoot(config.root)) {
     const canonical = await readProjectManifest(project);
     if (canonical) return canonical;
   }
@@ -802,7 +798,7 @@ async function loadProjectImportSummary(
   project: string,
 ): Promise<ProjectImportSummary | null> {
   try {
-    if (usesDefaultBrainRoot(config)) {
+    if (isDefaultScienceSwarmBrainRoot(config.root)) {
       const canonicalSummaryRecord = await readProjectImportSummary(project);
       if (canonicalSummaryRecord) {
         return canonicalSummaryRecord.lastImport;

@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 import { isPageFileRef, type GbrainPageFileRef } from "./gbrain-data-contracts";
 import { ensureBrainStoreReady, getBrainStore, type BrainPage, type BrainStore } from "./store";
@@ -9,7 +9,7 @@ import {
   type ProjectImportDuplicateGroupRecord,
   type ProjectImportSummary,
 } from "@/lib/state/project-import-summary";
-import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
+import { isDefaultScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 export interface ProjectImportRegistryEntry {
@@ -61,10 +61,6 @@ const GENERATED_ARTIFACT_PAGE_TYPES = new Set([
   "cover_letter",
 ]);
 const IMPORT_REGISTRY_PAGE_SCAN_LIMIT = 5000;
-
-function usesDefaultBrainRoot(config: BrainConfig): boolean {
-  return resolve(config.root) === resolve(getScienceSwarmBrainRoot());
-}
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -304,7 +300,7 @@ async function loadProjectImportSummaryForConfig(
   project: string,
 ): Promise<ProjectImportSummary | null> {
   try {
-    if (usesDefaultBrainRoot(config)) {
+    if (isDefaultScienceSwarmBrainRoot(config.root)) {
       const canonicalSummaryRecord = await readProjectImportSummary(project);
       if (canonicalSummaryRecord) {
         return canonicalSummaryRecord.lastImport;
