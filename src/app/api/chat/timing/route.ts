@@ -2,6 +2,7 @@ import {
   CHAT_TIMING_ARTIFACT_LIMIT,
   getRecentChatTimingArtifacts,
   isChatTimingTelemetryEnabled,
+  summarizeChatTimingArtifact,
 } from "@/lib/chat-timing-telemetry";
 import { isLocalRequest } from "@/lib/local-guard";
 
@@ -14,10 +15,13 @@ export async function GET(request: Request): Promise<Response> {
     return new Response(null, { status: 404 });
   }
 
+  const timings = getRecentChatTimingArtifacts();
+
   return Response.json(
     {
       maxEntries: CHAT_TIMING_ARTIFACT_LIMIT,
-      timings: getRecentChatTimingArtifacts(),
+      timings,
+      summaries: timings.map((timing) => summarizeChatTimingArtifact(timing)),
     },
     {
       headers: {
