@@ -1,6 +1,10 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { getScienceSwarmBrainRoot, resolveConfiguredPath } from "@/lib/scienceswarm-paths";
+import {
+  getScienceSwarmBrainRoot,
+  isDefaultScienceSwarmBrainRoot,
+  resolveConfiguredPath,
+} from "@/lib/scienceswarm-paths";
 import { getLegacyProjectStudyFilePath } from "@/lib/studies/state";
 import { readJsonFile, writeJsonFile } from "./atomic-json";
 import { assertSafeProjectSlug } from "./project-manifests";
@@ -30,6 +34,10 @@ function getProjectImportSourcePath(project: string): string {
 
 function getLegacyProjectImportSourcePath(project: string): string {
   return path.join(getProjectLocalStateRoot(assertSafeProjectSlug(project)), "import-source.json");
+}
+
+function getBrainRootProjectImportSourcePath(project: string, brainRoot: string): string {
+  return path.join(brainRoot, "state", "projects", assertSafeProjectSlug(project), "import-source.json");
 }
 
 function getConfiguredBrainRoot(): string {
@@ -78,8 +86,9 @@ function normalizeJobSource(candidate: ImportJobCandidate): ProjectImportSourceR
 
 async function inferProjectImportSourceFromJobs(
   project: string,
+  brainRoot = getConfiguredBrainRoot(),
 ): Promise<ProjectImportSourceRecord | null> {
-  const jobsRoot = path.join(getConfiguredBrainRoot(), "state", "import-jobs");
+  const jobsRoot = path.join(brainRoot, "state", "import-jobs");
   let jobNames: string[];
   try {
     jobNames = await readdir(jobsRoot);
@@ -116,30 +125,48 @@ export async function readProjectImportSource(
   project: string,
 ): Promise<ProjectImportSourceRecord | null> {
   const safeProject = assertSafeProjectSlug(project);
+  const brainRoot = getConfiguredBrainRoot();
+  const readDefaultStudyState = isDefaultScienceSwarmBrainRoot(brainRoot);
+
   let record: unknown = null;
-  try {
-    record = await readJsonFile<unknown>(getProjectImportSourcePath(safeProject));
-  } catch {
-    record = null;
-  }
-  if (isProjectImportSourceRecord(record) && record.project === safeProject) {
-    return record;
+  if (readDefaultStudyState) {
+    try {
+      record = await readJsonFile<unknown>(getProjectImportSourcePath(safeProject));
+    } catch {
+      record = null;
+    }
+    if (isProjectImportSourceRecord(record) && record.project === safeProject) {
+      return record;
+    }
+
+    try {
+      record = await readJsonFile<unknown>(getLegacyProjectImportSourcePath(safeProject));
+    } catch {
+      record = null;
+    }
+    if (isProjectImportSourceRecord(record) && record.project === safeProject) {
+      return record;
+    }
+  } else {
+    try {
+      record = await readJsonFile<unknown>(getBrainRootProjectImportSourcePath(safeProject, brainRoot));
+    } catch {
+      record = null;
+    }
+    if (isProjectImportSourceRecord(record) && record.project === safeProject) {
+      return record;
+    }
   }
 
-  try {
-    record = await readJsonFile<unknown>(getLegacyProjectImportSourcePath(safeProject));
-  } catch {
-    record = null;
-  }
-  if (isProjectImportSourceRecord(record) && record.project === safeProject) {
-    return record;
-  }
-
-  const inferred = await inferProjectImportSourceFromJobs(safeProject);
+  const inferred = await inferProjectImportSourceFromJobs(safeProject, brainRoot);
   if (!inferred) return null;
 
   try {
-    await writeJsonFile(getProjectImportSourcePath(safeProject), inferred);
+    if (readDefaultStudyState) {
+      await writeJsonFile(getProjectImportSourcePath(safeProject), inferred);
+    } else {
+      await writeJsonFile(getBrainRootProjectImportSourcePath(safeProject, brainRoot), inferred);
+    }
   } catch {
     // Best effort: callers can still use the inferred record for this request.
   }
@@ -160,6 +187,12 @@ export async function writeProjectImportSource(
     updatedAt: input.updatedAt,
     ...(input.lastJobId ? { lastJobId: input.lastJobId } : {}),
   };
-  await writeJsonFile(getProjectImportSourcePath(safeProject), record);
+  const brainRoot = getConfiguredBrainRoot();
+  await writeJsonFile(
+    isDefaultScienceSwarmBrainRoot(brainRoot)
+      ? getProjectImportSourcePath(safeProject)
+      : getBrainRootProjectImportSourcePath(safeProject, brainRoot),
+    record,
+  );
   return record;
 }

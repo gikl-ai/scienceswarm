@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 describe("project import source state", () => {
-  it("persists inferred legacy sources from an explicit BRAIN_ROOT", async () => {
+  it("infers legacy sources from an explicit BRAIN_ROOT without writing default Study state", async () => {
     process.env.BRAIN_ROOT = path.join(root, "legacy-brain");
     const jobsRoot = path.join(process.env.BRAIN_ROOT, "state", "import-jobs");
     mkdirSync(jobsRoot, { recursive: true });
@@ -62,8 +62,15 @@ describe("project import source state", () => {
     });
 
     const persistedPath = getLegacyProjectStudyFilePath("project-alpha", "import-source.json");
-    expect(existsSync(persistedPath)).toBe(true);
-    expect(readFileSync(persistedPath, "utf-8")).toContain("\"folderPath\": \"/tmp/project-alpha\"");
+    const customPersistedPath = path.join(
+      process.env.BRAIN_ROOT,
+      "state",
+      "projects",
+      "project-alpha",
+      "import-source.json",
+    );
+    expect(existsSync(persistedPath)).toBe(false);
+    expect(readFileSync(customPersistedPath, "utf-8")).toContain("\"folderPath\": \"/tmp/project-alpha\"");
     expect(existsSync(path.join(
       process.env.SCIENCESWARM_DIR!,
       "projects",
@@ -72,6 +79,81 @@ describe("project import source state", () => {
       "state",
       "import-source.json",
     ))).toBe(false);
+  });
+
+  it("does not let stale default Study import-source state override an explicit BRAIN_ROOT", async () => {
+    const defaultStudyPath = getLegacyProjectStudyFilePath("project-alpha", "import-source.json");
+    mkdirSync(path.dirname(defaultStudyPath), { recursive: true });
+    writeFileSync(
+      defaultStudyPath,
+      JSON.stringify({
+        version: 1,
+        project: "project-alpha",
+        folderPath: "/tmp/stale-project-alpha",
+        source: "default-study-state",
+        updatedAt: "2026-04-12T12:00:00.000Z",
+      }, null, 2),
+      "utf-8",
+    );
+
+    process.env.BRAIN_ROOT = path.join(root, "custom-brain");
+    const jobsRoot = path.join(process.env.BRAIN_ROOT, "state", "import-jobs");
+    mkdirSync(jobsRoot, { recursive: true });
+    writeFileSync(
+      path.join(jobsRoot, "job-1.json"),
+      JSON.stringify({
+        id: "job-1",
+        project: "project-alpha",
+        folderPath: "/tmp/custom-project-alpha",
+        source: "background-local-import",
+        updatedAt: "2026-04-13T12:00:00.000Z",
+      }, null, 2),
+      "utf-8",
+    );
+
+    const { readProjectImportSource } = await importProjectImportSourceModule();
+    const record = await readProjectImportSource("project-alpha");
+
+    expect(record).toMatchObject({
+      project: "project-alpha",
+      folderPath: "/tmp/custom-project-alpha",
+      source: "background-local-import",
+      lastJobId: "job-1",
+    });
+    expect(readFileSync(defaultStudyPath, "utf-8")).toContain("/tmp/stale-project-alpha");
+    expect(readFileSync(
+      path.join(process.env.BRAIN_ROOT, "state", "projects", "project-alpha", "import-source.json"),
+      "utf-8",
+    )).toContain("/tmp/custom-project-alpha");
+  });
+
+  it("writes explicit BRAIN_ROOT import-source records where explicit reads consult them", async () => {
+    process.env.BRAIN_ROOT = path.join(root, "custom-brain");
+
+    const { readProjectImportSource, writeProjectImportSource } = await importProjectImportSourceModule();
+    await writeProjectImportSource("project-alpha", {
+      folderPath: "/tmp/custom-write-project-alpha",
+      source: "background-local-import",
+      updatedAt: "2026-04-14T12:00:00.000Z",
+      lastJobId: "job-write",
+    });
+
+    const defaultStudyPath = getLegacyProjectStudyFilePath("project-alpha", "import-source.json");
+    const customPath = path.join(
+      process.env.BRAIN_ROOT,
+      "state",
+      "projects",
+      "project-alpha",
+      "import-source.json",
+    );
+    expect(existsSync(defaultStudyPath)).toBe(false);
+    expect(readFileSync(customPath, "utf-8")).toContain("/tmp/custom-write-project-alpha");
+
+    await expect(readProjectImportSource("project-alpha")).resolves.toMatchObject({
+      project: "project-alpha",
+      folderPath: "/tmp/custom-write-project-alpha",
+      lastJobId: "job-write",
+    });
   });
 
   it("skips malformed legacy import-job records while inferring sources", async () => {
