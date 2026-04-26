@@ -169,8 +169,50 @@ If the run succeeds, Claude Code should list:
 | `output/fits/classic_*.rds` | classic SCM fits and placebo ratios |
 | `output/fits/alternatives_*.rds` | gsynth, synthetic DiD when available, and DR-SC comparisons |
 | `output/inference_summary.{json,md}` | compact placebo-inference summary for the assistant to cite |
-| `output/scm-ir-report.html` | interactive report |
-| `output/lib/` | local Plotly/htmlwidget assets required by the report |
+| `output/scm-ir-report.html` | interactive report (classic stage-6 output) |
+| `output/lib/` | local Plotly/htmlwidget assets required by the classic report |
+
+---
+
+## Modern report (optional)
+
+After the pipeline finishes, a sophisticated *broadsheet*-themed sibling
+report can be produced from the same artifacts using the shared
+`scientific_report` skill (no R round trip needed). The two commands run
+from the **repository root** (so that the `tooling.scientific_report`
+package is importable); paths to the tutorial outputs are passed
+explicitly. Replace `<tutorial-output-dir>` with the absolute or
+repo-relative path to your tutorial's `output/` folder (e.g.
+`docs/tutorials/scm-ir-quickstart/output` for an in-repo run, or the
+ScienceSwarm project artifact path for a UI-driven run):
+
+```bash
+# from the repository root, with the tutorial's output/ already populated
+python -m tooling.scientific_report.exporters.scm_ir \
+  --inference     <tutorial-output-dir>/inference_summary.json \
+  --classic-html  <tutorial-output-dir>/scm-ir-report.html \
+  --out           <tutorial-output-dir>/scm-ir-spec.json
+
+python -m tooling.scientific_report \
+  --spec <tutorial-output-dir>/scm-ir-spec.json \
+  --out  <tutorial-output-dir>/scm-ir-report-modern.html
+```
+
+Outputs:
+
+| Artifact | Meaning |
+|---|---|
+| `<tutorial-output-dir>/scm-ir-spec.json` | normalized spec JSON; the renderer consumes this |
+| `<tutorial-output-dir>/scm-ir-report-modern.html` | broadsheet-themed sibling report — single HTML file with Plotly and Google Fonts loaded from CDNs at view time (no `lib/` folder) |
+
+The classic `output/scm-ir-report.html` is the source-of-truth for
+trajectory data and stays the primary deliverable. The modern report is
+a polished re-presentation of the same numbers and cannot disagree with
+the classic report on the underlying values — by construction, since its
+exporter parses the classic report's embedded data.
+
+For the spec format and how to author additional themes, see
+[`tooling/scientific_report/README.md`](../../../tooling/scientific_report/README.md).
 
 ---
 
