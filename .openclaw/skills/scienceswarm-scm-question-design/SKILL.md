@@ -1,6 +1,15 @@
 ---
 name: scienceswarm-scm-question-design
 description: "Frame an international-relations or social-science research question for synthetic control analysis: identify the treated unit, treatment date, donor pool, outcome of interest, and decide whether SCM is the right method."
+owner: scienceswarm
+runtime: in-session
+tier: synthetic-control-pipeline
+aliases:
+  - scm-question
+outputs:
+  - SCM Study Brief brain asset with asset_kind scm_study_brief
+  - SCM suitability verdict
+  - confidence boundary
 ---
 
 # ScienceSwarm SCM Question Design
@@ -29,6 +38,11 @@ fit.
    inclusion/exclusion criteria, primary outcome, secondary outcomes,
    pre/post windows, and a `Confidence Boundary` that states what the
    brief supports and what would change the recommendation.
+
+When the `scienceswarm` MCP tools are available, save the brief with
+`gbrain_capture` before answering. Use a clear title, the asset kind above,
+and the active project. If saving fails, report the exact save failure and do
+not present the brief as durable.
 
 Do not start data acquisition until the treated unit, treatment date,
 donor pool, and outcome are explicit.

@@ -1,6 +1,15 @@
 ---
 name: scienceswarm-scm-data-acquisition
 description: Pull and curate the country-year (or unit-time) panel needed for synthetic control. Validate balance, coverage, and donor-pool integrity before any modeling.
+owner: scienceswarm
+runtime: in-session
+tier: synthetic-control-pipeline
+aliases:
+  - scm-data
+outputs:
+  - SCM Data Manifest brain asset with asset_kind scm_data_manifest
+  - source and donor exclusion log
+  - coverage and balance gate result
 ---
 
 # ScienceSwarm SCM Data Acquisition
@@ -28,6 +37,12 @@ balanced panel that fits will run on.
    scm_data_manifest` listing every source, indicator, exclusion, and a
    `Confidence Boundary` that states what the manifest supports and what
    would change which donors are eligible.
+
+When the `scienceswarm` MCP tools are available, save the manifest with
+`gbrain_capture` before answering. Use a clear title, the asset kind above,
+the active project, and links or references to the upstream SCM Study Brief.
+If saving fails, report the exact save failure and do not present the manifest
+as durable.
 
 Do not begin model fitting until the manifest, balance check, and
 exclusion log are explicit.

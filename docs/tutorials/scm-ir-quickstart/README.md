@@ -1,210 +1,289 @@
-# SCM-IR quickstart — synthetic control for international relations shocks
+# SCM-IR quickstart - synthetic control for international relations shocks
 
-An end-to-end synthetic control method (SCM) pipeline that takes three
-canonical IR / political-economy shocks — **Brexit (2016)**, **Russia's 2022
-sanctions**, and **Basque Country / ETA terrorism (1975)** — pulls real
-World Bank panels and the bundled Abadie & Gardeazabal Basque dataset,
-fits classic SCM (Abadie 2003) plus three modern variants (generalized
-SCM, synthetic DiD, doubly-robust SC), runs permutation placebo
-inference, and renders an interactive HTML report that a researcher can
-drop straight into a paper, blog post, or policy memo.
+An end-to-end synthetic control method (SCM) pipeline for three canonical
+international-relations and political-economy shocks:
 
-Note: the third case substitutes Basque/ETA (Abadie & Gardeazabal 2003,
-*AER* — the *original* synthetic control paper) for German reunification.
-The German reunification dataset has been removed from recent CRAN
-versions of the `Synth` package; the Basque case is the canonical
-alternative and was the first SCM application in the literature.
+- **Brexit (2016)**
+- **Russia's 2022 sanctions**
+- **Basque Country / ETA terrorism (1975)**
 
-Wall time: roughly **8–12 min on a laptop** end-to-end (most of which is
-the first-time CRAN install). Fitting itself is seconds per case.
+ScienceSwarm drives the workflow from the project UI with Claude Code. You
+should not need to open a terminal or type Linux commands. The R scripts in
+this folder are the deterministic execution contract that the assistant runs
+for you: pull real World Bank panels, load the bundled Abadie & Gardeazabal
+Basque dataset, fit classic SCM plus modern variants, run placebo inference,
+and render an interactive HTML report.
 
 This tutorial exists to:
 
-- give a copy-paste-runnable proof that a non-expert can produce a
-  publication-grade synthetic control analysis without becoming an
-  econometrician,
-- expose the validation gates that distinguish a meaningful SCM result
-  from a fit that "ran" but is not interpretable (pre-period RMSPE,
-  donor weight concentration, placebo permutation),
-- serve as the concrete example that the
-  [ScienceSwarm SCM pipeline walkthrough](../scm-pipeline-walkthrough.md)
-  refers to.
+- show that a non-expert can produce a publication-grade synthetic control
+  scaffold from the ScienceSwarm UI,
+- expose the validation gates that distinguish an interpretable SCM result
+  from a fit that merely ran, and
+- provide the concrete example used by the
+  [ScienceSwarm SCM pipeline walkthrough](../scm-pipeline-walkthrough.md).
 
-It is **not** a research result. The three cases are deliberately
-canonical so the tutorial focuses on technique rather than novelty.
+It is **not** a research result. The cases are canonical so the tutorial can
+focus on method and workflow rather than novelty.
+
+Note: the third case uses Basque Country / ETA terrorism from Abadie &
+Gardeazabal (2003, *AER*), the original synthetic control paper. Recent CRAN
+versions of `Synth` no longer ship the German reunification dataset that older
+SCM tutorials used.
+
+Typical wall time is **8-12 min on a laptop** after R is available. The first
+run can take longer because CRAN packages are installed into a managed
+ScienceSwarm runtime library.
 
 ---
 
-## What you will do
+## What ScienceSwarm Runs
 
 | Stage | Script | Wall time | Output |
 |---|---|---|---|
-| 1. Fetch panel data | `01_fetch_data.R` | ~30 s (cached after first run) | `data/raw/{wdi_panel,basque_bundled}.rds` |
-| 2. Prepare three case panels | `02_prepare_panels.R` | < 5 s | `data/prepared/{brexit,russia,basque}.rds` |
+| 0. Prepare R dependencies | `setup.R` | ~5 min first run | managed R library under `$SCIENCESWARM_DIR/runtimes/` |
+| 1. Fetch panel data | `01_fetch_data.R` | ~30 s, cached | `data/raw/{wdi_panel,basque_bundled}.rds` |
+| 2. Prepare case panels | `02_prepare_panels.R` | < 5 s | `data/prepared/{brexit,russia,basque}.rds` |
 | 3. Classic SCM + placebo permutation | `03_fit_classic_scm.R` | ~30 s | `output/fits/classic_{brexit,russia,basque}.rds` |
-| 4. Method comparison (gsynth, SDID, DR-SC) | `04_fit_alternative_methods.R` | ~60 s | `output/fits/alternatives_*.rds` |
-| 5. Render interactive HTML report | `05_render_html.R` | ~10 s | `output/scm-ir-report.html` |
+| 4. Method comparison | `04_fit_alternative_methods.R` | ~60 s | `output/fits/alternatives_*.rds` |
+| 5. Summarize placebo inference | `05_summarize_inference.R` | < 5 s | `output/inference_summary.{json,md}` |
+| 6. Render interactive HTML report | `06_render_html.R` | ~10 s | `output/scm-ir-report.html` |
 
-The deliverable is one HTML file (`scm-ir-report.html`) plus a sibling
-`output/lib/` folder of locally-embedded Plotly assets — **no external
-CDN dependencies**. The two pieces are co-located, so the HTML renders
-correctly when opened directly from disk. The HTML includes:
+The deliverable is `output/scm-ir-report.html` plus a sibling `output/lib/`
+folder of locally embedded Plotly assets. Keep those pieces together when
+sharing or importing the report.
 
-- Animated counterfactual trajectory (treated vs. synthetic, gap fills
-  in over the post-treatment window)
-- Donor-weight bar chart with click-to-highlight country selection
-- Placebo distribution plot (RMSPE post/pre ratios, treated unit
-  highlighted in red)
-- "What-if" treatment-year falsification chart (in-time placebo)
-- Method-comparison forest plot (classic SCM vs gsynth vs synthetic DiD vs DR-SC, with 95% CIs)
-- Methodology explainer modal (toggleable, written for non-experts)
-- Auto-generated Methods paragraph ready to paste into a paper
+The report includes:
+
+- animated counterfactual trajectories,
+- hover-readable donor-weight charts,
+- placebo distributions with treated units highlighted,
+- in-time treatment-year falsification charts,
+- method-comparison forest plots,
+- a methodology explainer modal, and
+- auto-generated Methods paragraphs ready to adapt for a paper or memo.
 
 ---
 
 ## Requirements
 
-- macOS, Linux, or Windows
-- **R ≥ 4.2** (install via [CRAN](https://cran.r-project.org/) or `brew install r` on macOS)
-- ~250 MB free disk for outputs and CRAN packages
-- Internet access for (a) one-time CRAN install and (b) World Bank API
-  pulls (cached on first run; offline-friendly thereafter)
+- ScienceSwarm with project chat enabled
+- Claude Code available as an assistant destination
+- R 4.2 or newer available locally, or permission for the execution assistant
+  to help install a local R runtime
+- Internet access for one-time CRAN installs and World Bank API pulls
+- About 250 MB free for outputs and R packages
 
-No API keys, no cluster, no GPU required.
+No API keys, cluster, or GPU are required.
 
----
+ScienceSwarm's platform convention is:
 
-## Setup
+- persistent tools and language runtimes live under
+  `$SCIENCESWARM_DIR/runtimes/` (default `~/.scienceswarm/runtimes/`),
+- this tutorial's R packages are installed by `setup.R` into
+  `$SCIENCESWARM_DIR/runtimes/r/R-<major.minor>/<platform>/library/`, and
+- generated tutorial outputs stay inside the imported project tutorial folder
+  so the assistant can import, summarize, and save them as project artifacts.
 
-Install R packages from this directory:
-
-```bash
-Rscript setup.R
-```
-
-This is idempotent — already-installed packages are skipped. First run
-takes ~5 min; subsequent runs are instant.
-
-Verify the install:
-
-```bash
-Rscript -e 'core <- c("tidysynth","Synth","gsynth","WDI","plotly","htmlwidgets"); for (p in core) suppressMessages(library(p, character.only = TRUE)); cat(paste0(core, " OK"), sep = "\n"); if (requireNamespace("synthdid", quietly = TRUE)) { suppressMessages(library(synthdid)); cat("synthdid OK\n") } else { cat("synthdid not installed (optional; SDID method will be skipped)\n") }'
-```
+Do not install CRAN packages into the app checkout or commit generated outputs
+to the repository.
 
 ---
 
-## Run the pipeline
+## 0. Create the Project
 
-From `docs/tutorials/scm-ir-quickstart/scripts/`:
+1. Start ScienceSwarm and complete setup if the app asks.
+2. Open the dashboard and create a project. A name like
+   `SCM IR quickstart` is fine.
+3. Open the project. You should see the project chat composer at the bottom of
+   the page.
+4. Import this checkout, or just `docs/tutorials/scm-ir-quickstart/`, into the
+   project so Claude Code can see `setup.R` and `scripts/`.
+5. In the project chat composer, open the assistant selector and choose
+   `Claude Code`.
+6. If ScienceSwarm shows a send-review sheet for Claude Code, confirm the
+   destination is `Claude Code`, the project is the SCM project, and the
+   included data is the prompt plus project context.
 
-```bash
-Rscript 01_fetch_data.R
-Rscript 02_prepare_panels.R
-Rscript 03_fit_classic_scm.R
-Rscript 04_fit_alternative_methods.R
-Rscript 05_render_html.R
-```
-
-Each script prints diagnostics, fails fast on a bad input, and writes
-its output before exiting.
-
-Open the report:
-
-```bash
-open ../output/scm-ir-report.html       # macOS
-xdg-open ../output/scm-ir-report.html   # Linux
-start ../output/scm-ir-report.html      # Windows
-```
+Use Claude Code for the steps below.
 
 ---
 
-## What "good" looks like
+## 1. Prepare the Runtime
 
-Each fitting stage ends with a validation assertion that must pass
-before the next stage is meaningful.
+Paste this into the project chat:
+
+```text
+Prepare the SCM-IR quickstart for execution.
+
+If the full ScienceSwarm checkout is imported, use
+docs/tutorials/scm-ir-quickstart/. If only this tutorial folder is imported,
+use the current project folder.
+
+Use setup.R as the dependency contract. First check whether Rscript is
+available and report the R version. Then run setup.R from the tutorial root.
+Do not install R packages into the repository or the imported project folder.
+Use the ScienceSwarm-managed R library under
+$SCIENCESWARM_DIR/runtimes/r/R-<major.minor>/<platform>/library/ unless the
+project explicitly sets a different runtime path.
+
+When setup finishes, verify that tidysynth, Synth, gsynth, plotly,
+htmlwidgets, htmltools, dplyr, tidyr, purrr, readr, tibble, ggplot2, scales,
+and jsonlite load. synthdid is optional; report whether it is available.
+Stop with a clear recovery note if R itself is missing.
+```
+
+Continue only after Claude Code reports the R version, the managed library
+path, and whether `synthdid` is available.
+
+---
+
+## 2. Run the Pipeline
+
+Paste:
+
+```text
+Run the SCM-IR quickstart end to end using this ScienceSwarm project
+workspace.
+
+Use the tutorial root prepared in the previous step. Run the stages in order:
+setup.R, scripts/01_fetch_data.R, scripts/02_prepare_panels.R,
+scripts/03_fit_classic_scm.R, scripts/04_fit_alternative_methods.R, and
+scripts/05_summarize_inference.R, then scripts/06_render_html.R.
+
+Stop immediately if any validation gate fails. Keep generated files inside the
+tutorial folder. When finished, summarize the classic SCM fit diagnostics, the
+method-comparison sign-consistency gate, the placebo p-values, and the final
+HTML report path. Do not make the user run shell commands to view or manage
+artifacts; reference the ScienceSwarm project artifact path instead. Save a
+durable project-scoped SCM Run Log with gbrain_capture before answering.
+```
+
+If the run succeeds, Claude Code should list:
+
+| Artifact | Meaning |
+|---|---|
+| `data/raw/wdi_panel.rds` | cached World Bank indicators |
+| `data/raw/basque_bundled.rds` | bundled Basque dataset from `Synth` |
+| `data/prepared/{brexit,russia,basque}.rds` | validated case panels |
+| `output/fits/classic_*.rds` | classic SCM fits and placebo ratios |
+| `output/fits/alternatives_*.rds` | gsynth, synthetic DiD when available, and DR-SC comparisons |
+| `output/inference_summary.{json,md}` | compact placebo-inference summary for the assistant to cite |
+| `output/scm-ir-report.html` | interactive report |
+| `output/lib/` | local Plotly/htmlwidget assets required by the report |
+
+---
+
+## What "Good" Looks Like
+
+Each stage has a validation gate. A failed gate means the assistant should stop
+and explain what needs to change; it should not continue to a polished report.
 
 | Script | Validation gate |
 |---|---|
-| `01_fetch_data.R` | All requested country-year cells present (no silent NA panels) |
-| `02_prepare_panels.R` | Each case has ≥ 10 pre-treatment years, ≥ 15 donor candidates |
-| `03_fit_classic_scm.R` | Pre-period RMSPE / outcome-SD ratio ≤ 0.25 (well-fitted pre-period) |
-| `04_fit_alternative_methods.R` | Sign of estimated effect is consistent across ≥ 3 of 4 methods |
-| `05_render_html.R` | HTML + sibling `lib/` folder ≥ 1 MB total and HTML contains all 7 wow elements |
+| `01_fetch_data.R` | requested country-year cells are present; no silent empty panels |
+| `02_prepare_panels.R` | each case has at least 10 pre-treatment years and 15 donor candidates |
+| `03_fit_classic_scm.R` | pre-period RMSPE / outcome SD is at most 0.25 |
+| `04_fit_alternative_methods.R` | at least 75% of available methods agree on ATT sign |
+| `05_summarize_inference.R` | compact JSON and Markdown inference summaries are written without raw console tables |
+| `06_render_html.R` | HTML plus sibling `lib/` assets total at least 1 MB and required report markers are present |
 
-The 0.25 RMSPE / outcome-SD ratio reflects the practical guidance
-in Abadie (2021, *JEL*) and Abadie/Diamond/Hainmueller (2010): a
-synthetic control whose pre-period fit is materially worse than the
-outcome's own variability is not interpretable as a counterfactual,
-regardless of the post-period gap. The cross-method sign-consistency
-gate guards against single-method artifacts: if classic SCM, gsynth,
-SDID, and DR-SC disagree on the *direction* of the effect, the result
-is not robust enough to report.
+The 0.25 RMSPE / outcome-SD ratio follows the practical guidance in Abadie
+(2021, *JEL*) and Abadie/Diamond/Hainmueller (2010). If the pre-period fit is
+materially worse than the outcome's own variability, the counterfactual is not
+interpretable no matter how large the post-period gap looks.
+
+The cross-method sign-consistency gate guards against single-method artifacts.
+If classic SCM, gsynth, synthetic DiD, and DR-SC disagree on the direction of
+the effect, the tutorial should report fragility rather than a headline claim.
 
 ---
 
-## Reading the output
+## Reading the Output
 
-A typical converged `output/fits/classic_brexit.rds` includes:
+A typical `output/fits/classic_brexit.rds` summary contains:
 
 ```r
-# Loaded into R:
 fit <- readRDS("output/fits/classic_brexit.rds")
 str(fit$summary, max.level = 1)
-#> List of 6
-#>  $ unit_name              : chr "United Kingdom"
-#>  $ outcome                : chr "GDP per capita (constant 2015 USD)"
-#>  $ treatment_year         : num 2016
-#>  $ pre_rmspe              : num 412.3
-#>  $ post_pre_rmspe_ratio   : num 3.21
-#>  $ effect_avg_post        : num -1842
-#>  $ placebo_p_value        : num 0.041
 ```
 
-`post_pre_rmspe_ratio > 2` is conventionally treated as evidence of a
-real treatment effect (Abadie/Diamond/Hainmueller 2010). The placebo
-p-value is the share of donor units whose post/pre RMSPE ratio meets
-or exceeds the treated unit's — a non-parametric exact test.
+Expected fields include:
+
+- `unit_name`
+- `outcome`
+- `treatment_year`
+- `pre_rmspe`
+- `pre_rmspe_over_sd`
+- `post_pre_rmspe_ratio`
+- `effect_avg_post`
+- `placebo_p_value`
+
+`post_pre_rmspe_ratio > 2` is often treated as evidence of a treatment signal
+in classic SCM applications. The placebo p-value is the share of donor placebo
+units whose post/pre RMSPE ratio is at least as large as the treated unit's
+ratio.
 
 ---
 
-## Common failures and what they mean
+## Common Failures
 
-| Symptom | Likely cause | What to try |
+| Symptom | Likely cause | What ScienceSwarm should do |
 |---|---|---|
-| `Error: package 'tidysynth' is not available` | R version too old | Upgrade to R ≥ 4.2 |
-| `WDI` returns 0 rows | World Bank API throttled or offline | Re-run; fetch is cached after first success |
-| Pre-period RMSPE assertion fails | Donor pool too narrow, predictors poorly chosen | Widen donor pool in `02_prepare_panels.R`; revisit predictor list |
-| All methods disagree on sign | Treatment effect is genuinely small/null relative to noise | Honest finding — report null with placebo distribution |
-| Russia case shows NA in 2024 | World Bank lag for recent years | Acceptable; treatment effect is still estimable on 2022–2023 window |
-| HTML renders but charts are blank | Plotly assets in `output/lib/` are missing or not co-located with the HTML | Re-run `05_render_html.R`; verify `output/lib/plotly-main-*` exists alongside `output/scm-ir-report.html` |
+| `Rscript` is missing | R is not installed or not on PATH | Ask for permission to install or point to a local R runtime; do not continue |
+| CRAN package install fails | network issue, compiler issue, or stale lockfile | Preserve the managed library path and report the exact package/log |
+| World Bank fetch returns 0 rows | World Bank API throttled or offline | Re-run once; cache is used after first success |
+| pre-period RMSPE gate fails | donor pool too narrow or predictors poor | stop and revisit donor/predictor choices |
+| methods disagree on sign | fragile or small effect relative to noise | report fragility; do not claim a robust effect |
+| HTML opens with blank charts | `output/lib/` is missing or moved away from the HTML | re-run rendering and keep `scm-ir-report.html` next to `output/lib/` |
 
 ---
 
-## What this tutorial does not cover
+## Done Checklist
 
-- **Time-varying treatment effects with staggered adoption.** That is
-  the Callaway–Sant'Anna territory and a separate tutorial.
-- **Bayesian synthetic control.** `bayessynth` and related approaches
-  are out of scope but compatible with this scaffolding.
-- **Causal forests / heterogeneous treatment effects.** Different
-  question, different tool.
+You are done when the project has:
+
+- a saved SCM Run Log in gbrain,
+- `data/prepared/brexit.rds`,
+- `data/prepared/russia.rds`,
+- `data/prepared/basque.rds`,
+- `output/fits/classic_brexit.rds`,
+- `output/fits/classic_russia.rds`,
+- `output/fits/classic_basque.rds`,
+- `output/fits/alternatives_brexit.rds`,
+- `output/fits/alternatives_russia.rds`,
+- `output/fits/alternatives_basque.rds`,
+- `output/scm-ir-report.html`, and
+- `output/lib/` next to the report.
+
+For the fuller skill-by-skill research workflow, continue with
+[ScienceSwarm SCM pipeline walkthrough](../scm-pipeline-walkthrough.md).
 
 ---
 
-## Citing this tutorial
+## What This Tutorial Does Not Cover
 
-If you use this scaffold in published or shared work, please cite the
-underlying methods papers:
+- **Time-varying treatment effects with staggered adoption.** Use
+  Callaway-Sant'Anna or Sun-Abraham style staggered DiD instead.
+- **Bayesian synthetic control.** Compatible with the scaffold, but not wired
+  into this quickstart.
+- **Causal forests / heterogeneous treatment effects.** Different question,
+  different tool.
 
-- **Classic SCM:** Abadie, Diamond, Hainmueller (2010, *JASA*); Abadie
-  (2021, *JEL*).
+---
+
+## Citing This Tutorial
+
+If you use this scaffold in published or shared work, cite the methods papers:
+
+- **Classic SCM:** Abadie, Diamond, Hainmueller (2010, *JASA*); Abadie (2021,
+  *JEL*).
 - **Generalized SCM:** Xu (2017, *Political Analysis*).
-- **Synthetic DiD:** Arkhangelsky, Athey, Hirshberg, Imbens, Wager
-  (2021, *AER*).
+- **Synthetic DiD:** Arkhangelsky, Athey, Hirshberg, Imbens, Wager (2021,
+  *AER*).
 - **Doubly-robust SC:** Ben-Michael, Feller, Rothstein (2021, *JASA*).
 - **Brexit reference:** Born, Müller, Schularick, Sedláček (2019,
   *Economic Journal*).
-- **Basque case reference:** Abadie & Gardeazabal (2003, *AER*) — the
-  original synthetic control paper.
+- **Basque case reference:** Abadie & Gardeazabal (2003, *AER*).
 
 The tutorial code itself is MIT-licensed with the rest of ScienceSwarm.
