@@ -35,12 +35,12 @@ export async function GET(
 
   try {
     const brainRoot = resolveBrainRoot() ?? getScienceSwarmBrainRoot();
-    const preferredStateRoot = getProjectStateRootForBrainRoot(slug, brainRoot);
-    const summary = (
-      isDefaultScienceSwarmBrainRoot(brainRoot)
-        ? await readProjectImportSummary(slug)
-        : null
-    ) ?? await readProjectImportSummary(slug, preferredStateRoot);
+    const summary = isDefaultScienceSwarmBrainRoot(brainRoot)
+      ? await readProjectImportSummary(slug)
+      : await readProjectImportSummary(
+          slug,
+          getProjectStateRootForBrainRoot(slug, brainRoot),
+        );
     return Response.json({
       project: slug,
       lastImport: summary?.lastImport ?? null,
