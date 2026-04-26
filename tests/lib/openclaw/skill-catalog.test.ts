@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   OpenClawSkillNotFoundError,
   OpenClawSkillValidationError,
@@ -74,6 +74,37 @@ description: Query PubMed
     const repoRoot = mkdtempSync(path.join(tmpdir(), "skill-catalog-empty-"));
 
     await expect(listOpenClawSkills(repoRoot)).resolves.toEqual([]);
+  });
+
+  it("skips invalid skills without dropping the whole catalog", async () => {
+    const repoRoot = createSkillRepo({
+      "db-pubmed": `---
+name: db-pubmed
+description: Query PubMed
+---
+
+# PubMed
+`,
+      "broken-skill": `---
+name: broken-skill
+description: Broken: unquoted colon
+---
+
+# Broken
+`,
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      const skills = await listOpenClawSkills(repoRoot);
+
+      expect(skills.map((skill) => skill.slug)).toEqual(["db-pubmed"]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[openclaw] skipping invalid skill broken-skill:"),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it("surfaces missing skills as not found when saving", async () => {

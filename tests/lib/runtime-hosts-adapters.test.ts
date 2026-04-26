@@ -49,6 +49,12 @@ function createTestClaudeCodeRuntimeHostAdapter(
   });
 }
 
+function decodeRuntimeMcpTokenClaims(token: string): Record<string, unknown> {
+  const [payload] = token.split(".");
+  if (!payload) throw new Error("missing runtime MCP token payload");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>;
+}
+
 class FakeCliTransport implements CliTransport {
   readonly requests: CliTransportRunRequest[] = [];
   cancelResult = false;
@@ -538,6 +544,7 @@ describe("runtime host adapters", () => {
           ...process.env,
           SCIENCESWARM_DIR: dataRoot,
           BRAIN_ROOT: brainRoot,
+          FRONTEND_PORT: "3129",
         },
       });
 
@@ -607,11 +614,20 @@ describe("runtime host adapters", () => {
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_REPO_ROOT).toBe(repoRoot);
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_GBRAIN_BIN).toBe(repoGbrainBin);
       expect(mcpConfig.mcpServers.scienceswarm.env.GBRAIN_BIN).toBe(repoGbrainBin);
+      expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_APP_ORIGIN)
+        .toBe("http://localhost:3129");
       expect(mcpConfig.mcpServers.scienceswarm.env.PATH.split(path.delimiter)[0]).toBe(repoBinDir);
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET)
         .toBeUndefined();
       expect(mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN)
         .toEqual(expect.any(String));
+      const tokenClaims = decodeRuntimeMcpTokenClaims(
+        mcpConfig.mcpServers.scienceswarm.env.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN,
+      );
+      expect(
+        Date.parse(String(tokenClaims.expiresAt))
+          - Date.parse(String(tokenClaims.issuedAt)),
+      ).toBe(45 * 60 * 1000);
       expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_TOKEN_SECRET).toBeUndefined();
       expect(launch?.env?.SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN).toBeUndefined();
       expect(launch?.env?.SCIENCESWARM_REPO_ROOT).toBe(repoRoot);

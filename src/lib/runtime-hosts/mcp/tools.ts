@@ -136,6 +136,8 @@ export interface RuntimeMcpGbrainCaptureParams extends RuntimeMcpAuthParams {
   tags?: string[];
   channel?: string;
   userId?: string;
+  promptHash?: string;
+  inputFileRefs?: string[];
   runtimeProvenance?: RuntimeGbrainProvenance;
 }
 
@@ -194,11 +196,19 @@ export interface RuntimeMcpToolsetDeps {
   trustedToken?: string;
   now?: () => Date;
   concurrencyManager?: RuntimeConcurrencyManager;
+  runtimeProvenanceDefaults?: {
+    promptHash: string;
+    inputFileRefs: string[];
+    approvalState: RuntimeApprovalState;
+  };
   brainSearch?: (
-    params: Omit<RuntimeMcpGbrainSearchParams, keyof RuntimeMcpAuthParams>,
+    params: Pick<
+      RuntimeMcpGbrainSearchParams,
+      "projectId" | "query" | "mode" | "limit" | "detail"
+    >,
   ) => Promise<unknown>;
   brainRead?: (
-    params: Omit<RuntimeMcpGbrainReadParams, keyof RuntimeMcpAuthParams>,
+    params: Pick<RuntimeMcpGbrainReadParams, "projectId" | "path">,
   ) => Promise<unknown>;
   structuralRetrieval?: (
     params: RuntimeStructuralRetrievalInput,
@@ -405,6 +415,23 @@ function assertRuntimeGbrainCaptureProvenance(
   }
 }
 
+function defaultRuntimeGbrainCaptureProvenance(
+  input: RuntimeMcpGbrainCaptureParams,
+  defaults:
+    | RuntimeMcpToolsetDeps["runtimeProvenanceDefaults"]
+    | undefined,
+): RuntimeGbrainProvenance {
+  return {
+    runtimeSessionId: input.runtimeSessionId,
+    hostId: input.hostId,
+    sourceArtifactId: null,
+    promptHash: defaults?.promptHash ?? input.promptHash ?? "runtime-mcp",
+    inputFileRefs: defaults?.inputFileRefs ?? input.inputFileRefs ?? [],
+    approvalState:
+      defaults?.approvalState ?? (input.approved === false ? "required" : "approved"),
+  };
+}
+
 async function defaultProjectWorkspaceRead(
   input: RuntimeMcpProjectWorkspaceReadParams,
 ): Promise<RuntimeMcpProjectWorkspaceReadResult> {
@@ -528,7 +555,13 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
         () => {
           if (!toolsetDeps.brainSearch) toolUnavailable("gbrain_search");
           const { query, mode, limit, detail } = input;
-          return toolsetDeps.brainSearch({ query, mode, limit, detail });
+          return toolsetDeps.brainSearch({
+            projectId: input.projectId,
+            query,
+            mode,
+            limit,
+            detail,
+          });
         },
       );
     },
@@ -549,7 +582,10 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
         },
         () => {
           if (!toolsetDeps.brainRead) toolUnavailable("gbrain_read");
-          return toolsetDeps.brainRead({ path: input.path });
+          return toolsetDeps.brainRead({
+            projectId: input.projectId,
+            path: input.path,
+          });
         },
       );
     },
@@ -619,7 +655,15 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
         },
         () => {
           if (!toolsetDeps.brainCapture) toolUnavailable("gbrain_capture");
-          assertRuntimeGbrainCaptureProvenance(input);
+          const effectiveRuntimeProvenance = input.runtimeProvenance
+            ?? defaultRuntimeGbrainCaptureProvenance(
+              input,
+              toolsetDeps.runtimeProvenanceDefaults,
+            );
+          assertRuntimeGbrainCaptureProvenance({
+            ...input,
+            runtimeProvenance: effectiveRuntimeProvenance,
+          });
           const {
             content,
             kind,
@@ -628,17 +672,16 @@ export function createRuntimeMcpToolset(deps: RuntimeMcpToolsetDeps = {}) {
             tags,
             channel,
             userId,
-            runtimeProvenance,
           } = input;
           return toolsetDeps.brainCapture({
             content,
             kind,
             title,
-            project,
+            project: project ?? input.projectId,
             tags,
             channel,
             userId,
-            runtimeProvenance,
+            runtimeProvenance: effectiveRuntimeProvenance,
             runtimeOriginated: true,
             runtimeSessionId: input.runtimeSessionId,
             runtimeHostId: input.hostId,

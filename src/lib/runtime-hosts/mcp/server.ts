@@ -14,7 +14,7 @@ type McpToolResponse = {
 };
 
 export interface RegisterRuntimeMcpToolsDeps extends RuntimeMcpToolsetDeps {
-  defaultAuth?: Pick<RuntimeMcpAuthParams, "token">;
+  defaultAuth?: Partial<RuntimeMcpAuthParams>;
 }
 
 const projectPolicySchema = z.enum(["local-only", "cloud-ok", "execution-ok"]);
@@ -90,6 +90,17 @@ function withDefaultAuth<T extends { token?: string | null }>(
   return {
     ...params,
     token: params.token ?? deps.defaultAuth?.token,
+    projectId:
+      deps.defaultAuth?.projectId ?? (params as T & RuntimeMcpAuthParams).projectId,
+    runtimeSessionId:
+      deps.defaultAuth?.runtimeSessionId
+        ?? (params as T & RuntimeMcpAuthParams).runtimeSessionId,
+    hostId: deps.defaultAuth?.hostId ?? (params as T & RuntimeMcpAuthParams).hostId,
+    projectPolicy:
+      deps.defaultAuth?.projectPolicy
+        ?? (params as T & RuntimeMcpAuthParams).projectPolicy,
+    approved:
+      deps.defaultAuth?.approved ?? (params as T & RuntimeMcpAuthParams).approved,
   };
 }
 
@@ -158,6 +169,8 @@ export function registerRuntimeMcpTools(
       tags: z.array(z.string()).optional().describe("Tags"),
       channel: z.string().optional().describe("Origin channel"),
       userId: z.string().optional().describe("Originating user identifier"),
+      promptHash: z.string().optional().describe("Prompt hash for runtime provenance"),
+      inputFileRefs: z.array(z.string()).optional().describe("Input file refs for runtime provenance"),
       runtimeProvenance: runtimeProvenanceSchema
         .optional()
         .describe("RuntimeGbrainProvenance for runtime-originated writes"),

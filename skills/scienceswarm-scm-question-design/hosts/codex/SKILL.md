@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-scm-question-design
-description: Frame an international-relations or social-science research question for synthetic control analysis: identify the treated unit, treatment date, donor pool, outcome of interest, and decide whether SCM is the right method.
+description: "Frame an international-relations or social-science research question for synthetic control analysis: identify the treated unit, treatment date, donor pool, outcome of interest, and decide whether SCM is the right method."
 ---
 
 # ScienceSwarm SCM Question Design

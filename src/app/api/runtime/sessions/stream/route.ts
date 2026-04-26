@@ -5,6 +5,7 @@ import {
   buildRuntimeTurnRequest,
   computeRuntimeApiPreview,
   dataIncludedFromBodyWithRuntimeContext,
+  expandRuntimeSlashCommandPrompt,
   getRuntimeApiServices,
   optionalStringArrayField,
   optionalStringField,
@@ -49,7 +50,7 @@ function sseFrame(data: unknown): string {
 export async function POST(request: Request): Promise<Response> {
   let sessionId: string | null = null;
   try {
-    await assertRuntimeApiLocalRequest(request);
+    const appOrigin = await assertRuntimeApiLocalRequest(request);
     const body = await parseJsonObject(request);
     const services = getRuntimeApiServices();
     const mode = turnModeFromBody(body, "chat");
@@ -61,7 +62,10 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const hostId = requireStringField(body, "hostId");
-    const prompt = requireStringField(body, "prompt");
+    const prompt = await expandRuntimeSlashCommandPrompt(
+      requireStringField(body, "prompt"),
+      hostId,
+    );
     const projectId = requireSafeProjectId(body.projectId);
     const conversationId = optionalStringField(body, "conversationId") ?? null;
     const approvalState = approvalStateFromBody(body);
@@ -166,6 +170,7 @@ export async function POST(request: Request): Promise<Response> {
           inputFileRefs,
           approvalState,
           preview,
+          appOrigin,
           onEvent: appendEvent,
         });
         const result = mode === "task"

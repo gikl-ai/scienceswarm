@@ -262,6 +262,7 @@ describe("runtime MCP tool wrappers", () => {
       }),
     ).resolves.toEqual({ hits: ["alpha"] });
     expect(brainSearch).toHaveBeenCalledWith({
+      projectId: "project-alpha",
       query: "alpha",
       mode: undefined,
       limit: 3,
@@ -556,12 +557,17 @@ describe("runtime MCP tool wrappers", () => {
     });
   });
 
-  it("rejects runtime gbrain_capture before write access when provenance is missing", async () => {
-    const brainCapture = vi.fn(async () => ({ status: "should-not-run" }));
+  it("adds default RuntimeGbrainProvenance to runtime gbrain_capture calls", async () => {
+    const brainCapture = vi.fn(async () => ({ status: "captured" }));
     const tools = createRuntimeMcpToolset({
       tokenSecret: SECRET,
       now: () => NOW,
       brainCapture,
+      runtimeProvenanceDefaults: {
+        promptHash: "default-prompt-hash",
+        inputFileRefs: ["workspace:README.md"],
+        approvalState: "approved",
+      },
     });
 
     await expect(
@@ -570,8 +576,25 @@ describe("runtime MCP tool wrappers", () => {
         content: "Runtime note",
         title: "Runtime note",
       }),
-    ).rejects.toMatchObject({ code: "RUNTIME_MCP_UNAUTHORIZED" });
-    expect(brainCapture).not.toHaveBeenCalled();
+    ).resolves.toEqual({ status: "captured" });
+    expect(brainCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "Runtime note",
+        title: "Runtime note",
+        project: "project-alpha",
+        runtimeOriginated: true,
+        runtimeSessionId: "session-1",
+        runtimeHostId: "codex",
+        runtimeProvenance: {
+          runtimeSessionId: "session-1",
+          hostId: "codex",
+          sourceArtifactId: null,
+          promptHash: "default-prompt-hash",
+          inputFileRefs: ["workspace:README.md"],
+          approvalState: "approved",
+        },
+      }),
+    );
   });
 
   it("rate-limits MCP reads with the runtime concurrency policy", async () => {

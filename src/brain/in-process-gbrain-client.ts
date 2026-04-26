@@ -44,6 +44,17 @@ import { enqueueGbrainWrite } from "@/lib/gbrain/write-queue";
 import { getCurrentUserHandle as _requireAttributionImport } from "@/lib/setup/gbrain-installer";
 void _requireAttributionImport;
 
+function rejectJavaScriptFrontmatter(): Record<string, never> {
+  throw new Error("JavaScript frontmatter is not supported for gbrain pages");
+}
+
+const SAFE_GRAY_MATTER_OPTIONS = {
+  engines: {
+    js: rejectJavaScriptFrontmatter,
+    javascript: rejectJavaScriptFrontmatter,
+  },
+};
+
 interface InProcessEngine {
   transaction<T>(fn: (engine: InProcessEngine) => Promise<T>): Promise<T>;
   getPage(slug: string): Promise<InProcessRuntimePage | null>;
@@ -139,7 +150,7 @@ function parseMarkdownForPut(slug: string, content: string): {
   timeline: string;
   frontmatter: Record<string, unknown>;
 } {
-  const { data, content: body } = matter(content);
+  const { data, content: body } = matter(content, SAFE_GRAY_MATTER_OPTIONS);
 
   // Split body at the first standalone `---` to separate compiled_truth
   // from the timeline section (mirrors gbrain's own splitBody).

@@ -36,6 +36,31 @@ afterEach(async () => {
 });
 
 describe("createInProcessGbrainClient", () => {
+  it("rejects JavaScript frontmatter without executing it", async () => {
+    const client = createInProcessGbrainClient();
+    const globalWithProbe = globalThis as typeof globalThis & {
+      __scienceswarmInProcessFrontmatterProbe?: boolean;
+    };
+    globalWithProbe.__scienceswarmInProcessFrontmatterProbe = false;
+
+    await expect(
+      client.putPage(
+        "unsafe-js-frontmatter",
+        [
+          "---js",
+          "globalThis.__scienceswarmInProcessFrontmatterProbe = true;",
+          "module.exports = { title: 'Unsafe' };",
+          "---",
+          "",
+          "This body should not be imported.",
+        ].join("\n"),
+      ),
+    ).rejects.toThrow("JavaScript frontmatter is not supported");
+
+    expect(globalWithProbe.__scienceswarmInProcessFrontmatterProbe).toBe(false);
+    delete globalWithProbe.__scienceswarmInProcessFrontmatterProbe;
+  });
+
   it("runs read-merge-write and links inside one queued transaction", async () => {
     const client = createInProcessGbrainClient();
 

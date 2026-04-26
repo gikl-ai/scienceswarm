@@ -177,6 +177,7 @@ export interface RuntimeTurnRequest {
   dataIncluded: RuntimeDataIncluded[];
   approvalState: RuntimeApprovalState;
   preview: TurnPreview;
+  appOrigin?: string | null;
   onEvent?: (event: RuntimeEvent) => void;
 }
 

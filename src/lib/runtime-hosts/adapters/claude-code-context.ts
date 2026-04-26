@@ -8,7 +8,10 @@ import { loadBrainConfig } from "@/brain/config";
 import {
   getScienceSwarmProjectRoot,
 } from "@/lib/scienceswarm-paths";
-import { buildScienceSwarmGbrainEnv } from "@/lib/gbrain/source-of-truth";
+import {
+  SCIENCESWARM_RUNTIME_APP_ORIGIN_ENV,
+  buildScienceSwarmGbrainEnv,
+} from "@/lib/gbrain/source-of-truth";
 import { buildScienceSwarmPromptContextText } from "@/lib/scienceswarm-prompt-config";
 import type {
   RuntimeDataIncluded,
@@ -25,7 +28,11 @@ import {
 } from "@/lib/runtime-hosts/workspace";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
-const DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS = 15 * 60 * 1000;
+// Claude Code turns can spend most of their wall clock inside scientific
+// tools before the final gbrain write. Keep the scoped MCP token alive longer
+// than the 30 minute adapter timeout without making it a general long-lived
+// credential.
+const DEFAULT_RUNTIME_MCP_TOKEN_TTL_MS = 45 * 60 * 1000;
 const MAX_BRAIN_MD_CHARS = 4_000;
 
 export interface ClaudeCodeInvocationContext {
@@ -90,7 +97,13 @@ export async function buildClaudeCodeRuntimeContext(
     ? assertSafeProjectSlug(input.request.projectId)
     : "global";
   const repoRoot = path.resolve(input.repoRoot ?? process.cwd());
-  const runtimeEnv = buildScienceSwarmGbrainEnv(input.env, repoRoot);
+  const baseEnv = input.request.appOrigin
+    ? {
+        ...input.env,
+        [SCIENCESWARM_RUNTIME_APP_ORIGIN_ENV]: input.request.appOrigin,
+      }
+    : input.env;
+  const runtimeEnv = buildScienceSwarmGbrainEnv(baseEnv, repoRoot);
   const workspace = resolveRuntimeWorkspace({
     projectId: input.request.projectId,
     runId: input.runId,
@@ -117,6 +130,10 @@ export async function buildClaudeCodeRuntimeContext(
           projectId: projectSlug,
           runtimeSessionId: input.wrapperSessionId,
           projectPolicy: input.request.preview.projectPolicy,
+          promptHash:
+            input.request.promptHash ?? contentSha256(input.request.prompt),
+          inputFileRefs: input.request.inputFileRefs,
+          approvalState: input.request.approvalState,
           approvalStateApproved: input.request.approvalState === "approved"
             || input.request.approvalState === "not-required",
           repoRoot,
@@ -216,6 +233,12 @@ function buildClaudeCodeRuntimePromptMarkdown(input: {
     "- OpenHands is the execution agent for heavier implementation tasks.",
     "- Claude Code is running from a stable ScienceSwarm AgentWorkspace, not from a per-run capsule or the ScienceSwarm app source checkout.",
     "- Per-run prompt snapshots and MCP configuration live in the ScienceSwarm LaunchBundle for this run.",
+    "",
+    "Scientific runtime convention:",
+    "- Use an already-working project or system Python environment when it satisfies the requested toolchain.",
+    "- If a conda/mamba runtime must be created, keep the package-manager install under `$SCIENCESWARM_DIR/runtimes/` (default `~/.scienceswarm/runtimes/`) and keep named environments under `$SCIENCESWARM_DIR/runtimes/conda/envs/`.",
+    "- Do not install package managers, conda distributions, or persistent scientific software into the ScienceSwarm app checkout or an imported project folder.",
+    "- Before installing new persistent software, report the proposed install location and wait for user approval.",
     "",
     input.projectId ? `Current project: \`${input.projectId}\`.` : "No project is currently scoped.",
     "",
@@ -317,6 +340,9 @@ async function buildRuntimeMcpContext(input: {
   projectId: string;
   runtimeSessionId: string;
   projectPolicy: RuntimeProjectPolicy;
+  promptHash: string;
+  inputFileRefs: string[];
+  approvalState: RuntimeTurnRequest["approvalState"];
   approvalStateApproved: boolean;
   repoRoot: string;
   mcpConfigPath: string;
@@ -364,8 +390,21 @@ async function buildRuntimeMcpContext(input: {
             "SCIENCESWARM_REPO_ROOT",
             "SCIENCESWARM_GBRAIN_BIN",
             "GBRAIN_BIN",
+            "SCIENCESWARM_RUNTIME_APP_ORIGIN",
           ]),
           SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN: token,
+          SCIENCESWARM_RUNTIME_MCP_PROJECT_ID: input.projectId,
+          SCIENCESWARM_RUNTIME_MCP_SESSION_ID: input.runtimeSessionId,
+          SCIENCESWARM_RUNTIME_MCP_HOST_ID: "claude-code",
+          SCIENCESWARM_RUNTIME_MCP_PROJECT_POLICY: input.projectPolicy,
+          SCIENCESWARM_RUNTIME_MCP_APPROVED: input.approvalStateApproved
+            ? "true"
+            : "false",
+          SCIENCESWARM_RUNTIME_MCP_PROMPT_HASH: input.promptHash,
+          SCIENCESWARM_RUNTIME_MCP_INPUT_FILE_REFS: JSON.stringify(
+            input.inputFileRefs,
+          ),
+          SCIENCESWARM_RUNTIME_MCP_APPROVAL_STATE: input.approvalState,
         },
       },
     },
@@ -395,7 +434,7 @@ async function buildRuntimeMcpContext(input: {
       `- approved: ${input.approvalStateApproved ? "true" : "false"}`,
       "",
       `Allowed tools: ${allowedTools.join(", ")}.`,
-      "For runtime-originated gbrain writes, include RuntimeGbrainProvenance matching this session.",
+      "For runtime-originated gbrain writes, ScienceSwarm attaches RuntimeGbrainProvenance automatically. Do not fabricate provenance values.",
     ].join("\n"),
     env: {},
     cleanup: async () => {

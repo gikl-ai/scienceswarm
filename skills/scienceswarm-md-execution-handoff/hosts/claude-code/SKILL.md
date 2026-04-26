@@ -26,6 +26,12 @@ contract.
 7. Produce an `Execution Handoff Plan` with
    `asset_kind: md_execution_handoff_plan`.
 
+When the `scienceswarm` MCP tools are available, save the handoff with
+`gbrain_capture` before answering. Use a clear title, the asset kind above,
+the active project, and links or references to the upstream planning assets.
+If saving fails, report the exact save failure and do not present the handoff as
+durable.
+
 Include a `Confidence Boundary` section in the handoff.
 
 If a scientific choice is missing, create a blocking question instead of

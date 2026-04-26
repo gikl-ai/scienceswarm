@@ -5,6 +5,7 @@ import {
   buildRuntimeTurnRequest,
   computeRuntimeApiPreview,
   dataIncludedFromBodyWithRuntimeContext,
+  expandRuntimeSlashCommandPrompt,
   getRuntimeApiServices,
   optionalSafeProjectId,
   optionalRuntimeSessionStatusFromSearchParam,
@@ -71,7 +72,7 @@ export async function GET(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   let sessionId: string | null = null;
   try {
-    await assertRuntimeApiLocalRequest(request);
+    const appOrigin = await assertRuntimeApiLocalRequest(request);
     const body = await parseJsonObject(request);
     const services = getRuntimeApiServices();
     const mode = turnModeFromBody(body, "chat");
@@ -83,7 +84,10 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const hostId = requireStringField(body, "hostId");
-    const prompt = requireStringField(body, "prompt");
+    const prompt = await expandRuntimeSlashCommandPrompt(
+      requireStringField(body, "prompt"),
+      hostId,
+    );
     const projectId = requireSafeProjectId(body.projectId);
     const conversationId = optionalStringField(body, "conversationId") ?? null;
     const approvalState = approvalStateFromBody(body);
@@ -142,6 +146,7 @@ export async function POST(request: Request): Promise<Response> {
       inputFileRefs,
       approvalState,
       preview,
+      appOrigin,
     });
     const result = mode === "task"
       ? await adapter.executeTask(turnRequest)

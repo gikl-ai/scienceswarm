@@ -54,11 +54,28 @@ export async function listOpenClawSkills(repoRoot = process.cwd()): Promise<Open
     }
     throw error;
   }
-  const skills = await Promise.all(
-    entries
-      .filter((entry) => entry.isDirectory())
-      .map(async (entry) => readOpenClawSkill(entry.name, repoRoot)),
-  );
+  const skills = (
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory())
+        .map(async (entry) => {
+          try {
+            return await readOpenClawSkill(entry.name, repoRoot);
+          } catch (error) {
+            if (
+              error instanceof OpenClawSkillValidationError ||
+              error instanceof OpenClawSkillNotFoundError
+            ) {
+              console.warn(
+                `[openclaw] skipping invalid skill ${entry.name}: ${error.message}`,
+              );
+              return null;
+            }
+            throw error;
+          }
+        }),
+    )
+  ).filter((skill): skill is OpenClawSkillRecord => skill !== null);
 
   return skills.sort(compareOpenClawSkills);
 }

@@ -7,6 +7,7 @@ import {
   buildRuntimeTurnRequest,
   computeRuntimeApiPreview,
   dataIncludedFromBodyWithRuntimeContext,
+  expandRuntimeSlashCommandPrompt,
   getRuntimeApiServices,
   optionalStringArrayField,
   optionalStringField,
@@ -51,12 +52,12 @@ async function runBounded<T, R>(
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    await assertRuntimeApiLocalRequest(request);
+    const appOrigin = await assertRuntimeApiLocalRequest(request);
     const body = await parseJsonObject(request);
     const services = getRuntimeApiServices();
     const projectId = requireSafeProjectId(body.projectId);
     const projectPolicy = projectPolicyFromBody(body);
-    const prompt = requireStringField(body, "prompt");
+    const rawPrompt = requireStringField(body, "prompt");
     const approvalState = approvalStateFromBody(body);
     const selectedHostIds = requireStringArrayField(body, "selectedHostIds");
     const synthesisHostId = optionalStringField(body, "synthesisHostId") ?? "openclaw";
@@ -198,6 +199,10 @@ export async function POST(request: Request): Promise<Response> {
             });
           }
 
+          const childPrompt = await expandRuntimeSlashCommandPrompt(
+            rawPrompt,
+            child.hostId,
+          );
           const result = await adapter.sendTurn(
             buildRuntimeTurnRequest({
               hostId: child.hostId,
@@ -205,11 +210,12 @@ export async function POST(request: Request): Promise<Response> {
               projectId,
               conversationId: null,
               mode: "chat",
-              prompt,
+              prompt: childPrompt,
               promptHash: optionalStringField(body, "promptHash"),
               inputFileRefs,
               approvalState,
               preview: childPreview,
+              appOrigin,
             }),
           );
           services.sessionStore.updateSession(child.id, {
