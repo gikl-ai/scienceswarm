@@ -1492,7 +1492,7 @@ function renderContent(
   { assistantTypography = false }: { assistantTypography?: boolean } = {},
 ) {
   // Split on MEDIA references, embed tags, and markdown images.
-  const parts = content.split(/(MEDIA:[^\n]+|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gi);
+  const parts = content.split(/(^MEDIA:[^\n]+$|\[embed[^\]]*\]|!\[[^\]]*\]\([^)]+\))/gim);
   const renderedParts = parts.flatMap<RenderedContentPart>((part, i) => {
     const captionClass = assistantTypography
       ? ASSISTANT_CAPTION_CLASS
