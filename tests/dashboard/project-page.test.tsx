@@ -380,7 +380,7 @@ describe("Project dashboard smoke test", () => {
     expect(within(composer).getByText("demo-project")).toBeInTheDocument();
   });
 
-  it("uses singular compare copy when exactly one comparison host is selected", async () => {
+  it("uses singular compare copy when compareHostIds is empty and floors to one host", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
     window.localStorage.setItem(
