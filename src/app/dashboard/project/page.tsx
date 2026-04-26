@@ -1785,7 +1785,7 @@ function ProjectPageContent() {
       return `Compare ${hostCount} ${hostCount === 1 ? "host" : "hosts"}`;
     }
     return runtimeMode === "task" ? "Task mode" : "Chat mode";
-  }, [compareHostIds.length, runtimeMode]);
+  }, [compareHostIds, runtimeMode]);
   useEffect(() => {
     if (runtimeMode !== "compare") {
       clearRuntimeCompareResult();
