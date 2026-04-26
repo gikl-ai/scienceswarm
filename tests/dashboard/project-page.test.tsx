@@ -334,7 +334,10 @@ describe("Project dashboard smoke test", () => {
     const composer = await screen.findByTestId("project-chat-composer");
     const input = within(composer).getByLabelText("Chat with your project");
 
-    expect(input).toHaveAttribute("placeholder", "");
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "Summarize the latest paper I uploaded",
+    );
     expect(composer).toHaveClass("shadow-sm");
     expect(input).toHaveClass("py-2.5");
     expect(input).toHaveClass("pl-3");
@@ -398,6 +401,41 @@ describe("Project dashboard smoke test", () => {
     expect(sendButton).toHaveClass("bg-accent");
     expect(sendButton).toHaveClass("text-white");
     expect(sendButton).not.toHaveClass("border-accent/30");
+  });
+
+  it("rotates placeholder prompts only while the composer is empty and unfocused", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    const composer = await screen.findByTestId("project-chat-composer");
+    const input = within(composer).getByLabelText("Chat with your project");
+
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "Summarize the latest paper I uploaded",
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 4100));
+    });
+    await waitFor(() => {
+      expect(input).toHaveAttribute(
+        "placeholder",
+        "What's still open from last week?",
+      );
+    });
+
+    fireEvent.focus(input);
+    const focusedPlaceholder = input.getAttribute("placeholder");
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 4100));
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      focusedPlaceholder,
+    );
   });
 
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {

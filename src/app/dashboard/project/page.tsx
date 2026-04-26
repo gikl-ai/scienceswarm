@@ -245,6 +245,13 @@ const COMPOSER_HEIGHT_OPTIONS = [
   { px: 192, className: "h-48" },
 ] as const;
 const COMPOSER_DEFAULT_HEIGHT_INDEX = 1;
+const CHAT_PLACEHOLDER_PROMPTS = [
+  "Summarize the latest paper I uploaded",
+  "What's still open from last week?",
+  "Show me unfinished tasks",
+  "Run the failing test and tell me why",
+] as const;
+const CHAT_PLACEHOLDER_ROTATE_MS = 4000;
 const PROJECT_TREE_VISIBILITY_STORAGE_KEY =
   "scienceswarm:project-tree-visibility";
 type ProjectTreeVisibilityMode = "auto" | "open" | "closed";
@@ -1489,10 +1496,12 @@ function ProjectPageContent() {
   const [slashCommands, setSlashCommands] = useState<SlashCommandOption[]>(
     DEFAULT_CHAT_SLASH_COMMANDS,
   );
+  const [chatInputFocused, setChatInputFocused] = useState(false);
   const [chatInputDragOver, setChatInputDragOver] = useState(false);
   const [composerHeightIndex, setComposerHeightIndex] = useState(
     COMPOSER_DEFAULT_HEIGHT_INDEX,
   );
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const composerHeightOption = getComposerHeightOption(composerHeightIndex);
   const [projectTreeVisibilityMode, setProjectTreeVisibilityMode] =
     useState<ProjectTreeVisibilityMode>("auto");
@@ -1766,6 +1775,15 @@ function ProjectPageContent() {
       clearRuntimeCompareResult();
     }
   }, [clearRuntimeCompareResult, runtimeMode]);
+  useEffect(() => {
+    if (chatInputFocused || input.length > 0) {
+      return undefined;
+    }
+    const interval = window.setInterval(() => {
+      setPlaceholderIndex((current) => (current + 1) % CHAT_PLACEHOLDER_PROMPTS.length);
+    }, CHAT_PLACEHOLDER_ROTATE_MS);
+    return () => window.clearInterval(interval);
+  }, [chatInputFocused, input]);
   const activeAssistantMessageId = isStreaming
     ? [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null
     : null;
@@ -4965,6 +4983,8 @@ function ProjectPageContent() {
                             value={input}
                             onValueChange={handleChatInputChange}
                             onKeyDown={handleChatInputKeyDown}
+                            onFocus={() => setChatInputFocused(true)}
+                            onBlur={() => setChatInputFocused(false)}
                             onDragEnter={(e) => {
                               if (isChatBusy) return;
                               if (!e.dataTransfer.types.includes("Files")) return;
@@ -5006,7 +5026,11 @@ function ProjectPageContent() {
                             slashCommandsLoading={slashCommandsStatus === "loading"}
                             onMentionSelect={handleMentionSelect}
                             data-testid="chat-input"
-                            placeholder={isChatBusy ? "Processing..." : ""}
+                            placeholder={
+                              isChatBusy
+                                ? "Processing..."
+                                : CHAT_PLACEHOLDER_PROMPTS[placeholderIndex]
+                            }
                             disabled={isChatBusy}
                             rows={2}
                             className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[var(--radius-2)] border border-rule-soft bg-sunk/35 py-2.5 pl-3 pr-12 text-[15px] leading-6 text-strong caret-accent placeholder:text-quiet transition-colors focus:border-accent/60 focus:bg-sunk/55 focus:outline-none focus:ring-0 disabled:opacity-50`}
