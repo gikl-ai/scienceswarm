@@ -92,6 +92,7 @@ describe("ChatMessage", () => {
   });
 
   it("renders assistant markdown task lists with styled checkboxes", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const { container } = render(
       <ChatMessage
         role="assistant"
@@ -108,6 +109,7 @@ describe("ChatMessage", () => {
     expect(checkboxes[0]).toHaveClass("h-4");
     expect(checkboxes[0]).toHaveClass("accent-accent");
     expect(checkboxes[0].closest("li")).toHaveClass("task-list-item");
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it("uses softer caption and metadata typography for assistant media and footer", () => {

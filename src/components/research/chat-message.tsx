@@ -328,7 +328,7 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
       </a>
     );
   },
-  input: ({ type, checked, disabled, ...props }) => {
+  input: ({ type, checked, disabled, node: _node, ref: _ref, ...props }) => {
     if (type === "checkbox") {
       return (
         <input
@@ -417,7 +417,7 @@ const PROGRESS_MARKDOWN_COMPONENTS: Components = {
       </code>
     );
   },
-  input: ({ type, checked, disabled, ...props }) => {
+  input: ({ type, checked, disabled, node: _node, ref: _ref, ...props }) => {
     if (type === "checkbox") {
       return (
         <input
