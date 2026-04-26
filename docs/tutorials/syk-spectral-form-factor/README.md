@@ -1,4 +1,4 @@
-# SYK spectral form factor — dip, ramp, plateau on a laptop
+# SYK spectral form factor — dip, ramp, plateau from the ScienceSwarm UI
 
 An end-to-end exact-diagonalization tutorial that reproduces one of the
 cleanest signatures of quantum chaos in many-body physics: the
@@ -6,18 +6,23 @@ cleanest signatures of quantum chaos in many-body physics: the
 Sachdev–Ye–Kitaev (SYK) model. Wall time is roughly **3–5 min on a
 laptop CPU** at the default `N = 22`, no GPU required.
 
-The result is delivered as a single self-contained interactive HTML
-report — modern dark theme, animated 1D Coulomb-gas hero (which is
-literally the equilibrium distribution of GUE eigenvalues), Plotly-backed
-interactive plots for the spectral density, gap-ratio distribution, and
-the spectral form factor itself, with the slope-1 random-matrix-theory
-ramp overlaid for comparison.
+You should not need to open a terminal or type Linux commands. Create a
+ScienceSwarm project, import this tutorial folder, choose `Claude Code` in the
+project chat, and follow the
+[ScienceSwarm SYK walkthrough](../syk-spectral-form-factor-walkthrough.md).
+Claude Code checks the Python runtime, runs the scripts inside the project
+workspace, saves run logs to gbrain, and keeps generated artifacts in the
+project tree.
+
+The final result is a single self-contained interactive HTML report with
+Plotly-backed spectral-density, gap-ratio, and spectral-form-factor plots plus
+a Dyson-Coulomb-gas hero animation.
 
 This tutorial exists to:
 
-- give a copy-paste-runnable proof that the central plot of SYK / quantum
-  chaos / random-matrix-theory holography (Cotler et al. 2017) emerges on
-  commodity hardware in minutes;
+- give a UI-driven proof that the central plot of SYK / quantum chaos /
+  random-matrix-theory holography (Cotler et al. 2017) emerges on commodity
+  hardware in minutes;
 - expose the validation gates that distinguish a correct exact-diagonalization
   run from one that "completed" but produced a Poisson-like or otherwise
   broken spectrum;
@@ -33,84 +38,39 @@ visual presentation of the result.
 
 ## What you will do
 
-| Stage | Script | Wall time (CPU) | Output |
-|---|---|---|---|
-| 1. Diagonalize SYK ensemble (default N=22, 80 disorder samples) | `01_diagonalize.py` | ~3–5 min | `spectra.npz` |
-| 2. Spectral form factor + level statistics | `02_spectral_form_factor.py` | ~10 s | `sff_data.json`, `metrics.json` |
-| 3. Render interactive HTML report | `03_render_report.py` | <1 s | `report.html` |
+| Stage | What Claude Code does from ScienceSwarm | Output |
+|---|---|---|
+| 1. Study brief | Reads `README.md` and `scripts/`, records the model, run modes, validation gates, and confidence boundary | project-scoped gbrain Study Brief |
+| 2. Runtime check | Reuses a working Python with NumPy/SciPy or proposes a managed environment under `$SCIENCESWARM_DIR/runtimes/` | runtime decision in the run log |
+| 3. Diagonalize SYK ensemble | Runs `01_diagonalize.py` in the project `scripts/` folder | `scripts/spectra.npz` |
+| 4. Compute SFF + gates | Runs `02_spectral_form_factor.py` and stops if a gate fails | `scripts/sff_data.json`, `scripts/metrics.json` |
+| 5. Render report | Runs `03_render_report.py` only after gates pass | `scripts/report.html` |
+| 6. Interpret/refine | Reads the metrics and report, separates tutorial support from research claims | project-scoped gbrain notes |
 
 A faster preview (`--N 20 --samples 60`) finishes in well under a
-minute. A larger run (`--N 24 --samples 40`) takes ~10–15 min and
-gives a noticeably sharper ramp.
+minute and uses the GSE random-matrix class. The stage-2 script collapses the
+two-fold Kramers pairs for the GSE gap-ratio check and uses a degeneracy-aware
+late-time plateau reference. A larger run (`--N 24 --samples 40`) takes about
+10-15 min and gives a sharper ramp.
+
+No API keys, cluster, or GPU are required.
 
 ---
 
-## Requirements
+## Start here
 
-- macOS, Linux, or Windows (WSL2)
-- Conda or mamba (`miniforge3` recommended)
-- ~50 MB free disk
-- Modern browser (Chrome / Firefox / Safari) for the report
-- No internet required at run time; the report fetches Plotly, KaTeX,
-  Tailwind, and Alpine.js from CDNs the first time you open it
+Use the full UI walkthrough:
 
-No API keys, no cluster, no GPU required.
+- [ScienceSwarm SYK pipeline walkthrough](../syk-spectral-form-factor-walkthrough.md)
 
----
+The walkthrough assumes you are new to ScienceSwarm. It shows how to create a
+project, import this folder, choose Claude Code, approve the Claude Code send
+review sheet, run the fast preview, open the output artifacts from the project
+tree, and save interpretation/refinement notes to gbrain.
 
-## Setup
-
-Create the conda environment from this directory:
-
-```bash
-mamba env create -f environment.yml
-# or: conda env create -f environment.yml
-mamba activate scienceswarm-syk-sff
-```
-
-Verify the install:
-
-```bash
-python -c "import numpy, scipy; print(numpy.__version__, scipy.__version__)"
-# expected: 1.26+ / 2.x and 1.11+ / 1.13+
-```
-
----
-
-## Run the pipeline
-
-From `docs/tutorials/syk-spectral-form-factor/scripts/`:
-
-```bash
-# 1. diagonalize the SYK_4 disorder ensemble
-python 01_diagonalize.py            # default: N=22, samples=80, seed=2026
-
-# 2. compute the spectral form factor and level statistics; write
-#    sff_data.json and metrics.json (exits non-zero if any gate fails)
-python 02_spectral_form_factor.py   # default: beta*J = 5
-
-# 3. build the interactive HTML report
-python 03_render_report.py
-```
-
-Each script prints clear diagnostics, fails fast on a bad input or
-unconverged ensemble, and writes its outputs before exiting.
-
-Open the report:
-
-```bash
-open report.html              # macOS
-xdg-open report.html          # Linux
-# or just double-click it; the report works with file:// URLs.
-```
-
-If you prefer a local server (and you should, if the CDN-loaded
-Plotly/KaTeX behave oddly under file://):
-
-```bash
-python -m http.server 8000
-# then visit http://localhost:8000/report.html
-```
+If ScienceSwarm needs persistent scientific tooling, the assistant should keep
+package managers and named environments under `$SCIENCESWARM_DIR/runtimes/`;
+project outputs stay in the imported project workspace, usually `scripts/`.
 
 ---
 
@@ -155,17 +115,20 @@ A successful run satisfies all three:
 |---|---|---|
 | Mean gap ratio `<r>` | Atas surmise for the ensemble class implied by N mod 8 (GOE / GUE / GSE) | within 0.020 |
 | Dip-to-plateau ratio | plateau ÷ dip > 3 | hard floor |
-| Late-time plateau | `Z(2β) / Z(β)²` | within 50% |
+| Late-time plateau | finite-sample time average; for GSE this is degeneracy-aware for Kramers pairs | within 50% |
 
 If any gate fails, `02_spectral_form_factor.py` exits non-zero and the
 report is not regenerated. Failures usually mean either the parity
-projection misfired (a code bug worth filing), the ensemble was too
-small to clear shot noise, or `t_max` was too small to reach the
-plateau (extend it via `--t-max`).
+projection misfired (a code bug worth filing), Kramers pairs were not handled
+for a GSE preview, the ensemble was too small to clear shot noise, or the time
+grid was too short to reach the plateau.
 
 ---
 
 ## Knobs
+
+These are parameters for the assistant to use in the ScienceSwarm project
+workspace; you do not need to type them into a terminal.
 
 `01_diagonalize.py`:
 - `--N` (default 22) — number of Majoranas. Even sector dimension is
@@ -180,6 +143,25 @@ plateau (extend it via `--t-max`).
   Cotler et al. 2017 reference uses `βJ = 5`; smaller `β` makes the
   early-time decay shallower.
 - `--t-min`, `--t-max`, `--n-times` — time grid for the SFF.
+
+---
+
+## Artifact conventions
+
+ScienceSwarm should keep tutorial state in three places:
+
+- Project workspace files: imported tutorial files and generated outputs such
+  as `scripts/spectra.npz`, `scripts/sff_data.json`, `scripts/metrics.json`,
+  and `scripts/report.html`.
+- gbrain: durable Study Briefs, execution run logs, interpretation notes, and
+  refinement decisions saved with `gbrain_capture`.
+- Managed runtimes: persistent package managers and named environments under
+  `$SCIENCESWARM_DIR/runtimes/`, for example
+  `$SCIENCESWARM_DIR/runtimes/conda/envs/scienceswarm-syk-sff`, only when the
+  existing Python environment is insufficient.
+
+The ScienceSwarm app checkout and the original tutorial checkout should remain
+source material, not the place where generated scientific outputs accumulate.
 
 ---
 
