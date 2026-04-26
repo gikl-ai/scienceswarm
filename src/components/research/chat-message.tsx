@@ -1411,6 +1411,30 @@ function renderInlineMarkdownLite(value: string, keyPrefix: string) {
   return elements;
 }
 
+function hasProgressMarkdownTable(value: string): boolean {
+  const lines = value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const header = lines[index];
+    const separator = lines[index + 1];
+    const headerCells = header.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+    const separatorCells = separator.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+
+    if (headerCells.length < 2 || separatorCells.length !== headerCells.length) {
+      continue;
+    }
+
+    if (separatorCells.every((cell) => /^:?-{3,}:?$/.test(cell))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function shouldRenderProgressMarkdownBlock(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed.includes("\n")) {
@@ -1421,7 +1445,9 @@ function shouldRenderProgressMarkdownBlock(value: string): boolean {
     /```/.test(trimmed) ||
     /^#{1,6}\s/m.test(trimmed) ||
     /^>\s/m.test(trimmed) ||
-    /^\s*(?:[-*+]|\d+\.)\s/m.test(trimmed)
+    /^\s*(?:[-*+]|\d+\.)\s/m.test(trimmed) ||
+    /^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/m.test(trimmed) ||
+    hasProgressMarkdownTable(trimmed)
   );
 }
 

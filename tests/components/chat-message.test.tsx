@@ -791,6 +791,52 @@ describe("ChatMessage", () => {
     expect(screen.getByText("results").closest("code")).not.toHaveClass("bg-sunk/90");
   });
 
+  it("renders markdown tables when a progress row carries GFM table syntax", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "thinking",
+            text:
+              "| Metric | Value |\n" +
+              "| --- | --- |\n" +
+              "| First chunk | 58 ms |\n" +
+              "| Total | 6677 ms |",
+          },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Metric" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "6677 ms" })).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-run-state")).not.toHaveTextContent("| Metric | Value |");
+  });
+
+  it("renders thematic breaks when a progress row carries markdown dividers", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "thinking",
+            text: "## Current plan\n\n---\n\nCompare the latest timing report.",
+          },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(container.querySelector('[data-testid="assistant-progress-transcript"] hr')).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Current plan" })).toBeInTheDocument();
+  });
+
   it("renders mixed inline formatting inside visible explored transcript rows", () => {
     render(
       <ChatMessage
