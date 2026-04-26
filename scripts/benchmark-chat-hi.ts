@@ -644,7 +644,7 @@ export function benchmarkHelpText(): string {
     "  --timeout-ms <ms>        Abort after this many ms (default: 120000)",
     "  --no-stream-phases       Disable streamPhases for comparison",
     "  --timing-artifact        Fetch the latest local /api/chat/timing artifact after the run",
-    "  --json                   Print machine-readable JSON",
+    "  --json                   Print machine-readable JSON, including observedLatencySplit and timingArtifact details when available",
   ].join("\n");
 }
 
