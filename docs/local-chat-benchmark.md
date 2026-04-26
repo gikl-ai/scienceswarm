@@ -20,8 +20,12 @@ Useful flags:
 For a machine-readable timing snapshot, run:
 
 ```bash
-SCIENCESWARM_CHAT_TIMING=1 npx tsx scripts/benchmark-chat-hi.ts --timing-artifact --json | jq '{headersMs, firstChunkMs, totalMs, timingArtifact: .timingArtifact.observedSplit}'
+SCIENCESWARM_CHAT_TIMING=1 npx tsx scripts/benchmark-chat-hi.ts --timing-artifact --json | jq '{headersMs, firstChunkMs, totalMs, observedLatencySplit, timingArtifact: .timingArtifact.observedSplit}'
 ```
+
+The JSON output includes `observedLatencySplit` for the client-visible timing
+segments, so automation does not need to derive them from the rounded top-level
+latency fields.
 
 ## Read the output
 
