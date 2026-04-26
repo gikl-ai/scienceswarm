@@ -47,7 +47,6 @@ export function buildScienceSwarmMaintenanceContext(
       researchLayout && researchLayout.legacyHomesDetected > 0
         ? researchLayout
         : undefined,
-    gbrainCapabilities:
-      report.source === "gbrain" ? gbrainCapabilities : undefined,
+    gbrainCapabilities,
   };
 }

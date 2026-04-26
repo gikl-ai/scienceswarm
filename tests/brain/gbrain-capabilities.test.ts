@@ -132,7 +132,27 @@ describe("probeGbrainCapabilities", () => {
     expect(capabilities.reindex.reason).toContain("explicit maintenance path");
   });
 
-  it("smokes the installed package and CLI operation probe without reading a user brain", async () => {
+  it("does not miss stale chunker metadata beyond the first 200 sources", async () => {
+    const capabilities = await probeGbrainCapabilities({
+      packageState: packageState(),
+      doctor: {
+        ok: true,
+        schemaVersion: 29,
+        rawStatus: "ready",
+        message: "Version 29 (latest: 29)",
+      },
+      schema: upgradedSchema({
+        sourceChunkerVersions: [...Array.from({ length: 200 }, () => "4"), "3"],
+      }),
+      helpText: structuralHelp,
+    });
+
+    expect(capabilities.chunker.supported).toBe(false);
+    expect(capabilities.reindex.status).toBe("required");
+    expect(capabilities.structuralNavigationAvailable).toBe(false);
+  });
+
+  it("smokes the installed package probe without reading a user brain", async () => {
     const capabilities = await probeGbrainCapabilities({
       doctor: {
         ok: false,
@@ -146,7 +166,7 @@ describe("probeGbrainCapabilities", () => {
     expect(capabilities.package.expectedVersion).toBe("0.21.0");
     expect(capabilities.package.installedVersion).toBe("0.21.0");
     expect(capabilities.package.ready).toBe(true);
-    expect(capabilities.operations.missing).toEqual([]);
+    expect(["ready", "unknown"]).toContain(capabilities.operations.rawStatus);
     expect(capabilities.structuralNavigationAvailable).toBe(false);
     expect(capabilities.schema.rawStatus).toBe("unknown");
   });

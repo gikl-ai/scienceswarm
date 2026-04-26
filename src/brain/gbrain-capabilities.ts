@@ -6,7 +6,7 @@ import {
   scienceSwarmGbrainBin,
   type ScienceSwarmGbrainPackageState,
 } from "@/lib/gbrain/source-of-truth";
-import { getBrainStore, type BrainBackendUnavailableError } from "./store";
+import { getBrainStore } from "./store";
 
 const execFileAsync = promisify(execFile);
 
@@ -35,6 +35,8 @@ const REQUIRED_SCHEMA_FIELDS = [
   { table: "code_edges_chunk", column: "to_chunk_id" },
   { table: "code_edges_symbol", column: "to_symbol_qualified" },
 ] as const;
+
+const DEFAULT_PROBE_CACHE_TTL_MS = 30_000;
 
 type ProbeStatus = "ready" | "degraded" | "unknown";
 
@@ -108,6 +110,11 @@ interface RuntimeSchemaEngine {
   getConfig(key: string): Promise<string | null>;
   executeRaw<T = Record<string, unknown>>(sql: string): Promise<T[]>;
 }
+
+let defaultProbeCache: {
+  expiresAt: number;
+  value: GbrainCapabilities;
+} | null = null;
 
 function compareVersions(left: string | null, right: string): number {
   if (!left) return -1;
@@ -336,7 +343,7 @@ export async function readCurrentGbrainSchemaSnapshot(): Promise<GbrainSchemaSna
         ].join(" "),
       ),
       engine.executeRaw<{ chunker_version: string | null }>(
-        "SELECT chunker_version FROM sources ORDER BY id LIMIT 200",
+        "SELECT DISTINCT chunker_version FROM sources ORDER BY chunker_version",
       ),
     ]);
     return {
@@ -350,10 +357,7 @@ export async function readCurrentGbrainSchemaSnapshot(): Promise<GbrainSchemaSna
       })),
       sourceChunkerVersions: sources.map((row) => row.chunker_version ?? null),
     };
-  } catch (error) {
-    if ((error as BrainBackendUnavailableError)?.name === "BrainBackendUnavailableError") {
-      return null;
-    }
+  } catch {
     return null;
   }
 }
@@ -361,6 +365,16 @@ export async function readCurrentGbrainSchemaSnapshot(): Promise<GbrainSchemaSna
 export async function probeGbrainCapabilities(
   options: ProbeGbrainCapabilitiesOptions = {},
 ): Promise<GbrainCapabilities> {
+  const useDefaultCache = Object.keys(options).length === 0;
+  const now = Date.now();
+  if (
+    useDefaultCache
+    && defaultProbeCache
+    && defaultProbeCache.expiresAt > now
+  ) {
+    return defaultProbeCache.value;
+  }
+
   const repoRoot = options.repoRoot ?? resolveScienceSwarmRepoRoot();
   const packageState =
     options.packageState ?? readScienceSwarmGbrainPackageState(repoRoot);
@@ -394,7 +408,7 @@ export async function probeGbrainCapabilities(
   if (operations.missing.length > 0) blockers.push("installed gbrain is missing required structural CLI operations.");
   if (!chunker.supported) blockers.push("one or more sources need explicit code reindexing.");
 
-  return {
+  const capabilities = {
     structuralNavigationAvailable: blockers.length === 0,
     package: {
       requiredVersion: GBRAIN_STRUCTURAL_MIN_VERSION,
@@ -424,4 +438,13 @@ export async function probeGbrainCapabilities(
     reindex,
     blockers,
   };
+
+  if (useDefaultCache) {
+    defaultProbeCache = {
+      expiresAt: now + DEFAULT_PROBE_CACHE_TTL_MS,
+      value: capabilities,
+    };
+  }
+
+  return capabilities;
 }
