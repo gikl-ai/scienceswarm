@@ -335,7 +335,7 @@ describe("Project dashboard smoke test", () => {
     const input = within(composer).getByLabelText("Chat with your project");
 
     expect(input).toHaveAttribute("placeholder", "");
-    expect(composer).toHaveClass("shadow-[0_12px_36px_rgba(15,23,42,0.07)]");
+    expect(composer).toHaveClass("shadow-sm");
     expect(input).toHaveClass("py-2.5");
     expect(input).toHaveClass("pl-3");
     expect(input).toHaveClass("pr-12");
@@ -345,6 +345,7 @@ describe("Project dashboard smoke test", () => {
     expect(composer).toHaveClass("rounded-[var(--radius-3)]");
     expect(composer).toHaveClass("bg-raised");
     expect(composer).toHaveClass("border-rule");
+    expect(within(composer).getByTestId("composer-footer")).toHaveClass("border-rule/70");
     expect(within(composer).queryByText("Project Chat")).not.toBeInTheDocument();
     expect(
       within(composer).queryByText("Keep the next turn grounded in this workspace."),
