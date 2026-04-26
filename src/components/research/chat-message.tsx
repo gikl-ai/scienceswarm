@@ -229,6 +229,8 @@ const ASSISTANT_SUBSECTION_CLASS =
 const ASSISTANT_LIST_CLASS =
   "mb-5 pl-6 text-[15px] leading-7 tracking-[0.005em] text-body sm:text-base sm:leading-8";
 const ASSISTANT_LIST_ITEM_CLASS = "pl-2 [&>ol]:mt-3 [&>ul]:mt-3";
+const ASSISTANT_TASK_LIST_CHECKBOX_CLASS =
+  "mr-2 inline-block h-4 w-4 rounded border border-rule accent-accent align-[-0.18em]";
 const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-dim";
 const ASSISTANT_METADATA_CLASS =
   "text-[10px] font-medium tracking-[0.02em] text-quiet";
@@ -242,6 +244,8 @@ const ASSISTANT_INLINE_CODE_CLASS =
   "rounded-md border border-rule bg-sunk/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-strong";
 const PROGRESS_INLINE_CODE_CLASS =
   "rounded border border-rule/70 bg-sunk/70 px-1 py-0.5 font-mono text-[0.85em] font-normal text-body";
+const PROGRESS_TASK_LIST_CHECKBOX_CLASS =
+  "mr-2 inline-block h-3.5 w-3.5 rounded border border-rule accent-accent align-[-0.18em]";
 const ASSISTANT_CODE_BLOCK_CLASS =
   "my-6 overflow-x-auto rounded-3xl border border-rule bg-ink px-5 py-4 text-[13px] leading-6 text-quiet shadow-[0_12px_30px_rgba(15,23,42,0.12)]";
 const ASSISTANT_RULE_CLASS = "my-8 border-0 border-t border-rule";
@@ -287,7 +291,9 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   ol: ({ children }) => (
     <ol className={`${ASSISTANT_LIST_CLASS} list-decimal space-y-2.5 marker:font-medium marker:text-dim`}>{children}</ol>
   ),
-  li: ({ children }) => <li className={ASSISTANT_LIST_ITEM_CLASS}>{children}</li>,
+  li: ({ children, className }) => (
+    <li className={`${ASSISTANT_LIST_ITEM_CLASS}${className ? ` ${className}` : ""}`}>{children}</li>
+  ),
   blockquote: ({ children }) => <blockquote className={ASSISTANT_BLOCKQUOTE_CLASS}>{children}</blockquote>,
   hr: () => <hr className={ASSISTANT_RULE_CLASS} />,
   pre: ({ children }) => <pre className={ASSISTANT_CODE_BLOCK_CLASS}>{children}</pre>,
@@ -321,6 +327,21 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
         {children}
       </a>
     );
+  },
+  input: ({ type, checked, disabled, ...props }) => {
+    if (type === "checkbox") {
+      return (
+        <input
+          {...props}
+          type="checkbox"
+          checked={Boolean(checked)}
+          disabled={disabled ?? true}
+          readOnly
+          className={ASSISTANT_TASK_LIST_CHECKBOX_CLASS}
+        />
+      );
+    }
+    return <input {...props} type={type} disabled={disabled} readOnly />;
   },
   strong: ({ children }) => <strong className="font-semibold text-strong">{children}</strong>,
   em: ({ children }) => <em className="italic text-body">{children}</em>,
@@ -368,7 +389,9 @@ const PROGRESS_MARKDOWN_COMPONENTS: Components = {
       {children}
     </ol>
   ),
-  li: ({ children }) => <li className="pl-1">{children}</li>,
+  li: ({ children, className }) => (
+    <li className={`pl-1${className ? ` ${className}` : ""}`}>{children}</li>
+  ),
   blockquote: ({ children }) => (
     <blockquote className="m-0 border-l-2 border-rule pl-3 italic text-body">
       {children}
@@ -393,6 +416,21 @@ const PROGRESS_MARKDOWN_COMPONENTS: Components = {
         {children}
       </code>
     );
+  },
+  input: ({ type, checked, disabled, ...props }) => {
+    if (type === "checkbox") {
+      return (
+        <input
+          {...props}
+          type="checkbox"
+          checked={Boolean(checked)}
+          disabled={disabled ?? true}
+          readOnly
+          className={PROGRESS_TASK_LIST_CHECKBOX_CLASS}
+        />
+      );
+    }
+    return <input {...props} type={type} disabled={disabled} readOnly />;
   },
   a: ASSISTANT_MARKDOWN_COMPONENTS.a,
   strong: ASSISTANT_MARKDOWN_COMPONENTS.strong,
