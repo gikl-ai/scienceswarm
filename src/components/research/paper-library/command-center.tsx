@@ -2067,12 +2067,17 @@ export function PaperLibraryCommandCenter({
     setTimedGraphActionMessage("Graph filters reset.");
   }, [setTimedGraphActionMessage]);
   const handleSelectMostConnectedGraphNode = useCallback(() => {
-    const node = graphInsights.sortedNodes[0];
+    const node = [...graphInsights.sortedNodes].sort((left, right) => {
+      const degreeDelta = (graphInsights.degreeByNodeId.get(right.id) ?? 0) - (graphInsights.degreeByNodeId.get(left.id) ?? 0);
+      if (degreeDelta !== 0) return degreeDelta;
+      if (left.local !== right.local) return left.local ? -1 : 1;
+      return graphNodeTitle(left).localeCompare(graphNodeTitle(right));
+    })[0];
     if (!node) return;
     setSelectedGraphNodeId(node.id);
     setGraphMoreOpen(false);
     setTimedGraphActionMessage("Selected the most connected paper.");
-  }, [graphInsights.sortedNodes, setTimedGraphActionMessage]);
+  }, [graphInsights.degreeByNodeId, graphInsights.sortedNodes, setTimedGraphActionMessage]);
   const approvalTokenExpired = approvalToken
     ? Date.parse(approvalToken.expiresAt) <= Date.now()
     : false;
