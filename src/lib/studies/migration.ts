@@ -207,23 +207,22 @@ function isPathInside(root: string, target: string): boolean {
   return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
 }
 
-async function isExistingPathInsideAllowedRoots(filePath: string, allowedRoots: string[]): Promise<boolean> {
-  let targetRealPath: string;
+async function existingRealPath(filePath: string): Promise<string | null> {
   try {
-    targetRealPath = await realpath(filePath);
+    return await realpath(filePath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
+}
+
+async function isExistingPathInsideAllowedRoots(filePath: string, allowedRoots: string[]): Promise<boolean> {
+  const targetRealPath = await existingRealPath(filePath);
+  if (!targetRealPath) return false;
 
   for (const root of allowedRoots) {
-    let rootRealPath: string;
-    try {
-      rootRealPath = await realpath(root);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw error;
-    }
+    const rootRealPath = await existingRealPath(root);
+    if (!rootRealPath) continue;
     if (isPathInside(rootRealPath, targetRealPath)) return true;
   }
 
@@ -288,6 +287,7 @@ async function listFilesRecursive(
     const files: string[] = [];
     for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
       const absolute = path.join(dir, entry.name);
+      // Dirent uses lstat semantics here; symlinks are intentionally not followed.
       if (entry.isDirectory()) {
         files.push(...await walk(absolute));
       } else if (entry.isFile()) {
@@ -454,21 +454,22 @@ async function addPaperLibraryInventory(input: {
 }): Promise<void> {
   const seenRoots = new Set<string>();
   for (const { root, allowedRoot } of input.roots) {
-    const resolved = path.resolve(root);
+    const rootRealPath = await existingRealPath(root);
     if (
-      seenRoots.has(resolved)
+      !rootRealPath
+      || seenRoots.has(rootRealPath)
       || !(await directoryExists(root))
       || !(await isExistingPathInsideAllowedRoots(root, [allowedRoot]))
     ) continue;
-    seenRoots.add(resolved);
-    const files = await listFilesRecursive(root, input.maxFilesPerTree, allowedRoot);
+    seenRoots.add(rootRealPath);
+    const files = await listFilesRecursive(rootRealPath, input.maxFilesPerTree, allowedRoot);
     for (const sourcePath of files) {
       input.candidates.push({
         classification: "paper-library-inventory",
         action: "inventory-only",
         sourcePath,
         destinationPath: null,
-        relativePath: `paper-library/${relativePortable(root, sourcePath)}`,
+        relativePath: `paper-library/${relativePortable(rootRealPath, sourcePath)}`,
       });
     }
   }

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -124,9 +124,40 @@ describe("Study migration planning", () => {
     expect(paperEntries.every((entry) => entry.action === "inventory-only")).toBe(true);
     expect(paperEntries.every((entry) => entry.destinationPath === null)).toBe(true);
     expect(paperEntries.map((entry) => entry.sourcePath)).toEqual(expect.arrayContaining([
-      path.join(roots.projectsRoot, "project-alpha", ".brain", "state", "paper-library", "scans", "scan-1.json"),
-      path.join(roots.brainRoot, "state", "paper-library", "global-cache.json"),
+      await realpath(path.join(roots.projectsRoot, "project-alpha", ".brain", "state", "paper-library", "scans", "scan-1.json")),
+      await realpath(path.join(roots.brainRoot, "state", "paper-library", "global-cache.json")),
     ]));
+  });
+
+  it("deduplicates paper-library inventory roots by real path", async () => {
+    const roots = await installFixture();
+    const globalPaperLibrary = path.join(roots.brainRoot, "state", "paper-library");
+    const projectGlobalPaperLibrary = path.join(
+      roots.brainRoot,
+      "state",
+      "projects",
+      "project-alpha",
+      "paper-library",
+    );
+    await mkdir(path.dirname(projectGlobalPaperLibrary), { recursive: true });
+    await symlink(globalPaperLibrary, projectGlobalPaperLibrary);
+
+    const plan = await planLegacyProjectStateMigration({
+      legacyProjectSlug: "project-alpha",
+      studyId: "study_alpha",
+      threadId: "thread_alpha",
+      projectsRoot: roots.projectsRoot,
+      brainRoot: roots.brainRoot,
+      stateRoot: roots.stateRoot,
+      generatedAt: "2026-04-26T00:00:00.000Z",
+    });
+    const paperEntries = plan.entries.filter((entry) => entry.classification === "paper-library-inventory");
+    const globalCachePath = await realpath(path.join(globalPaperLibrary, "global-cache.json"));
+    const globalEntries = paperEntries.filter((entry) => entry.sourcePath === globalCachePath);
+
+    expect(globalEntries).toHaveLength(1);
+    expect(globalEntries[0]?.relativePath).toBe("paper-library/global-cache.json");
+    expect(paperEntries.some((entry) => entry.relativePath.includes(".."))).toBe(false);
   });
 
   it("rejects linked wiki paths that would traverse outside legacy roots", async () => {
