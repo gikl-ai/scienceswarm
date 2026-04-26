@@ -608,6 +608,14 @@ async function copyFileWithSha256Verification(entry: StudyMigrationManifestEntry
     if (destinationHash !== entry.sha256) {
       throw new Error(`Destination checksum mismatch for ${entry.relativePath}.`);
     }
+    const destinationStats = await pathStats(entry.destinationPath);
+    if (destinationStats) {
+      if (destinationStats.isFile && await sha256File(entry.destinationPath) === entry.sha256) {
+        await rm(tempPath, { force: true });
+        return;
+      }
+      throw new Error(`Destination already exists for ${entry.relativePath}.`);
+    }
     await rename(tempPath, entry.destinationPath);
   } catch (error) {
     await rm(tempPath, { force: true });

@@ -214,6 +214,26 @@ describe("Study migration execution", () => {
     expect(existsSync(path.join(roots.stateRoot, "studies", "study_alpha", "migration-reports"))).toBe(true);
   });
 
+  it("does not overwrite a destination created after planning", async () => {
+    const { plan } = await planFixture();
+    const manifestEntry = plan.entries.find((entry) => entry.classification === "project-manifest");
+    expect(manifestEntry?.destinationPath).toBeTruthy();
+    await mkdir(path.dirname(manifestEntry?.destinationPath ?? ""), { recursive: true });
+    await writeFile(manifestEntry?.destinationPath ?? "", "{\"conflict\":true}\n", "utf-8");
+
+    const report = await executeLegacyProjectStateMigration(plan, { concurrency: 1 });
+
+    expect(report.state).toBe("failed");
+    expect(report.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: manifestEntry?.id,
+        status: "failed",
+        error: expect.stringContaining("Destination already exists"),
+      }),
+    ]));
+    await expect(readFile(manifestEntry?.destinationPath ?? "", "utf-8")).resolves.toBe("{\"conflict\":true}\n");
+  });
+
   it("reads migrated files first and falls back to untouched legacy files", async () => {
     const { roots, plan } = await planFixture();
     const legacyManifest = await readMigratedOrLegacyProjectFile({
