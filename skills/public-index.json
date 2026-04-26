@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-26T06:00:10.764Z",
+  "generatedAt": "2026-04-26T22:47:40.403Z",
   "skills": [
     {
       "slug": "db-arxiv",
@@ -531,6 +531,125 @@
       "owner": "scienceswarm",
       "status": "ready",
       "summary": "Second step of the SCM pipeline: assemble a balanced unit-time panel with documented sources and validated coverage."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-data-authoring",
+      "name": "ScienceSwarm SCM From-Scratch Data Authoring",
+      "description": "Author and review the data acquisition and munging code for a from-scratch synthetic-control panel after the study design is approved.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "data",
+        "panel",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Second step of the from-scratch SCM workflow: generate only the selected data acquisition and panel-building code, then validate balance and provenance."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-inference-placebos",
+      "name": "ScienceSwarm SCM From-Scratch Inference and Placebos",
+      "description": "Author placebo and sensitivity code for from-scratch SCM fits, including in-space, in-time, and leave-one-out checks.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "inference",
+        "placebo",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fifth step of the from-scratch SCM workflow: generate selected placebo and sensitivity code, then summarize non-parametric inference limits."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-method-choice",
+      "name": "ScienceSwarm SCM From-Scratch Method Choice",
+      "description": "Author method-comparison code for from-scratch SCM results and decide whether classic SCM is robust enough to carry forward.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "robustness",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fourth step of the from-scratch SCM workflow: compare classic SCM with modern variants and gate reporting on method-level robustness."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-pretreatment-fit",
+      "name": "ScienceSwarm SCM From-Scratch Pretreatment Fit",
+      "description": "Author the classic Abadie synthetic-control fit code for prepared from-scratch panels and gate the result on pre-treatment diagnostics.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "fitting",
+        "abadie",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Third step of the from-scratch SCM workflow: generate only the classic SCM fit code for approved panels and stop on failed pre-treatment fit."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-question-design",
+      "name": "ScienceSwarm SCM From-Scratch Question Design",
+      "description": "Frame the from-scratch synthetic-control research question and turn it into an approval-gated analysis plan before code exists.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "causal-inference",
+        "planning",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "First step of the from-scratch SCM workflow: define the question, estimand, donor pool, assumptions, artifact plan, and approval gate before any R code is generated."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-results-report",
+      "name": "ScienceSwarm SCM From-Scratch Results Report",
+      "description": "Author the final from-scratch SCM reporting code and surface comparable figures, tables, interpretation, and artifact links in the project.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "visualization",
+        "html",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Sixth step of the from-scratch SCM workflow: generate the selected report-rendering code and surface final artifacts with provenance."
     },
     {
       "slug": "scienceswarm-scm-inference-and-placebos",
