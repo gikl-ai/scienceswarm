@@ -123,18 +123,17 @@ def _extract_trajectory(widget: dict[str, Any]) -> dict[str, Any] | None:
 
     For the modern report we want a *static* figure (no animation slider),
     so we recover:
-        years      from trace 2.x (the actual treated unit)
-        actual     from trace 2.y
-        synthetic  from trace 3.y (re-aligned to trace 2 years)
-        placebos   from trace 0 — but that's flat-concatenated, so we
-                   reshape it back into per-donor lines using the section
-                   length and `split` field.
+        years      from the actual-treated trace (matched by name)
+        actual     from that same trace's y values
+        synthetic  from the synthetic-counterfactual trace
+        placebos   from trace 1 (the animation-frame trace, year-major;
+                   trace 0 is a single-donor static line and is not used).
+                   We bin by year to recover a min/max placebo envelope.
     """
     traces = widget.get("data") or []
     if len(traces) < 4:
         return None
 
-    placebo_trace = traces[0]
     actual_trace = next((t for t in traces if str(t.get("name", "")).startswith("Actual")), None)
     synth_trace  = next((t for t in traces if "ynthetic" in str(t.get("name", ""))), None)
     if actual_trace is None or synth_trace is None:
@@ -376,13 +375,15 @@ def build_spec(inference_summary_path: Path, classic_html_path: Path) -> dict[st
             gap_str = f"{avg_gap:+,.0f}"
         else:
             gap_str = "—"
+        post_pre_str = f"{post_pre:.2f}×" if post_pre is not None else "—"
+        pval_str = f"{pval:.3f}" if pval is not None else "—"
 
         kpis = [
-            {"label": "Post / Pre RMSPE", "value": f"{post_pre:.2f}×",
-             "note": f"placebo p = {pval:.3f}"},
+            {"label": "Post / Pre RMSPE", "value": post_pre_str,
+             "note": f"placebo p = {pval_str}"},
             {"label": "Avg post-treatment gap", "value": gap_str,
              "note": _OUTCOME_LABELS.get(cid, "")},
-            {"label": "Placebo p-value", "value": f"{pval:.3f}",
+            {"label": "Placebo p-value", "value": pval_str,
              "note": "share of donor ratios ≥ treated"},
             {"label": "Top donor", "value": info["closest_donor_placebos"][0]["unit"]
                 if info.get("closest_donor_placebos") else "—",
@@ -516,16 +517,18 @@ def build_spec(inference_summary_path: Path, classic_html_path: Path) -> dict[st
 
 def _methods_paragraph(info: dict, outcome_label: str) -> str:
     treated = info.get("treated_unit", "the treated unit")
-    cid = info.get("case_id", "")
     treatment_year = info.get("treatment_year")
     post_pre = info.get("post_pre_rmspe_ratio")
     pval = info.get("placebo_p_value")
+    post_pre_str = f"{post_pre:.2f}" if post_pre is not None else "—"
+    pval_str = f"{pval:.3f}" if pval is not None else "—"
+    treatment_str = str(treatment_year) if treatment_year is not None else "—"
     return (
         f"Following Abadie, Diamond, and Hainmueller (2010) and Abadie (2021), "
         f"we construct a synthetic {treated} as the convex combination of donor "
         f"units that minimizes pre-treatment outcome MSPE on {outcome_label.lower()}. "
-        f"Treatment is dated to {treatment_year}. The treated unit's post-to-pre "
-        f"RMSPE ratio is {post_pre:.2f} with a placebo p-value of {pval:.3f}. "
+        f"Treatment is dated to {treatment_str}. The treated unit's post-to-pre "
+        f"RMSPE ratio is {post_pre_str} with a placebo p-value of {pval_str}. "
         f"Sign consistency across classic SCM, generalized SCM (Xu, 2017), "
         f"synthetic difference-in-differences (Arkhangelsky et al., 2021), and "
         f"doubly-robust SC (Ben-Michael, Feller, Rothstein, 2021) is reported in "

@@ -110,9 +110,13 @@ def render(spec: dict[str, Any]) -> str:
     explainer_html = _build_explainer(explainer) if explainer else ""
     glossary_html = _build_glossary(glossary) if glossary else ""
     footer_html = _build_colophon(meta, refs)
+    # JSON-island escape: any literal "</script>" or "<!--" sequence inside a
+    # JSON value would prematurely close the script tag and let attacker-
+    # controlled spec text inject HTML/JS.  Escape both terminators per the
+    # standard json-in-html guidance.  json.dumps does not do this on its own.
     plot_data_block = (
         '<script id="report-plot-data" type="application/json">'
-        + _json.dumps(plot_payload)
+        + _json.dumps(plot_payload).replace("</", "<\\/").replace("<!--", "<\\!--")
         + "</script>"
     )
 
@@ -439,9 +443,6 @@ def _build_plot_payload(cases: list[dict]) -> dict[str, Any]:
         }
         if c.get("trajectory"):
             entry["trajectory"] = c["trajectory"]
-            # Allow placebo_band to be either nested in trajectory or top-level.
-            if c.get("trajectory", {}).get("placebo_band"):
-                entry["trajectory"] = c["trajectory"]
         if c.get("weights"):
             entry["weights"] = c["weights"]
         if c.get("placebo_distribution"):
