@@ -388,7 +388,7 @@ export const ChatMentionInput = forwardRef<
           role="listbox"
           id={listboxId}
           aria-label="File mention suggestions"
-          className="absolute bottom-full left-0 right-0 mb-2 max-h-72 overflow-y-auto rounded-xl border-2 border-border bg-white shadow-lg z-30"
+          className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-72 overflow-y-auto rounded-[var(--radius-3)] border border-rule bg-raised"
         >
           {filtered.map((file, idx) => {
             const label = file.name || file.path;
@@ -402,7 +402,7 @@ export const ChatMentionInput = forwardRef<
                 className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-sm ${
                   isActive
                     ? "bg-accent/10 text-accent"
-                    : "text-foreground hover:bg-surface"
+                    : "text-foreground hover:bg-sunk"
                 }`}
                 onMouseDown={(e) => {
                   // Prevent textarea blur before we can insert.
@@ -427,7 +427,7 @@ export const ChatMentionInput = forwardRef<
           role="listbox"
           id={listboxId}
           aria-label="Slash command suggestions"
-          className="absolute bottom-full left-0 right-0 mb-2 max-h-72 overflow-y-auto rounded-xl border-2 border-border bg-white shadow-lg z-30"
+          className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-72 overflow-y-auto rounded-[var(--radius-3)] border border-rule bg-raised"
         >
           {filteredSlashCommands.length === 0 ? (
             <li className="px-3 py-2 text-sm text-muted">
@@ -445,7 +445,7 @@ export const ChatMentionInput = forwardRef<
                   className={`flex cursor-pointer items-start gap-2 px-3 py-2 text-sm ${
                     isActive
                       ? "bg-accent/10 text-accent"
-                      : "text-foreground hover:bg-surface"
+                      : "text-foreground hover:bg-sunk"
                   }`}
                   onMouseDown={(event) => {
                     event.preventDefault();

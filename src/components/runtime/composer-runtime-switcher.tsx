@@ -11,6 +11,12 @@ import {
 } from "@/hooks/use-runtime-hosts";
 
 const ASSISTANT_ORDER = ["openclaw", "claude-code", "codex", "gemini-cli"];
+const ASSISTANT_LABELS: Record<string, string> = {
+  openclaw: "OpenClaw",
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  "gemini-cli": "Gemini CLI",
+};
 const MENU_WIDTH = 292;
 const VIEWPORT_MARGIN = 12;
 const MENU_GAP = 8;
@@ -257,7 +263,7 @@ export function ComposerRuntimeSwitcher({
             Assistant
           </span>
           <span className="block truncate text-sm font-semibold text-strong">
-            {selectedHost?.profile.label ?? "Assistant"}
+            {selectedHost?.profile.label ?? ASSISTANT_LABELS[selectedHostId] ?? "Assistant"}
           </span>
         </span>
         <CaretDown size={12} className="shrink-0 text-dim" />

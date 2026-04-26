@@ -325,7 +325,7 @@ describe("Project dashboard smoke test", () => {
     expect(column).toHaveClass("gap-6");
   });
 
-  it("renders a guided composer surface with project context", async () => {
+  it("renders a tokenized composer surface without redundant context chrome", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -336,21 +336,23 @@ describe("Project dashboard smoke test", () => {
 
     expect(input).toHaveAttribute("placeholder", "");
     expect(input).toHaveClass("py-2.5");
-    expect(input).toHaveClass("pl-2.5");
+    expect(input).toHaveClass("pl-3");
     expect(input).toHaveClass("pr-12");
+    expect(input).toHaveClass("bg-sunk/45");
     expect(input).not.toHaveClass("px-0");
     expect(input).not.toHaveClass("py-1");
-    expect(composer).toHaveClass("rounded-[30px]");
-    expect(composer).toHaveClass("backdrop-blur-sm");
-    expect(within(composer).getByText("Project Chat")).toBeInTheDocument();
+    expect(composer).toHaveClass("rounded-[var(--radius-3)]");
+    expect(composer).toHaveClass("bg-raised");
+    expect(composer).toHaveClass("border-rule");
+    expect(within(composer).queryByText("Project Chat")).not.toBeInTheDocument();
     expect(
-      within(composer).getByText("Keep the next turn grounded in this workspace."),
-    ).toBeInTheDocument();
+      within(composer).queryByText("Keep the next turn grounded in this workspace."),
+    ).not.toBeInTheDocument();
     expect(within(composer).getByText("OpenClaw")).toBeInTheDocument();
-    expect(within(composer).getByText("demo-project")).toBeInTheDocument();
+    expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
   });
 
-  it("reflects the selected runtime host in the composer context chip", async () => {
+  it("reflects the selected runtime host in the composer runtime switcher", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
     window.localStorage.setItem(
@@ -370,7 +372,7 @@ describe("Project dashboard smoke test", () => {
     await waitFor(() => {
       expect(within(composer).getByText("Codex")).toBeInTheDocument();
     });
-    expect(within(composer).getByText("demo-project")).toBeInTheDocument();
+    expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
   });
 
   it("renders footer guidance copy and a prominent send button", async () => {
@@ -383,7 +385,7 @@ describe("Project dashboard smoke test", () => {
     const guidance = within(composer).getByTestId("composer-guidance-row");
     const sendButton = within(composer).getByRole("button", { name: "Send" });
 
-    expect(within(guidance).getByText("Drop files")).toHaveClass("rounded-full");
+    expect(within(guidance).getByText("Drop files")).toHaveClass("rounded-[var(--radius-1)]");
     expect(within(guidance).getByText("Mention files")).toBeInTheDocument();
     expect(within(guidance).getByText("Commands")).toBeInTheDocument();
     expect(within(guidance).getByText("@")).toHaveClass("font-mono");
@@ -391,7 +393,7 @@ describe("Project dashboard smoke test", () => {
     expect(
       within(guidance).getByText("Enter to send · Shift+Enter for a new line."),
     ).toBeInTheDocument();
-    expect(sendButton).toHaveClass("bg-slate-950");
+    expect(sendButton).toHaveClass("bg-accent");
     expect(sendButton).toHaveClass("text-white");
     expect(sendButton).not.toHaveClass("border-accent/30");
   });

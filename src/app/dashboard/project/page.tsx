@@ -168,14 +168,6 @@ type SlashCommandStatus = "idle" | "loading" | "ready" | "error";
 
 const DEFAULT_CHAT_SLASH_COMMANDS: SlashCommandOption[] =
   buildOpenClawSlashCommands([]);
-const RUNTIME_HOST_LABELS: Record<string, string> = {
-  openclaw: "OpenClaw",
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  "gemini-cli": "Gemini CLI",
-  openhands: "OpenHands",
-};
-
 // Radar runner freshness (Phase C / TODO #2). The skill runner writes
 // a `.radar-last-run.json` pointer into the brain root every cycle;
 // /api/brain/status reads it and returns this shape so the dashboard
@@ -1774,16 +1766,6 @@ function ProjectPageContent() {
       clearRuntimeCompareResult();
     }
   }, [clearRuntimeCompareResult, runtimeMode]);
-  const selectedRuntimeHostLabel = useMemo(() => {
-    const selectedHost = runtimeHosts.hosts.find(
-      (host) => host.profile.id === selectedRuntimeHostId,
-    );
-    return (
-      selectedHost?.profile.label
-      ?? RUNTIME_HOST_LABELS[selectedRuntimeHostId]
-      ?? "OpenClaw"
-    );
-  }, [runtimeHosts.hosts, selectedRuntimeHostId]);
   const activeAssistantMessageId = isStreaming
     ? [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null
     : null;
@@ -4923,14 +4905,14 @@ function ProjectPageContent() {
                   </div>
                 )}
 
-                <div className="flex-shrink-0 border-t border-border/70 bg-white/95 px-6 py-4 backdrop-blur-sm">
+                <div className="flex-shrink-0 border-t border-rule/70 bg-raised/95 px-6 py-4 backdrop-blur-sm">
                   <div className="mx-auto w-full max-w-[60rem]">
                     <div
                       data-testid="project-chat-composer"
-                      className={`rounded-[30px] border border-slate-200/90 bg-white/96 shadow-[0_20px_48px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-colors ${
+                      className={`rounded-[var(--radius-3)] border bg-raised shadow-none transition-colors ${
                         chatInputDragOver
                           ? "border-accent ring-4 ring-accent/10"
-                          : "focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
+                          : "border-rule focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10"
                       }`}
                     >
                       {chatContextItems.length > 0 && (
@@ -4976,27 +4958,7 @@ function ProjectPageContent() {
                           </button>
                         </div>
                       )}
-                      <div className="flex flex-wrap items-start justify-between gap-4 px-4 pb-2 pt-4 sm:items-center">
-                        <div className="min-w-0 space-y-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-                            Project Chat
-                          </p>
-                          <p className="text-[13px] leading-5 text-muted">
-                            Keep the next turn grounded in this workspace.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {activeProjectSlug && (
-                            <span className="inline-flex items-center rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-foreground">
-                              {activeProjectSlug}
-                            </span>
-                          )}
-                          <span className="inline-flex items-center rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-muted">
-                            {selectedRuntimeHostLabel}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="px-4 pb-2 pt-1">
+                      <div className="px-4 pb-2 pt-4">
                         <div className="relative flex-1">
                           <ChatMentionInput
                             ref={inputRef}
@@ -5047,12 +5009,12 @@ function ProjectPageContent() {
                             placeholder={isChatBusy ? "Processing..." : ""}
                             disabled={isChatBusy}
                             rows={2}
-                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[24px] border-0 bg-transparent py-2.5 pl-2.5 pr-12 text-[15px] leading-6 text-strong placeholder:text-quiet focus:outline-none focus:ring-0 disabled:opacity-50`}
+                            className={`w-full ${composerHeightOption.className} min-h-11 max-h-48 resize-none overflow-auto rounded-[var(--radius-2)] border border-rule-soft bg-sunk/45 py-2.5 pl-3 pr-12 text-[15px] leading-6 text-strong caret-accent placeholder:text-quiet transition-colors focus:border-accent/60 focus:bg-sunk/65 focus:outline-none focus:ring-0 disabled:opacity-50`}
                           />
                           <button
                             type="button"
                             onPointerDown={handleComposerResizePointerDown}
-                            className="absolute right-0 top-0 z-10 flex h-7 w-7 cursor-ns-resize items-center justify-center rounded-full border border-transparent text-muted transition-colors hover:border-rule hover:bg-sunk hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
+                            className="absolute right-1 top-1 z-10 flex h-7 w-7 cursor-ns-resize items-center justify-center rounded-[var(--radius-1)] border border-transparent text-muted transition-colors hover:border-rule hover:bg-raised hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
                             aria-label="Resize message composer"
                             title="Drag up to resize"
                           >
@@ -5065,7 +5027,7 @@ function ProjectPageContent() {
                           </button>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-3 border-t border-rule/80 px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
+                      <div className="flex flex-col gap-3 border-t border-rule-soft px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
                         <div className="flex min-w-0 flex-col gap-2">
                           <div className="flex flex-wrap items-center gap-2.5">
                             <ComposerRuntimeSwitcher
@@ -5099,24 +5061,24 @@ function ProjectPageContent() {
                           </div>
                           <div
                             data-testid="composer-guidance-row"
-                            className="flex flex-wrap items-center gap-2 text-[11px] leading-5 text-slate-500"
+                            className="flex flex-wrap items-center gap-2 text-[11px] leading-5 text-dim"
                           >
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50/85 px-2.5 py-1 text-slate-600">
+                            <span className="inline-flex items-center rounded-[var(--radius-1)] border border-rule bg-sunk px-2.5 py-1 text-dim">
                               Drop files
                             </span>
-                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50/85 px-2.5 py-1 text-slate-600">
-                              <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px] text-slate-700">
+                            <span className="inline-flex items-center gap-1 rounded-[var(--radius-1)] border border-rule bg-sunk px-2.5 py-1 text-dim">
+                              <code className="rounded-[var(--radius-1)] bg-raised px-1 py-0.5 font-mono text-[10px] text-strong">
                                 @
                               </code>
                               <span>Mention files</span>
                             </span>
-                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50/85 px-2.5 py-1 text-slate-600">
-                              <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px] text-slate-700">
+                            <span className="inline-flex items-center gap-1 rounded-[var(--radius-1)] border border-rule bg-sunk px-2.5 py-1 text-dim">
+                              <code className="rounded-[var(--radius-1)] bg-raised px-1 py-0.5 font-mono text-[10px] text-strong">
                                 /
                               </code>
                               <span>Commands</span>
                             </span>
-                            <span className="text-slate-400">
+                            <span className="text-quiet">
                               Enter to send · Shift+Enter for a new line.
                             </span>
                           </div>
@@ -5132,10 +5094,10 @@ function ProjectPageContent() {
                               ? !canCancelActiveTurn
                               : isChatBusy || !input.trim()
                           }
-                          className={`inline-flex h-11 shrink-0 items-center justify-center rounded-full px-5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                          className={`inline-flex h-11 shrink-0 items-center justify-center rounded-[var(--radius-2)] px-5 text-sm font-semibold shadow-none transition-colors disabled:cursor-not-allowed disabled:border disabled:border-rule disabled:bg-sunk disabled:text-quiet disabled:opacity-100 disabled:hover:bg-sunk ${
                             isStreaming
-                              ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                              : "bg-slate-950 text-white shadow-[0_10px_24px_rgba(15,23,42,0.18)] hover:bg-slate-900"
+                              ? "border border-rule bg-raised text-strong hover:bg-sunk"
+                              : "bg-accent text-white hover:bg-accent-dim"
                           }`}
                         >
                           {isStreaming ? "Stop" : "Send"}
