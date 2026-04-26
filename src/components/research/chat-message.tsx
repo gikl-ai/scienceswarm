@@ -1036,8 +1036,8 @@ function ExploredTranscriptBlock({
             onClick={() => setExpanded((current) => !current)}
           >
             {expanded
-              ? "Hide extra actions"
-              : `Show ${hiddenCount} more action${hiddenCount === 1 ? "" : "s"}`}
+              ? "Hide extra lines"
+              : `Show ${hiddenCount} more line${hiddenCount === 1 ? "" : "s"}`}
           </button>
         )}
       </div>

@@ -1036,7 +1036,7 @@ describe("ChatMessage", () => {
     expect(within(transcript).getByText("Search docs/ for metrics")).toBeInTheDocument();
     expect(within(transcript).getByText("Run python3 scripts/report.py")).toBeInTheDocument();
     expect(screen.getByTestId("assistant-explored-toggle-0")).toHaveTextContent(
-      "Hide extra actions",
+      "Hide extra lines",
     );
   });
 
@@ -1081,7 +1081,7 @@ describe("ChatMessage", () => {
       "Search docs/ for metrics",
     )).toBeInTheDocument();
     expect(screen.getByTestId("assistant-explored-toggle-1")).toHaveTextContent(
-      "Hide extra actions",
+      "Hide extra lines",
     );
   });
 
