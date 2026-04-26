@@ -83,7 +83,7 @@ def collapse_kramers_pairs(eigvals: np.ndarray) -> tuple[np.ndarray, float, floa
         )
     pairs = eigvals.reshape(n_samples, dim // 2, 2)
     pair_splits = np.abs(pairs[..., 1] - pairs[..., 0])
-    scale = max(1.0, float(np.ptp(eigvals)))
+    scale = max(1.0, float(eigvals.max() - eigvals.min()))
     tolerance = 1e-8 * scale
     max_split = float(pair_splits.max())
     if max_split > tolerance:
