@@ -234,8 +234,10 @@ const ASSISTANT_TASK_LIST_CHECKBOX_CLASS =
 const ASSISTANT_CAPTION_CLASS = "mt-2 block text-[11px] leading-5 text-dim";
 const ASSISTANT_METADATA_CLASS =
   "text-[10px] font-medium tracking-[0.02em] text-quiet";
+const ASSISTANT_METADATA_BAR_CLASS =
+  "inline-flex items-center gap-1 rounded-full border border-rule/70 bg-white/80 px-1.5 py-1 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur-sm";
 const ASSISTANT_METADATA_CHIP_CLASS =
-  "inline-flex items-center rounded-full bg-sunk/85 px-2.5 py-1 text-[10px] font-medium tracking-[0.015em] text-quiet";
+  "inline-flex items-center rounded-full border border-rule/60 bg-sunk/35 px-2 py-0.5 text-[9px] font-medium tracking-[0.04em] text-quiet";
 const ASSISTANT_BLOCKQUOTE_CLASS =
   "my-6 rounded-r-2xl border-l-2 border-rule bg-sunk/75 px-4 py-3 italic text-body";
 const ASSISTANT_LINK_CLASS =
@@ -1995,11 +1997,11 @@ export function ChatMessage({
           ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-danger/30 bg-danger/10 text-danger transition-colors hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
           : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-quiet transition-colors hover:border-accent/25 hover:bg-accent/10 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       : copyState === "copied"
-        ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-ok/30 bg-ok/10 text-ok transition-all hover:bg-ok/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/30"
+        ? "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-ok/30 bg-ok/10 text-ok transition-all hover:bg-ok/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/30"
         : copyState === "error"
-        ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-danger/30 bg-danger/10 text-danger transition-all hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/30"
+        ? "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-danger/30 bg-danger/10 text-danger transition-all hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/30"
         : isAssistantTurn
-          ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-quiet opacity-0 transition-all group-hover/assistant:opacity-100 group-focus-within/assistant:opacity-100 hover:border-rule hover:bg-sunk hover:text-dim focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+          ? "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-transparent text-quiet/80 transition-all hover:border-rule hover:bg-sunk hover:text-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
           : "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-muted/65 transition-colors hover:border-border hover:bg-sunk hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30";
   const bubbleClass =
     role === "user"
@@ -2018,7 +2020,7 @@ export function ChatMessage({
     ? `select-text text-strong [&>*:last-child]:mb-0 ${selectionClass}`
     : `whitespace-pre-wrap select-text ${selectionClass}`;
   const footerRowClass = isAssistantTurn
-    ? "mt-5 flex items-center justify-end gap-2"
+    ? "mt-4 flex items-center justify-end"
     : "mt-3 flex items-center justify-end gap-3";
 
   useEffect(() => () => {
@@ -2151,20 +2153,44 @@ export function ChatMessage({
       </div>
 
       <div className={footerRowClass}>
-        {hasCopyableText && (
-          <button
-            type="button"
-            onClick={copyToClipboard}
-            className={copyButtonClass}
-            aria-label={copyButtonLabel}
-            title={copyButtonLabel}
+        {isAssistantTurn ? (
+          <div
+            data-testid="assistant-metadata-bar"
+            className={ASSISTANT_METADATA_BAR_CLASS}
           >
-            <CopyStatusIcon size={18} weight="regular" aria-hidden="true" />
-          </button>
+            {hasCopyableText && (
+              <button
+                type="button"
+                onClick={copyToClipboard}
+                className={copyButtonClass}
+                aria-label={copyButtonLabel}
+                title={copyButtonLabel}
+              >
+                <CopyStatusIcon size={16} weight="regular" aria-hidden="true" />
+              </button>
+            )}
+            <div className={ASSISTANT_METADATA_CHIP_CLASS}>
+              {timestampText}
+            </div>
+          </div>
+        ) : (
+          <>
+            {hasCopyableText && (
+              <button
+                type="button"
+                onClick={copyToClipboard}
+                className={copyButtonClass}
+                aria-label={copyButtonLabel}
+                title={copyButtonLabel}
+              >
+                <CopyStatusIcon size={18} weight="regular" aria-hidden="true" />
+              </button>
+            )}
+            <div className={`text-[9px] ${footerTextClass}`}>
+              {timestampText}
+            </div>
+          </>
         )}
-        <div className={isAssistantTurn ? ASSISTANT_METADATA_CHIP_CLASS : `text-[9px] ${footerTextClass}`}>
-          {timestampText}
-        </div>
       </div>
     </>
   );
