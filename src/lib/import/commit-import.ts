@@ -18,15 +18,15 @@ import {
 import { buildPreviewAnalysis, classifyImportFile } from "./preview-core";
 import type { ContentType, ImportPreview, SourceRef, ProjectManifest } from "@/brain/types";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import { assertSafeProjectSlug, updateProjectManifest } from "@/lib/state/project-manifests";
+import { getLegacyProjectStudyFilePath } from "@/lib/studies/state";
 import {
   writeProjectImportSummary,
   type ProjectImportDuplicateGroupRecord,
 } from "@/lib/state/project-import-summary";
 import { getTargetFolder, hashContent } from "@/lib/workspace-manager";
 import {
-  getProjectAbsoluteWikiPath,
-  getProjectLocalManifestPath,
   getLegacyProjectManifestPath,
   getProjectRootPath,
 } from "@/lib/state/project-storage";
@@ -322,7 +322,7 @@ export async function importSourceFileToProject(input: {
   }
 
   if (!input.brainRoot) {
-    await writeImportPage(getProjectAbsoluteWikiPath(input.projectSlug, sourcePagePath), {
+    await writeImportPage(join(getScienceSwarmBrainRoot(), sourcePagePath), {
       title: input.file.name,
       project: input.projectSlug,
       sourceRefs: [sourceRef],
@@ -461,7 +461,7 @@ export async function finalizeImportedProject(
 
   const absoluteProjectPagePath = brainRoot
     ? join(brainRoot, projectPagePath)
-    : getProjectAbsoluteWikiPath(input.projectSlug, projectPagePath);
+    : join(getScienceSwarmBrainRoot(), projectPagePath);
 
   await mkdir(dirname(absoluteProjectPagePath), { recursive: true });
 
@@ -519,7 +519,7 @@ export async function finalizeImportedProject(
     projectPagePath,
     manifestPath: brainRoot
       ? getLegacyProjectManifestPath(input.projectSlug, join(brainRoot, "state"))
-      : getProjectLocalManifestPath(input.projectSlug),
+      : getLegacyProjectStudyFilePath(input.projectSlug, "manifest.json"),
     sourcePagePaths: input.sourcePagePaths,
     sourceRefs: input.sourceRefs,
     duplicateGroups: input.duplicateGroups,

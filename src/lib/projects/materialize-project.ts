@@ -3,7 +3,7 @@ import path from "node:path";
 
 import type { ProjectRecord } from "@/brain/gbrain-data-contracts";
 import { getScienceSwarmProjectsRoot } from "@/lib/scienceswarm-paths";
-import { ensureProjectManifest } from "@/lib/state/project-manifests";
+import { writeStudyStateForProjectRecord } from "@/lib/studies";
 
 export interface MaterializeProjectResult {
   path: string;
@@ -34,6 +34,6 @@ export async function materializeProjectFolder(
     ),
   );
 
-  await ensureProjectManifest(project.slug, undefined, projectsRoot);
+  await writeStudyStateForProjectRecord(project);
   return { path: dir, ok: true };
 }

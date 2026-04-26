@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ImportPreview } from "@/brain/types";
@@ -145,6 +145,14 @@ describe("GET /api/projects/[slug]/import-summary", () => {
       source: "local-scan",
     });
     expect(typeof body.lastImport.generatedAt).toBe("string");
+    await expect(readFile(
+      path.join(root, "state", "studies", "study_alpha-project", "legacy-project", "alpha-project", "import-summary.json"),
+      "utf-8",
+    )).resolves.toContain("\"project\": \"alpha-project\"");
+    await expect(readFile(
+      path.join(root, "projects", "alpha-project", ".brain", "state", "import-summary.json"),
+      "utf-8",
+    )).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("returns null when no import summary exists yet", async () => {
@@ -163,6 +171,10 @@ describe("GET /api/projects/[slug]/import-summary", () => {
       project: "alpha-project",
       lastImport: null,
     });
+    await expect(readFile(
+      path.join(root, "projects", "alpha-project", ".brain", "state", "import-summary.json"),
+      "utf-8",
+    )).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("rejects unsafe project slugs", async () => {

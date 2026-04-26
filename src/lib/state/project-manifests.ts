@@ -1,12 +1,11 @@
-import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import path from "node:path";
 import { getScienceSwarmBrainRoot, getScienceSwarmProjectsRoot } from "@/lib/scienceswarm-paths";
+import { getLegacyProjectStudyFilePath } from "@/lib/studies/state";
 import type { ProjectManifest } from "@/brain/types";
 import { readJsonFile, updateJsonFile, writeJsonFile } from "./atomic-json";
 import {
   getLegacyProjectManifestPath,
-  getLegacyProjectImportSummaryPath,
   getLegacyProjectStateDir,
   getLegacyProjectWatchConfigPath,
   getProjectAbsoluteWikiPath,
@@ -81,19 +80,6 @@ export function getProjectPagePath(slug: string): string {
   return `wiki/projects/${assertSafeProjectSlug(slug)}.md`;
 }
 
-function hasLegacyProjectArtifacts(slug: string): boolean {
-  const legacyBrainRoot = getScienceSwarmBrainRoot();
-  const legacyStateRoot = path.join(legacyBrainRoot, "state");
-
-  return (
-    existsSync(getLegacyProjectManifestPath(slug, legacyStateRoot))
-    || existsSync(getLegacyProjectWatchConfigPath(slug, legacyStateRoot))
-    || existsSync(getLegacyProjectImportSummaryPath(slug, legacyStateRoot))
-    || existsSync(path.join(legacyBrainRoot, getProjectPagePath(slug)))
-    || existsSync(path.join(legacyBrainRoot, "wiki", "projects", slug))
-  );
-}
-
 export async function readProjectManifest(
   slug: string,
   root?: string,
@@ -103,17 +89,16 @@ export async function readProjectManifest(
     return readJsonFile<ProjectManifest>(getProjectManifestPath(safeSlug, root));
   }
 
-  const canonicalManifest = await readJsonFile<ProjectManifest>(getProjectManifestPath(safeSlug));
-  if (canonicalManifest) {
-    return canonicalManifest;
-  }
+  const studyManifest = await readJsonFile<ProjectManifest>(
+    getLegacyProjectStudyFilePath(safeSlug, "manifest.json"),
+  );
+  if (studyManifest) return studyManifest;
 
-  if (!hasLegacyProjectArtifacts(safeSlug)) {
-    return readJsonFile<ProjectManifest>(getProjectManifestPath(safeSlug));
-  }
+  const projectLocalManifest = await readJsonFile<ProjectManifest>(getProjectManifestPath(safeSlug));
+  if (projectLocalManifest) return projectLocalManifest;
 
-  await migrateLegacyProjectState(safeSlug);
-  return readJsonFile<ProjectManifest>(getProjectManifestPath(safeSlug));
+  const legacyStateRoot = path.join(getScienceSwarmBrainRoot(), "state");
+  return readJsonFile<ProjectManifest>(getLegacyProjectManifestPath(safeSlug, legacyStateRoot));
 }
 
 export async function writeProjectManifest(
@@ -121,10 +106,12 @@ export async function writeProjectManifest(
   root?: string,
 ): Promise<ProjectManifest> {
   const safeSlug = assertSafeProjectSlug(manifest.slug);
-  if (!root) {
-    await migrateLegacyProjectState(safeSlug);
-  }
-  await writeJsonFile(getProjectManifestPath(safeSlug, root), manifest);
+  await writeJsonFile(
+    root
+      ? getProjectManifestPath(safeSlug, root)
+      : getLegacyProjectStudyFilePath(safeSlug, "manifest.json"),
+    manifest,
+  );
   return manifest;
 }
 
@@ -134,10 +121,13 @@ export async function updateProjectManifest(
   root?: string,
 ): Promise<ProjectManifest> {
   const safeSlug = assertSafeProjectSlug(slug);
-  if (!root) {
-    await migrateLegacyProjectState(safeSlug);
+  if (root) {
+    return updateJsonFile<ProjectManifest>(getProjectManifestPath(safeSlug, root), updater);
   }
-  return updateJsonFile<ProjectManifest>(getProjectManifestPath(safeSlug, root), updater);
+  const current = await readProjectManifest(safeSlug);
+  const updated = updater(current);
+  await writeJsonFile(getLegacyProjectStudyFilePath(safeSlug, "manifest.json"), updated);
+  return updated;
 }
 
 interface ProjectMetadata {
@@ -255,13 +245,15 @@ export async function ensureProjectManifest(
   const existing = await readProjectManifest(safeSlug, stateRoot);
 
   if (existing) {
-    await ensureProjectPage({
-      slug: safeSlug,
-      title: existing.title,
-      status: existing.status,
-      updatedAt: existing.updatedAt,
-      brainRoot,
-    });
+    if (stateRoot) {
+      await ensureProjectPage({
+        slug: safeSlug,
+        title: existing.title,
+        status: existing.status,
+        updatedAt: existing.updatedAt,
+        brainRoot,
+      });
+    }
     return existing;
   }
 
@@ -270,7 +262,7 @@ export async function ensureProjectManifest(
     return null;
   }
 
-  if (!stateRoot) {
+  if (stateRoot) {
     await migrateLegacyProjectState(safeSlug);
     await migrateLegacyProjectWiki(safeSlug);
   }
@@ -294,15 +286,17 @@ export async function ensureProjectManifest(
     updatedAt,
   };
 
-  await ensureProjectPage({
-    slug: safeSlug,
-    title: manifest.title,
-    description: metadata.description,
-    status: manifest.status,
-    createdAt: metadata.createdAt,
-    updatedAt,
-    brainRoot,
-  });
+  if (stateRoot) {
+    await ensureProjectPage({
+      slug: safeSlug,
+      title: manifest.title,
+      description: metadata.description,
+      status: manifest.status,
+      createdAt: metadata.createdAt,
+      updatedAt,
+      brainRoot,
+    });
+  }
 
   await writeProjectManifest(manifest, stateRoot);
   return manifest;

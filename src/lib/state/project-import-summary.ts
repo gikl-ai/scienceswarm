@@ -1,11 +1,16 @@
 import { join } from "node:path";
 import { readJsonFile, writeJsonFile } from "./atomic-json";
+import { planLegacyProjectStateMigration, readMigratedOrLegacyProjectFile } from "@/lib/studies/migration";
+import {
+  getLegacyProjectStudyFilePath,
+  studyIdForLegacyProjectSlug,
+  writeStudyStateForProjectRecord,
+} from "@/lib/studies/state";
 import { assertSafeProjectSlug } from "./project-manifests";
 import {
   getLegacyProjectImportSummaryPath,
   getProjectLocalImportSummaryPath,
   isProjectLocalStateRoot,
-  migrateLegacyProjectState,
 } from "./project-storage";
 
 export interface ProjectImportDuplicateGroupRecord {
@@ -96,10 +101,9 @@ export async function readProjectImportSummary(
   root?: string,
 ): Promise<ProjectImportSummaryRecord | null> {
   const safeSlug = assertSafeProjectSlug(slug);
-  if (!root) {
-    await migrateLegacyProjectState(safeSlug);
-  }
-  const raw = await readJsonFile<unknown>(getProjectImportSummaryPath(slug, root));
+  const raw = root
+    ? await readJsonFile<unknown>(getProjectImportSummaryPath(safeSlug, root))
+    : await readDefaultProjectImportSummary(safeSlug);
   if (!raw || !isProjectImportSummaryRecord(raw)) {
     return null;
   }
@@ -117,13 +121,31 @@ export async function writeProjectImportSummary(
   root?: string,
 ): Promise<ProjectImportSummaryRecord> {
   const project = assertSafeProjectSlug(slug);
-  if (!root) {
-    await migrateLegacyProjectState(project);
-  }
   const record: ProjectImportSummaryRecord = {
     project,
     lastImport,
   };
-  await writeJsonFile(getProjectImportSummaryPath(project, root), record);
+  if (root) {
+    await writeJsonFile(getProjectImportSummaryPath(project, root), record);
+  } else {
+    await writeStudyStateForProjectRecord({
+      slug: project,
+      lastActive: lastImport?.generatedAt ?? new Date().toISOString(),
+    });
+    await writeJsonFile(getLegacyProjectStudyFilePath(project, "import-summary.json"), record);
+  }
   return record;
+}
+
+async function readDefaultProjectImportSummary(
+  project: string,
+): Promise<unknown | null> {
+  const plan = await planLegacyProjectStateMigration({
+    legacyProjectSlug: project,
+    studyId: studyIdForLegacyProjectSlug(project),
+  });
+  return readMigratedOrLegacyProjectFile({
+    plan,
+    classification: "import-summary",
+  });
 }
