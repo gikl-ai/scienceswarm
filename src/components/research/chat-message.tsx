@@ -240,6 +240,8 @@ const ASSISTANT_LINK_CLASS =
   "font-medium text-accent underline decoration-accent/30 underline-offset-4 transition-colors hover:text-accent-dim hover:decoration-accent";
 const ASSISTANT_INLINE_CODE_CLASS =
   "rounded-md border border-rule bg-sunk/90 px-1.5 py-0.5 font-mono text-[0.9em] font-medium text-strong";
+const PROGRESS_INLINE_CODE_CLASS =
+  "rounded border border-rule/70 bg-sunk/70 px-1 py-0.5 font-mono text-[0.85em] font-normal text-body";
 const ASSISTANT_CODE_BLOCK_CLASS =
   "my-6 overflow-x-auto rounded-3xl border border-rule bg-ink px-5 py-4 text-[13px] leading-6 text-quiet shadow-[0_12px_30px_rgba(15,23,42,0.12)]";
 const ASSISTANT_RULE_CLASS = "my-8 border-0 border-t border-rule";
@@ -378,7 +380,20 @@ const PROGRESS_MARKDOWN_COMPONENTS: Components = {
       {children}
     </pre>
   ),
-  code: ASSISTANT_MARKDOWN_COMPONENTS.code,
+  code: ({ className, children }) => {
+    const languageClass = typeof className === "string" ? className : "";
+    const isBlock =
+      languageClass.length > 0
+      || (typeof children === "string" && children.includes("\n"));
+    if (isBlock) {
+      return <code className="font-mono">{children}</code>;
+    }
+    return (
+      <code className={PROGRESS_INLINE_CODE_CLASS}>
+        {children}
+      </code>
+    );
+  },
   a: ASSISTANT_MARKDOWN_COMPONENTS.a,
   strong: ASSISTANT_MARKDOWN_COMPONENTS.strong,
   em: ASSISTANT_MARKDOWN_COMPONENTS.em,

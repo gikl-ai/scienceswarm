@@ -764,7 +764,7 @@ describe("ChatMessage", () => {
         progressLog={[
           {
             kind: "thinking",
-            text: "### Plan\n\n- Extract the results table\n- Render the chart",
+            text: "### Plan\n\n- Extract the `results` table\n- Render the chart",
           },
           {
             kind: "activity",
@@ -786,6 +786,9 @@ describe("ChatMessage", () => {
     expect(
       screen.getByText("python3 scripts/extract_results_chart.py").closest("pre"),
     ).not.toHaveClass("rounded-3xl");
+    expect(screen.getByText("results").closest("code")).toHaveClass("bg-sunk/70");
+    expect(screen.getByText("results").closest("code")).toHaveClass("font-normal");
+    expect(screen.getByText("results").closest("code")).not.toHaveClass("bg-sunk/90");
   });
 
   it("renders mixed inline formatting inside visible explored transcript rows", () => {
