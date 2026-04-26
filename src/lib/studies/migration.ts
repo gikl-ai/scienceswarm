@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { getScienceSwarmBrainRoot, getScienceSwarmProjectsRoot } from "@/lib/scienceswarm-paths";
@@ -635,19 +635,20 @@ async function readCheckpoint(filePath: string): Promise<Checkpoint> {
       return raw as Checkpoint;
     }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT" && !(error instanceof SyntaxError)) {
+      throw error;
+    }
   }
   return { version: 1, completedEntryIds: [], updatedAt: new Date().toISOString() };
 }
 
 async function writeCheckpoint(filePath: string, completed: Set<string>): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
   const checkpoint: Checkpoint = {
     version: 1,
     completedEntryIds: [...completed].sort((left, right) => left.localeCompare(right)),
     updatedAt: new Date().toISOString(),
   };
-  await writeFile(filePath, `${JSON.stringify(checkpoint, null, 2)}\n`, "utf-8");
+  await writeJsonFile(filePath, checkpoint);
 }
 
 function summarizeExecution(entries: StudyMigrationExecutionEntry[]): StudyMigrationExecutionReport["summary"] {

@@ -214,6 +214,22 @@ describe("Study migration execution", () => {
     expect(existsSync(path.join(roots.stateRoot, "studies", "study_alpha", "migration-reports"))).toBe(true);
   });
 
+  it("recovers from a malformed checkpoint file", async () => {
+    const { roots, plan } = await planFixture();
+    const checkpointPath = path.join(roots.stateRoot, "studies", "study_alpha", "migration-checkpoint.json");
+    await mkdir(path.dirname(checkpointPath), { recursive: true });
+    await writeFile(checkpointPath, "{\"completedEntryIds\": [", "utf-8");
+
+    const report = await executeLegacyProjectStateMigration(plan, {
+      concurrency: 1,
+      checkpointPath,
+    });
+
+    expect(report.state).toBe("completed");
+    const checkpoint = JSON.parse(await readFile(checkpointPath, "utf-8")) as { completedEntryIds: string[] };
+    expect(checkpoint.completedEntryIds.length).toBe(plan.entries.length);
+  });
+
   it("does not overwrite a destination created after planning", async () => {
     const { plan } = await planFixture();
     const manifestEntry = plan.entries.find((entry) => entry.classification === "project-manifest");
