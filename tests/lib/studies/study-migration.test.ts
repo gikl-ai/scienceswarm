@@ -247,6 +247,28 @@ describe("Study migration planning", () => {
     expect(plan.entries.some((entry) => entry.relativePath.includes("scan-secret"))).toBe(false);
   });
 
+  it("treats unusable symlink paths as missing instead of crashing planning", async () => {
+    const roots = await installFixture();
+    const localChatPath = path.join(roots.projectsRoot, "project-alpha", ".brain", "state", "chat.json");
+    await rm(localChatPath, { force: true });
+    await symlink(localChatPath, localChatPath);
+
+    const plan = await planLegacyProjectStateMigration({
+      legacyProjectSlug: "project-alpha",
+      studyId: "study_alpha",
+      threadId: "thread_alpha",
+      projectsRoot: roots.projectsRoot,
+      brainRoot: roots.brainRoot,
+      stateRoot: roots.stateRoot,
+      generatedAt: "2026-04-26T00:00:00.000Z",
+    });
+
+    expect(plan.entries.find((entry) => entry.classification === "chat-history")).toMatchObject({
+      sourcePath: null,
+      status: "missing",
+    });
+  });
+
   it("fails dry-run planning when a legacy tree exceeds the file bound", async () => {
     const roots = await installFixture();
     const manifestPath = path.join(roots.projectsRoot, "project-alpha", ".brain", "state", "manifest.json");

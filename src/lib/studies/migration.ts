@@ -147,6 +147,7 @@ interface Checkpoint {
 }
 
 const DEFAULT_MAX_MIGRATION_FILES_PER_TREE = 5_000;
+const UNUSABLE_REALPATH_ERROR_CODES = new Set(["EACCES", "ELOOP", "ENOENT", "ENOTDIR"]);
 
 function normalizeMaxFilesPerTree(maxFiles: number | undefined): number {
   if (maxFiles === undefined) return DEFAULT_MAX_MIGRATION_FILES_PER_TREE;
@@ -187,7 +188,7 @@ async function pathStats(filePath: string | null): Promise<{ size: number; isFil
       isDirectory: stats.isDirectory(),
     };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (UNUSABLE_REALPATH_ERROR_CODES.has((error as NodeJS.ErrnoException).code ?? "")) return null;
     throw error;
   }
 }
@@ -211,7 +212,7 @@ async function existingRealPath(filePath: string): Promise<string | null> {
   try {
     return await realpath(filePath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (UNUSABLE_REALPATH_ERROR_CODES.has((error as NodeJS.ErrnoException).code ?? "")) return null;
     throw error;
   }
 }
