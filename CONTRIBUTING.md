@@ -32,6 +32,29 @@ pushes, but it also blocks merge. Remove `ci-defer` when the PR is ready for
 final validation so CI, dependency review, and any relevant E2E checks run on
 the merge candidate.
 
+## Local chat benchmark
+
+Use the benchmark helper when a change affects chat latency or OpenClaw
+progress behavior:
+
+```bash
+SCIENCESWARM_CHAT_TIMING=1 npx tsx scripts/benchmark-chat-hi.ts --timing-artifact
+```
+
+What the key lines mean:
+
+- `Observed split` is the client-visible breakdown from browser request start to
+  response headers, from headers to the first streamed chunk, and from the first
+  chunk to completion.
+- `Timing artifact` comes from the local `/api/chat/timing` endpoint and stays
+  disabled unless `SCIENCESWARM_CHAT_TIMING=1` is set.
+- `Server timing` appears when the timing artifact contains the server-side
+  milestones, including readiness, connect/auth, send acknowledgement, and the
+  first OpenClaw or assistant events.
+
+If you include benchmark numbers in a PR body, note the local environment, the
+final text sample, and whether timing artifacts were enabled for that run.
+
 ## Contribution rules
 
 - Do not commit secrets, private local paths, or local runtime state.
