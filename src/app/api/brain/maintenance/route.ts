@@ -39,9 +39,7 @@ export async function GET(request: Request) {
     }
 
     const report = await generateHealthReportWithGbrain(config);
-    const gbrainCapabilities = report.source === "gbrain"
-      ? await probeGbrainCapabilities()
-      : undefined;
+    const gbrainCapabilities = await probeGbrainCapabilities().catch(() => undefined);
     return Response.json(
       buildBrainMaintenancePlan(
         report,

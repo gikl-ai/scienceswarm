@@ -404,6 +404,188 @@ describe("gbrain page", () => {
     expect(await screen.findByLabelText("Search research brain")).toBeInTheDocument();
   });
 
+  it("treats ok:false brain status responses as unavailable while still showing structural blockers", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url === "/api/brain/status") {
+        return Response.json({
+          ok: false,
+          error: "column \"symbol_name\" does not exist",
+          pageCount: null,
+          backend: "pglite",
+        });
+      }
+
+      if (url === "/api/brain/maintenance") {
+        return Response.json({
+          source: "disk-fallback",
+          signals: {
+            gbrainCapabilities: {
+              structuralNavigationAvailable: false,
+              package: {
+                installedVersion: "0.21.0",
+                requiredVersion: "0.21.0",
+                inSync: true,
+                binPath: "/tmp/private-brain/gbrain",
+              },
+              operations: {
+                missing: [],
+              },
+              schema: {
+                missingFields: ["content_chunks.symbol_name"],
+              },
+              reindex: {
+                status: "unknown",
+                reason: "Local gbrain schema metadata was unavailable.",
+              },
+              blockers: ["local schema is missing required structural fields."],
+            },
+          },
+        });
+      }
+
+      return Response.json({});
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GbrainPage />);
+
+    expect(await screen.findByText("Research brain is unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("column \"symbol_name\" does not exist")).toBeInTheDocument();
+    expect(await screen.findByText("Structural retrieval degraded")).toBeInTheDocument();
+    expect(screen.getByText("local schema is missing required structural fields.")).toBeInTheDocument();
+    expect(screen.queryByText(/private-brain/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a structural status fallback when maintenance omits capability details", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 4, backend: "gbrain" });
+      }
+
+      if (url === "/api/brain/maintenance") {
+        return Response.json({
+          source: "disk-fallback",
+          signals: {
+            totalPages: 1,
+          },
+        });
+      }
+
+      return Response.json({});
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GbrainPage />);
+
+    expect(await screen.findByText("Structural retrieval status unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("Maintenance did not return gbrain capability details.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry structural status" })).toBeInTheDocument();
+  });
+
+  it("surfaces degraded structural retrieval readiness without leaking local paths", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 4, backend: "gbrain" });
+      }
+
+      if (url === "/api/brain/maintenance") {
+        return Response.json({
+          signals: {
+            gbrainCapabilities: {
+              structuralNavigationAvailable: false,
+              package: {
+                installedVersion: "0.16.4",
+                requiredVersion: "0.21.0",
+                inSync: false,
+                binPath: "/tmp/private-brain/gbrain",
+              },
+              operations: {
+                missing: ["code-def", "code-refs"],
+              },
+              schema: {
+                missingFields: ["content_chunks.symbol_name"],
+              },
+              reindex: {
+                status: "unavailable",
+                reason: "Installed gbrain does not expose reindex-code.",
+              },
+              blockers: ["local schema is missing required structural fields."],
+            },
+          },
+        });
+      }
+
+      return Response.json({});
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GbrainPage />);
+
+    expect(await screen.findByText("Structural retrieval degraded")).toBeInTheDocument();
+    expect(screen.getByText(/0\.16\.4 installed, 0\.21\.0 required/i)).toBeInTheDocument();
+    expect(screen.getByText("local schema is missing required structural fields.")).toBeInTheDocument();
+    expect(screen.getByText(/Missing gbrain operations: code-def, code-refs\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Reindex unavailable: Installed gbrain does not expose reindex-code\./i)).toBeInTheDocument();
+    expect(screen.queryByText(/private-brain/i)).not.toBeInTheDocument();
+  });
+
+  it("surfaces ready structural retrieval readiness", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url === "/api/brain/status") {
+        return Response.json({ pageCount: 4, backend: "gbrain" });
+      }
+
+      if (url === "/api/brain/maintenance") {
+        return Response.json({
+          signals: {
+            gbrainCapabilities: {
+              structuralNavigationAvailable: true,
+              package: {
+                installedVersion: "0.21.0",
+                requiredVersion: "0.21.0",
+                inSync: true,
+                binPath: "/tmp/private-brain/gbrain",
+              },
+              operations: {
+                missing: [],
+              },
+              schema: {
+                missingFields: [],
+              },
+              reindex: {
+                status: "not-required",
+                reason: "Structural schema is current.",
+              },
+              blockers: [],
+            },
+          },
+        });
+      }
+
+      return Response.json({});
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GbrainPage />);
+
+    expect(await screen.findByText("Structural retrieval ready")).toBeInTheDocument();
+    expect(screen.getByText(/Runtime agents can use gbrain code-definition/i)).toBeInTheDocument();
+    expect(screen.getByText("Reindex not required for the current structural schema.")).toBeInTheDocument();
+    expect(screen.queryByText(/private-brain/i)).not.toBeInTheDocument();
+  });
+
   it("keeps the Paper Library panel constrained so its internal body can scroll", async () => {
     searchParamsValue = "name=demo-project&view=paper-library";
 
