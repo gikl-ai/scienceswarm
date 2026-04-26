@@ -306,8 +306,12 @@ const ASSISTANT_MARKDOWN_COMPONENTS: Components = {
   ),
   thead: ({ children }) => <thead className={ASSISTANT_TABLE_HEAD_CLASS}>{children}</thead>,
   tr: ({ children }) => <tr className={ASSISTANT_TABLE_ROW_CLASS}>{children}</tr>,
-  th: ({ children }) => <th className={ASSISTANT_TABLE_HEADER_CELL_CLASS}>{children}</th>,
-  td: ({ children }) => <td className={ASSISTANT_TABLE_CELL_CLASS}>{children}</td>,
+  th: ({ children, scope, style }) => (
+    <th className={ASSISTANT_TABLE_HEADER_CELL_CLASS} scope={scope ?? "col"} style={style}>
+      {children}
+    </th>
+  ),
+  td: ({ children, style }) => <td className={ASSISTANT_TABLE_CELL_CLASS} style={style}>{children}</td>,
   pre: ({ children }) => <pre className={ASSISTANT_CODE_BLOCK_CLASS}>{children}</pre>,
   code: ({ className, children }) => {
     const languageClass = typeof className === "string" ? className : "";

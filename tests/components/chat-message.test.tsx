@@ -115,6 +115,25 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("cell", { name: "6677 ms" }).closest("tr")).toHaveClass("even:bg-sunk/35");
   });
 
+  it("preserves GFM table alignment and header scope attributes", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content={
+          "| Left | Right |\n" +
+          "| :-- | --: |\n" +
+          "| A | 42 |\n"
+        }
+        timestamp={new Date("2026-04-22T16:45:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("columnheader", { name: "Left" })).toHaveAttribute("scope", "col");
+    expect(screen.getByRole("columnheader", { name: "Left" })).toHaveStyle({ textAlign: "left" });
+    expect(screen.getByRole("columnheader", { name: "Right" })).toHaveStyle({ textAlign: "right" });
+    expect(screen.getByRole("cell", { name: "42" })).toHaveStyle({ textAlign: "right" });
+  });
+
   it("uses softer caption and metadata typography for assistant media and footer", () => {
     const timestamp = new Date(2026, 3, 22, 16, 45, 0);
     const expectedFooter = `${timestamp.toLocaleDateString(undefined, {
