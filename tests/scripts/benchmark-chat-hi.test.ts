@@ -265,7 +265,6 @@ describe("benchmark-chat-hi", () => {
       },
     });
     expect(formattedWithTiming).toContain("Total: 100 ms");
-    expect(formattedWithTiming).toContain("Shared timing tick: no");
     expect(formattedWithTiming).toContain(
       "Timing phases: project_materialization skipped, chat_readiness 7 ms (inferred)",
     );
@@ -355,7 +354,7 @@ describe("benchmark-chat-hi", () => {
         finalTextSample: "Hello.",
         timingArtifact: null,
       }),
-    ).toContain("Shared timing tick: yes");
+    ).not.toContain("Shared timing tick:");
     expect(
       formatBenchmarkSummary({
         status: 200,
