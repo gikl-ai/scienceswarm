@@ -86,7 +86,7 @@ export function extractAbstractFromPdfText(text: string): string | undefined {
   const normalized = text.replace(/\r\n?/g, "\n");
   const patterns = [
     /\bAbstract\b[:\s.\-—]*\n?\s*([\s\S]{20,2000}?)(?=\n\s*\n|\n\s*(?:(?:Introduction|Keywords|References)\b|(?:1(?:\s+|\.\s+)|I\.\s+)))/i,
-    /\bAbstract\b[:\s.\-—]*\n?\s*([\s\S]{20,2000}?)(?=\s+(?:Introduction|Keywords|References)\b|\n\s*(?:1(?:\s+|\.\s+)|I\.\s+))/i,
+    /\bAbstract\b[:\s.\-—]*\n?\s*([\s\S]{20,2000}?)(?=\s+Introduction\b|\s+(?:Keywords|References)\s*[:\-—]|\n\s*(?:1(?:\s+|\.\s+)|I\.\s+))/i,
   ];
 
   for (const pattern of patterns) {

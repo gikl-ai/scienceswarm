@@ -162,6 +162,15 @@ describe("extractPdfText", () => {
     ].join("\n"))).toBe("We report a 1.2x improvement for local graph inspection while preserving paper context.");
   });
 
+  it("does not treat keywords or references in prose as section headings", () => {
+    expect(extractAbstractFromPdfText([
+      "Abstract",
+      "We compare keywords and references in normal prose while preserving enough context for selected papers.",
+      "Introduction",
+      "The body starts here.",
+    ].join("\n"))).toBe("We compare keywords and references in normal prose while preserving enough context for selected papers.");
+  });
+
   it("throws 'PDF file not found' for a missing path", async () => {
     await expect(extractPdfText(MISSING_PDF)).rejects.toThrow(/^PDF file not found$/);
   });
