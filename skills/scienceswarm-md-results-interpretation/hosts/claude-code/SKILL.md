@@ -22,6 +22,12 @@ packet exists.
 7. Produce a `Results Interpretation Note` with
    `asset_kind: md_results_interpretation_note`.
 
+When the `scienceswarm` MCP tools are available, save the interpretation note
+with `gbrain_capture` before answering. Use a clear title, the asset kind
+above, the active project, and links or references to the upstream run log,
+analysis packet, and planning assets. If saving fails, report the exact save
+failure and do not present the interpretation as durable.
+
 Include a `Confidence Boundary` section in the interpretation note.
 
 Never treat "the run completed" as evidence that the biological claim is true.

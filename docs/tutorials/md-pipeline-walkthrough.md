@@ -1,71 +1,59 @@
 # ScienceSwarm MD pipeline walkthrough
 
-This walkthrough is the UI runbook for driving ScienceSwarm's
-molecular-dynamics planning skills on the
-[lysozyme MD quickstart](md-quickstart/README.md). By the end, you should
-have:
+This walkthrough shows a new ScienceSwarm user how to drive the
+[lysozyme MD quickstart](md-quickstart/README.md) from the UI. You should not
+need to open a terminal or type shell commands. The expected final state is:
 
-- eight durable MD planning assets in the project brain,
-- an OpenHands-ready execution handoff,
+- project-scoped MD planning assets saved in gbrain,
+- a Claude Code-ready execution handoff,
 - a completed lysozyme OpenMM run,
-- `analysis/metrics.json`, production logs, and three analysis plots,
+- `analysis/metrics.json`, production logs, trajectories, and plots,
 - a final interpretation and refinement decision.
 
-The normal path is ScienceSwarm-first. You should not need to open a
-terminal or type Linux commands to complete this walkthrough.
+The example is a tutorial scaffold, not a new biological result.
 
 ---
 
-## Before you start
+## 0. Create the project and choose Claude Code
 
-1. Start ScienceSwarm and complete `/setup` if the app asks for setup.
-2. Open or create a project workspace.
-3. Import this checkout, or just `docs/tutorials/md-quickstart/`, into the
-   project so ScienceSwarm can see `environment.yml` and `scripts/`.
-4. Confirm the project chat composer is visible. It has an `Assistant`
-   selector, a message box, and a `Send` button.
+1. Start ScienceSwarm and complete setup if the app asks.
+2. Open the dashboard and create a project. A name like `Lysozyme MD quickstart`
+   is fine.
+3. Open the project. You should see the project chat composer at the bottom of
+   the page.
+4. Import this checkout, or the `docs/tutorials/md-quickstart/` folder, into
+   the project. The important imported files are `environment.yml` and the
+   `scripts/` folder.
+5. If the import says `README.md` or `environment.yml` were saved without typed
+   conversion, continue. They are still available to the assistant as project
+   notes/files.
+6. In the project chat composer, open the assistant selector and choose
+   `Claude Code`.
+7. If ScienceSwarm shows a send-review sheet for Claude Code, confirm the
+   destination is `Claude Code`, the project is the lysozyme project, and the
+   included data is the prompt plus project context. Then click the send button
+   in that sheet.
 
-Use two agents for this walkthrough:
-
-| Phase | Agent | Where to select it | Why |
-|---|---|---|---|
-| Planning and interpretation | OpenClaw | Project chat composer `Assistant` selector | Runs the MD slash-command skills and saves the scientific assets. |
-| Execution | OpenHands | Settings > Project AI destinations | Runs the approved handoff as a task-capable local execution destination. |
-
-For planning, click the project chat `Assistant` selector and choose
-`OpenClaw`. Keep the project policy `Local only` unless ScienceSwarm asks
-for a different policy.
-
-For execution, open Settings > Project AI destinations, select the same
-project, then set:
-
-| Control | Value |
-|---|---|
-| Project policy | `Execution ok` |
-| Mode | `Task` |
-| Destination | `OpenHands` |
-
-Return to the project chat after changing those settings. The next task
-send will show a `Review before sending` sheet. Click `Approve and send`
-after checking that the destination is OpenHands and the included data is
-the project prompt/files you expect.
+Use Claude Code for every step below. Do not switch to OpenHands for this
+walkthrough.
 
 ---
 
-## How to run a skill
+## How to run each skill
 
-All MD planning steps use the same pattern:
+For each planning step:
 
-1. Make sure the project chat `Assistant` selector says `OpenClaw`.
-2. Click the message box.
-3. Type the slash command and request shown in the relevant step below.
-4. Press `Send`.
-5. Wait for the answer to finish before starting the next step.
+1. Stay on the project page.
+2. Confirm the assistant selector says `Claude Code`.
+3. Click the message box.
+4. Paste the text block for the step.
+5. Click `Send`.
+6. Wait until the `Stop` button disappears and the assistant reports a saved
+   gbrain slug before starting the next step.
 
-When you type `/`, ScienceSwarm should show command suggestions. Use the
-short MD aliases in this walkthrough:
+The MD slash commands used here are:
 
-| Step | Command | Asset produced |
+| Step | Command | Asset |
 |---|---|---|
 | 1 | `/md-study` | `md_study_brief` |
 | 2 | `/md-evidence` | `md_evidence_grounding_packet` |
@@ -73,17 +61,14 @@ short MD aliases in this walkthrough:
 | 4 | `/md-parameters` | `md_parameter_decision_ledger` |
 | 5 | `/md-review` | `md_protocol_review_note` |
 | 6 | `/md-handoff` | `md_execution_handoff_plan` |
-| 7 | `/md-results` | `md_results_interpretation_note` |
-| 8 | `/md-refine` | `md_refinement_decision_update` |
-
-If a skill asks a clarifying question, answer it in the same chat thread,
-then continue with the next step after the skill produces the asset.
+| 8 | `/md-results` | `md_results_interpretation_note` |
+| 9 | `/md-refine` | `md_refinement_decision_update` |
 
 ---
 
 ## 1. Create the MD Study Brief
 
-In project chat, with `Assistant` set to `OpenClaw`, send:
+Paste this into the project chat:
 
 ```text
 /md-study Create an MD Study Brief for the lysozyme quickstart.
@@ -98,317 +83,255 @@ Question: does the protein remain folded and stable during a short
 
 Desired claim: this is a validated tutorial scaffold, not a new
 biological result. Map the claim to C-alpha RMSD, C-alpha RMSF, and
-radius of gyration. Save the result as a durable MD Study Brief.
+radius of gyration. Save the result as a durable project-scoped MD Study
+Brief with gbrain_capture before answering.
 ```
 
-Check that the output includes:
-
-- `MD Suitability Verdict` = `md-fit` or `md-with-caveats`.
-- a claim-to-observable map with C-alpha RMSD, RMSF, and Rg.
-- stop criteria and a confidence boundary.
-- a clear statement that this does not prove a new biological claim.
+Continue only after the assistant says it saved an `MD Study Brief`. Check that
+the output includes `md-fit` or `md-with-caveats`, the C-alpha RMSD/RMSF/Rg
+observables, stop criteria, and a confidence boundary.
 
 ---
 
 ## 2. Ground the evidence
 
-Send:
+Paste:
 
 ```text
 /md-evidence Build the MD Evidence Grounding Packet for the lysozyme
-quickstart. Use the MD Study Brief from the previous turn.
+quickstart. Use the latest project-scoped MD Study Brief from this project.
 
-Search the project paper library first. If this project has no relevant
-papers yet, use external evidence for PDB 1AKI, AMBER ff14SB / TIP3P
-solution MD behavior, OpenMM, and the published C-alpha RMSD reference
-band used by the tutorial. Label each evidence item as project-literature,
-external-literature, common-heuristic, tool-default, or speculative.
+Search the project paper library first. If this project has no relevant papers
+yet, use external evidence for PDB 1AKI, AMBER ff14SB / TIP3P solution MD
+behavior, OpenMM, and the published C-alpha RMSD reference band used by the
+tutorial. Label each evidence item as project-literature, external-literature,
+common-heuristic, tool-default, or speculative. Save a durable project-scoped
+MD Evidence Grounding Packet with gbrain_capture before answering.
 ```
 
-Check that the output includes:
-
-- PDB 1AKI as the starting structure.
-- AMBER ff14SB / TIP3P as the reference force-field/water context.
-- a 0.6-2.0 Angstrom C-alpha RMSD reference band for the tutorial gate.
-- evidence gaps, if any, instead of invented certainty.
+Check for PDB 1AKI, AMBER ff14SB/TIP3P, OpenMM, the 0.6-2.0 Angstrom C-alpha
+RMSD reference band, and explicit evidence gaps.
 
 ---
 
 ## 3. Define the molecular system
 
-Send:
+Paste:
 
 ```text
-/md-system Define the exact molecular system for the lysozyme
-quickstart using the MD Study Brief and Evidence Grounding Packet.
+/md-system Define the exact molecular system for the lysozyme quickstart using
+the MD Study Brief and Evidence Grounding Packet from this project.
 
-Use PDB 1AKI chain A, residues 1-129, apo lysozyme, pH 7.0, AMBER
-ff14SB, TIP3P water, a 10 Angstrom padded box, neutralization plus
-0.15 M NaCl, 300 K, and 1 atm. Include identity locks, preparation
-risks, and blocking uncertainties. Do not add ligands, membranes,
-mutations, or enhanced sampling.
+Use PDB 1AKI chain A, residues 1-129, apo lysozyme, pH 7.0, AMBER ff14SB,
+TIP3P water, a 10 Angstrom padded box, neutralization plus 0.15 M NaCl, 300 K,
+and 1 atm. Include identity locks, preparation risks, and blocking
+uncertainties. Do not add ligands, membranes, mutations, or enhanced sampling.
+Save a durable project-scoped Molecular System Definition with gbrain_capture
+before answering.
 ```
 
-Check that the output includes:
-
-- 129 protein residues as an identity lock.
-- neutral net charge after solvation as an identity lock.
-- explicit exclusions for ligands, membranes, and enhanced sampling.
-- preparation risks such as missing residues, protonation, and ion setup.
+Check for identity locks: 1AKI, chain A, residues 1-129, apo protein, no ligand,
+no membrane, no mutation, ff14SB/TIP3P, neutralized 0.15 M NaCl solution.
 
 ---
 
 ## 4. Choose parameters
 
-Send:
+Paste:
 
 ```text
 /md-parameters Create the Parameter Decision Ledger for the lysozyme
-quickstart. Use the previous MD assets and keep the protocol aligned
-with docs/tutorials/md-quickstart.
+quickstart. Use the previous MD assets in this project and keep the protocol
+aligned with docs/tutorials/md-quickstart.
 
-Record force field, water model, ions, box, timestep, constraints,
-thermostat, barostat, equilibration, production length, seeds, analysis
-metrics, and validation thresholds. Label standard defaults separately
-from tutorial-only choices. Mark 1 ns x 3 seeds as acceptable for a
-tutorial scaffold but not a default for biological claims.
+Record force field, water model, ions, box, timestep, constraints, thermostat,
+barostat, equilibration, production length, seeds, analysis metrics, and
+validation thresholds. Label standard defaults separately from tutorial-only
+choices. Mark 1 ns x 3 seeds as acceptable for a tutorial scaffold but not a
+default for biological claims. Save a durable project-scoped Parameter Decision
+Ledger with gbrain_capture before answering.
 ```
 
-Check that the output includes:
-
-| Choice | Expected value |
-|---|---|
-| Force field | AMBER ff14SB |
-| Water | TIP3P |
-| Salt | 0.15 M NaCl |
-| Timestep | 2 fs with constrained bonds to hydrogen |
-| Production | 1 ns each for seeds 11, 22, and 33 |
-| Validation | RMSD band 0.6-2.0 Angstrom, seed plateau spread < 0.4 Angstrom |
+Expected values include AMBER ff14SB, TIP3P, 0.15 M NaCl, 10 Angstrom padding,
+2 fs timestep with constrained bonds to hydrogen, 1 ns production for seeds 11,
+22, and 33, and RMSD/seed-spread validation gates.
 
 ---
 
 ## 5. Review the protocol before execution
 
-Send:
+Paste:
 
 ```text
-/md-review Review the lysozyme MD protocol before execution. Use the
-MD Study Brief, Evidence Grounding Packet, Molecular System Definition,
-and Parameter Decision Ledger from this project.
+/md-review Review the lysozyme MD protocol before execution. Use the MD Study
+Brief, Evidence Grounding Packet, Molecular System Definition, and Parameter
+Decision Ledger from this project.
 
-Return approved-to-run, approved-with-caveats, or blocked. If approved,
-list the exact caveats, validation gates, and overclaim risks the
-execution agent must preserve. If blocked, list the required fixes
-instead of producing runnable instructions.
+Return approved-to-run, approved-with-caveats, or blocked. If approved, list
+the exact caveats, validation gates, and overclaim risks the execution agent
+must preserve. If blocked, list the required fixes instead of producing
+runnable instructions. Save a durable project-scoped Protocol Review Note with
+gbrain_capture before answering.
 ```
 
-For this tutorial, the expected result is `approved-with-caveats`: the
-run can demonstrate the scaffold and protein stability gate, but it
-cannot support a novel biological or therapeutic claim.
-
-Do not continue to execution if the result is `blocked`.
+For this tutorial the expected verdict is `approved-with-caveats`. Stop if the
+verdict is `blocked`.
 
 ---
 
 ## 6. Create the execution handoff
 
-Send:
+Paste:
 
 ```text
-/md-handoff Create an OpenHands-ready MD Execution Handoff Plan for
-the lysozyme quickstart.
+/md-handoff Create a Claude Code-ready MD Execution Handoff Plan for the
+lysozyme quickstart.
 
-Use the approved protocol assets. The implementation files already live
-under docs/tutorials/md-quickstart. The execution agent may create or
-reuse the scienceswarm-md-quickstart environment from environment.yml,
-fetch PDB 1AKI, run the tutorial stages in order, collect logs and
-artifacts, and stop on failed validation gates.
+Use the approved protocol assets from this project. The implementation files
+already live under docs/tutorials/md-quickstart. The execution assistant may
+create or reuse the scienceswarm-md-quickstart environment from
+environment.yml, fetch PDB 1AKI, run the tutorial stages in order, collect logs
+and artifacts, and stop on failed validation gates.
 
-The execution agent must not change the scientific protocol, substitute
+The execution assistant must not change the scientific protocol, substitute
 force fields, change the protein system, skip seeds, or treat successful
-completion as a biological discovery. Include a copyable task prompt
-for OpenHands.
+completion as a biological discovery. Include a copyable task prompt for
+Claude Code. Save a durable project-scoped MD Execution Handoff Plan with
+gbrain_capture before answering.
 ```
 
-Check that the handoff includes:
-
-- environment check,
-- system preparation,
-- solvation,
-- minimization and equilibration,
-- production for seeds 11, 22, and 33,
-- analysis,
-- stage gates,
-- expected artifacts,
-- run provenance.
-
-This is the last planning step before compute.
+Check that the handoff includes environment checks, fetch, preparation,
+solvation, equilibration, production for seeds 11/22/33, analysis, validation
+gates, artifacts, and run provenance.
 
 ---
 
 ## 7. Run the lysozyme example
 
-Switch the project to OpenHands task mode before sending the execution
-request:
-
-1. Open Settings > Project AI destinations.
-2. Select the same project.
-3. Set `Project policy` to `Execution ok`.
-4. Set `Mode` to `Task`.
-5. Set `Destination` to `OpenHands`.
-6. Return to the project chat.
-
-Now send this in the project chat message box:
+Keep the assistant selector on `Claude Code`. Paste:
 
 ```text
-Run the lysozyme MD quickstart end to end using docs/tutorials/md-quickstart.
+Run the lysozyme MD quickstart end to end using this ScienceSwarm project
+workspace.
 
-Use the approved MD Execution Handoff Plan from this project and the
-bundled environment.yml. Create or reuse the scienceswarm-md-quickstart
-environment. Fetch PDB 1AKI into the tutorial scripts folder. Run stages
-01 through 05 in order. Run production for seeds 11, 22, and 33 at
-1.0 ns each. Stop immediately if any validation gate fails.
+Use the approved MD Execution Handoff Plan from this project and the imported
+tutorial files under the project workspace. The scripts live in scripts/ and
+the environment file is config/environment.yml. First check whether python3 can
+already import OpenMM, PDBFixer, MDTraj, NumPy, and Matplotlib. If that works,
+reuse that environment and report the versions. If it does not work and
+ScienceSwarm is allowed to install tools, create or reuse a managed
+scienceswarm-md-quickstart conda/mamba environment under
+$SCIENCESWARM_DIR/runtimes/conda/envs/.
 
-Keep generated files inside the tutorial folder. When finished, summarize
-analysis/metrics.json, list the generated plots and logs, and say which OpenMM
-platform was used.
+Use CUDA or OpenCL if OpenMM can see it; otherwise fall back to CPU and report
+the fallback. Fetch PDB 1AKI into the scripts folder. Run stages 01 through 05
+in order. Run production for seeds 11, 22, and 33 at 1.0 ns each. Stop
+immediately if any validation gate fails.
+
+Keep generated files inside the project scripts folder. When finished,
+summarize analysis/metrics.json, list generated plots/logs/trajectories, say
+which OpenMM platform was used, and save a durable project-scoped Simulation
+Run Log with gbrain_capture before answering.
 ```
 
-If you have CUDA available, add this sentence before sending:
+If ScienceSwarm needs to install a package manager or persistent scientific
+software, it should ask before installing. The platform convention is
+`$SCIENCESWARM_DIR/runtimes/` for package managers and
+`$SCIENCESWARM_DIR/runtimes/conda/envs/` for named conda/mamba environments.
 
-```text
-Use CUDA if OpenMM can see it; otherwise fall back to CPU and report the fallback.
-```
-
-ScienceSwarm will show a `Review before sending` sheet. Confirm:
-
-- destination is OpenHands,
-- mode is task,
-- data included is the prompt and expected project context,
-- project policy is `Execution ok`.
-
-Then click `Approve and send`.
-
-You can monitor the run in the project chat stream. Settings > Project AI
-destinations also shows task sessions and session history.
-
-The expected run artifacts are:
+The expected run outputs are:
 
 | Artifact | Meaning |
 |---|---|
-| `prepared.pdb` | cleaned lysozyme with hydrogens |
-| `solvated.pdb` and `system.xml` | solvated, neutralized OpenMM system |
-| `equilibrated.pdb` and `equilibrated.xml` | equilibrated starting point |
-| `prod_seed11.dcd`, `prod_seed22.dcd`, `prod_seed33.dcd` | production trajectories |
-| `prod_seed*.log` and `eq_*.log` | runtime diagnostics |
-| `analysis/metrics.json` | validation metrics |
-| `analysis/rmsd_ca.png`, `analysis/rmsf_ca.png`, `analysis/rg.png` | plots |
+| `scripts/1AKI.pdb` | downloaded input structure |
+| `scripts/prepared.pdb` | cleaned lysozyme with hydrogens |
+| `scripts/solvated.pdb`, `scripts/system.xml` | solvated OpenMM system |
+| `scripts/equilibrated.pdb`, `scripts/equilibrated.xml` | equilibrated state |
+| `scripts/prod_seed11.dcd`, `scripts/prod_seed22.dcd`, `scripts/prod_seed33.dcd` | production trajectories |
+| `scripts/prod_seed*.log`, `scripts/eq_*.log` | diagnostics |
+| `scripts/analysis/metrics.json` | validation metrics |
+| `scripts/analysis/rmsd_ca.png`, `scripts/analysis/rmsf_ca.png`, `scripts/analysis/rg.png` | plots |
 
 ---
 
 ## 8. Interpret the results
 
-After OpenHands finishes, switch back to OpenClaw:
-
-1. In Settings > Project AI destinations, set `Mode` to `Chat`,
-   `Destination` to `OpenClaw`, and `Project policy` to `Local only`.
-2. Return to the project chat.
-3. If the generated files appear in the workspace, type `@` in the
-   composer and attach or mention `analysis/metrics.json`, the production logs,
-   and the analysis plots.
-
-Then send:
+After Claude Code reports that the run finished, paste:
 
 ```text
 /md-results Interpret the completed lysozyme MD quickstart.
 
-Use the generated analysis/metrics.json, production logs, and analysis plots.
-Classify each candidate claim as supported, suggestive, weak, or
-unsupported. Separate "the run completed" from scientific support.
-Report whether the C-alpha RMSD plateau lands in the 0.6-2.0 Angstrom
-reference band and whether the seed plateau spread is below 0.4 Angstrom.
+Use the generated scripts/analysis/metrics.json, production logs, and analysis
+plots. Classify each candidate claim as supported, suggestive, weak, or
+unsupported. Separate "the run completed" from scientific support. Report
+whether the C-alpha RMSD plateau lands in the 0.6-2.0 Angstrom reference band
+and whether the seed plateau spread is below 0.4 Angstrom. Save a durable
+project-scoped Results Interpretation Note with gbrain_capture before
+answering.
 ```
 
-Expected interpretation:
-
-| Candidate claim | Expected class |
-|---|---|
-| The pipeline ran end to end on commodity hardware | `supported` if all stages completed |
-| Lysozyme apo backbone stayed stable on this short run | `supported` or `suggestive` if validation gates passed |
-| Three 1 ns seeds are enough for a biological conclusion | `unsupported` |
-| The scaffold is ready to adapt to a new target | `suggestive`, with caveats |
+Expected interpretation: the pipeline completion is supported if all stages
+completed; lysozyme short-run stability is supported or suggestive if gates
+passed; any broader biological conclusion is unsupported.
 
 ---
 
 ## 9. Decide what to do next
 
-Send:
+Paste:
 
 ```text
-/md-refine Create the MD Refinement Decision Update for the lysozyme
-quickstart using the planning assets, execution handoff, and results
-interpretation.
+/md-refine Create the MD Refinement Decision Update for the lysozyme quickstart
+using the planning assets, execution handoff, and results interpretation.
 
 Choose one of: stop, rerun-same-protocol, extend-run, adjust-parameters,
 change-system-definition, switch-method, seek-expert-review, or
-seek-experimental-validation. For this tutorial, explain whether the
-right next step is to stop, extend the run, or define a new system such
-as a ligand-bound lysozyme example.
+seek-experimental-validation. For this tutorial, explain whether the right next
+step is to stop, extend the run, or define a new system such as a ligand-bound
+lysozyme example. Save a durable project-scoped Refinement Decision Update with
+gbrain_capture before answering.
 ```
 
-For a successful tutorial run, the likely decision is `stop` for the
-lysozyme scaffold, with `change-system-definition` as the natural next
-learning path if you want to add a ligand.
+For a successful tutorial run, `stop` is the likely decision for the scaffold.
+`change-system-definition` is the natural next learning path if you want to add
+a ligand or a new target.
 
 ---
 
 ## Done checklist
 
-You are done when the project has these planning assets:
+You are done when gbrain contains:
 
 - MD Study Brief
 - MD Evidence Grounding Packet
 - Molecular System Definition
 - Parameter Decision Ledger
 - Protocol Review Note
-- Execution Handoff Plan
+- MD Execution Handoff Plan
+- Simulation Run Log
 - Results Interpretation Note
 - Refinement Decision Update
 
-And these run outputs:
+And the project workspace contains:
 
-- `analysis/metrics.json`
+- `scripts/analysis/metrics.json`
 - three production trajectories
 - production and equilibration logs
-- `analysis/rmsd_ca.png`
-- `analysis/rmsf_ca.png`
-- `analysis/rg.png`
+- `scripts/analysis/rmsd_ca.png`
+- `scripts/analysis/rmsf_ca.png`
+- `scripts/analysis/rg.png`
 
-The final answer you want from ScienceSwarm is not just "the job ran."
-It is a traceable chain from study question, to protocol decisions, to
-execution artifacts, to validation metrics, to an explicit stop or
-refinement decision.
-
----
-
-## What this walkthrough does not cover
-
-- **Small-molecule and covalent ligand parameterization.** The skills
-  cover the decision and provenance side; ligand parameterization itself
-  requires GAFF + AM1-BCC via `openmmforcefields` or CGenFF.
-- **Cluster / multi-node MD.** OpenMM's MPI / multi-replica strategies
-  are out of scope here.
-- **Trajectory storage strategy.** Long-running MD generates many
-  gigabytes; pick a storage tier appropriate to your institution before
-  scaling production.
+The final answer you want from ScienceSwarm is a traceable chain from study
+question, to protocol decisions, to execution artifacts, to validation metrics,
+to an explicit stop or refinement decision.
 
 ---
 
 ## Further reading
 
-- [`docs/tutorials/md-quickstart/README.md`](md-quickstart/README.md) -
-  the runnable lysozyme example.
-- `skills/scienceswarm-md-*/hosts/openclaw/SKILL.md` - the OpenClaw skill
+- [`docs/tutorials/md-quickstart/README.md`](md-quickstart/README.md) - the
+  runnable lysozyme example.
+- `skills/scienceswarm-md-*/hosts/claude-code/SKILL.md` - the Claude Code skill
   instructions used by the slash commands.
 - Maier et al. 2015 (PMID 26574453) - AMBER ff14SB.
 - Eastman et al. 2017 (PMID 28746537) - OpenMM.

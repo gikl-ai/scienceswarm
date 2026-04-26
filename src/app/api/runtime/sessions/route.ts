@@ -5,6 +5,7 @@ import {
   buildRuntimeTurnRequest,
   computeRuntimeApiPreview,
   dataIncludedFromBodyWithRuntimeContext,
+  expandRuntimeSlashCommandPrompt,
   getRuntimeApiServices,
   optionalSafeProjectId,
   optionalRuntimeSessionStatusFromSearchParam,
@@ -83,7 +84,10 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const hostId = requireStringField(body, "hostId");
-    const prompt = requireStringField(body, "prompt");
+    const prompt = await expandRuntimeSlashCommandPrompt(
+      requireStringField(body, "prompt"),
+      hostId,
+    );
     const projectId = requireSafeProjectId(body.projectId);
     const conversationId = optionalStringField(body, "conversationId") ?? null;
     const approvalState = approvalStateFromBody(body);

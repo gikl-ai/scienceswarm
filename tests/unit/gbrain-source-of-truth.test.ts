@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildScienceSwarmGbrainEnv,
   readScienceSwarmGbrainPackageState,
+  resolveScienceSwarmRuntimeAppOrigin,
   scienceSwarmGbrainBin,
   scienceSwarmNodeBinDir,
 } from "@/lib/gbrain/source-of-truth";
@@ -80,6 +81,25 @@ describe("ScienceSwarm gbrain source of truth", () => {
 
     expect(env.PATH?.split(path.delimiter)[0]).toBe(scienceSwarmNodeBinDir(repoRoot));
     expect(env.Path).toBe(env.PATH);
+  });
+
+  it("passes a local ScienceSwarm app origin to runtime MCP processes", () => {
+    const env = buildScienceSwarmGbrainEnv({
+      NODE_ENV: "test",
+      FRONTEND_PORT: "3129",
+      PATH: "/usr/bin",
+    }, "/tmp/scienceswarm");
+
+    expect(env.SCIENCESWARM_RUNTIME_APP_ORIGIN).toBe("http://127.0.0.1:3129");
+    expect(resolveScienceSwarmRuntimeAppOrigin({
+      NODE_ENV: "test",
+      SCIENCESWARM_RUNTIME_APP_ORIGIN: "http://localhost:4173/dashboard",
+    })).toBe("http://localhost:4173");
+    expect(resolveScienceSwarmRuntimeAppOrigin({
+      NODE_ENV: "test",
+      SCIENCESWARM_RUNTIME_APP_ORIGIN: "https://example.com",
+      FRONTEND_PORT: "3129",
+    })).toBe("http://127.0.0.1:3129");
   });
 
   it("reports stale node_modules when installed gbrain differs from package-lock", async () => {

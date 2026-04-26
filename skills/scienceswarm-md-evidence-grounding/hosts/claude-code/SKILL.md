@@ -23,6 +23,12 @@ chosen.
 7. Produce an `Evidence Grounding Packet` with
    `asset_kind: md_evidence_grounding_packet`.
 
+When the `scienceswarm` MCP tools are available, save the packet with
+`gbrain_capture` before answering. Use a clear title, the asset kind above,
+the active project, and links or references to the upstream MD Study Brief.
+If saving fails, report the exact save failure and do not present the packet as
+durable.
+
 Include a `Confidence Boundary` section in the packet.
 
 Do not replace missing evidence with confident defaults.

@@ -7,6 +7,7 @@ import {
   buildRuntimeTurnRequest,
   computeRuntimeApiPreview,
   dataIncludedFromBodyWithRuntimeContext,
+  expandRuntimeSlashCommandPrompt,
   getRuntimeApiServices,
   optionalStringArrayField,
   optionalStringField,
@@ -56,7 +57,9 @@ export async function POST(request: Request): Promise<Response> {
     const services = getRuntimeApiServices();
     const projectId = requireSafeProjectId(body.projectId);
     const projectPolicy = projectPolicyFromBody(body);
-    const prompt = requireStringField(body, "prompt");
+    const prompt = await expandRuntimeSlashCommandPrompt(
+      requireStringField(body, "prompt"),
+    );
     const approvalState = approvalStateFromBody(body);
     const selectedHostIds = requireStringArrayField(body, "selectedHostIds");
     const synthesisHostId = optionalStringField(body, "synthesisHostId") ?? "openclaw";

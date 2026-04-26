@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-scm-pretreatment-fit
-description: Fit classic Abadie synthetic control: choose predictors, solve donor weights via the constrained quadratic program, and gate the fit on pre-period RMSPE relative to outcome variability.
+description: "Fit classic Abadie synthetic control: choose predictors, solve donor weights via the constrained quadratic program, and gate the fit on pre-period RMSPE relative to outcome variability."
 ---
 
 # ScienceSwarm SCM Pre-Treatment Fit

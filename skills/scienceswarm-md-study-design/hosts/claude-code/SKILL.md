@@ -22,5 +22,10 @@ into an MD study question before any files or parameters are generated.
 7. Include a `Confidence Boundary` section that states what the brief supports,
    what it does not support, and what would change the recommendation.
 
+When the `scienceswarm` MCP tools are available, save the brief with
+`gbrain_capture` before answering. Use a clear title, the asset kind above, and
+the active project. If saving fails, report the exact save failure and do not
+present the brief as durable.
+
 Do not start parameter planning until the simulation question and method
 suitability are explicit.

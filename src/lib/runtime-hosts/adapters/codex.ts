@@ -372,6 +372,14 @@ export function buildCodexRuntimeMcpContext(input: {
       "-c",
       `mcp_servers.scienceswarm.env_vars=${tomlStringArray([
         "SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN",
+        "SCIENCESWARM_RUNTIME_MCP_PROJECT_ID",
+        "SCIENCESWARM_RUNTIME_MCP_SESSION_ID",
+        "SCIENCESWARM_RUNTIME_MCP_HOST_ID",
+        "SCIENCESWARM_RUNTIME_MCP_PROJECT_POLICY",
+        "SCIENCESWARM_RUNTIME_MCP_APPROVED",
+        "SCIENCESWARM_RUNTIME_MCP_PROMPT_HASH",
+        "SCIENCESWARM_RUNTIME_MCP_INPUT_FILE_REFS",
+        "SCIENCESWARM_RUNTIME_MCP_APPROVAL_STATE",
         "BRAIN_ROOT",
         "SCIENCESWARM_DIR",
         "NODE_ENV",
@@ -379,6 +387,7 @@ export function buildCodexRuntimeMcpContext(input: {
         "SCIENCESWARM_REPO_ROOT",
         "SCIENCESWARM_GBRAIN_BIN",
         "GBRAIN_BIN",
+        "SCIENCESWARM_RUNTIME_APP_ORIGIN",
       ])}`,
       "-c",
       `mcp_servers.scienceswarm.enabled_tools=${tomlStringArray(allowedTools)}`,
@@ -388,6 +397,21 @@ export function buildCodexRuntimeMcpContext(input: {
     env: {
       ...runtimeEnv,
       SCIENCESWARM_RUNTIME_MCP_ACCESS_TOKEN: token,
+      SCIENCESWARM_RUNTIME_MCP_PROJECT_ID: projectId,
+      SCIENCESWARM_RUNTIME_MCP_SESSION_ID: runtimeSessionId,
+      SCIENCESWARM_RUNTIME_MCP_HOST_ID: "codex",
+      SCIENCESWARM_RUNTIME_MCP_PROJECT_POLICY: input.request.preview.projectPolicy,
+      SCIENCESWARM_RUNTIME_MCP_APPROVED:
+        input.request.approvalState === "approved"
+        || input.request.approvalState === "not-required"
+          ? "true"
+          : "false",
+      SCIENCESWARM_RUNTIME_MCP_PROMPT_HASH:
+        input.request.promptHash ?? "runtime-mcp",
+      SCIENCESWARM_RUNTIME_MCP_INPUT_FILE_REFS: JSON.stringify(
+        input.request.inputFileRefs,
+      ),
+      SCIENCESWARM_RUNTIME_MCP_APPROVAL_STATE: input.request.approvalState,
     },
     prompt: [instructions, "", "User prompt:", input.request.prompt].join("\n"),
     allowedTools,
@@ -416,7 +440,7 @@ function buildCodexRuntimeMcpInstructions(input: {
     `- approved: ${input.approvalStateApproved ? "true" : "false"}`,
     "",
     `Allowed tools: ${input.allowedTools.join(", ")}.`,
-    "For runtime-originated gbrain writes, include RuntimeGbrainProvenance matching this session.",
+    "For runtime-originated gbrain writes, ScienceSwarm attaches RuntimeGbrainProvenance automatically. Do not fabricate provenance values.",
   ].join("\n");
 }
 

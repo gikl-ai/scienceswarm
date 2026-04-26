@@ -51,6 +51,11 @@ function isNativeClaudeCodeSessionId(
     && conversationId.startsWith("claude-code-") === false;
 }
 
+// Scientific execution turns can legitimately spend many minutes inside
+// domain tools before returning a final assistant message.
+const DEFAULT_CLAUDE_CODE_TIMEOUT_MS = 30 * 60_000;
+const CLAUDE_CODE_STDOUT_IDLE_SETTLE_MS = 20_000;
+
 function isMissingClaudeCodeConversationError(error: unknown): boolean {
   const text = error instanceof RuntimeHostError
     ? [
@@ -105,7 +110,7 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
     this.runtimeProfile = options.profile ?? requireRuntimeHostProfile("claude-code");
     this.transport = options.transport ?? new LocalCliTransport();
     this.command = options.command ?? this.runtimeProfile.transport.command ?? "claude";
-    this.timeoutMs = options.timeoutMs ?? 120_000;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_CLAUDE_CODE_TIMEOUT_MS;
     this.sessionIdGenerator = options.sessionIdGenerator ?? (() => randomUUID());
     this.healthArgs = options.healthArgs ?? ["--version"];
     this.authArgs = options.authArgs;
@@ -392,6 +397,8 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
         cwd: context?.cwd,
         env: this.runtimeEnv(env, context),
         timeoutMs: this.timeoutMs,
+        settleAfterStdoutIdleMs: CLAUDE_CODE_STDOUT_IDLE_SETTLE_MS,
+        settleAfterStdoutIdleWhen: isClaudeCodeTerminalResultLine,
         onStdoutLine: (line) => {
           const event = stream.acceptLine(line);
           if (event) request.onEvent?.(event);
@@ -430,6 +437,20 @@ export class ClaudeCodeRuntimeHostAdapter implements ResearchRuntimeHost {
         nativeSessionId: input.nativeSessionId ?? input.sessionId,
       },
     };
+  }
+}
+
+function isClaudeCodeTerminalResultLine(line: string): boolean {
+  try {
+    const parsed = JSON.parse(line.trim()) as unknown;
+    return Boolean(
+      parsed
+        && typeof parsed === "object"
+        && !Array.isArray(parsed)
+        && (parsed as { type?: unknown }).type === "result",
+    );
+  } catch {
+    return false;
   }
 }
 

@@ -24,8 +24,13 @@ export interface ParsedOpenClawSlashCommand {
   raw: string;
 }
 
+export interface BuildOpenClawSlashCommandPromptOptions {
+  hostId?: string | null;
+  skillInstructions?: string | null;
+}
+
 const LEADING_SLASH_COMMAND_PATTERN =
-  /^\s*\/([a-z0-9][a-z0-9-]*)(?:\s+(.*))?$/i;
+  /^\s*\/([a-z0-9][a-z0-9-]*)(?:\s+([\s\S]*))?$/i;
 
 function helpCommand(): OpenClawSlashCommandRecord {
   return {
@@ -131,6 +136,7 @@ export function parseOpenClawSlashCommandInput(
 
 export function buildOpenClawSlashCommandPrompt(
   parsed: ParsedOpenClawSlashCommand,
+  options: BuildOpenClawSlashCommandPromptOptions = {},
 ): string {
   if (parsed.command.kind === "builtin") {
     return `The user asked for ScienceSwarm slash-command help via \`${parsed.raw}\`.`;
@@ -138,9 +144,30 @@ export function buildOpenClawSlashCommandPrompt(
 
   const segments = [
     `ScienceSwarm slash command: \`${parsed.raw}\``,
-    `Use the installed ScienceSwarm skill \`${parsed.command.skillSlug}\` as the primary procedure for this request.`,
     `Skill description: ${parsed.command.description}`,
+    [
+      "Scope rule: the current user request is authoritative.",
+      "Do not substitute a different molecule, project, prior study, or previous MD asset unless the user explicitly names it in this request.",
+      "Use prior project artifacts only when they match the requested system and question.",
+    ].join(" "),
   ];
+
+  if (options.skillInstructions?.trim()) {
+    const hostLabel = options.hostId ? ` for ${options.hostId}` : "";
+    segments.push(
+      [
+        `Embedded ScienceSwarm skill instructions${hostLabel}:`,
+        "Follow these instructions directly. Do not call or require a separate skill loader for this slug.",
+        "```markdown",
+        options.skillInstructions.trim(),
+        "```",
+      ].join("\n"),
+    );
+  } else {
+    segments.push(
+      `Use the installed ScienceSwarm skill \`${parsed.command.skillSlug}\` as the primary procedure for this request.`,
+    );
+  }
 
   if (parsed.arguments.length > 0) {
     segments.push(`User request:\n${parsed.arguments}`);

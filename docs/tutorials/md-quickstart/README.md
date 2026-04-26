@@ -43,10 +43,9 @@ asking ScienceSwarm to use CUDA when OpenMM can see it.
 ## Requirements
 
 - macOS, Linux, or Windows (WSL2)
-- ScienceSwarm with project chat and an execution-capable destination such
-  as OpenHands
-- A local execution runtime that can create Conda or mamba environments
-  (`miniforge3` recommended)
+- ScienceSwarm with project chat and Claude Code enabled as an assistant
+- A local execution runtime with the scientific Python stack available, or
+  permission for ScienceSwarm to create a managed conda/mamba environment
 - ~1 GB free disk for outputs
 - Internet access for one PDB download
 
@@ -56,32 +55,37 @@ No API keys, no cluster, no GPU required.
 
 ## Setup
 
-Do this from the ScienceSwarm UI. The Conda environment is an
-implementation detail for the execution agent; users should not have to
-create it by hand.
+Do this from the ScienceSwarm UI. The Python or conda environment is an
+implementation detail for the execution assistant; users should not have to
+create it by hand or paste shell commands.
 
 1. Start ScienceSwarm and open a project workspace.
 2. Import this checkout, or just the `docs/tutorials/md-quickstart/`
    folder, into the project so the agent can see `environment.yml` and
    `scripts/`.
-3. Open Settings > Project AI destinations for the same project. Set
-   `Project policy` to `Execution ok`, `Mode` to `Task`, and
-   `Destination` to `OpenHands`.
+3. In the project chat composer, set the assistant to `Claude Code`.
 4. Return to the project chat and send this request:
 
 ```text
 Prepare the MD quickstart in docs/tutorials/md-quickstart for execution.
-Use the bundled environment.yml to create or reuse the
-scienceswarm-md-quickstart environment, then verify that OpenMM, MDTraj,
-and pdbfixer import successfully. Keep all generated files inside the
-tutorial folder and stop with a clear error if setup fails.
+Use the bundled environment.yml as the dependency contract. First check
+whether python3 can already import OpenMM, MDTraj, pdbfixer, NumPy, and
+Matplotlib. If that works, reuse that environment and report the versions.
+If it does not work and ScienceSwarm is allowed to install tools, create or
+reuse a managed scienceswarm-md-quickstart conda/mamba environment. Keep all
+generated files inside the tutorial folder and stop with a clear error if
+setup fails.
 ```
 
 ScienceSwarm should report the environment it created or reused, plus the
-OpenMM and MDTraj versions it verified. If the runtime reports missing
-infrastructure, treat that as a ScienceSwarm execution-setup issue and
-fix the destination before rerunning; the tutorial itself should not send
-you to a terminal to recover.
+OpenMM and MDTraj versions it verified. If it needs to create conda/mamba
+state, the platform convention is to keep the package-manager install under
+`$SCIENCESWARM_DIR/runtimes/` (default `~/.scienceswarm/runtimes/`) and named
+environments under `$SCIENCESWARM_DIR/runtimes/conda/envs/`, not inside the
+app checkout or imported project folder. If the runtime reports missing
+infrastructure, treat that as a ScienceSwarm execution-setup issue and fix the
+destination before rerunning; the tutorial itself should not send you to a
+terminal to recover.
 
 ---
 
@@ -96,8 +100,8 @@ Run the lysozyme MD quickstart end to end. Fetch PDB 1AKI, run stages
 finishes, summarize analysis/metrics.json and list the generated plots.
 ```
 
-For a CUDA GPU run, add: `Use CUDA if OpenMM can see it; otherwise fall
-back to CPU and say which platform was used.`
+For an accelerated run, add: `Use CUDA or OpenCL if OpenMM can see it;
+otherwise fall back to CPU and say which platform was used.`
 
 The execution agent should perform these implementation steps:
 

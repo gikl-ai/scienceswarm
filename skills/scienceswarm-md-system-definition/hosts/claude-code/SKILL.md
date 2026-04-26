@@ -22,6 +22,12 @@ planning or execution.
 7. Produce a `Molecular System Definition` with
    `asset_kind: md_system_definition`.
 
+When the `scienceswarm` MCP tools are available, save the definition with
+`gbrain_capture` before answering. Use a clear title, the asset kind above,
+the active project, and links or references to the upstream study and evidence
+assets. If saving fails, report the exact save failure and do not present the
+definition as durable.
+
 Include a `Confidence Boundary` section in the definition.
 
 Stop if identity, charge, protonation, cofactors, or membrane composition are

@@ -19,6 +19,12 @@ Use this skill as the pre-run quality gate for an MD setup.
 5. Produce a `Protocol Review Note` with
    `asset_kind: md_protocol_review_note`.
 
+When the `scienceswarm` MCP tools are available, save the review note with
+`gbrain_capture` before answering. Use a clear title, the asset kind above,
+the active project, and links or references to the reviewed planning assets.
+If saving fails, report the exact save failure and do not present the review as
+durable.
+
 Include a `Confidence Boundary` section in the review note.
 
 If the verdict is `blocked`, do not produce runnable commands. Produce required

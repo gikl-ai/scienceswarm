@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import matter from "gray-matter";
+
 import type {
   ResearchRuntimeHost,
   RuntimeApprovalState,
@@ -43,6 +47,15 @@ import { createGeminiCliRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/
 import { createOpenHandsRuntimeHostAdapter } from "@/lib/runtime-hosts/adapters/openhands";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 import { isLocalRequest } from "@/lib/local-guard";
+import { readOpenClawSkill } from "@/lib/openclaw/skill-catalog";
+import { listScienceSwarmOpenClawSlashCommandSkills } from "@/lib/openclaw/skill-registry";
+import {
+  buildOpenClawSlashCommandPrompt,
+  buildOpenClawSlashCommands,
+  looksLikeSlashCommandInput,
+  parseOpenClawSlashCommandInput,
+  type ParsedOpenClawSlashCommand,
+} from "@/lib/openclaw/slash-commands";
 
 export interface RuntimeApiServices {
   sessionStore: RuntimeSessionStore;
@@ -140,10 +153,94 @@ export function runtimeInvalidRequest(
   });
 }
 
+function hostSkillDirectory(hostId: string | null | undefined): string | null {
+  switch (hostId) {
+    case "openclaw":
+    case "claude-code":
+    case "codex":
+      return hostId;
+    default:
+      return null;
+  }
+}
+
+async function readRuntimeHostSkillInstructions(
+  parsed: ParsedOpenClawSlashCommand,
+  hostId: string | null | undefined,
+): Promise<string | null> {
+  const skillSlug = parsed.command.skillSlug;
+  if (!skillSlug) return null;
+
+  const hostDirectory = hostSkillDirectory(hostId);
+  if (hostDirectory) {
+    try {
+      const rawMarkdown = await readFile(
+        path.join(
+          process.cwd(),
+          "skills",
+          skillSlug,
+          "hosts",
+          hostDirectory,
+          "SKILL.md",
+        ),
+        "utf-8",
+      );
+      const parsedMarkdown = matter(rawMarkdown);
+      if (parsedMarkdown.content.trim()) {
+        return parsedMarkdown.content.trim();
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
+        throw error;
+      }
+    }
+  }
+
+  try {
+    return (await readOpenClawSkill(skillSlug)).content.trim();
+  } catch {
+    return null;
+  }
+}
+
+export async function expandRuntimeSlashCommandPrompt(
+  prompt: string,
+  hostId?: string | null,
+): Promise<string> {
+  if (!looksLikeSlashCommandInput(prompt)) {
+    return prompt;
+  }
+
+  const skills = await listScienceSwarmOpenClawSlashCommandSkills();
+  const commands = buildOpenClawSlashCommands(skills);
+  const parsed = parseOpenClawSlashCommandInput(prompt, commands);
+  if (!parsed) {
+    const commandName = /^\s*\/([a-z0-9][a-z0-9-]*)/i.exec(prompt)?.[1];
+    throw runtimeInvalidRequest(
+      commandName
+        ? `Unknown command: /${commandName}`
+        : "Unknown ScienceSwarm slash command.",
+      { commandName },
+    );
+  }
+
+  const skillInstructions = await readRuntimeHostSkillInstructions(
+    parsed,
+    hostId,
+  );
+  return buildOpenClawSlashCommandPrompt(parsed, {
+    hostId,
+    skillInstructions,
+  });
+}
+
 export async function assertRuntimeApiLocalRequest(
   request: Request,
 ): Promise<void> {
-  if (await isLocalRequest(request)) return;
+  if (await isLocalRequest(request)) {
+    rememberRuntimeAppOrigin(request);
+    return;
+  }
 
   throw new RuntimeHostError({
     code: "RUNTIME_INVALID_REQUEST",
@@ -153,6 +250,17 @@ export async function assertRuntimeApiLocalRequest(
     recoverable: false,
     context: { localOnly: true },
   });
+}
+
+function rememberRuntimeAppOrigin(request: Request): void {
+  try {
+    const origin = new URL(request.url).origin;
+    if (origin.startsWith("http://") || origin.startsWith("https://")) {
+      process.env.SCIENCESWARM_RUNTIME_APP_ORIGIN = origin;
+    }
+  } catch {
+    // Best effort only. Runtime MCP can still fall back to direct gbrain.
+  }
 }
 
 export async function parseJsonObject(

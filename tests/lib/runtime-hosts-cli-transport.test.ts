@@ -213,6 +213,46 @@ describe("runtime host CLI transport", () => {
     await expect(transport.cancel("rt-session-cancellable")).resolves.toBe(false);
   });
 
+  it("does not settle on stdout idle before an eligible line appears", async () => {
+    const transport = new LocalCliTransport();
+
+    await expect(
+      transport.run({
+        hostId: "claude-code",
+        command: process.execPath,
+        args: ["-e", "process.stdout.write('startup\\n'); setTimeout(() => {}, 5_000)"],
+        timeoutMs: 80,
+        settleAfterStdoutIdleMs: 20,
+        settleAfterStdoutIdleWhen: (line) => line === "result",
+      }),
+    ).rejects.toThrow(RuntimeCliTimeoutError);
+  });
+
+  it("settles on stdout idle after an eligible terminal line appears", async () => {
+    const transport = new LocalCliTransport();
+    const startedAt = Date.now();
+
+    const result = await transport.run({
+      hostId: "claude-code",
+      command: process.execPath,
+      args: [
+        "-e",
+        [
+          "process.stdout.write('startup\\n');",
+          "setTimeout(() => process.stdout.write('result\\n'), 70);",
+          "setTimeout(() => {}, 5_000);",
+        ].join(" "),
+      ],
+      timeoutMs: 1_000,
+      settleAfterStdoutIdleMs: 20,
+      settleAfterStdoutIdleWhen: (line) => line === "result",
+    });
+
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(70);
+    expect(result.exitCode).toBe(0);
+    expect(result.output.lines).toEqual(["startup", "result"]);
+  });
+
   it("times out hung subprocesses with a typed timeout error", async () => {
     const transport = new LocalCliTransport();
 

@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-scm-inference-and-placebos
-description: Run permutation-based inference for synthetic control: in-space placebos across donors, in-time placebos across alternate treatment years, and leave-one-out donor sensitivity.
+description: "Run permutation-based inference for synthetic control: in-space placebos across donors, in-time placebos across alternate treatment years, and leave-one-out donor sensitivity."
 ---
 
 # ScienceSwarm SCM Inference and Placebos

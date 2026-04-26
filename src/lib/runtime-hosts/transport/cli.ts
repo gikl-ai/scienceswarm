@@ -22,6 +22,8 @@ export interface CliTransportRunRequest {
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
   requireJson?: boolean;
+  settleAfterStdoutIdleMs?: number;
+  settleAfterStdoutIdleWhen?: (line: string) => boolean;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
 }
@@ -164,11 +166,12 @@ export class LocalCliTransport implements CliTransport {
       }
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
-      const stdoutLines = new LineEmitter(request.onStdoutLine);
       const stderrLines = new LineEmitter(request.onStderrLine);
       let settled = false;
       let timer: NodeJS.Timeout | null = null;
       let forceKillTimer: NodeJS.Timeout | null = null;
+      let stdoutIdleTimer: NodeJS.Timeout | null = null;
+      let stdoutIdleArmed = false;
 
       const clearTimers = () => {
         if (timer) {
@@ -178,6 +181,10 @@ export class LocalCliTransport implements CliTransport {
         if (forceKillTimer) {
           clearTimeout(forceKillTimer);
           forceKillTimer = null;
+        }
+        if (stdoutIdleTimer) {
+          clearTimeout(stdoutIdleTimer);
+          stdoutIdleTimer = null;
         }
       };
       const clearActiveProcess = () => {
@@ -217,6 +224,62 @@ export class LocalCliTransport implements CliTransport {
           }),
         );
       };
+      const finishResolve = (
+        exitCode: number | null,
+        signal: NodeJS.Signals | null,
+        output: NormalizedCliOutput,
+      ) => {
+        resolve({
+          command: request.command,
+          args,
+          exitCode,
+          signal,
+          output,
+        });
+      };
+      const finishStdoutIdle = () => {
+        if (settled || !stdoutIdleArmed) return;
+        settled = true;
+        clearTimers();
+        clearActiveProcess();
+        const output = outputSoFar();
+        child.kill("SIGTERM");
+        forceKillTimer = setTimeout(() => child.kill("SIGKILL"), 250);
+        forceKillTimer.unref?.();
+        finishResolve(0, null, output);
+      };
+      const scheduleStdoutIdle = () => {
+        if (!request.settleAfterStdoutIdleMs || request.settleAfterStdoutIdleMs <= 0) {
+          return;
+        }
+        if (!stdoutIdleArmed) return;
+        if (stdoutIdleTimer) clearTimeout(stdoutIdleTimer);
+        stdoutIdleTimer = setTimeout(
+          finishStdoutIdle,
+          request.settleAfterStdoutIdleMs,
+        );
+      };
+      const onStdoutLine = (line: string) => {
+        request.onStdoutLine?.(line);
+        if (
+          request.settleAfterStdoutIdleMs
+          && request.settleAfterStdoutIdleMs > 0
+          && (request.settleAfterStdoutIdleWhen?.(line) ?? true)
+        ) {
+          stdoutIdleArmed = true;
+          scheduleStdoutIdle();
+        }
+      };
+      const stdoutLines = new LineEmitter(onStdoutLine);
+      const outputSoFar = (): NormalizedCliOutput => {
+        stdoutLines.flush();
+        stderrLines.flush();
+        return normalizeCliOutput({
+          stdout: Buffer.concat(stdout),
+          stderr: Buffer.concat(stderr),
+          requireJson: request.requireJson,
+        });
+      };
       timer = setTimeout(() => {
         child.kill("SIGTERM");
         forceKillTimer = setTimeout(() => child.kill("SIGKILL"), 250);
@@ -227,6 +290,7 @@ export class LocalCliTransport implements CliTransport {
       child.stdout?.on("data", (chunk: Buffer) => {
         stdout.push(chunk);
         stdoutLines.push(chunk);
+        scheduleStdoutIdle();
       });
       child.stderr?.on("data", (chunk: Buffer) => {
         stderr.push(chunk);
@@ -254,11 +318,7 @@ export class LocalCliTransport implements CliTransport {
         stdoutLines.flush();
         stderrLines.flush();
 
-        const output = normalizeCliOutput({
-          stdout: Buffer.concat(stdout),
-          stderr: Buffer.concat(stderr),
-          requireJson: request.requireJson,
-        });
+        const output = outputSoFar();
         const authChallenge = isCliAuthChallengeText(output.stderr)
           || (exitCode !== null && exitCode !== 0 && output.authChallenge);
         if (authChallenge) {
@@ -314,13 +374,7 @@ export class LocalCliTransport implements CliTransport {
           return;
         }
 
-        resolve({
-          command: request.command,
-          args,
-          exitCode,
-          signal,
-          output,
-        });
+        finishResolve(exitCode, signal, output);
       });
 
       if (request.input) {
