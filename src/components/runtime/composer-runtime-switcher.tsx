@@ -16,6 +16,7 @@ const ASSISTANT_LABELS: Record<string, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
   "gemini-cli": "Gemini CLI",
+  openhands: "OpenHands",
 };
 const MENU_WIDTH = 292;
 const VIEWPORT_MARGIN = 12;

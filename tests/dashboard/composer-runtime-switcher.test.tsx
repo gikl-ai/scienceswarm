@@ -150,6 +150,26 @@ describe("ComposerRuntimeSwitcher", () => {
     expect(within(dialog).queryByText("Private local assistant for ScienceSwarm.")).not.toBeInTheDocument();
   });
 
+  it("keeps the OpenHands assistant label while host metadata loads", () => {
+    render(
+      <ComposerRuntimeSwitcher
+        hosts={[]}
+        selectedHostId="openhands"
+        projectPolicy="local-only"
+        loading
+        open={false}
+        onOpenChange={vi.fn()}
+        onSelectedHostIdChange={vi.fn()}
+        onProjectPolicyChange={vi.fn()}
+        onModeChange={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Change assistant" });
+    expect(trigger).toHaveTextContent("OpenHands");
+    expect(trigger).not.toHaveTextContent("openhands");
+  });
+
   it("selects Claude Code as a plain assistant choice and hides policy details", async () => {
     const onProjectPolicyChange = vi.fn();
     const onSelectedHostIdChange = vi.fn();
