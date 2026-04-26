@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -149,6 +149,71 @@ describe("Study migration planning", () => {
 
     expect(plan.entries.some((entry) => entry.relativePath.includes("outside-secret"))).toBe(false);
     expect(plan.entries.some((entry) => entry.sourcePath?.endsWith("outside-secret.md"))).toBe(false);
+  });
+
+  it("rejects linked wiki symlinks that resolve outside legacy roots", async () => {
+    const roots = await installFixture();
+    const manifestPath = path.join(roots.projectsRoot, "project-alpha", ".brain", "state", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf-8")) as { taskPaths: string[] };
+    manifest.taskPaths.push("wiki/projects/project-alpha/leaked.md");
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
+    const outsideSecret = path.join(roots.dataRoot, "outside-secret.md");
+    await writeFile(outsideSecret, "do not copy", "utf-8");
+    await symlink(
+      outsideSecret,
+      path.join(roots.projectsRoot, "project-alpha", ".brain", "wiki", "projects", "project-alpha", "leaked.md"),
+    );
+
+    const plan = await planLegacyProjectStateMigration({
+      legacyProjectSlug: "project-alpha",
+      studyId: "study_alpha",
+      threadId: "thread_alpha",
+      projectsRoot: roots.projectsRoot,
+      brainRoot: roots.brainRoot,
+      stateRoot: roots.stateRoot,
+      generatedAt: "2026-04-26T00:00:00.000Z",
+    });
+
+    const leakedEntry = plan.entries.find((entry) => entry.relativePath === "wiki/projects/project-alpha/leaked.md");
+    expect(leakedEntry).toMatchObject({
+      sourcePath: null,
+      status: "missing",
+    });
+    expect(plan.entries.some((entry) => entry.sourcePath === outsideSecret)).toBe(false);
+  });
+
+  it("rejects fixed legacy files and inventory roots that resolve outside allowed roots", async () => {
+    const roots = await installFixture();
+    const localChatPath = path.join(roots.projectsRoot, "project-alpha", ".brain", "state", "chat.json");
+    const localPaperLibraryPath = path.join(roots.projectsRoot, "project-alpha", ".brain", "state", "paper-library");
+    const outsideRoot = path.join(roots.dataRoot, "outside");
+    await mkdir(outsideRoot, { recursive: true });
+    const outsideChat = path.join(outsideRoot, "chat.json");
+    await writeFile(outsideChat, "{\"role\":\"user\",\"content\":\"secret\"}\n", "utf-8");
+    await rm(localChatPath, { force: true });
+    await symlink(outsideChat, localChatPath);
+    await rm(localPaperLibraryPath, { recursive: true, force: true });
+    await mkdir(path.join(outsideRoot, "paper-library"), { recursive: true });
+    await writeFile(path.join(outsideRoot, "paper-library", "scan-secret.json"), "{\"id\":\"secret\"}\n", "utf-8");
+    await symlink(path.join(outsideRoot, "paper-library"), localPaperLibraryPath);
+
+    const plan = await planLegacyProjectStateMigration({
+      legacyProjectSlug: "project-alpha",
+      studyId: "study_alpha",
+      threadId: "thread_alpha",
+      projectsRoot: roots.projectsRoot,
+      brainRoot: roots.brainRoot,
+      stateRoot: roots.stateRoot,
+      generatedAt: "2026-04-26T00:00:00.000Z",
+    });
+
+    const chatEntry = plan.entries.find((entry) => entry.classification === "chat-history");
+    expect(chatEntry).toMatchObject({
+      sourcePath: null,
+      status: "missing",
+    });
+    expect(plan.entries.some((entry) => entry.sourcePath?.startsWith(outsideRoot))).toBe(false);
+    expect(plan.entries.some((entry) => entry.relativePath.includes("scan-secret"))).toBe(false);
   });
 
   it("fails dry-run planning when a legacy tree exceeds the file bound", async () => {

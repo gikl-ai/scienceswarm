@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { getScienceSwarmBrainRoot, getScienceSwarmProjectsRoot } from "@/lib/scienceswarm-paths";
@@ -135,6 +135,11 @@ interface CandidateFile {
   missingReason?: string;
 }
 
+interface SourceCandidate {
+  filePath: string;
+  allowedRoot: string;
+}
+
 interface Checkpoint {
   version: 1;
   completedEntryIds: string[];
@@ -197,6 +202,34 @@ async function directoryExists(filePath: string): Promise<boolean> {
   return stats?.isDirectory ?? false;
 }
 
+function isPathInside(root: string, target: string): boolean {
+  const relativePath = path.relative(root, target);
+  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+}
+
+async function isExistingPathInsideAllowedRoots(filePath: string, allowedRoots: string[]): Promise<boolean> {
+  let targetRealPath: string;
+  try {
+    targetRealPath = await realpath(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+
+  for (const root of allowedRoots) {
+    let rootRealPath: string;
+    try {
+      rootRealPath = await realpath(root);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+    if (isPathInside(rootRealPath, targetRealPath)) return true;
+  }
+
+  return false;
+}
+
 async function sha256File(filePath: string): Promise<string> {
   const hash = createHash("sha256");
   await new Promise<void>((resolve, reject) => {
@@ -241,8 +274,12 @@ async function readJsonOrJsonlIfPresent(filePath: string): Promise<unknown | nul
 async function listFilesRecursive(
   root: string,
   maxFiles: number,
+  allowedRoot = root,
 ): Promise<string[]> {
   const limit = normalizeMaxFilesPerTree(maxFiles);
+  if (!(await isExistingPathInsideAllowedRoots(root, [allowedRoot]))) {
+    return [];
+  }
   let visitedFiles = 0;
 
   async function walk(dir: string): Promise<string[]> {
@@ -289,9 +326,14 @@ function relativeDestination(base: string, relativePath: string): string {
   return path.join(base, ...normalizeSafeRelativePath(relativePath).split("/"));
 }
 
-async function firstExistingFile(paths: string[]): Promise<string | null> {
-  for (const filePath of paths) {
-    if (await fileExists(filePath)) return filePath;
+async function firstExistingFile(candidates: SourceCandidate[]): Promise<string | null> {
+  for (const candidate of candidates) {
+    if (
+      await fileExists(candidate.filePath)
+      && await isExistingPathInsideAllowedRoots(candidate.filePath, [candidate.allowedRoot])
+    ) {
+      return candidate.filePath;
+    }
   }
   return null;
 }
@@ -300,7 +342,7 @@ async function addSingleCandidate(
   candidates: CandidateFile[],
   input: {
     classification: StudyMigrationClassification;
-    sourceCandidates: string[];
+    sourceCandidates: SourceCandidate[];
     destinationPath: string;
     relativePath: string;
     missingReason: string;
@@ -365,6 +407,7 @@ async function addWikiCandidates(input: {
       const sourcePath = relativeDestination(sourceRoot, relativePath);
       const sourceStats = await pathStats(sourcePath);
       if (!sourceStats) continue;
+      if (!(await isExistingPathInsideAllowedRoots(sourcePath, [sourceRoot]))) continue;
       found = true;
       if (sourceStats.isFile) {
         input.candidates.push({
@@ -377,7 +420,7 @@ async function addWikiCandidates(input: {
         break;
       }
       if (sourceStats.isDirectory) {
-        const files = await listFilesRecursive(sourcePath, input.maxFilesPerTree);
+        const files = await listFilesRecursive(sourcePath, input.maxFilesPerTree, sourceRoot);
         for (const filePath of files) {
           const childRelative = `${relativePath}/${relativePortable(sourcePath, filePath)}`;
           input.candidates.push({
@@ -406,15 +449,19 @@ async function addWikiCandidates(input: {
 
 async function addPaperLibraryInventory(input: {
   candidates: CandidateFile[];
-  roots: string[];
+  roots: Array<{ root: string; allowedRoot: string }>;
   maxFilesPerTree: number;
 }): Promise<void> {
   const seenRoots = new Set<string>();
-  for (const root of input.roots) {
+  for (const { root, allowedRoot } of input.roots) {
     const resolved = path.resolve(root);
-    if (seenRoots.has(resolved) || !(await directoryExists(root))) continue;
+    if (
+      seenRoots.has(resolved)
+      || !(await directoryExists(root))
+      || !(await isExistingPathInsideAllowedRoots(root, [allowedRoot]))
+    ) continue;
     seenRoots.add(resolved);
-    const files = await listFilesRecursive(root, input.maxFilesPerTree);
+    const files = await listFilesRecursive(root, input.maxFilesPerTree, allowedRoot);
     for (const sourcePath of files) {
       input.candidates.push({
         classification: "paper-library-inventory",
@@ -522,7 +569,10 @@ export async function planLegacyProjectStateMigration(input: PlanStudyMigrationI
   const globalManifestPath = getLegacyProjectManifestPath(legacyProjectSlug, legacyGlobalStateRoot);
   const manifestSource = await addSingleCandidate(candidates, {
     classification: "project-manifest",
-    sourceCandidates: [localManifestPath, globalManifestPath],
+    sourceCandidates: [
+      { filePath: localManifestPath, allowedRoot: localProjectStateRoot },
+      { filePath: globalManifestPath, allowedRoot: legacyGlobalStateRoot },
+    ],
     destinationPath: path.join(legacyCopyRoot, "manifest.json"),
     relativePath: "legacy-project/manifest.json",
     missingReason: "No legacy project manifest was found.",
@@ -530,8 +580,14 @@ export async function planLegacyProjectStateMigration(input: PlanStudyMigrationI
   await addSingleCandidate(candidates, {
     classification: "watch-config",
     sourceCandidates: [
-      getProjectLocalWatchConfigPath(legacyProjectSlug, projectsRoot),
-      getLegacyProjectWatchConfigPath(legacyProjectSlug, legacyGlobalStateRoot),
+      {
+        filePath: getProjectLocalWatchConfigPath(legacyProjectSlug, projectsRoot),
+        allowedRoot: localProjectStateRoot,
+      },
+      {
+        filePath: getLegacyProjectWatchConfigPath(legacyProjectSlug, legacyGlobalStateRoot),
+        allowedRoot: legacyGlobalStateRoot,
+      },
     ],
     destinationPath: path.join(legacyCopyRoot, "watch-config.json"),
     relativePath: "legacy-project/watch-config.json",
@@ -540,8 +596,14 @@ export async function planLegacyProjectStateMigration(input: PlanStudyMigrationI
   await addSingleCandidate(candidates, {
     classification: "import-summary",
     sourceCandidates: [
-      getProjectLocalImportSummaryPath(legacyProjectSlug, projectsRoot),
-      getLegacyProjectImportSummaryPath(legacyProjectSlug, legacyGlobalStateRoot),
+      {
+        filePath: getProjectLocalImportSummaryPath(legacyProjectSlug, projectsRoot),
+        allowedRoot: localProjectStateRoot,
+      },
+      {
+        filePath: getLegacyProjectImportSummaryPath(legacyProjectSlug, legacyGlobalStateRoot),
+        allowedRoot: legacyGlobalStateRoot,
+      },
     ],
     destinationPath: path.join(legacyCopyRoot, "import-summary.json"),
     relativePath: "legacy-project/import-summary.json",
@@ -550,8 +612,14 @@ export async function planLegacyProjectStateMigration(input: PlanStudyMigrationI
   await addSingleCandidate(candidates, {
     classification: "chat-history",
     sourceCandidates: [
-      getProjectLocalChatPath(legacyProjectSlug, projectsRoot),
-      getLegacyProjectChatPath(legacyProjectSlug, legacyGlobalStateRoot),
+      {
+        filePath: getProjectLocalChatPath(legacyProjectSlug, projectsRoot),
+        allowedRoot: localProjectStateRoot,
+      },
+      {
+        filePath: getLegacyProjectChatPath(legacyProjectSlug, legacyGlobalStateRoot),
+        allowedRoot: legacyGlobalStateRoot,
+      },
     ],
     destinationPath: getThreadMessagesPath(threadId, stateRoot),
     relativePath: `threads/${threadId}/messages.jsonl`,
@@ -570,9 +638,18 @@ export async function planLegacyProjectStateMigration(input: PlanStudyMigrationI
   await addPaperLibraryInventory({
     candidates,
     roots: [
-      path.join(localProjectStateRoot, "paper-library"),
-      path.join(getLegacyProjectStateDir(legacyProjectSlug, legacyGlobalStateRoot), "paper-library"),
-      path.join(legacyGlobalStateRoot, "paper-library"),
+      {
+        root: path.join(localProjectStateRoot, "paper-library"),
+        allowedRoot: localProjectStateRoot,
+      },
+      {
+        root: path.join(getLegacyProjectStateDir(legacyProjectSlug, legacyGlobalStateRoot), "paper-library"),
+        allowedRoot: legacyGlobalStateRoot,
+      },
+      {
+        root: path.join(legacyGlobalStateRoot, "paper-library"),
+        allowedRoot: legacyGlobalStateRoot,
+      },
     ],
     maxFilesPerTree,
   });
