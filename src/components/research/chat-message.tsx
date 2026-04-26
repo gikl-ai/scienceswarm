@@ -1124,7 +1124,12 @@ function buildProgressSectionChanges(
   return elements;
 }
 
-function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): string | null {
+type RunStateDetail = {
+  label: string;
+  text: string;
+};
+
+function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunStateDetail | null {
   const compactDetail = (value: string): string | null => {
     const trimmed = value.trim();
     if (!trimmed) {
@@ -1141,17 +1146,26 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): strin
     if (block.type === "narrative") {
       const detail = compactDetail(block.entry.text);
       if (detail) {
-        return detail;
+        return {
+          label: block.section === "thinking" ? "Thinking" : "Activity",
+          text: detail,
+        };
       }
       continue;
     }
     if (block.lines.length > 0) {
       if (block.rawCount > 1) {
-        return `Explored ${block.rawCount} actions`;
+        return {
+          label: "Activity",
+          text: `Explored ${block.rawCount} actions`,
+        };
       }
       const detail = compactDetail(block.lines[block.lines.length - 1]);
       if (detail) {
-        return detail;
+        return {
+          label: "Activity",
+          text: detail,
+        };
       }
     }
   }
@@ -1166,7 +1180,7 @@ function ActiveRunStateSurface({
 }: {
   workingElapsed: string | null;
   summaries: string[];
-  detail: string | null;
+  detail: RunStateDetail | null;
 }) {
   return (
     <div
@@ -1188,8 +1202,13 @@ function ActiveRunStateSurface({
         ))}
       </div>
       {detail && (
-        <div className="mt-2 text-[12px] leading-6 text-dim">
-          {detail}
+        <div className="mt-2 flex flex-wrap items-start gap-2 text-[12px] leading-6 text-dim">
+          <span className="inline-flex items-center rounded-full border border-rule/80 bg-raised px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dim">
+            {detail.label}
+          </span>
+          <span className="min-w-0 flex-1 break-words text-body/80">
+            {detail.text}
+          </span>
         </div>
       )}
     </div>

@@ -562,6 +562,7 @@ describe("ChatMessage", () => {
       />,
     );
 
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent("Thinking");
     expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
       "Plan: compare the timing artifact",
     );
@@ -582,6 +583,9 @@ describe("ChatMessage", () => {
       />,
     );
 
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
+      "Activity",
+    );
     expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
       "Explored 3 actions",
     );
@@ -649,6 +653,67 @@ describe("ChatMessage", () => {
     expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
       "Read docs/results_table.csv",
     );
+  });
+
+  it("updates the labeled run-state detail when the latest compact detail changes", () => {
+    const timestamp = new Date("2026-04-20T10:00:00.000Z");
+    const { rerender } = render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "thinking", text: "Plan: inspect the saved chart." },
+        ]}
+        timestamp={timestamp}
+        isStreaming
+      />,
+    );
+
+    const runState = screen.getByTestId("assistant-run-state");
+    expect(runState).toHaveTextContent("Thinking");
+    expect(runState).toHaveTextContent("Plan: inspect the saved chart.");
+
+    rerender(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "thinking", text: "Plan: inspect the saved chart." },
+          { kind: "activity", text: "Read docs/results_table.csv" },
+        ]}
+        timestamp={timestamp}
+        isStreaming
+      />,
+    );
+
+    expect(runState).toHaveTextContent("Activity");
+    expect(runState).toHaveTextContent("Read docs/results_table.csv");
+    expect(runState).not.toHaveTextContent("Plan: inspect the saved chart.");
+  });
+
+  it("wraps long run-state detail content without forcing horizontal overflow", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "thinking",
+            text:
+              "Plan: compare docs/results_table.csv against docs/results_summary_with_extra_long_context_name.md before summarizing.",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const runState = screen.getByTestId("assistant-run-state");
+    expect(
+      within(runState).getByText(
+        "Plan: compare docs/results_table.csv against docs/results_summary_with_extra_long_context_name.md before summarizing.",
+      ),
+    ).toHaveClass("break-words");
   });
 
   it("coalesces consecutive explored file actions into compact summaries", () => {
