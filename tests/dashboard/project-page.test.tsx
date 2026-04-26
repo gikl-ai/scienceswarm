@@ -391,6 +391,27 @@ describe("Project dashboard smoke test", () => {
     expect(within(composer).getByText("demo-project")).toBeInTheDocument();
   });
 
+  it("uses singular compare copy when compareHostIds is empty and floors to one host", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    window.localStorage.setItem(
+      "scienceswarm.runtime.project.demo-project",
+      JSON.stringify({
+        projectPolicy: "cloud-ok",
+        mode: "compare",
+        selectedHostId: "codex",
+        compareHostIds: [],
+      }),
+    );
+
+    render(<ProjectPage />);
+
+    const composer = await screen.findByTestId("project-chat-composer");
+    await waitFor(() => {
+      expect(within(composer).getByText("Compare 1 host")).toBeInTheDocument();
+    });
+  });
+
   it("renders footer controls as one compact row with a disabled idle send button", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
