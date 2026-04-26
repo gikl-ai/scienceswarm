@@ -390,24 +390,24 @@ const PROGRESS_MARKDOWN_COMPONENTS: Components = {
   ),
   p: ({ children }) => <p className="m-0 mt-2 first:mt-0 text-inherit">{children}</p>,
   ul: ({ children }) => (
-    <ul className="m-0 mt-2 list-disc space-y-1.5 pl-4 text-inherit marker:text-quiet">
+    <ul className="m-0 mt-2 first:mt-0 list-disc space-y-1.5 pl-4 text-inherit marker:text-quiet">
       {children}
     </ul>
   ),
   ol: ({ children }) => (
-    <ol className="m-0 mt-2 list-decimal space-y-1.5 pl-4 text-inherit marker:text-dim">
+    <ol className="m-0 mt-2 first:mt-0 list-decimal space-y-1.5 pl-4 text-inherit marker:text-dim">
       {children}
     </ol>
   ),
   li: ({ children }) => <li className="pl-1">{children}</li>,
   blockquote: ({ children }) => (
-    <blockquote className="m-0 mt-2 border-l-2 border-rule pl-3 italic text-body">
+    <blockquote className="m-0 mt-2 first:mt-0 border-l-2 border-rule pl-3 italic text-body">
       {children}
     </blockquote>
   ),
   hr: () => <hr className="my-4 border-0 border-t border-rule" />,
   table: ({ children }) => (
-    <div className={`mt-2 ${PROGRESS_TABLE_WRAPPER_CLASS}`}>
+    <div className={`mt-2 first:mt-0 ${PROGRESS_TABLE_WRAPPER_CLASS}`}>
       <table className={PROGRESS_TABLE_CLASS}>{children}</table>
     </div>
   ),
@@ -420,7 +420,7 @@ const PROGRESS_MARKDOWN_COMPONENTS: Components = {
   ),
   td: ({ children, style }) => <td className={PROGRESS_TABLE_CELL_CLASS} style={style}>{children}</td>,
   pre: ({ children }) => (
-    <pre className="m-0 mt-2 overflow-x-auto rounded-2xl border border-rule bg-ink px-4 py-3 text-[12px] leading-5 text-quiet">
+    <pre className="m-0 mt-2 first:mt-0 overflow-x-auto rounded-2xl border border-rule bg-ink px-4 py-3 text-[12px] leading-5 text-quiet">
       {children}
     </pre>
   ),

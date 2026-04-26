@@ -862,6 +862,24 @@ describe("ChatMessage", () => {
     ).toHaveClass("mt-2");
   });
 
+  it("keeps leading progress block elements flush when they start the markdown block", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          { kind: "thinking", text: "- First item\n- Second item" },
+          { kind: "activity", text: "```bash\nnpm run test\n```" },
+        ]}
+        timestamp={new Date("2026-04-21T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByRole("list")).toHaveClass("first:mt-0");
+    expect(screen.getByText("npm run test").closest("pre")).toHaveClass("first:mt-0");
+  });
+
   it("renders markdown tables when a progress row carries GFM table syntax", () => {
     render(
       <ChatMessage
