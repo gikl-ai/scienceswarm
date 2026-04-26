@@ -612,7 +612,7 @@ export function benchmarkHelpText(): string {
     "Usage: npx tsx scripts/benchmark-chat-hi.ts [options]",
     "",
     "Options:",
-    "  --url <url>              ScienceSwarm origin; path/query/hash are stripped (default: http://127.0.0.1:3001)",
+    "  --url <url>              ScienceSwarm origin; path/query/hash are stripped (default: http://localhost:3001)",
     "  --project <slug>         Project slug (default: test)",
     "  --message <text>         Message to send (default: Hi)",
     "  --conversation-id <id>   Conversation id for the benchmark turn",
@@ -629,7 +629,7 @@ export function parseBenchmarkArgs(
 ): ChatBenchmarkOptions {
   const options: ChatBenchmarkOptions = {
     baseUrl: normalizeBenchmarkBaseUrl(
-      env.SCIENCESWARM_CHAT_URL ?? "http://127.0.0.1:3001",
+      env.SCIENCESWARM_CHAT_URL ?? "http://localhost:3001",
     ),
     projectId: env.SCIENCESWARM_CHAT_PROJECT ?? "test",
     message: env.SCIENCESWARM_CHAT_MESSAGE ?? "Hi",
