@@ -319,6 +319,8 @@ SCIENCESWARM_CHAT_TIMING=1 npx tsx scripts/benchmark-chat-hi.ts --timing-artifac
 
 See [`docs/local-chat-benchmark.md`](docs/local-chat-benchmark.md) for the
 timing field guide and JSON inspection examples.
+Use `Observed split` to reason about the local route path and `Server timing`
+to reason about downstream OpenClaw or model latency.
 
 ## License
 
