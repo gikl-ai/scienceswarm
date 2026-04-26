@@ -317,6 +317,9 @@ benchmark helper and include the key timing output in the PR body:
 SCIENCESWARM_CHAT_TIMING=1 npx tsx scripts/benchmark-chat-hi.ts --timing-artifact
 ```
 
+See [`docs/local-chat-benchmark.md`](docs/local-chat-benchmark.md) for the
+timing field guide and JSON inspection examples.
+
 ## License
 
 [MIT](LICENSE)
