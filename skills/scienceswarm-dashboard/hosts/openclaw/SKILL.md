@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-dashboard
-description: 'Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the project workspace, settings, communications panel, or how to configure features in the web interface.'
+description: 'Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the study workspace, settings, communications panel, or how to configure features in the web interface.'
 metadata:
   openclaw:
     emoji: "📊"
@@ -12,7 +12,7 @@ metadata:
 
 The dashboard is a Next.js web UI at `https://localhost:${FRONTEND_PORT:-3001}` by default, serving local HTTPS for Safari and secure-cookie compatibility:
 
-- **Project workspace**: View and manage research projects
+- **Study workspace**: View and manage research studies
 - **Communications panel**: Chat through OpenClaw, NanoClaw, or direct LLM backends
 - **Settings**: Configure services, radar, frontier watch, and integrations
 - **Health dashboard**: Monitor connected services
@@ -21,7 +21,7 @@ The dashboard is a Next.js web UI at `https://localhost:${FRONTEND_PORT:-3001}` 
 
 | Path | Purpose |
 |---|---|
-| `/dashboard/project` | Main project workspace (currently demo data) |
+| `/dashboard/study` | Main study workspace |
 | `/dashboard/settings` | Service configuration and feature settings |
 | `/api/health` | JSON health check for all services |
 
@@ -39,20 +39,20 @@ Check connection status via the panel's indicator dot (green = connected).
 
 Configure:
 - **Agent backend**: Choose between OpenClaw, NanoClaw, or direct LLM
-- **Frontier Watch**: Set up recurring research scans per project
+- **Frontier Watch**: Set up recurring research scans per study
 - **Model selection**: Choose LLM model for agent tasks
 - **Integrations**: View connected services status
 
 ## Frontier Watch (Settings)
 
-Per-project frontier watches run via OpenClaw:
+Per-study frontier watches run via OpenClaw:
 - Configure topics, schedule, and delivery channel
 - Set cadence: daily, weekdays, or weekly
 - View and tweak the generated research prompt
-- Access at `/dashboard/settings?project=<slug>#frontier-watch`
+- Access at `/dashboard/settings?study=<slug>#frontier-watch`
 
 ## Important Notes
 
-- The main project workspace currently runs on **demo data** in `src/app/dashboard/project/page.tsx`. It does not persist to a real database yet.
+- The main study workspace lives at `src/app/dashboard/study/page.tsx`.
 - Real agent features (chat, code execution, GitHub integration) require OpenHands or OpenClaw to be running.
 - The health endpoint at `/api/health` reports which features are actually available.

@@ -434,7 +434,7 @@ export function approvalStateFromBody(
 
 export function requireSafeProjectId(value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") {
-    throw runtimeInvalidRequest("Project-scoped runtime requests require projectId.");
+    throw runtimeInvalidRequest("Study-scoped runtime requests require projectId.");
   }
   try {
     return assertSafeProjectSlug(value.trim());

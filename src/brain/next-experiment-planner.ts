@@ -195,14 +195,14 @@ function buildPlannerContext(input: {
 
   return [
     `Scientist request: ${input.prompt}`,
-    `Project: ${input.project}`,
+    `Study: ${input.project}`,
     input.brief
       ? [
           `Current next move: ${input.brief.nextMove.recommendation}`,
           `Top matters: ${input.brief.topMatters.map((item) => item.summary).join("; ") || "none"}`,
           `Unresolved risks: ${input.brief.unresolvedRisks.map((item) => item.risk).join("; ") || "none"}`,
         ].join("\n")
-      : "Project brief: unavailable",
+      : "Study brief: unavailable",
     latestEvidencePage
       ? `Latest linked evidence to account for:\n${pageLabel(latestEvidencePage)}\n${truncate(latestEvidencePage.content, 1200)}`
       : "",
@@ -210,7 +210,7 @@ function buildPlannerContext(input: {
     input.previousPlan
       ? `Previous plan artifact:\n${truncate(input.previousPlan.content, 1200)}`
       : "",
-    "Project evidence:",
+    "Study evidence:",
     ...pages,
   ]
     .filter(Boolean)
@@ -326,7 +326,7 @@ function parsePlannerResponse(content: string): NextExperimentPlan {
       return {
         summary: String(parsed.summary ?? "Generated next-experiment plan."),
         uncertainty: String(
-          parsed.uncertainty ?? "Confidence is limited by the currently linked project evidence.",
+          parsed.uncertainty ?? "Confidence is limited by the currently linked study evidence.",
         ),
         whatChanged:
           typeof parsed.whatChanged === "string" && parsed.whatChanged.trim().length > 0
@@ -343,7 +343,7 @@ function parsePlannerResponse(content: string): NextExperimentPlan {
 
   return {
     summary: "Generated next-experiment plan.",
-    uncertainty: "Confidence is limited by the currently linked project evidence.",
+    uncertainty: "Confidence is limited by the currently linked study evidence.",
     missingInputs: [],
     evidence: [],
     recommendations: [],
@@ -482,7 +482,7 @@ function fallbackPlan(input: {
       discriminates:
         "It separates a true mechanistic effect from a downstream correlation or survivor artifact.",
       confidence: "medium",
-      turnaround: "Choose the shortest assay already validated in this project",
+      turnaround: "Choose the shortest assay already validated in this study",
       dependsOn: ["A directly measurable disputed mechanism"],
     });
   }
@@ -490,16 +490,16 @@ function fallbackPlan(input: {
   return {
     summary:
       input.brief?.nextMove?.recommendation
-      ?? `Generated a ranked next-experiment plan for ${humanizeProject(input.project)} from linked project evidence.`,
+      ?? `Generated a ranked next-experiment plan for ${humanizeProject(input.project)} from linked study evidence.`,
     uncertainty:
-      "This plan is grounded in the current linked pages, but confidence would improve with a fresh result, explicit controls already run, and any negative findings not yet captured in the project.",
+      "This plan is grounded in the current linked pages, but confidence would improve with a fresh result, explicit controls already run, and any negative findings not yet captured in the study.",
     whatChanged: input.previousPlan
       ? latestEvidencePage
         ? `This update re-ranked the plan against the newly linked evidence in ${pageLabel(latestEvidencePage)} and the prior saved plan.`
-        : "This update re-ranked the plan against the latest visible project evidence and the prior saved plan."
+        : "This update re-ranked the plan against the latest visible study evidence and the prior saved plan."
       : undefined,
     missingInputs: [
-      "Any negative or null follow-up results not yet linked into the project",
+      "Any negative or null follow-up results not yet linked into the study",
       "Which assays are already validated and fastest in the current model system",
     ],
     evidence: rankPages(input.pages, input.prompt, input.focusPage?.path)
@@ -539,7 +539,7 @@ function finalizePlan(input: {
     input.plan.missingInputs.length > 0
       ? input.plan.missingInputs
       : [
-          "Any negative or null follow-up results not yet linked into the project",
+          "Any negative or null follow-up results not yet linked into the study",
           "Which assays are already validated and fastest in the current model system",
         ];
   const whatChanged =
@@ -816,7 +816,7 @@ function renderPlanMarkdown(
   }
 
   if (input.briefRecommendation) {
-    lines.push("", "## Prior Project Brief Next Move", input.briefRecommendation);
+    lines.push("", "## Prior Study Brief Next Move", input.briefRecommendation);
   }
 
   return `${lines.join("\n")}\n`;
@@ -907,7 +907,7 @@ function truncate(value: string, maxLength: number): string {
 
 const NEXT_EXPERIMENT_PLANNER_PROMPT = `You are ScienceSwarm's next-experiment planner for laboratory scientists.
 
-Given project evidence, rank up to 4 follow-up experiments that most reduce uncertainty.
+Given study evidence, rank up to 4 follow-up experiments that most reduce uncertainty.
 
 Return valid JSON with this exact shape:
 {

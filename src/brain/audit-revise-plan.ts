@@ -80,7 +80,9 @@ export function draftRevisionPlan(input: DraftPlanInput): DraftPlanResult {
   const frontmatter: RevisionPlanFrontmatter =
     RevisionPlanFrontmatterSchema.parse({
       type: "revision_plan",
-      project: input.project,
+      study: input.project,
+      study_slug: input.project,
+      legacy_project_slug: input.project,
       parent: input.paperSlug,
       critique: input.critiqueSlug,
       status: "draft",

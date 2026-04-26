@@ -110,7 +110,7 @@ describe("capture service", () => {
     expect(sessionAfterFirst?.pendingClarification).toEqual({
       captureId: first.captureId,
       rawPath: first.rawPath,
-      question: "Which project should this capture belong to?",
+      question: "Which study should this capture belong to?",
       choices: ["alpha", "beta"],
     });
 

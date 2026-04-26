@@ -121,7 +121,11 @@ export function buildCapturePage(
     frontmatter.kind = params.kind;
     frontmatter.type = params.kind;
   }
-  if (params.project) frontmatter.project = params.project;
+  if (params.project) {
+    frontmatter.study = params.project;
+    frontmatter.study_slug = params.project;
+    frontmatter.legacy_project_slug = params.project;
+  }
   if (params.tags && params.tags.length > 0) frontmatter.tags = params.tags;
   if (params.channel) frontmatter.channel = params.channel;
   if (params.userId) frontmatter.userId = params.userId;

@@ -140,7 +140,7 @@ describe("/api/brain/critique", () => {
       parent_slug: "hubble-1929",
       project_slug: "project-alpha",
       project_slugs: ["project-alpha"],
-      project_url: "/dashboard/project?name=project-alpha&brain_slug=hubble-1929-critique",
+      project_url: "/dashboard/study?name=project-alpha&brain_slug=hubble-1929-critique",
       linked_parent: true,
       finding_count: 1,
     });
@@ -152,7 +152,8 @@ describe("/api/brain/critique", () => {
     ];
     expect(slug).toBe("hubble-1929-critique");
     expect(markdown).toContain("type: critique");
-    expect(markdown).toContain("project: project-alpha");
+    expect(markdown).toContain("study: project-alpha");
+    expect(markdown).toContain("study_slug: project-alpha");
     expect(markdown).toContain("parent: hubble-1929");
     expect(markdown).toContain("descartes_job_id: job-123");
     expect(markdown).toContain("## Raw Descartes response");
@@ -184,13 +185,14 @@ describe("/api/brain/critique", () => {
       project_slug: "project-alpha",
       project_slugs: ["project-alpha", "project-beta"],
       project_urls: {
-        "project-alpha": "/dashboard/project?name=project-alpha&brain_slug=hubble-1929-critique",
-        "project-beta": "/dashboard/project?name=project-beta&brain_slug=hubble-1929-critique",
+        "project-alpha": "/dashboard/study?name=project-alpha&brain_slug=hubble-1929-critique",
+        "project-beta": "/dashboard/study?name=project-beta&brain_slug=hubble-1929-critique",
       },
     });
     const [, markdown] = mocks.putPage.mock.calls[0] as unknown as [string, string];
-    expect(markdown).toContain("project: project-alpha");
-    expect(markdown).toContain("projects:");
+    expect(markdown).toContain("study: project-alpha");
+    expect(markdown).toContain("study_slug: project-alpha");
+    expect(markdown).toContain("studies:");
     expect(markdown).toContain("- project-alpha");
     expect(markdown).toContain("- project-beta");
     expect(mocks.ensureProjectShellForProjectSlug).toHaveBeenCalledWith({
@@ -375,10 +377,10 @@ describe("/api/brain/critique", () => {
           finding_count: 4,
           url: "/dashboard/reasoning?brain_slug=hubble-1929-critique-2",
           project_url:
-            "/dashboard/project?name=hubble-1929&brain_slug=hubble-1929-critique-2",
+            "/dashboard/study?name=hubble-1929&brain_slug=hubble-1929-critique-2",
           project_urls: {
             "hubble-1929":
-              "/dashboard/project?name=hubble-1929&brain_slug=hubble-1929-critique-2",
+              "/dashboard/study?name=hubble-1929&brain_slug=hubble-1929-critique-2",
           },
         },
       ],

@@ -65,7 +65,7 @@ export async function interpretMultimodalResultPacket(input: {
   const workspaceRoot = getScienceSwarmProjectRoot(project);
   const evidence = await collectPacketEvidence(workspaceRoot, input.files ?? []);
   if (evidence.length === 0) {
-    throw new Error("No project files were available to interpret.");
+    throw new Error("No study files were available to interpret.");
   }
 
   const unsupportedInputs = evidence

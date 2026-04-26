@@ -1,8 +1,8 @@
 /**
  * GET /api/brain/brief
  *
- * Project-aware briefing route.
- * Query param: ?project=<slug>
+ * Study-aware briefing route.
+ * Query param: ?study=<slug>
  */
 
 import { buildProjectBrief } from "@/brain/briefing";
@@ -15,19 +15,19 @@ export async function GET(request: Request) {
   const config = configOrError;
 
   const url = new URL(request.url);
-  const project = url.searchParams.get("project");
-  if (!project) {
-    return Response.json({ error: "Missing project parameter" }, { status: 400 });
+  const study = url.searchParams.get("study") ?? url.searchParams.get("project");
+  if (!study) {
+    return Response.json({ error: "Missing study parameter" }, { status: 400 });
   }
 
   try {
-    assertSafeProjectSlug(project);
+    assertSafeProjectSlug(study);
   } catch {
-    return Response.json({ error: "project must be a safe bare slug" }, { status: 400 });
+    return Response.json({ error: "study must be a safe bare slug" }, { status: 400 });
   }
 
   try {
-    const brief = await buildProjectBrief({ config, project });
+    const brief = await buildProjectBrief({ config, project: study });
     return Response.json(brief);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Brief generation failed";

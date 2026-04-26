@@ -317,7 +317,7 @@ function checkBrain(env: Record<string, string>): Check {
       name: "Research brain",
       status: "fail",
       detail: `brain root missing at ${brainRoot}`,
-      fix: "Open /setup to initialize the local store, then import your first corpus from /dashboard/project.",
+      fix: "Open /setup to initialize the local store, then import your first corpus from /dashboard/study.",
     };
   }
   if (!existsSync(brainMd)) {

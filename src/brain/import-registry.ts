@@ -11,6 +11,7 @@ import {
 } from "@/lib/state/project-import-summary";
 import { isDefaultScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
+import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 
 export interface ProjectImportRegistryEntry {
   pagePath: string;
@@ -45,6 +46,7 @@ export interface ProjectImportRegistry {
 }
 
 const NON_IMPORT_PAGE_TYPES = new Set([
+  "study",
   "project",
   "task",
   "decision",
@@ -103,11 +105,7 @@ function normalizePageFileRefs(value: unknown): GbrainPageFileRef[] {
 }
 
 function filterProjectPages(pages: BrainPage[], project: string): BrainPage[] {
-  return pages.filter((page) => {
-    const frontmatter = page.frontmatter ?? {};
-    return frontmatter.project === project
-      || (Array.isArray(frontmatter.projects) && frontmatter.projects.includes(project));
-  });
+  return pages.filter((page) => frontmatterMatchesStudy(page.frontmatter, project));
 }
 
 export function isGeneratedArtifactPage(page: BrainPage): boolean {

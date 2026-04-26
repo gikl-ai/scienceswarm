@@ -726,7 +726,7 @@ export function SchedulerPanel({
                   <dl className="mt-3 grid gap-3 text-xs">
                     {jobProjectId ? (
                       <div>
-                        <dt className="text-muted">Project</dt>
+                        <dt className="text-muted">Study</dt>
                         <dd className="mt-1 font-mono text-foreground">{jobProjectId}</dd>
                       </div>
                     ) : null}

@@ -70,7 +70,7 @@ describe("GET /api/brain/import-registry", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: "Missing project parameter" });
+    await expect(response.json()).resolves.toEqual({ error: "Missing study parameter" });
   });
 
   it("hides internal error details on 500 responses", async () => {

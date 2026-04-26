@@ -83,7 +83,7 @@ export function RuntimePicker({
     >
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
         <label className="min-w-0 space-y-1">
-          <span className="text-xs font-semibold text-muted">Project policy</span>
+          <span className="text-xs font-semibold text-muted">Study policy</span>
           <select
             className="min-h-11 w-full rounded border border-border bg-surface px-3 text-sm focus:border-accent focus:outline-none"
             value={projectPolicy}

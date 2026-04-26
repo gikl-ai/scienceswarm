@@ -8,6 +8,7 @@ import { buildSourceRefCitationLines, buildSourceRefEvidenceLines } from "@/lib/
 import { isLocalRequest } from "@/lib/local-guard";
 import { getCurrentUserHandle as _requireAttributionImport } from "@/lib/setup/gbrain-installer";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
+import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 import { getBrainConfig, isErrorResponse } from "../_shared";
 void _requireAttributionImport;
 
@@ -76,7 +77,11 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const slug = typeof body.slug === "string" ? body.slug.trim() : "";
-  const project = typeof body.project === "string" ? body.project.trim() : "";
+  const study = typeof body.study === "string"
+    ? body.study.trim()
+    : typeof body.project === "string"
+      ? body.project.trim()
+      : "";
   const content = typeof body.content === "string" ? body.content.trim() : "";
   const sourceRefs = Array.isArray(body.sourceRefs)
     ? body.sourceRefs.filter(isSourceRef)
@@ -85,8 +90,8 @@ export async function POST(request: Request): Promise<Response> {
   if (!slug) {
     return Response.json({ error: "slug is required" }, { status: 400 });
   }
-  if (!project) {
-    return Response.json({ error: "project is required" }, { status: 400 });
+  if (!study) {
+    return Response.json({ error: "study is required" }, { status: 400 });
   }
   if (!content) {
     return Response.json({ error: "content is required" }, { status: 400 });
@@ -94,9 +99,9 @@ export async function POST(request: Request): Promise<Response> {
 
   let safeProject: string;
   try {
-    safeProject = assertSafeProjectSlug(project);
+    safeProject = assertSafeProjectSlug(study);
   } catch {
-    return Response.json({ error: "project must be a safe bare slug" }, { status: 400 });
+    return Response.json({ error: "study must be a safe bare slug" }, { status: 400 });
   }
 
   const decisionPath = buildMirroredBrainPagePath(slug, "decision");
@@ -119,17 +124,24 @@ export async function POST(request: Request): Promise<Response> {
     if (frontmatter.type !== "decision") {
       return Response.json({ error: "Only decision pages can be amended" }, { status: 400 });
     }
-    if (typeof frontmatter.project === "string" && frontmatter.project !== safeProject) {
-      return Response.json({ error: "Decision project does not match the active project" }, { status: 400 });
+    if (!frontmatterMatchesStudy(frontmatter, safeProject)) {
+      return Response.json({ error: "Decision study does not match the active study" }, { status: 400 });
     }
 
     const existingSourceRefs = Array.isArray(frontmatter.source_refs)
       ? frontmatter.source_refs.filter(isSourceRef)
       : [];
     const mergedSourceRefs = dedupeSourceRefs([...existingSourceRefs, ...sourceRefs]);
+    const {
+      project: _legacyProject,
+      projects: _legacyProjects,
+      ...frontmatterWithoutLegacyScope
+    } = frontmatter;
     const nextFrontmatter = {
-      ...frontmatter,
-      project: safeProject,
+      ...frontmatterWithoutLegacyScope,
+      study: safeProject,
+      study_slug: safeProject,
+      legacy_project_slug: safeProject,
       source_refs: mergedSourceRefs,
       updated_at: new Date().toISOString(),
     };

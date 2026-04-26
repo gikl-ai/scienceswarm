@@ -9,7 +9,7 @@ const replaceMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(searchParamsValue),
-  usePathname: () => "/dashboard/project",
+  usePathname: () => "/dashboard/study",
   useRouter: () => ({
     replace: replaceMock,
   }),
@@ -27,7 +27,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import ProjectPage from "@/app/dashboard/project/page";
+import ProjectPage from "@/app/dashboard/study/page";
 
 function stubMinimalDashboardFetch() {
   return vi.fn((url: string) => {
@@ -65,7 +65,7 @@ function stubMinimalDashboardFetch() {
     if (url.startsWith("/api/brain/brief?project=")) {
       return Promise.resolve(Response.json({ project: "demo-project" }));
     }
-    if (url === "/api/projects/demo-project/import-summary") {
+    if (url === "/api/studies/demo-project/import-summary") {
       return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
     }
     return Promise.resolve(Response.json({ status: "disconnected" }));
@@ -91,7 +91,7 @@ describe("chat draft persistence", () => {
 
     const first = render(<ProjectPage />);
 
-    const input = (await screen.findByLabelText("Chat with your project")) as HTMLTextAreaElement;
+    const input = (await screen.findByLabelText("Chat with your study")) as HTMLTextAreaElement;
 
     fireEvent.change(input, { target: { value: "draft in progress" } });
 
@@ -110,11 +110,11 @@ describe("chat draft persistence", () => {
     render(<ProjectPage />);
 
     await waitFor(() => {
-      const restored = screen.getByLabelText("Chat with your project") as HTMLTextAreaElement;
+      const restored = screen.getByLabelText("Chat with your study") as HTMLTextAreaElement;
       expect(restored.value).toBe("draft in progress");
     });
 
-    const restored = screen.getByLabelText("Chat with your project") as HTMLTextAreaElement;
+    const restored = screen.getByLabelText("Chat with your study") as HTMLTextAreaElement;
 
     // Simulate a clear (what happens after a successful send).
     fireEvent.change(restored, { target: { value: "" } });
@@ -126,14 +126,14 @@ describe("chat draft persistence", () => {
     );
   });
 
-  it("scopes drafts per project slug and falls back to __global__ without a slug", async () => {
+  it("scopes drafts per study slug and falls back to __global__ without a slug", async () => {
     window.localStorage.setItem("scienceswarm.chat.draft.other-project", "not mine");
 
     vi.stubGlobal("fetch", stubMinimalDashboardFetch());
 
     render(<ProjectPage />);
 
-    const input = (await screen.findByLabelText("Chat with your project")) as HTMLTextAreaElement;
+    const input = (await screen.findByLabelText("Chat with your study")) as HTMLTextAreaElement;
 
     // The demo-project input must not inherit the other-project draft.
     expect(input.value).toBe("");
@@ -159,12 +159,12 @@ describe("chat draft persistence", () => {
 
     render(<ProjectPage />);
 
-    const input = screen.getByLabelText("Chat with your project") as HTMLTextAreaElement;
+    const input = screen.getByLabelText("Chat with your study") as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "typed before hydrate" } });
 
     await waitFor(() => {
       expect(
-        (screen.getByLabelText("Chat with your project") as HTMLTextAreaElement).value,
+        (screen.getByLabelText("Chat with your study") as HTMLTextAreaElement).value,
       ).toBe("typed before hydrate");
     });
   });

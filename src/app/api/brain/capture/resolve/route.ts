@@ -27,8 +27,9 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Missing required field: captureId" }, { status: 400 });
   }
 
-  if (typeof body.project !== "string" || !body.project.trim()) {
-    return Response.json({ error: "Missing required field: project" }, { status: 400 });
+  const requestedStudy = body.study ?? body.project;
+  if (typeof requestedStudy !== "string" || !requestedStudy.trim()) {
+    return Response.json({ error: "Missing required field: study" }, { status: 400 });
   }
 
   let channel: CaptureChannel = "web";
@@ -43,16 +44,16 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const captureId = body.captureId.trim();
-  const project = body.project.trim();
+  const study = requestedStudy.trim();
   const rawPath =
     typeof body.rawPath === "string" && body.rawPath.trim().length > 0
       ? body.rawPath.trim()
       : undefined;
 
   try {
-    assertSafeProjectSlug(project);
+    assertSafeProjectSlug(study);
   } catch {
-    return Response.json({ error: "project must be a safe bare slug" }, { status: 400 });
+    return Response.json({ error: "study must be a safe bare slug" }, { status: 400 });
   }
 
   try {
@@ -60,7 +61,7 @@ export async function POST(request: Request): Promise<Response> {
       brainRoot: configOrError.root,
       channel,
       captureId,
-      project,
+      project: study,
       rawPath,
     });
     return Response.json(result);

@@ -600,7 +600,7 @@ async function executeAction(action: JobAction, job: ScheduledJob): Promise<JobR
           getProjectStateRootForBrainRoot(safeProject, config.root),
         );
         if (!manifest) {
-          throw new Error(`Project ${project} was not found in brain state`);
+          throw new Error(`Study ${project} was not found in brain state`);
         }
         const refreshed = await refreshProjectWatchFrontier(config, manifest);
         job.logs.push(`[${new Date().toISOString()}] Frontier watch refreshed for ${project}`);

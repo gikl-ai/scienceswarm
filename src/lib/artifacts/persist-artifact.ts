@@ -12,6 +12,7 @@ export interface ArtifactJobRecord {
   version: 1;
   idempotencyKey: string;
   jobId: string;
+  study?: string;
   project: string;
   artifactType: string;
   intent: string;
@@ -112,7 +113,7 @@ export async function persistArtifact(params: {
     const artifactPage = await writeArtifactPage(bundle, execution, params.jobId, saved.relativePath);
     await updateProjectPage(bundle, artifactPage, execution.title, saved.relativePath);
     await updateProjectManifest(bundle.projectSlug, (current) => {
-      if (!current) throw new Error(`Project manifest not found for ${bundle.projectSlug}`);
+      if (!current) throw new Error(`Study manifest not found for ${bundle.projectSlug}`);
       const artifactPaths = Array.from(new Set([...current.artifactPaths, artifactPage]));
       return {
         ...current,
@@ -184,7 +185,9 @@ async function writeArtifactPage(
     "type: artifact",
     "para: projects",
     `title: ${JSON.stringify(execution.title)}`,
-    `project: ${JSON.stringify(bundle.projectSlug)}`,
+    `study: ${JSON.stringify(bundle.projectSlug)}`,
+    `study_slug: ${JSON.stringify(bundle.projectSlug)}`,
+    `legacy_project_slug: ${JSON.stringify(bundle.projectSlug)}`,
     `privacy: ${bundle.privacy}`,
     "status: completed",
     `tags: [${[bundle.projectSlug, bundle.artifactType, "artifact"].map((tag) => slugifyWorkspaceSegment(tag)).join(", ")}]`,
@@ -247,7 +250,7 @@ async function updateProjectPage(
     projectPageAbsolutePath !== resolvedBrainRoot
     && !projectPageAbsolutePath.startsWith(`${resolvedBrainRoot}${path.sep}`)
   ) {
-    throw new Error("Invalid project page path");
+    throw new Error("Invalid study page path");
   }
   await mkdir(path.dirname(projectPageAbsolutePath), { recursive: true });
   let content = "";
@@ -277,7 +280,7 @@ async function updateBrainIndex(
     const updated = upsertSectionEntry(content, "## Artifacts", entry);
     await writeFile(indexPath, updated, "utf-8");
   } catch {
-    // Ignore missing index during artifact persistence; the project linkage is the source of truth.
+    // Ignore missing index during artifact persistence; the study linkage is the source of truth.
   }
 }
 

@@ -39,7 +39,7 @@ export async function GET(request: Request): Promise<Response> {
         if (result.success) {
           return new Response(null, {
             status: 302,
-            headers: { Location: "/dashboard/project?drive=connected" },
+            headers: { Location: "/dashboard/study?drive=connected" },
           });
         }
         return Response.json({ error: "OAuth callback failed" }, { status: 500 });

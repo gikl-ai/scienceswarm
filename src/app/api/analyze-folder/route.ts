@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       })
       .join("\n\n");
 
-    const prompt = `Analyze this research project folder. Here is a structural summary and file contents:
+    const prompt = `Analyze this research study folder. Here is a structural summary and file contents:
 
 STRUCTURE:
 ${summary}
@@ -206,7 +206,7 @@ function buildLocalAnalysis(
   );
 
   const sections: string[] = [
-    `Project Analysis`,
+    `Study Analysis`,
     "",
     summary,
     "",

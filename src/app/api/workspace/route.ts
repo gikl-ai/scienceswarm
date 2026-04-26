@@ -36,6 +36,7 @@ import { repairLegacyImportedProject } from "@/lib/state/legacy-import-repair";
 import { getOpenHandsUrl } from "@/lib/config/ports";
 import { createProjectRepository } from "@/lib/projects/project-repository";
 import { getWorkspaceRouteFileStore } from "@/lib/testing/workspace-route-overrides";
+import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 
 // ---------------------------------------------------------------------------
 // Workspace root — uses the OpenHands sandbox when available, otherwise a
@@ -458,7 +459,7 @@ function resolveImportedWorkspacePath(
     || relativeToRoot.startsWith("..")
     || path.isAbsolute(relativeToRoot)
   ) {
-    throw new Error("Imported workspace path must stay inside the project workspace.");
+    throw new Error("Imported workspace path must stay inside the study workspace.");
   }
   return targetPath;
 }
@@ -498,10 +499,7 @@ async function listGbrainWorkspaceFileEntries(
         const entriesByWorkspacePath = new Map<string, GbrainWorkspaceFileEntry>();
         for (const page of pages) {
           const fm = page.frontmatter ?? {};
-          if (
-            fm.project !== safeProjectId
-            && !(Array.isArray(fm.projects) && fm.projects.includes(safeProjectId))
-          ) {
+          if (!frontmatterMatchesStudy(fm, safeProjectId)) {
             continue;
           }
           const fileRefs = Array.isArray(fm.file_refs)
@@ -666,7 +664,7 @@ function mergeWorkspaceTreeNodes(
     }
 
     // gbrain metadata is authoritative for exact path conflicts, but it should
-    // not hide unrelated source files that still live in the project workspace.
+    // not hide unrelated source files that still live in the study workspace.
     merged[existingIndex] = cloneTreeNode(gbrainNode);
   }
 
@@ -1185,7 +1183,7 @@ async function handleUpload(request: Request) {
 async function handleList(projectId: string | null) {
   if (projectId) {
     // Skip legacy repair for archived (soft-deleted) projects — repairing
-    // them would resurrect the project record.
+    // them would resurrect the study record.
     try {
       const repo = createProjectRepository();
       const record = await repo.get(projectId);
@@ -1193,7 +1191,7 @@ async function handleList(projectId: string | null) {
         return Response.json({ tree: [], totalFiles: 0, watchRevision: "", lastModified: null });
       }
     } catch {
-      // Brain store not available — proceed; the project is not known to be archived.
+      // Brain store not available — proceed; the study is not known to be archived.
     }
 
     try {
@@ -1287,11 +1285,11 @@ async function handleCheckChanges(projectId: string | null) {
         });
       }
     } catch {
-      // Brain store not available — proceed; the project is not known to be archived.
+      // Brain store not available — proceed; the study is not known to be archived.
     }
   }
 
-  // check-changes writes the refs file back, so the project directory must
+  // check-changes writes the refs file back, so the study directory must
   // exist on disk by the time we get here.
   const root = resolveWorkspaceRoot(projectId, { create: true });
   const refs = repairFlatScientistWorkspaceFiles(root, readRefs(root));
@@ -2296,7 +2294,7 @@ function handleUpdateMeta(
   }
   if (references && references.length > 0) {
     content = content.replace(
-      /## References\n\*\(Links to related files in this project\)\*/,
+      /## References\n\*\(Links to related files in this study\)\*/,
       `## References\n${references.map(r => `- ${r}`).join("\n")}`,
     );
   }
@@ -2394,7 +2392,7 @@ function handleDeleteFile(
 
   const root = resolveWorkspaceRoot(projectId, { create: false });
   if (!fs.existsSync(root)) {
-    return Response.json({ error: "Project folder not found" }, { status: 404 });
+    return Response.json({ error: "Study folder not found" }, { status: 404 });
   }
   const realRoot = fs.realpathSync(root);
   const requestedPath = file.replace(/^\/+/, "");

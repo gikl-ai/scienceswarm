@@ -40,3 +40,16 @@ export async function readJsonBody(request: Request): Promise<unknown> {
     throw new Error("Invalid JSON body.");
   }
 }
+
+export function readStudyOrProjectParam(url: URL): string | null {
+  return url.searchParams.get("study") ?? url.searchParams.get("project");
+}
+
+export function normalizeStudyBody(body: unknown): unknown {
+  if (!body || typeof body !== "object") return body;
+  const record = body as Record<string, unknown>;
+  return {
+    ...record,
+    project: record.study ?? record.project,
+  };
+}

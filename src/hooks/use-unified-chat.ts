@@ -307,15 +307,15 @@ function safeSlugOrNull(value: string | null | undefined): string | null {
 function normalizeProjectChatError(message: string, projectName: string): string {
   if (/has no privacy manifest; remote chat is blocked\./i.test(message)) {
     return (
-      `Project ${projectName} is not ready for remote chat yet. ` +
-      "Use Create empty project or Import project in the workspace panel to generate its privacy manifest, then retry."
+      `Study ${projectName} is not ready for remote chat yet. ` +
+      "Use Create empty study or Import study in the workspace panel to generate its privacy manifest, then retry."
     );
   }
 
-  if (/is local-only; remote chat is blocked for this project\./i.test(message)) {
+  if (/is local-only; remote chat is blocked for this (?:study|project)\./i.test(message)) {
     return (
-      `Project ${projectName} is set to local-only chat. ` +
-      "Use the visible project setup flow to enable remote chat before retrying this slash command."
+      `Study ${projectName} is set to local-only chat. ` +
+      "Use the visible study setup flow to enable remote chat before retrying this slash command."
     );
   }
 
@@ -2074,7 +2074,7 @@ function buildInitialMessages(projectName: string): Message[] {
     {
       id: "1",
       role: "system",
-      content: `Project **${projectName}** loaded.`,
+      content: `Study **${projectName}** loaded.`,
       timestamp: new Date(),
     },
     {
@@ -2082,7 +2082,7 @@ function buildInitialMessages(projectName: string): Message[] {
       role: "assistant",
       content: `Research workspace ready for **${projectName}**.\n\n` +
         "Import a research archive or upload files to start organizing papers, code, data, and notes.\n\n" +
-        "Once your materials are in place, ask me to \"organize this project\" and I can cluster likely project threads, surface possible duplicate papers and stale exports, and suggest the next pages or tasks worth creating.",
+        "Once your materials are in place, ask me to \"organize this study\" and I can cluster likely study threads, surface possible duplicate papers and stale exports, and suggest the next pages or tasks worth creating.",
       timestamp: new Date(),
     },
   ];
@@ -2952,9 +2952,12 @@ async function loadStoredChatFromServer(projectName: string): Promise<RestoredCh
   if (!safeSlugOrNull(projectName)) return null;
 
   try {
-    const res = await fetch(`/api/chat/thread?project=${encodeURIComponent(projectName)}`);
+    const res = await fetch(`/api/chat/thread?study=${encodeURIComponent(projectName)}`);
     if (!res.ok) return null;
-    const raw = await res.json() as Partial<StoredChatState> & { project?: string };
+    const raw = await res.json() as Partial<StoredChatState> & {
+      study?: string;
+      project?: string;
+    };
     if (raw.version !== CHAT_STORAGE_VERSION || !Array.isArray(raw.messages)) {
       return null;
     }
@@ -2999,7 +3002,7 @@ async function persistChatToServer(
   const messageLimit = keepalive ? MAX_KEEPALIVE_MESSAGES : MAX_PERSISTED_MESSAGES;
   const persistedMessages = sanitizeMessagesForPersistence(messages);
   const payload = {
-    project: projectName,
+    study: projectName,
     conversationId,
     conversationBackend,
     messages: persistedMessages.slice(-messageLimit).map((message) => ({
@@ -3150,7 +3153,7 @@ export function useUnifiedChat(
 
     // The hydration effect only seeds the restored thread into state. Do not
     // allow persistence or unmount cleanup to treat that thread as durable
-    // until this render has actually committed for the current project.
+    // until this render has actually committed for the current study.
     pendingHydrationKeyRef.current = null;
     hydratedChatKeyRef.current = storageKey;
   }, [
@@ -3285,7 +3288,7 @@ export function useUnifiedChat(
       }
       unloadPersistedRef.current = true;
       // Route changes can interrupt the delayed server sync. Persist the live
-      // thread to local storage first so a return to the project always
+      // thread to local storage first so a return to the study always
       // rehydrates from the newest in-memory state.
       persistChat(
         projectName,
@@ -3907,7 +3910,7 @@ export function useUnifiedChat(
       activeFile?: ActiveFileContext,
     ) => {
       if (!hasProjectScope(context.projectName)) {
-        throw new Error("AI destination sends require an active project.");
+        throw new Error("AI destination sends require an active study.");
       }
 
       const requestFiles = liveUploadedFilesRef.current;

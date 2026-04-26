@@ -42,12 +42,12 @@ export function buildOpenClawWatchTask(input: {
   adhoc?: boolean;
 }): string {
   const { manifest, watchConfig } = input;
-  const prompt = watchConfig.compiledPrompt || watchConfig.objective || "Find the most important current frontier news for this project.";
+  const prompt = watchConfig.compiledPrompt || watchConfig.objective || "Find the most important current frontier news for this study.";
 
   return [
     "You are ScienceSwarm's OpenClaw frontier-news agent.",
     "",
-    `Project: ${manifest.title} (${manifest.slug})`,
+    `Study: ${manifest.title} (${manifest.slug})`,
     `Mode: ${input.adhoc ? "adhoc run now" : "scheduled recurring watch"}`,
     "",
     "User's watch request:",
@@ -61,7 +61,7 @@ export function buildOpenClawWatchTask(input: {
     "- Search the live web for current, high-signal items.",
     "- Prefer primary sources, credible reporting, release notes, papers, and stable URLs.",
     "- Deduplicate repeated coverage and ignore low-signal SEO/newswire duplicates.",
-    "- Explain why each item matters for this project.",
+    "- Explain why each item matters for this study.",
     "- Include source links for every substantive claim.",
     "",
     ...buildWatchOutputSectionLines(watchConfig.objective, watchConfig.compiledPrompt),

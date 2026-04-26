@@ -184,7 +184,7 @@ export function buildBriefingPrompt(
     .map((p) => `### ${p.title}\n${p.content.slice(0, 300)}`)
     .join("\n\n");
 
-  return `Brain stats: ${stats.totalPages} pages (${stats.papers} papers, ${stats.notes} notes, ${stats.experiments} experiments, ${stats.projects} projects)
+  return `Brain stats: ${stats.totalPages} pages (${stats.papers} papers, ${stats.notes} notes, ${stats.experiments} experiments, ${stats.projects} studies)
 
 Pages:
 ${pageList}
@@ -236,7 +236,7 @@ export function buildHeuristicBriefing(
 
   // Active threads: recent pages grouped by type
   const activeThreads: ColdstartBriefing["activeThreads"] = [];
-  const recentProjects = sorted.filter((p) => p.type === "project").slice(0, 3);
+  const recentProjects = sorted.filter((p) => p.type === "study" || p.type === "project").slice(0, 3);
   for (const proj of recentProjects) {
     activeThreads.push({
       name: proj.title,

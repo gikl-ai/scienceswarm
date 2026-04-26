@@ -76,7 +76,7 @@ export function claudeCodeRuntimeContextDataIncluded(input: {
     },
     {
       kind: "gbrain-excerpt",
-      label: "Compact gbrain project brief",
+      label: "Compact gbrain study brief",
     },
   ];
 
@@ -237,20 +237,20 @@ function buildClaudeCodeRuntimePromptMarkdown(input: {
     "Scientific runtime convention:",
     "- Use an already-working project or system Python environment when it satisfies the requested toolchain.",
     "- If a conda/mamba runtime must be created, keep the package-manager install under `$SCIENCESWARM_DIR/runtimes/` (default `~/.scienceswarm/runtimes/`) and keep named environments under `$SCIENCESWARM_DIR/runtimes/conda/envs/`.",
-    "- Do not install package managers, conda distributions, or persistent scientific software into the ScienceSwarm app checkout or an imported project folder.",
+    "- Do not install package managers, conda distributions, or persistent scientific software into the ScienceSwarm app checkout or an imported study folder.",
     "- Before installing new persistent software, report the proposed install location and wait for user approval.",
     "",
-    input.projectId ? `Current project: \`${input.projectId}\`.` : "No project is currently scoped.",
+    input.projectId ? `Current project: \`${input.projectId}\`.` : "No study is currently scoped.",
     "",
     "Use the compact context below first. Do not dump or scan the whole brain.",
     "Search gbrain selectively, then read only the specific pages that matter for the user's request.",
     "",
     input.loadedProjectGuidance
-      ? ["## Loaded Project Guidance", "", input.loadedProjectGuidance].join("\n")
+      ? ["## Loaded Study Guidance", "", input.loadedProjectGuidance].join("\n")
       : [
-          "## Loaded Project Guidance",
+          "## Loaded Study Guidance",
           "",
-          "No project-specific SCIENCESWARM.md was found, so this generated capsule provides the runtime guidance.",
+          "No study-specific SCIENCESWARM.md was found, so this generated capsule provides the runtime guidance.",
         ].join("\n"),
     "",
     input.brainBrief
@@ -287,8 +287,8 @@ async function buildCompactBrainBrief(projectId: string | null): Promise<string 
     try {
       const brief = await buildProjectBrief({ config, project: projectId });
       sections.push(
-        "### Project Brief",
-        `Project: ${brief.project}`,
+        "### Study Brief",
+        `Study: ${brief.project}`,
       );
       if (brief.topMatters.length > 0) {
         sections.push(
@@ -327,8 +327,8 @@ async function buildCompactBrainBrief(projectId: string | null): Promise<string 
       }
     } catch {
       sections.push(
-        "### Project Brief",
-        `Project brief unavailable for ${projectId}. Use gbrain search before making project-specific claims.`,
+        "### Study Brief",
+        `Study brief unavailable for ${projectId}. Use gbrain search before making study-specific claims.`,
       );
     }
   }

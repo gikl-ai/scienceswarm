@@ -585,7 +585,7 @@ function buildProjectUrlsForBrainSlug(
   return Object.fromEntries(
     projectSlugs.map((projectSlug) => [
       projectSlug,
-      `/dashboard/project?name=${encodeURIComponent(projectSlug)}&brain_slug=${encodedSlug}`,
+      `/dashboard/study?name=${encodeURIComponent(projectSlug)}&brain_slug=${encodedSlug}`,
     ]),
   );
 }
@@ -641,8 +641,10 @@ function normalizePersistedCritiqueSummaries(payload: unknown): PersistedCritiqu
 
 function normalizeProjectOptions(payload: unknown): ProjectOption[] {
   const rawProjects =
-    payload && typeof payload === "object" && "projects" in payload
-      ? (payload as { projects?: unknown }).projects
+    payload && typeof payload === "object" && "studies" in payload
+      ? (payload as { studies?: unknown }).studies
+      : payload && typeof payload === "object" && "projects" in payload
+        ? (payload as { projects?: unknown }).projects
       : payload;
   if (!Array.isArray(rawProjects)) return [];
   return rawProjects.flatMap((entry): ProjectOption[] => {
@@ -672,10 +674,10 @@ function normalizeProjectOptions(payload: unknown): ProjectOption[] {
 }
 
 async function listProjectOptions(): Promise<ProjectOption[]> {
-  const response = await fetch("/api/projects", { cache: "no-store" });
+  const response = await fetch("/api/studies", { cache: "no-store" });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(readErrorFromPayload(payload) || "Failed to load projects");
+    throw new Error(readErrorFromPayload(payload) || "Failed to load studies");
   }
   return normalizeProjectOptions(payload);
 }
@@ -684,7 +686,7 @@ async function createProjectOption(input: {
   name: string;
   description?: string;
 }): Promise<ProjectOption> {
-  const response = await fetch("/api/projects", {
+  const response = await fetch("/api/studies", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -695,12 +697,12 @@ async function createProjectOption(input: {
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(readErrorFromPayload(payload) || "Failed to create project");
+    throw new Error(readErrorFromPayload(payload) || "Failed to create study");
   }
-  const projects = normalizeProjectOptions([payload && typeof payload === "object" ? (payload as { project?: unknown }).project : null]);
+  const projects = normalizeProjectOptions([payload && typeof payload === "object" ? (payload as { study?: unknown }).study : null]);
   const project = projects[0];
   if (!project) {
-    throw new Error("Project creation returned an invalid response");
+    throw new Error("Study creation returned an invalid response");
   }
   return project;
 }
@@ -1055,9 +1057,9 @@ function formatSavedProjectLabel(
   slugs: string[],
   projects: ProjectOption[],
 ): string {
-  if (slugs.length === 0) return "project";
+  if (slugs.length === 0) return "study";
   if (slugs.length === 1 && slugs[0]) return projectLabel(slugs[0], projects);
-  return `${slugs.length} projects`;
+  return `${slugs.length} studies`;
 }
 
 function dedupeStrings(values: string[]): string[] {
@@ -1205,7 +1207,7 @@ function TopStrip({
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-rule-soft bg-raised px-6 py-3">
       <Link
-        href="/dashboard/project"
+        href="/dashboard/study"
         className="text-sm font-medium text-muted hover:text-accent transition-colors mr-1"
       >
         ScienceSwarm
@@ -1391,7 +1393,7 @@ function ProjectSavePanel({
   return (
     <div className="rounded-lg border border-rule bg-sunk/80 p-3">
       <div className="flex items-center justify-between gap-3">
-        <div className={SECTION_LABEL}>Destination projects</div>
+        <div className={SECTION_LABEL}>Destination studies</div>
         <button
           type="button"
           onClick={controls.onClose}
@@ -1402,10 +1404,10 @@ function ProjectSavePanel({
       </div>
 
       {controls.projectStatus === "loading" ? (
-        <div className="mt-3 text-xs text-muted">Loading projects...</div>
+        <div className="mt-3 text-xs text-muted">Loading studies...</div>
       ) : controls.projectStatus === "error" ? (
         <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs text-danger">Projects unavailable.</span>
+          <span className="text-xs text-danger">Studies unavailable.</span>
           <button
             type="button"
             onClick={controls.onReloadProjects}
@@ -1439,16 +1441,16 @@ function ProjectSavePanel({
           ))}
         </div>
       ) : (
-        <div className="mt-3 text-xs text-muted">No projects yet.</div>
+        <div className="mt-3 text-xs text-muted">No studies yet.</div>
       )}
 
       <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <label className="text-xs font-medium text-foreground">
-          New project
+          New study
           <input
             value={controls.newProjectName}
             onChange={(event) => controls.onNewProjectNameChange(event.target.value)}
-            placeholder="Project name"
+            placeholder="Study name"
             className="mt-1 w-full rounded border border-rule bg-raised px-2 py-1.5 text-xs font-normal text-foreground outline-none transition-colors focus:border-accent"
           />
         </label>
@@ -1597,7 +1599,7 @@ function ReportOverview({
                       onClick={destinationControls?.onOpen}
                       className="rounded-lg border border-rule px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Manage projects
+                      Manage studies
                     </button>
                   </>
                 ) : (
@@ -1607,7 +1609,7 @@ function ReportOverview({
                     disabled={saveStatus.state === "saving"}
                     className="rounded-lg border border-rule px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {saveStatus.state === "saving" ? "Saving..." : "Save to project..."}
+                    {saveStatus.state === "saving" ? "Saving..." : "Save to study..."}
                   </button>
                 )}
               </>
@@ -2430,7 +2432,7 @@ function StructuredCritiquePageContent() {
       setSavePanelError(null);
     } catch (err) {
       setProjectListStatus("error");
-      setSavePanelError(err instanceof Error ? err.message : "Failed to load projects");
+      setSavePanelError(err instanceof Error ? err.message : "Failed to load studies");
     }
   }, []);
 

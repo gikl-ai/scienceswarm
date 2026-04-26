@@ -4,6 +4,7 @@ import type { GbrainEngineAdapter } from "./stores/gbrain-engine-adapter";
 import type { BrainConfig } from "./types";
 import type { LLMClient } from "./llm";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { readStudySlugFromFrontmatter } from "@/lib/studies/frontmatter";
 
 export interface CompileAffectedTopic {
   slug: string;
@@ -230,8 +231,11 @@ async function buildFallbackCompileTargets(input: {
 
   const now = new Date().toISOString();
   const createdBy = getCurrentUserHandle();
+  const studySlug = readStudySlugFromFrontmatter(input.sourcePage.frontmatter);
   const frontmatter = {
-    project: input.sourcePage.frontmatter.project,
+    study: studySlug,
+    study_slug: studySlug,
+    legacy_project_slug: studySlug,
     type: "concept",
     created_from_source: input.sourceSlug,
     created_at: now,
@@ -242,7 +246,7 @@ async function buildFallbackCompileTargets(input: {
     type: "concept",
     title,
     compiled_truth: [
-      `${title} is a current-view topic created from new project evidence.`,
+      `${title} is a current-view topic created from new study evidence.`,
       "Dream Cycle will refine this page as sources, notes, and contradictions accumulate.",
     ].join("\n\n"),
     timeline: "",

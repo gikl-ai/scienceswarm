@@ -11,6 +11,7 @@ import {
 } from "../_shared";
 
 interface RequestBody {
+  study?: unknown;
   project?: unknown;
   prompt?: unknown;
   files?: Array<{
@@ -35,20 +36,24 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const project = typeof body.project === "string" ? body.project.trim() : "";
+  const study = typeof body.study === "string"
+    ? body.study.trim()
+    : typeof body.project === "string"
+      ? body.project.trim()
+      : "";
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-  if (!project) {
-    return Response.json({ error: "project is required" }, { status: 400 });
+  if (!study) {
+    return Response.json({ error: "study is required" }, { status: 400 });
   }
   if (!prompt) {
     return Response.json({ error: "prompt is required" }, { status: 400 });
   }
 
   try {
-    assertSafeProjectSlug(project);
+    assertSafeProjectSlug(study);
   } catch (error) {
     if (!(error instanceof InvalidSlugError)) throw error;
-    return Response.json({ error: "project must be a safe bare slug" }, { status: 400 });
+    return Response.json({ error: "study must be a safe bare slug" }, { status: 400 });
   }
 
   const files = Array.isArray(body.files)
@@ -63,7 +68,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const result = await interpretMultimodalResultPacket({
       llm: getLLMClient(config),
-      project,
+      project: study,
       prompt,
       files,
     });

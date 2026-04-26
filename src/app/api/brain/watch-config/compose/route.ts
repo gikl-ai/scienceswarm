@@ -51,7 +51,7 @@ export async function POST(request: Request): Promise<Response> {
       getProjectStateRootForBrainRoot(project, configOrError.root),
     );
     if (!manifest) {
-      return Response.json({ error: `Project ${project} was not found in brain state.` }, { status: 404 });
+      return Response.json({ error: `Study ${project} was not found in brain state.` }, { status: 404 });
     }
     projectTitle = manifest.title;
   }

@@ -238,7 +238,7 @@ function normalizeStringArray(value: unknown): string[] {
 
 function buildFallbackAssumptions(bundle: ArtifactContextBundle): string[] {
   return [
-    `The first pass relies on the current ${bundle.projectTitle} project memory and may miss context outside the manifest-backed pages.`,
+    `The first pass relies on the current ${bundle.projectTitle} study memory and may miss context outside the manifest-backed pages.`,
     "Any quantitative claims or citations should be checked against the original sources before reuse.",
   ];
 }

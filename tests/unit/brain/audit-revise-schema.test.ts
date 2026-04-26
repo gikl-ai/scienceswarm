@@ -58,8 +58,8 @@ describe("PaperFrontmatterSchema", () => {
 
   it.each([
     {
-      name: "missing project",
-      input: { type: "paper" },
+      name: "missing type",
+      input: { project: "hubble-1929" },
     },
     {
       name: "invalid year",

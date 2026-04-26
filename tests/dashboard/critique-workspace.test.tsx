@@ -216,12 +216,12 @@ function makeEmptyHostedCritiqueHistory() {
 }
 
 function isProjectListRequest(input: RequestInfo | URL): boolean {
-  return String(input) === "/api/projects";
+  return String(input) === "/api/studies";
 }
 
 function makeProjectListResponse() {
   return Response.json({
-    projects: [
+    studies: [
       {
         slug: "project-alpha",
         name: "Project Alpha",
@@ -274,7 +274,7 @@ describe("Critique workspace", () => {
           return Response.json({
             brain_slug: "paper-critique",
             url: "/dashboard/reasoning?brain_slug=paper-critique",
-            project_url: "/dashboard/project?name=paper&brain_slug=paper-critique",
+            project_url: "/dashboard/study?name=paper&brain_slug=paper-critique",
           });
         }
         throw new Error(`Unexpected fetch in test: ${String(input)}`);
@@ -317,7 +317,7 @@ describe("Critique workspace", () => {
           return Response.json({
             brain_slug: "paper-critique",
             url: "/dashboard/reasoning?brain_slug=paper-critique",
-            project_url: "/dashboard/project?name=paper&brain_slug=paper-critique",
+            project_url: "/dashboard/study?name=paper&brain_slug=paper-critique",
           });
         }
         throw new Error(`Unexpected fetch in test: ${String(input)}`);
@@ -375,7 +375,7 @@ describe("Critique workspace", () => {
                 finding_count: 3,
                 url: "/dashboard/reasoning?brain_slug=newest-text-critique",
                 project_url:
-                  "/dashboard/project?name=pasted-text&brain_slug=newest-text-critique",
+                  "/dashboard/study?name=pasted-text&brain_slug=newest-text-critique",
               },
               {
                 brain_slug: "hubble-1929-critique",
@@ -388,7 +388,7 @@ describe("Critique workspace", () => {
                 finding_count: 3,
                 url: "/dashboard/reasoning?brain_slug=hubble-1929-critique",
                 project_url:
-                  "/dashboard/project?name=hubble-1929&brain_slug=hubble-1929-critique",
+                  "/dashboard/study?name=hubble-1929&brain_slug=hubble-1929-critique",
               },
             ],
           });
@@ -450,7 +450,7 @@ describe("Critique workspace", () => {
     expect(screen.getByText("Saved in pasted-text")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open in file tree" })).toHaveAttribute(
       "href",
-      "/dashboard/project?name=pasted-text&brain_slug=newest-text-critique",
+      "/dashboard/study?name=pasted-text&brain_slug=newest-text-critique",
     );
     expect(screen.getByText("Saved in brain")).toBeInTheDocument();
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
@@ -491,7 +491,7 @@ describe("Critique workspace", () => {
                 finding_count: 3,
                 url: "/dashboard/reasoning?brain_slug=hubble-1929-critique",
                 project_url:
-                  "/dashboard/project?name=hubble-1929&brain_slug=hubble-1929-critique",
+                  "/dashboard/study?name=hubble-1929&brain_slug=hubble-1929-critique",
               },
             ],
           });
@@ -545,7 +545,7 @@ describe("Critique workspace", () => {
     fireEvent.click(screen.getByText("remote-paper.pdf"));
 
     expect(await screen.findByText("Audit for Synthetic Biology Draft")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save to project..." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save to study..." })).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
       "/api/brain/critique",
       expect.objectContaining({ method: "POST" }),
@@ -615,10 +615,10 @@ describe("Critique workspace", () => {
           project_slug: "project-alpha",
           project_slugs: ["project-alpha"],
           url: "/dashboard/reasoning?brain_slug=paper-critique",
-          project_url: "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
+          project_url: "/dashboard/study?name=project-alpha&brain_slug=paper-critique",
           project_urls: {
             "project-alpha":
-              "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
+              "/dashboard/study?name=project-alpha&brain_slug=paper-critique",
           },
         });
       }
@@ -632,11 +632,11 @@ describe("Critique workspace", () => {
     await openRecentAnalysis("paper.pdf");
 
     expect(await screen.findByText("Audit for Synthetic Biology Draft")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save to project..." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save to study..." })).toBeInTheDocument();
     expect(postBodies).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Save to project..." }));
-    expect(await screen.findByText("Destination projects")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save to study..." }));
+    expect(await screen.findByText("Destination studies")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Project Alpha"));
     fireEvent.click(screen.getByRole("button", { name: "Save critique" }));
 
@@ -650,7 +650,7 @@ describe("Critique workspace", () => {
     ]);
     expect(screen.getByRole("link", { name: "Open in file tree" })).toHaveAttribute(
       "href",
-      "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
+      "/dashboard/study?name=project-alpha&brain_slug=paper-critique",
     );
     expect(screen.getByRole("link", { name: "Open saved analysis" })).toHaveAttribute(
       "href",
@@ -687,11 +687,11 @@ describe("Critique workspace", () => {
     render(<StructuredCritiquePage />);
 
     await openRecentAnalysis("paper.pdf");
-    fireEvent.click(await screen.findByRole("button", { name: "Save to project..." }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save to study..." }));
     fireEvent.click(await screen.findByText("Project Alpha"));
     fireEvent.click(screen.getByRole("button", { name: "Save critique" }));
 
-    const destinationLabel = await screen.findByText("Destination projects");
+    const destinationLabel = await screen.findByText("Destination studies");
     const panel = destinationLabel.parentElement?.parentElement;
     expect(panel).toBeTruthy();
     expect(
@@ -720,7 +720,7 @@ describe("Critique workspace", () => {
       if (isHostedCritiqueHistoryRequest(input)) {
         return makeEmptyHostedCritiqueHistory();
       }
-      if (String(input) === "/api/projects" && init?.method === "POST") {
+      if (String(input) === "/api/studies" && init?.method === "POST") {
         return pendingCreateProject;
       }
       if (isProjectListRequest(input)) {
@@ -742,15 +742,15 @@ describe("Critique workspace", () => {
     render(<StructuredCritiquePage />);
 
     await openRecentAnalysis("paper.pdf");
-    fireEvent.click(await screen.findByRole("button", { name: "Save to project..." }));
-    fireEvent.change(await screen.findByPlaceholderText("Project name"), {
+    fireEvent.click(await screen.findByRole("button", { name: "Save to study..." }));
+    fireEvent.change(await screen.findByPlaceholderText("Study name"), {
       target: { value: "New Project" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save critique" }));
     expect(await screen.findByRole("button", { name: "Saving..." })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save to project..." }));
+    fireEvent.click(screen.getByRole("button", { name: "Save to study..." }));
     fireEvent.click(await screen.findByText("Project Alpha"));
 
     expect(screen.getByRole("button", { name: "Save critique" })).toBeEnabled();
@@ -789,7 +789,7 @@ describe("Critique workspace", () => {
               finding_count: 3,
               url: "/dashboard/reasoning?brain_slug=paper-critique",
               project_url:
-                "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
+                "/dashboard/study?name=project-alpha&brain_slug=paper-critique",
             },
           ],
         });
@@ -813,7 +813,7 @@ describe("Critique workspace", () => {
     expect(await screen.findByText("Saved in project-alpha")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open in file tree" })).toHaveAttribute(
       "href",
-      "/dashboard/project?name=project-alpha&brain_slug=paper-critique",
+      "/dashboard/study?name=project-alpha&brain_slug=paper-critique",
     );
     expect(fetchMock).not.toHaveBeenCalledWith(
       "/api/brain/critique",
@@ -885,7 +885,7 @@ describe("Critique workspace", () => {
         return Response.json({
           brain_slug: "paper-critique",
           url: "/dashboard/reasoning?brain_slug=paper-critique",
-          project_url: "/dashboard/project?name=paper&brain_slug=paper-critique",
+          project_url: "/dashboard/study?name=paper&brain_slug=paper-critique",
         });
       }
       if (String(input) === "/api/structured-critique/feedback") {
@@ -1022,7 +1022,7 @@ describe("Critique workspace", () => {
       id: "job-auto-domain",
       pdf_filename: "pasted-text.txt",
     })));
-    expect(await screen.findByRole("button", { name: "Save to project..." })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Save to study..." })).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
       "/api/brain/critique",
       expect.objectContaining({ method: "POST" }),
@@ -1056,7 +1056,7 @@ describe("Critique workspace", () => {
         return Response.json({
           brain_slug: "short-text-critique",
           url: "/dashboard/reasoning?brain_slug=short-text-critique",
-          project_url: "/dashboard/project?name=short-text&brain_slug=short-text-critique",
+          project_url: "/dashboard/study?name=short-text&brain_slug=short-text-critique",
         });
       }
       throw new Error(`Unexpected fetch in test: ${url}`);
@@ -1170,7 +1170,7 @@ describe("Critique workspace", () => {
           brain_slug: "long-running-critique",
           url: "/dashboard/reasoning?brain_slug=long-running-critique",
           project_url:
-            "/dashboard/project?name=long-running&brain_slug=long-running-critique",
+            "/dashboard/study?name=long-running&brain_slug=long-running-critique",
         });
       }
       if (url === "/api/structured-critique") {
@@ -1275,7 +1275,7 @@ describe("Critique workspace", () => {
           brain_slug: "queued-critique",
           url: "/dashboard/reasoning?brain_slug=queued-critique",
           project_url:
-            "/dashboard/project?name=queued&brain_slug=queued-critique",
+            "/dashboard/study?name=queued&brain_slug=queued-critique",
         });
       }
       if (url === "/api/structured-critique") {

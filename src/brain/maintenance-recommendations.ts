@@ -229,7 +229,7 @@ function linkExtractionRecommendation(
     title: "Extract and connect links",
     rationale: parts.join(" and ") + " need graph attention.",
     action:
-      "Run a targeted link extraction pass around active projects, papers, and concepts; ask before a whole-brain pass.",
+      "Run a targeted link extraction pass around active studys, papers, and concepts; ask before a whole-brain pass.",
     approvalRequired: true,
     automatable: true,
   };

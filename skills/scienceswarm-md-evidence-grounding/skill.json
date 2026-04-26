@@ -1,7 +1,7 @@
 {
   "slug": "scienceswarm-md-evidence-grounding",
   "name": "ScienceSwarm MD Evidence Grounding",
-  "description": "Search the project paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.",
+  "description": "Search the study paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.",
   "visibility": "public",
   "status": "ready",
   "tags": [
@@ -15,7 +15,7 @@
     "codex"
   ],
   "owner": "scienceswarm",
-  "summary": "Ground MD planning in project literature before external search and preserve evidence classes for downstream parameter decisions.",
+  "summary": "Ground MD planning in study literature before external search and preserve evidence classes for downstream parameter decisions.",
   "source": {
     "kind": "local"
   },

@@ -310,7 +310,7 @@ function normalizeEvidenceMapPayload(
     }),
     honesty_note:
       readNonEmptyString(record.honesty_note)
-      ?? "This evidence map is limited to the selected visible project sources and should be updated when better evidence arrives.",
+      ?? "This evidence map is limited to the selected visible study sources and should be updated when better evidence arrives.",
   };
 }
 
@@ -326,7 +326,9 @@ function buildEvidenceMapMarkdown(args: {
   const frontmatter = {
     title,
     type: "note",
-    project: args.projectId,
+    study: args.projectId,
+    study_slug: args.projectId,
+    legacy_project_slug: args.projectId,
     analysis_kind: "evidence_map",
     question: args.question,
     generated_at: args.generatedAt,
@@ -432,7 +434,7 @@ function buildEvidenceMapMarkdown(args: {
   );
 }
 
-const SYSTEM_PROMPT = `You build project evidence maps for scientists.
+const SYSTEM_PROMPT = `You build study evidence maps for scientists.
 
 Use only the supplied project sources. Do not invent claims or confidence.
 When evidence is weak, say so plainly.
@@ -518,7 +520,7 @@ export async function POST(request: Request) {
 
   const question =
     readNonEmptyString(body.question)
-    ?? "What does the current project evidence support, and where does it disagree?";
+    ?? "What does the current study evidence support, and where does it disagree?";
   const focusBrainSlug = readNonEmptyString(body.focusBrainSlug);
 
   try {
@@ -533,7 +535,7 @@ export async function POST(request: Request) {
       });
     if (projectPages.length === 0) {
       return Response.json(
-        { error: `No readable project pages found for ${projectId}.` },
+        { error: `No readable study pages found for ${projectId}.` },
         { status: 404 },
       );
     }
@@ -552,7 +554,7 @@ export async function POST(request: Request) {
     const completion = await llm.complete({
       system: SYSTEM_PROMPT,
       user: [
-        `Project: ${projectId}`,
+        `Study: ${projectId}`,
         `Focused question: ${question}`,
         "",
         "Sources:",
@@ -606,7 +608,7 @@ export async function POST(request: Request) {
 
     return Response.json({
       brain_slug: slug,
-      project_url: `/dashboard/project?name=${encodeURIComponent(projectId)}&brain_slug=${encodeURIComponent(slug)}`,
+      project_url: `/dashboard/study?name=${encodeURIComponent(projectId)}&brain_slug=${encodeURIComponent(slug)}`,
       summary: {
         question: payload.focused_question,
         claimCount: payload.claims.length,

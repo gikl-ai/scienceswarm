@@ -404,7 +404,7 @@ describe("GET /api/chat/unified", () => {
     );
   });
 
-  it("discovers the latest project-scoped OpenClaw session when conversationId is missing", async () => {
+  it("discovers the latest study-scoped OpenClaw session when conversationId is missing", async () => {
     resolveAgentConfig.mockReturnValue({
       type: "openclaw",
       url: "http://localhost:19002",
@@ -457,7 +457,7 @@ describe("GET /api/chat/unified", () => {
         role: "assistant",
         channel: "web",
         content:
-          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_variant_summary.md.",
+          "Recovered from the durable study-scoped session. Saved reports/baseline_vs_variant_summary.md.",
         timestamp: "2026-01-01T00:00:04.000Z",
         conversationId: newerSessionId,
       },
@@ -544,7 +544,7 @@ describe("GET /api/chat/unified", () => {
         role: "assistant",
         channel: "web",
         content:
-          "Recovered from the durable project-scoped session. Saved reports/baseline_vs_variant_summary.md.",
+          "Recovered from the durable study-scoped session. Saved reports/baseline_vs_variant_summary.md.",
         timestamp: "2026-01-01T00:00:04.000Z",
         conversationId: sessionId,
       },
@@ -1616,9 +1616,9 @@ describe("POST /api/chat/unified", () => {
   it("returns local slash-command help from the dedicated command route", async () => {
     listOpenClawSkills.mockResolvedValueOnce([
       {
-        slug: "project-organizer",
-        name: "project-organizer",
-        description: "Organize the current project",
+        slug: "study-organizer",
+        name: "study-organizer",
+        description: "Organize the current study",
         runtime: "in-session",
         emoji: null,
       },
@@ -1643,7 +1643,7 @@ describe("POST /api/chat/unified", () => {
     const body = await response.json();
     expect(body.response).toContain("**ScienceSwarm slash commands**");
     expect(body.response).toContain("`/help`");
-    expect(body.response).toContain("`/project-organizer [request]`");
+    expect(body.response).toContain("`/study-organizer [request]`");
     expect(checkRateLimit).toHaveBeenCalledWith("slash-help-test", "web");
     expect(sendOpenClawMessage).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
@@ -1653,9 +1653,9 @@ describe("POST /api/chat/unified", () => {
   it("returns 503 for unknown slash-like input when OpenClaw is disconnected (no local fallback)", async () => {
     listOpenClawSkills.mockResolvedValueOnce([
       {
-        slug: "project-organizer",
-        name: "project-organizer",
-        description: "Organize the current project",
+        slug: "study-organizer",
+        name: "study-organizer",
+        description: "Organize the current study",
         runtime: "in-session",
         emoji: null,
       },
@@ -1697,9 +1697,9 @@ describe("POST /api/chat/unified", () => {
   it("routes known slash skill commands only through OpenClaw", async () => {
     listOpenClawSkills.mockResolvedValueOnce([
       {
-        slug: "project-organizer",
-        name: "project-organizer",
-        description: "Organize the current project",
+        slug: "study-organizer",
+        name: "study-organizer",
+        description: "Organize the current study",
         runtime: "in-session",
         emoji: null,
       },
@@ -1724,9 +1724,9 @@ describe("POST /api/chat/unified", () => {
         "x-real-ip": "slash-openclaw-test",
       },
       body: JSON.stringify({
-        message: "/project-organizer show duplicate papers",
+        message: "/study-organizer show duplicate papers",
         messages: [
-          { role: "user", content: "/project-organizer show duplicate papers" },
+          { role: "user", content: "/study-organizer show duplicate papers" },
         ],
       }),
     });
@@ -1736,12 +1736,12 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     expect(sendOpenClawMessage).toHaveBeenCalledWith(
       expect.stringContaining(
-        "ScienceSwarm slash command: `/project-organizer show duplicate papers`",
+        "ScienceSwarm slash command: `/study-organizer show duplicate papers`",
       ),
       expect.any(Object),
     );
     expect(sendOpenClawMessage.mock.calls[0]?.[0]).toContain(
-      "Use the installed ScienceSwarm skill `project-organizer`",
+      "Use the installed ScienceSwarm skill `study-organizer`",
     );
     expect(sendOpenClawMessage.mock.calls[0]?.[0]).toContain(
       "User request:\nshow duplicate papers",
@@ -1756,9 +1756,9 @@ describe("POST /api/chat/unified", () => {
   it("checks slash skill readiness with the fast OpenClaw gateway probe", async () => {
     listOpenClawSkills.mockResolvedValueOnce([
       {
-        slug: "project-organizer",
-        name: "project-organizer",
-        description: "Organize the current project",
+        slug: "study-organizer",
+        name: "study-organizer",
+        description: "Organize the current study",
         runtime: "in-session",
         emoji: null,
       },
@@ -1780,9 +1780,9 @@ describe("POST /api/chat/unified", () => {
         "x-real-ip": "slash-fast-gateway-test",
       },
       body: JSON.stringify({
-        message: "/project-organizer list stale exports",
+        message: "/study-organizer list stale exports",
         messages: [
-          { role: "user", content: "/project-organizer list stale exports" },
+          { role: "user", content: "/study-organizer list stale exports" },
         ],
       }),
     });
@@ -1794,7 +1794,7 @@ describe("POST /api/chat/unified", () => {
     expect(openClawHealthCheck).not.toHaveBeenCalled();
     expect(sendOpenClawMessage).toHaveBeenCalledWith(
       expect.stringContaining(
-        "ScienceSwarm slash command: `/project-organizer list stale exports`",
+        "ScienceSwarm slash command: `/study-organizer list stale exports`",
       ),
       expect.any(Object),
     );
@@ -1808,9 +1808,9 @@ describe("POST /api/chat/unified", () => {
 
     listOpenClawSkills.mockResolvedValueOnce([
       {
-        slug: "project-organizer",
-        name: "project-organizer",
-        description: "Organize the current project",
+        slug: "study-organizer",
+        name: "study-organizer",
+        description: "Organize the current study",
         runtime: "in-session",
         emoji: null,
       },
@@ -1842,11 +1842,11 @@ describe("POST /api/chat/unified", () => {
         "x-real-ip": "slash-stream-test",
       },
       body: JSON.stringify({
-        message: "/project-organizer draft a revision checklist",
+        message: "/study-organizer draft a revision checklist",
         messages: [
           {
             role: "user",
-            content: "/project-organizer draft a revision checklist",
+            content: "/study-organizer draft a revision checklist",
           },
         ],
         projectId: "alpha-project",
@@ -1900,7 +1900,7 @@ describe("POST /api/chat/unified", () => {
     });
     expect(sendOpenClawMessage).toHaveBeenCalledWith(
       expect.stringContaining(
-        "ScienceSwarm slash command: `/project-organizer draft a revision checklist`",
+        "ScienceSwarm slash command: `/study-organizer draft a revision checklist`",
       ),
       expect.any(Object),
     );
@@ -3170,7 +3170,7 @@ describe("POST /api/chat/unified", () => {
   // fallback respectively. Both are dead code under the chat-only-through-
   // OpenClaw rule; see the dedicated 503 tests above.
 
-  it("uses the per-project workspace for OpenClaw even when a shared workspace exists", async () => {
+  it("uses the per-study workspace for OpenClaw even when a shared workspace exists", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     const sharedWorkspaceRoot = createSharedWorkspaceRoot();
     const agentCfg = { type: "openclaw", url: "http://localhost:19002" };
@@ -3218,7 +3218,7 @@ describe("POST /api/chat/unified", () => {
       "Do not spawn subagents, background agents, sessions, or gateway pairing flows.",
     );
     expect(openClawMessage).toContain(
-      "Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to project-visible relative paths",
+      "Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to study-visible relative paths",
     );
     expect(openClawMessage).toContain(
       "Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
@@ -3910,17 +3910,17 @@ describe("POST /api/chat/unified", () => {
       "What action should I take next for this stale research task?",
     );
     expect(openClawMessage).toContain(
-      "Answer the user's latest request directly using the visible project context.",
+      "Answer the user's latest request directly using the visible study context.",
     );
     expect(openClawMessage).toContain(
-      "Ignore project brief next-move suggestions unless the user explicitly asks you to act on them in this turn.",
+      "Ignore study brief next-move suggestions unless the user explicitly asks you to act on them in this turn.",
     );
     expect(openClawMessage).not.toContain("Execute all steps using your tools");
     expect(streamChat).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
   });
 
-  it("auto-resolves project file references from the message for OpenClaw requests", async () => {
+  it("auto-resolves study file references from the message for OpenClaw requests", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeFileSync(
       path.join(projectRoot, "RESULTS.md"),
@@ -3968,7 +3968,7 @@ describe("POST /api/chat/unified", () => {
     );
     expect(openClawMessage).toContain("[Files: RESULTS.md]");
     expect(openClawMessage).toContain(
-      "Resolved project file references for this turn:",
+      "Resolved study file references for this turn:",
     );
     expect(openClawMessage).toContain("- results.md -> RESULTS.md");
     expect(openClawMessage).toContain("File: RESULTS.md (1 pages)");
@@ -4013,10 +4013,10 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
     expect(openClawMessage).toContain(
-      "Answer the user's latest request directly using the visible project context.",
+      "Answer the user's latest request directly using the visible study context.",
     );
     expect(openClawMessage).toContain(
-      "Ignore project brief next-move suggestions unless the user explicitly asks you to act on them in this turn.",
+      "Ignore study brief next-move suggestions unless the user explicitly asks you to act on them in this turn.",
     );
     expect(openClawMessage).not.toContain("Execute all steps using your tools");
   });
@@ -4105,7 +4105,7 @@ describe("POST /api/chat/unified", () => {
     );
   });
 
-  it("resolves @ project file references from the message for OpenClaw requests", async () => {
+  it("resolves @ study file references from the message for OpenClaw requests", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeFileSync(
       path.join(projectRoot, "RESULTS.md"),
@@ -4245,7 +4245,7 @@ describe("POST /api/chat/unified", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message: "Summarize these project notes.",
+        message: "Summarize these study notes.",
         projectId: "alpha-project",
         mode: "openclaw-tools",
         files,
@@ -4271,7 +4271,7 @@ describe("POST /api/chat/unified", () => {
     );
   });
 
-  it("implicitly attaches imported project notes for broad literature questions", async () => {
+  it("implicitly attaches imported study notes for broad literature questions", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeWorkspaceFile(
       projectRoot,
@@ -4306,7 +4306,7 @@ describe("POST /api/chat/unified", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message:
-          "Based on the imported project note, identify two falsifiable hypotheses.",
+          "Based on the imported study note, identify two falsifiable hypotheses.",
         projectId: "alpha-project",
       }),
     });
@@ -4322,10 +4322,10 @@ describe("POST /api/chat/unified", () => {
       }),
     );
     expect(openClawMessage).toContain(
-      "Resolved project file references for this turn:",
+      "Resolved study file references for this turn:",
     );
     expect(openClawMessage).toContain(
-      "- visible imported project context -> docs/project_notes.md",
+      "- visible imported study context -> docs/project_notes.md",
     );
     expect(openClawMessage).toContain(
       "File: docs/project_notes.md (1 pages)",
@@ -4396,7 +4396,7 @@ describe("POST /api/chat/unified", () => {
     expect(openClawMessage).toContain("Cepheid distance evidence.");
   });
 
-  it("resolves extensionless project file references by unique stem match", async () => {
+  it("resolves extensionless study file references by unique stem match", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeFileSync(path.join(projectRoot, "RESULTS.md"), "# Results\n");
     resolveAgentConfig.mockReturnValue({
@@ -4421,7 +4421,7 @@ describe("POST /api/chat/unified", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message: "Read results in the current project and summarize it.",
+        message: "Read results in the current study and summarize it.",
         projectId: "alpha-project",
         mode: "openclaw-tools",
       }),
@@ -4432,7 +4432,7 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
     expect(openClawMessage).toContain(
-      "Resolved project file references for this turn:",
+      "Resolved study file references for this turn:",
     );
     expect(openClawMessage).toContain("- results -> RESULTS.md");
     expect(openClawMessage).toContain("File: RESULTS.md (1 pages)");
@@ -5112,7 +5112,7 @@ describe("POST /api/chat/unified", () => {
     injectBrainContextIntoUserMessage.mockImplementationOnce(
       (message: string) =>
         [
-          "Use the following project memory when relevant.",
+          "Use the following study memory when relevant.",
           "",
           "## Project Brief",
           "- Later this workflow will need an editor cover letter.",
@@ -7571,7 +7571,7 @@ describe("POST /api/chat/unified", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message:
-          "Read the file results in the current project and summarize it.",
+          "Read the file results in the current study and summarize it.",
         projectId: "alpha-project",
         mode: "openclaw-tools",
       }),
@@ -7582,7 +7582,7 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
     expect(openClawMessage).toContain(
-      "Resolved project file references for this turn:",
+      "Resolved study file references for this turn:",
     );
     expect(openClawMessage).toContain("- results -> RESULTS.md");
     expect(openClawMessage).toContain("File: RESULTS.md (1 pages)");
@@ -7592,7 +7592,7 @@ describe("POST /api/chat/unified", () => {
     });
   });
 
-  it("resolves near-name project file references by unique fuzzy match", async () => {
+  it("resolves near-name study file references by unique fuzzy match", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeFileSync(path.join(projectRoot, "RESULTS.md"), "# Results\n");
     resolveAgentConfig.mockReturnValue({
@@ -7617,7 +7617,7 @@ describe("POST /api/chat/unified", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message: "Read reslts in the current project and summarize it.",
+        message: "Read reslts in the current study and summarize it.",
         projectId: "alpha-project",
         mode: "openclaw-tools",
       }),
@@ -7628,7 +7628,7 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
     expect(openClawMessage).toContain(
-      "Resolved project file references for this turn:",
+      "Resolved study file references for this turn:",
     );
     expect(openClawMessage).toContain("- reslts -> RESULTS.md");
     expect(openClawMessage).toContain("File: RESULTS.md (1 pages)");
@@ -7638,7 +7638,7 @@ describe("POST /api/chat/unified", () => {
     });
   });
 
-  it("does not auto-attach ambiguous fuzzy project file references", async () => {
+  it("does not auto-attach ambiguous fuzzy study file references", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     writeFileSync(path.join(projectRoot, "RESULTS.md"), "# Results\n");
     mkdirSync(path.join(projectRoot, "results"), { recursive: true });
@@ -7663,7 +7663,7 @@ describe("POST /api/chat/unified", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message: "Read results in the current project and summarize it.",
+        message: "Read results in the current study and summarize it.",
         projectId: "alpha-project",
         mode: "openclaw-tools",
       }),
@@ -7674,7 +7674,7 @@ describe("POST /api/chat/unified", () => {
     expect(response.status).toBe(200);
     const [[openClawMessage]] = sendOpenClawMessage.mock.calls;
     expect(openClawMessage).toContain(
-      "Ambiguous project file references were not auto-attached. Ask the user to confirm one of:",
+      "Ambiguous study file references were not auto-attached. Ask the user to confirm one of:",
     );
     expect(openClawMessage).toContain(
       "results: RESULTS.md, results/results.csv",
@@ -7687,7 +7687,7 @@ describe("POST /api/chat/unified", () => {
     });
   });
 
-  it("imports OpenClaw-generated media and sibling runtime outputs into the project workspace", async () => {
+  it("imports OpenClaw-generated media and sibling runtime outputs into the study workspace", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     const homeRoot = mkdtempSync(path.join(tmpdir(), "openclaw-home-"));
     vi.stubEnv("HOME", homeRoot);
@@ -7729,7 +7729,7 @@ describe("POST /api/chat/unified", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message: "Create a chart from results.md in the current project data.",
+        message: "Create a chart from results.md in the current study data.",
         projectId: "alpha-project",
         files: [
           { name: "results.md", workspacePath: "results.md", size: "1 KB" },
@@ -7752,7 +7752,7 @@ describe("POST /api/chat/unified", () => {
         expect.objectContaining({
           projectPath: "figures/ratio-trend.jpg",
           sourceFiles: ["results.md"],
-          prompt: "Create a chart from results.md in the current project data.",
+          prompt: "Create a chart from results.md in the current study data.",
           tool: "OpenClaw CLI",
         }),
       ]),
@@ -7765,7 +7765,7 @@ describe("POST /api/chat/unified", () => {
     ).toBe(true);
   });
 
-  it("rewrites internal OpenClaw workspace paths to the imported project workspace path", async () => {
+  it("rewrites internal OpenClaw workspace paths to the imported study workspace path", async () => {
     const projectRoot = createProjectRoot("alpha-project");
     const homeRoot = mkdtempSync(path.join(tmpdir(), "openclaw-home-"));
     vi.stubEnv("HOME", homeRoot);

@@ -131,7 +131,8 @@ describe("paper-library gbrain writer", () => {
     expect(page?.content).not.toContain("old.pdf");
     expect(page?.frontmatter.custom).toBe("keep-me");
     expect(page?.frontmatter.paper_library).toMatchObject({
-      project: "project-alpha",
+      study: "project-alpha",
+      study_slug: "project-alpha",
       apply_manifest_id: "manifest-1",
     });
   });

@@ -160,7 +160,8 @@ describe("paper-library review and apply routes", () => {
       frontmatter: {
         entity_type: "paper",
         paper_library: expect.objectContaining({
-          project: "project-alpha",
+          study: "project-alpha",
+          study_slug: "project-alpha",
           apply_manifest_id: applied.manifestId,
         }),
       },

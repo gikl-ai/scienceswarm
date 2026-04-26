@@ -14,15 +14,21 @@ import { isLocalRequest } from "@/lib/local-guard";
 import { getBrainConfig, isErrorResponse } from "../../_shared";
 
 const ScanLookupRequestSchema = z.object({
-  project: ProjectSlugSchema,
+  study: ProjectSlugSchema,
   id: z.string().trim().min(1),
 });
 
 const ScanCancelRequestSchema = z.object({
   action: z.literal("cancel"),
-  project: ProjectSlugSchema,
+  study: ProjectSlugSchema,
   scanId: z.string().trim().min(1),
 });
+
+function readStudySlugFromUnknown(input: unknown): unknown {
+  if (!input || typeof input !== "object") return undefined;
+  const record = input as Record<string, unknown>;
+  return record.study ?? record.project;
+}
 
 function badRequest(error: unknown): Response {
   if (error instanceof ZodError) {
@@ -48,24 +54,26 @@ export async function GET(request: Request) {
   const wantsLatest = latestParam === "1" || latestParam === "true";
 
   if (wantsLatest) {
-    const project = ProjectSlugSchema.safeParse(url.searchParams.get("project"));
-    if (!project.success) return badRequest(project.error);
+    const study = ProjectSlugSchema.safeParse(
+      url.searchParams.get("study") ?? url.searchParams.get("project"),
+    );
+    if (!study.success) return badRequest(study.error);
 
-    const scan = await findLatestPaperLibraryScan(project.data, configOrError.root);
+    const scan = await findLatestPaperLibraryScan(study.data, configOrError.root);
     if (!scan) {
-      return Response.json(paperLibraryError("job_not_found", "Paper library scan not found."), { status: 404 });
+      return Response.json({ ok: true, scan: null });
     }
 
     return Response.json({ ok: true, scan });
   }
 
   const lookup = ScanLookupRequestSchema.safeParse({
-    project: url.searchParams.get("project"),
+    study: url.searchParams.get("study") ?? url.searchParams.get("project"),
     id: url.searchParams.get("id"),
   });
   if (!lookup.success) return badRequest(lookup.error);
 
-  const scan = await reconcileStalePaperLibraryScan(lookup.data.project, lookup.data.id, configOrError.root);
+  const scan = await reconcileStalePaperLibraryScan(lookup.data.study, lookup.data.id, configOrError.root);
   if (!scan) {
     return Response.json(paperLibraryError("job_not_found", "Paper library scan not found."), { status: 404 });
   }
@@ -93,9 +101,12 @@ export async function POST(request: Request) {
     : "start";
 
   if (action === "cancel") {
-    const cancel = ScanCancelRequestSchema.safeParse(body);
+    const cancel = ScanCancelRequestSchema.safeParse({
+      ...(body && typeof body === "object" ? body : {}),
+      study: readStudySlugFromUnknown(body),
+    });
     if (!cancel.success) return badRequest(cancel.error);
-    const scan = await cancelPaperLibraryScan(cancel.data.project, cancel.data.scanId, configOrError.root);
+    const scan = await cancelPaperLibraryScan(cancel.data.study, cancel.data.scanId, configOrError.root);
     if (!scan) {
       return Response.json(paperLibraryError("job_not_found", "Paper library scan not found."), { status: 404 });
     }
@@ -107,7 +118,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const input = PaperLibraryScanStartRequestSchema.parse(body);
+    const input = PaperLibraryScanStartRequestSchema.parse({
+      ...(body && typeof body === "object" ? body : {}),
+      project: readStudySlugFromUnknown(body),
+    });
     const scan = await startPaperLibraryScan({
       project: input.project,
       rootPath: input.rootPath,

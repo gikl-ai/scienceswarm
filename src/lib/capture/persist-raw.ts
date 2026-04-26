@@ -114,6 +114,7 @@ export async function persistRawCapture(input: PersistRawInput): Promise<Persist
     channel: input.channel,
     userId: input.userId,
     kind: input.kind,
+    study: input.project,
     project: input.project,
     privacy: input.privacy,
     sourceRefs: input.sourceRefs ?? [],

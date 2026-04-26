@@ -164,7 +164,7 @@ exit 1
 
     expect(output).toContain("Frontend health: ok");
     expect(output).toContain("Frontend health: ok (https)");
-    expect(output).toContain("Open: https://127.0.0.1:43994/dashboard/project");
+    expect(output).toContain("Open: https://127.0.0.1:43994/dashboard/study");
     expect(output).toContain("Setup: https://127.0.0.1:43994/setup");
     expect(fs.readFileSync(curlLogPath, "utf8").trim()).toBe(
       "-kfsS --max-time 2 https://127.0.0.1:43994/api/health",
@@ -312,10 +312,10 @@ exit 0
     });
 
     expect(output).toContain(
-      "Opening http://127.0.0.1:43989/dashboard/project in the system default browser",
+      "Opening http://127.0.0.1:43989/dashboard/study in the system default browser",
     );
     expect(fs.readFileSync(wslviewLogPath, "utf8").trim()).toBe(
-      "http://localhost:43989/dashboard/project",
+      "http://localhost:43989/dashboard/study",
     );
   });
 

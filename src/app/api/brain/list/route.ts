@@ -1,13 +1,13 @@
 /**
- * GET /api/brain/list?project=<slug>
+ * GET /api/brain/list?study=<slug>
  *
- * Returns an array of gbrain pages scoped to a project. Each entry
+ * Returns an array of gbrain pages scoped to a study. Each entry
  * contains the page slug, title, type, and frontmatter so the FileTree
- * and other dashboard surfaces can render project artifacts without
+ * and other dashboard surfaces can render study artifacts without
  * fetching each page individually.
  *
- * The route lists all pages from the brain store and filters by the
- * `project` field in each page's frontmatter. This is a read-only
+ * The route lists all pages from the brain store and filters by
+ * Study-aware frontmatter aliases. This is a read-only
  * endpoint with no auth requirement for user-facing reads.
  */
 
@@ -18,33 +18,32 @@ import {
 } from "@/brain/store";
 import { displayTitleForBrainPage } from "@/brain/page-title";
 import { listProjectPageSummariesFast } from "@/lib/gbrain/project-query-fast-path";
+import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const project = url.searchParams.get("project");
-  if (!project || typeof project !== "string" || project.trim().length === 0) {
+  const study = url.searchParams.get("study") ?? url.searchParams.get("project");
+  if (!study || typeof study !== "string" || study.trim().length === 0) {
     return Response.json(
-      { error: "Missing required query parameter: project" },
+      { error: "Missing required query parameter: study" },
       { status: 400 },
     );
   }
 
   try {
-    const trimmedProject = project.trim();
-    const fastPages = await listProjectPageSummariesFast(trimmedProject);
+    const trimmedStudy = study.trim();
+    const fastPages = await listProjectPageSummariesFast(trimmedStudy);
 
     let projectSummaries;
     if (fastPages) {
-      // `listProjectPageSummariesFast` already filtered by project in SQL.
+      // `listProjectPageSummariesFast` already filtered by study in SQL.
       projectSummaries = fastPages;
     } else {
       await ensureBrainStoreReady();
       const allPages = await getBrainStore().listPages({ limit: 5000 });
-      projectSummaries = allPages.filter((page) => {
-        const fm = page.frontmatter ?? {};
-        return fm.project === trimmedProject
-          || (Array.isArray(fm.projects) && fm.projects.includes(trimmedProject));
-      });
+      projectSummaries = allPages.filter((page) =>
+        frontmatterMatchesStudy(page.frontmatter, trimmedStudy),
+      );
     }
 
     const projectPages = projectSummaries

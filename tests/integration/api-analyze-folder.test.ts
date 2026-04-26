@@ -70,7 +70,7 @@ describe("POST /api/analyze-folder", () => {
 
     const data = await response.json();
     expect(data.backend).toBe("local");
-    expect(data.analysis).toContain("Project Analysis");
+    expect(data.analysis).toContain("Study Analysis");
     expect(data.analysis).toContain("Folder: Beta Folder (2 files)");
     expect(data.preview.analysis).toBe(data.analysis);
     expect(data.preview.backend).toBe("local");

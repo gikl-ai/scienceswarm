@@ -27,11 +27,11 @@ const SAMPLE_SLASH_COMMANDS: SlashCommandOption[] = [
     kind: "builtin",
   },
   {
-    command: "project-organizer",
-    description: "Organize the current project",
+    command: "study-organizer",
+    description: "Organize the current study",
     argumentHint: "[request]",
     kind: "skill",
-    skillSlug: "project-organizer",
+    skillSlug: "study-organizer",
   },
   {
     command: "pubmed",
@@ -281,7 +281,7 @@ describe("ChatMentionInput slash-command autocomplete", () => {
       .getAllByRole("option")
       .map((option) => option.textContent || "");
     expect(labels.some((label) => label.includes("/help"))).toBe(true);
-    expect(labels.some((label) => label.includes("/project-organizer"))).toBe(
+    expect(labels.some((label) => label.includes("/study-organizer"))).toBe(
       true,
     );
   });

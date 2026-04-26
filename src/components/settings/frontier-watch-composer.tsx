@@ -150,8 +150,8 @@ export function FrontierWatchComposer({
     {
       id: "papers",
       title: "Track papers daily",
-      description: "Start with a project-shaped arXiv query and keep the frontier tight.",
-      objective: `Track new papers, methods, and datasets relevant to ${projectLabel || "this project"}.`,
+      description: "Start with a study-shaped arXiv query and keep the frontier tight.",
+      objective: `Track new papers, methods, and datasets relevant to ${projectLabel || "this study"}.`,
       apply: (config, label) =>
         applyObjectiveToWatchConfig(
           {
@@ -159,7 +159,7 @@ export function FrontierWatchComposer({
             promotionThreshold: 5,
             stagingThreshold: 2,
           },
-          `Track new papers, methods, and datasets relevant to ${label || "this project"}.`,
+          `Track new papers, methods, and datasets relevant to ${label || "this study"}.`,
           label,
         ),
     },
@@ -167,7 +167,7 @@ export function FrontierWatchComposer({
       id: "feeds",
       title: "Follow feeds",
       description: "Add a ready-to-edit RSS slot for labs, blogs, or journals you already trust.",
-      objective: `Follow blog, journal, and lab feeds that matter for ${projectLabel || "this project"}.`,
+      objective: `Follow blog, journal, and lab feeds that matter for ${projectLabel || "this study"}.`,
       apply: (config) => ({
         ...config,
         sources: config.sources.some((source) => source.type === "rss")
@@ -185,7 +185,7 @@ export function FrontierWatchComposer({
       id: "mixed",
       title: "Mixed frontier brief",
       description: "Combine papers with external feeds so the brief catches both research and outside movement.",
-      objective: `Watch ${projectLabel || "this project"} across arXiv plus a few external feeds, then surface only the items that change the plan.`,
+      objective: `Watch ${projectLabel || "this study"} across arXiv plus a few external feeds, then surface only the items that change the plan.`,
       apply: (config, label) => {
         const next = applyObjectiveToWatchConfig(
           {
@@ -193,7 +193,7 @@ export function FrontierWatchComposer({
             promotionThreshold: 6,
             stagingThreshold: 3,
           },
-          `Watch ${label || "this project"} across arXiv plus a few external feeds.`,
+          `Watch ${label || "this study"} across arXiv plus a few external feeds.`,
           label,
         );
 
@@ -389,7 +389,7 @@ export function FrontierWatchComposer({
               Daily Frontier Setup
             </p>
             <h3 className="text-xl font-semibold leading-tight">
-              What should ScienceSwarm watch for this project?
+              What should ScienceSwarm watch for this study?
             </h3>
             <p className="text-sm text-muted">
                 Describe the recurring news/research brief you want. ScienceSwarm will turn it into a specific web-search prompt and query plan.
@@ -449,14 +449,14 @@ export function FrontierWatchComposer({
       <div className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-medium">Project</p>
+            <p className="text-sm font-medium">Study</p>
             <p className="text-xs text-muted">
-              Choose the project whose brief should pick up this watch.
+              Choose the study whose brief should pick up this watch.
             </p>
           </div>
           <div className="w-full max-w-sm">
             <label className="sr-only" htmlFor="watch-project">
-              Project slug
+              Study slug
             </label>
             <input
               id="watch-project"
@@ -500,7 +500,7 @@ export function FrontierWatchComposer({
 
         {projectOptions.length === 0 && (
           <p className="text-xs text-muted">
-            No brain project pages found yet. Import or create a project before saving watch config.
+            No brain study pages found yet. Import or create a study before saving watch config.
           </p>
         )}
       </div>
@@ -968,7 +968,7 @@ export function FrontierWatchComposer({
               Promotion threshold
             </label>
             <p className="text-xs text-muted">
-              Score required before an item appears directly in the project brief. Leave at 5 for normal use.
+              Score required before an item appears directly in the study brief. Leave at 5 for normal use.
             </p>
             <input
               id="watch-promotion-threshold"
@@ -997,7 +997,7 @@ export function FrontierWatchComposer({
           {watchSaving ? "Saving..." : watchLoading ? "Loading..." : "Save Frontier Watch"}
         </button>
         <span className="text-xs text-muted">
-          The next project brief will refresh this watch and pull promoted frontier items into the brief.
+          The next study brief will refresh this watch and pull promoted frontier items into the brief.
         </span>
       </div>
     </div>

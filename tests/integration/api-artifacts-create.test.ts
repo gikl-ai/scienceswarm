@@ -102,7 +102,7 @@ describe("POST /api/artifacts/create", () => {
         expect.objectContaining({ kind: "conversation", ref: "msg-2" }),
       ]),
     );
-    expect(bundle.prompt).toContain("Project page");
+    expect(bundle.prompt).toContain("Study page");
     expect(bundle.prompt).toContain("Recent decisions");
 
     const savedArtifact = path.join(TEST_ROOT, "workspace", body.savePath);
@@ -294,7 +294,7 @@ async function seedProjectManifest(overrides: Partial<ProjectManifest> = {}) {
     [
       "---",
       "date: 2026-04-08",
-      "type: project",
+      "type: study",
       "para: projects",
       "title: Project Alpha",
       "tags: [alpha]",

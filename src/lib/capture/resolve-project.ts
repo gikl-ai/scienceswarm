@@ -72,7 +72,7 @@ export async function resolveProject(input: {
     source: "ambiguous",
     choices: candidates,
     clarificationQuestion: candidates.length > 1
-      ? "Which project should this capture belong to?"
-      : "Which project should I link this capture to?",
+      ? "Which study should this capture belong to?"
+      : "Which study should I link this capture to?",
   };
 }

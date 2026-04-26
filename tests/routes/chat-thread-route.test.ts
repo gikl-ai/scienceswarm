@@ -32,6 +32,7 @@ describe("chat thread route", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       version: 1,
+      study: "alpha-project",
       project: "alpha-project",
       conversationId: null,
       conversationBackend: null,
@@ -111,6 +112,7 @@ describe("chat thread route", () => {
     expect(readResponse.status).toBe(200);
     await expect(readResponse.json()).resolves.toEqual({
       version: 1,
+      study: "alpha-project",
       project: "alpha-project",
       conversationId: "conv-alpha",
       conversationBackend: "openclaw",

@@ -213,7 +213,9 @@ async function ingestPdf(
     const pageFileRef = pageFileRefFromInput(file, input);
     const parsedFrontmatter: PaperFrontmatter = PaperFrontmatterSchema.parse({
       type: "paper",
-      project: input.project,
+      study: input.project,
+      study_slug: input.project,
+      legacy_project_slug: input.project,
       source_filename: input.filename,
       sha256: file.sha256,
       uploaded_at: now().toISOString().replace(/\.\d+/, ""),
@@ -256,7 +258,9 @@ async function ingestCsv(
     const pageFileRef = pageFileRefFromInput(file, input);
     const parsedFrontmatter: DatasetFrontmatter = DatasetFrontmatterSchema.parse({
       type: "dataset",
-      project: input.project,
+      study: input.project,
+      study_slug: input.project,
+      legacy_project_slug: input.project,
       source_filename: input.filename,
       sha256: file.sha256,
       uploaded_at: now().toISOString().replace(/\.\d+/, ""),
@@ -299,7 +303,9 @@ async function ingestCode(
     const pageFileRef = pageFileRefFromInput(file, input);
     const parsedFrontmatter: CodeFrontmatter = CodeFrontmatterSchema.parse({
       type: "code",
-      project: input.project,
+      study: input.project,
+      study_slug: input.project,
+      legacy_project_slug: input.project,
       source_filename: input.filename,
       sha256: file.sha256,
       uploaded_at: now().toISOString().replace(/\.\d+/, ""),

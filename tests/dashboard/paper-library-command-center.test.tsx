@@ -97,7 +97,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         return Response.json(
           { error: { message: "Paper library scan not found." } },
           { status: 404 },
@@ -112,7 +112,7 @@ describe("PaperLibraryCommandCenter", () => {
         return Response.json({ ok: true, scanId: "scan-1" });
       }
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan(),
@@ -137,7 +137,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     await waitFor(() => {
       expect(
-        fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/scan?project=demo-project&latest=1"),
+        fetchMock.mock.calls.some(([request]) => String(request) === "/api/brain/paper-library/scan?study=demo-project&latest=1"),
       ).toBe(true);
     });
 
@@ -154,7 +154,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         return Response.json(
           { error: { message: "Paper library scan not found." } },
           { status: 404 },
@@ -166,7 +166,7 @@ describe("PaperLibraryCommandCenter", () => {
         return Response.json({ ok: true, scanId: "scan-1" });
       }
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({ rootPath: "/tmp/manual-library", rootRealpath: "/tmp/manual-library" }),
@@ -194,7 +194,7 @@ describe("PaperLibraryCommandCenter", () => {
     await waitFor(() => {
       expect(scanRequestBody).toMatchObject({
         action: "start",
-        project: "demo-project",
+        study: "demo-project",
         rootPath: "/tmp/manual-library",
         mode: "dry-run",
       });
@@ -215,7 +215,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         return Response.json(
           { error: { message: "Paper library scan not found." } },
           { status: 404 },
@@ -231,7 +231,7 @@ describe("PaperLibraryCommandCenter", () => {
         return Response.json({ ok: true, scanId: "scan-1" });
       }
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({ rootPath: "/tmp/manual-library", rootRealpath: "/tmp/manual-library" }),
@@ -274,7 +274,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         return Response.json(
           { error: { message: "Paper library scan not found." } },
           { status: 404 },
@@ -289,7 +289,7 @@ describe("PaperLibraryCommandCenter", () => {
         return Response.json({ ok: true, scanId: "scan-1" });
       }
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({ rootPath: "/tmp/manual-library", rootRealpath: "/tmp/manual-library" }),
@@ -328,7 +328,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -343,7 +343,7 @@ describe("PaperLibraryCommandCenter", () => {
         });
       }
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -404,7 +404,7 @@ describe("PaperLibraryCommandCenter", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -530,7 +530,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         return latestScanResponse;
       }
 
@@ -580,7 +580,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         return Response.json(
           { error: { message: "Paper library scan not found." } },
           { status: 404 },
@@ -628,7 +628,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({ status: "scanning" }),
@@ -644,7 +644,7 @@ describe("PaperLibraryCommandCenter", () => {
 
     expect(await screen.findByText("scanning")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import PDF Folder" })).toBeDisabled();
-    expect(fetchMock).not.toHaveBeenCalledWith("/api/brain/paper-library/scan?project=demo-project&latest=1");
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/brain/paper-library/scan?study=demo-project&latest=1");
   });
 
   it("ignores malformed latest-scan payloads without breaking the scan view", async () => {
@@ -652,7 +652,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         return Response.json({ ok: true });
       }
 
@@ -672,7 +672,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -689,7 +689,7 @@ describe("PaperLibraryCommandCenter", () => {
         });
       }
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -809,7 +809,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -825,7 +825,7 @@ describe("PaperLibraryCommandCenter", () => {
         });
       }
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -875,7 +875,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -1062,7 +1062,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan(),
@@ -1118,7 +1118,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -1280,7 +1280,7 @@ describe("PaperLibraryCommandCenter", () => {
         return Response.json({ ok: true, scanId: "scan-2" });
       }
 
-      if (url.startsWith("/api/brain/paper-library/scan?project=demo-project&id=")) {
+      if (url.startsWith("/api/brain/paper-library/scan?study=demo-project&id=")) {
         return Response.json({
           ok: true,
           scan: baseScan({ id: activeScanId }),
@@ -1355,7 +1355,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -1457,7 +1457,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -1582,7 +1582,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -1722,7 +1722,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -1811,7 +1811,7 @@ describe("PaperLibraryCommandCenter", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&id=scan-1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&id=scan-1") {
         return Response.json({
           ok: true,
           scan: baseScan({
@@ -2008,7 +2008,7 @@ describe("PaperLibraryCommandCenter", () => {
             reusedGbrainCount: 0,
             fallbackCount: 0,
           },
-          warnings: ["No compatible embedding model is available for this project."],
+          warnings: ["No compatible embedding model is available for this study."],
           totalCount: 2,
           filteredCount: 2,
           nextCursor: cursor ? undefined : "MQ",

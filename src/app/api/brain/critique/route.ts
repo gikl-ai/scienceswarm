@@ -307,8 +307,17 @@ function readSafeSlug(value: unknown): string | undefined {
 
 function readProjectSlugs(frontmatter: Record<string, unknown>): string[] {
   const slugs: string[] = [];
-  const primary = readSafeSlug(frontmatter.project);
+  const primary = readSafeSlug(frontmatter.study_slug)
+    ?? readSafeSlug(frontmatter.study)
+    ?? readSafeSlug(frontmatter.legacy_project_slug)
+    ?? readSafeSlug(frontmatter.project);
   if (primary) slugs.push(primary);
+  if (Array.isArray(frontmatter.studies)) {
+    for (const value of frontmatter.studies) {
+      const slug = readSafeSlug(value);
+      if (slug) slugs.push(slug);
+    }
+  }
   if (Array.isArray(frontmatter.projects)) {
     for (const value of frontmatter.projects) {
       const slug = readSafeSlug(value);
@@ -325,7 +334,7 @@ function buildProjectUrls(
   return Object.fromEntries(
     projectSlugs.map((projectSlug) => [
       projectSlug,
-      `/dashboard/project?name=${encodeURIComponent(projectSlug)}&brain_slug=${encodedBrainSlug}`,
+      `/dashboard/study?name=${encodeURIComponent(projectSlug)}&brain_slug=${encodedBrainSlug}`,
     ]),
   );
 }

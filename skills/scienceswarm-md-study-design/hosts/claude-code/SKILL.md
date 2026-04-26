@@ -11,7 +11,7 @@ into an MD study question before any files or parameters are generated.
 ## Workflow
 
 1. Identify the research goal, molecular system, cancer or therapeutic context,
-   desired conclusion, and available project evidence.
+   desired conclusion, and available study evidence.
 2. Map the desired claim to MD observables, needed controls/comparisons,
    decision thresholds, and inconclusive outcomes.
 3. Compare MD with adjacent methods that may answer the claim better.

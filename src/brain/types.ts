@@ -22,6 +22,7 @@ export type ContentType =
   | "topic"
   | "survey"
   | "method"
+  | "study"
   | "project"
   | "decision"
   | "task"
@@ -45,6 +46,7 @@ export type ResearchContentType =
   | "overnight_journal"
   | "job_run"
   | "paper"
+  | "study"
   | "project";
 
 export type PARACategory = "projects" | "areas" | "resources" | "archives";
@@ -90,6 +92,10 @@ export interface SourceRef {
 
 export interface SharedFrontmatterFields {
   title?: string;
+  study?: string;
+  study_id?: string;
+  study_slug?: string;
+  legacy_project_slug?: string;
   project?: string;
   source_refs?: SourceRef[];
   confidence?: Confidence;
@@ -122,6 +128,10 @@ export interface BaseFrontmatter extends SharedFrontmatterFields {
 
 export interface ProjectFrontmatter extends BaseFrontmatter {
   type: "project";
+}
+
+export interface StudyFrontmatter extends BaseFrontmatter {
+  type: "study";
 }
 
 export interface DecisionFrontmatter extends BaseFrontmatter {
@@ -207,6 +217,7 @@ export type Frontmatter =
   | DataFrontmatter
   | WebFrontmatter
   | VoiceFrontmatter
+  | StudyFrontmatter
   | ProjectFrontmatter
   | DecisionFrontmatter
   | TaskFrontmatter
@@ -410,6 +421,7 @@ export interface CaptureEnvelope {
   channel: CaptureChannel;
   userId: string;
   kind: CaptureKind;
+  study?: string | null;
   project: string | null;
   privacy: PrivacyMode;
   sourceRefs: SourceRef[];
@@ -437,6 +449,7 @@ export interface CaptureResult {
   channel: CaptureChannel;
   userId: string;
   kind: CaptureKind;
+  study?: string | null;
   project: string | null;
   privacy: PrivacyMode;
   rawPath: string;
@@ -755,7 +768,7 @@ export interface MorningBrief {
     implication: string;
   }>;
 
-  /** Frontier items: new papers/developments relevant to active projects */
+  /** Frontier items: new papers/developments relevant to active studys */
   frontier: Array<{
     title: string;
     source: string;

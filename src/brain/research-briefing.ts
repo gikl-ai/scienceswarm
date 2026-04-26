@@ -283,7 +283,7 @@ export async function buildProgramBrief(
 
   for (const signal of projectSignals) {
     contextParts.push(
-      `## Project: ${signal.project}`,
+      `## Study: ${signal.project}`,
       `  Tasks: ${signal.tasks.length} (${signal.tasks.map((t) => t.title).join("; ")})`,
       `  Experiments: ${signal.experiments.length} (${signal.experiments.map((e) => e.title).join("; ")})`,
       `  Hypotheses: ${signal.hypotheses.length} (${signal.hypotheses.map((h) => h.title).join("; ")})`,
@@ -555,7 +555,7 @@ function buildSynthesisContext(input: {
   const parts: string[] = [];
 
   if (input.projectFilter) {
-    parts.push(`Project focus: ${input.projectFilter}`);
+    parts.push(`Study focus: ${input.projectFilter}`);
   }
 
   parts.push(`Recent events (last 24h): ${input.recentEvents.length}`);

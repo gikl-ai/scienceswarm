@@ -88,7 +88,7 @@ describe("GET /api/brain/brief", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
-      error: "project must be a safe bare slug",
+      error: "study must be a safe bare slug",
     });
   });
 

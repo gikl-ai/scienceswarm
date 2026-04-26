@@ -48,15 +48,15 @@ Use ScienceSwarm-owned entry points:
 - `npm run install:gbrain` for first-time setup.
 - `/api/brain/capture` or `brain_capture` for notes, observations, and
   decisions.
-- the project import flow for local folders and paper collections.
+- the study import flow for local folders and paper collections.
 - `/api/brain/status` or `/api/brain/health-report` for health checks.
 
-## Project Linking
+## Study Linking
 
-Captures can be linked to projects. When the bot can't determine the project:
+Captures can be linked to studies. When the bot can't determine the study:
 - It saves to the inbox without linking
-- Asks which project to associate with
-- Lists available projects for selection
+- Asks which study to associate with
+- Lists available studies for selection
 
 ## Wiki & Backlinks
 

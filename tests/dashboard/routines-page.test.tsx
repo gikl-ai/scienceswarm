@@ -34,9 +34,9 @@ function buildFetchStub() {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
-    if (url === "/api/projects") {
+    if (url === "/api/studies") {
       return Response.json({
-        projects: [
+        studies: [
           { slug: "alpha-project", name: "Alpha Project" },
         ],
       });
@@ -61,7 +61,7 @@ function buildFetchStub() {
       });
     }
 
-    if (url.startsWith("/api/brain/watch-config?project=")) {
+    if (url.startsWith("/api/brain/watch-config?study=")) {
       return Response.json({
         config: {
           version: 1,
@@ -99,7 +99,7 @@ describe("RoutinesPage", () => {
     window.localStorage.clear();
   });
 
-  it("collects project jobs, Dream Cycle, Frontier Watch, and Research Radar", async () => {
+  it("collects study jobs, Dream Cycle, Frontier Watch, and Research Radar", async () => {
     const fetchMock = buildFetchStub();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -108,25 +108,25 @@ describe("RoutinesPage", () => {
     expect(await screen.findByText("Recurring workbench")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Workspace" })).toHaveAttribute(
       "href",
-      "/dashboard/project?name=alpha-project",
+      "/dashboard/study?name=alpha-project",
     );
     expect(await screen.findByText("Pipelines & Jobs")).toBeInTheDocument();
     expect(screen.getAllByText("Dream Cycle").length).toBeGreaterThan(0);
-    expect(await screen.findByText("What should ScienceSwarm watch for this project?")).toBeInTheDocument();
+    expect(await screen.findByText("What should ScienceSwarm watch for this study?")).toBeInTheDocument();
     expect(await screen.findByText(/No radar configured yet/)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/brain/watch-config?project=alpha-project",
+      "/api/brain/watch-config?study=alpha-project",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
-  it("does not navigate while typing in the Frontier Watch project input", async () => {
+  it("does not navigate while typing in the Frontier Watch study input", async () => {
     const fetchMock = buildFetchStub();
     vi.stubGlobal("fetch", fetchMock);
 
     render(<RoutinesPage />);
 
-    const projectInput = await screen.findByLabelText("Project slug");
+    const projectInput = await screen.findByLabelText("Study slug");
     replaceMock.mockClear();
 
     fireEvent.change(projectInput, { target: { value: "beta-project" } });

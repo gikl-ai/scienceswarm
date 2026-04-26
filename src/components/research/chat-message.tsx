@@ -36,7 +36,7 @@ export interface ChatMessageProps {
   isStreaming?: boolean;
   taskPhases?: ChatTaskPhase[];
   steps?: Step[];
-  /** Project ID for workspace media URLs — avoids SSR window.location access. */
+  /** Study ID for workspace media URLs - avoids SSR window.location access. */
   projectId?: string;
 }
 

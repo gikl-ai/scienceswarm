@@ -86,7 +86,7 @@ describe("GET /api/drive", () => {
     expect(handleCallbackMock).toHaveBeenCalledWith("test-code", "oauth-state");
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe(
-      "/dashboard/project?drive=connected",
+      "/dashboard/study?drive=connected",
     );
   });
 

@@ -13,7 +13,7 @@ Standard Next.js App Router layout for the `src/` tree.
 - **New shared types** — co-locate with the component that owns them, don't create standalone `types.ts` files
 
 ## Key entry points
-- `app/dashboard/project/page.tsx` — the main workspace; owns all demo data and tab state (~550 lines)
+- `app/dashboard/study/page.tsx` — the main study workspace; owns study data and tab state
 - `app/dashboard/gbrain/page.tsx` — the gbrain workspace, including the Paper Library view
 - `components/research/paper-library/command-center.tsx` — the Paper Library command center for scan, review, apply, graph, clusters, gaps, and history
 - `lib/paper-library/` — local PDF archive organization, metadata enrichment, graph building, clustering, and gap detection helpers

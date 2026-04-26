@@ -370,7 +370,7 @@ export function JiraPanel() {
               <span className="text-[10px] font-medium text-ok">Connected</span>
             </div>
 
-            {/* Project selector */}
+            {/* Study selector */}
             <select
               value={selectedProject}
               onChange={(e) => setSelectedProject(e.target.value)}

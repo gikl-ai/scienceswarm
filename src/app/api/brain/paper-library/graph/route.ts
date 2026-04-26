@@ -7,7 +7,7 @@ import {
   getOrBuildPaperLibraryGraph,
   windowPaperLibraryGraph,
 } from "@/lib/paper-library/graph";
-import { paperLibraryBadRequest, requirePaperLibraryRequest } from "../_shared";
+import { paperLibraryBadRequest, readStudyOrProjectParam, requirePaperLibraryRequest } from "../_shared";
 
 const BooleanQuerySchema = z.preprocess((value) => {
   if (value == null) return false;
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const parsed = GraphLookupRequestSchema.safeParse({
-    project: url.searchParams.get("project"),
+    project: readStudyOrProjectParam(url),
     scanId: url.searchParams.get("scanId"),
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,

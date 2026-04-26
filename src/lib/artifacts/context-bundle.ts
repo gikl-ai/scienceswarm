@@ -59,7 +59,7 @@ export async function buildArtifactContextBundle(
     }
   }
   if (!manifest) {
-    throw new Error(`Project manifest not found for ${request.projectSlug}`);
+    throw new Error(`Study manifest not found for ${request.projectSlug}`);
   }
 
   const privacy = restrictPrivacy(manifest.privacy, request.requestedPrivacy);
@@ -186,8 +186,8 @@ function buildConversationRefs(request: ValidatedArtifactRequest): SourceRef[] {
 
 function renderArtifactPrompt(bundle: ArtifactContextBundle): string {
   const sections = [
-    "Create a first-pass research artifact from the provided ScienceSwarm project context.",
-    `Project: ${bundle.projectTitle} (${bundle.projectSlug})`,
+    "Create a first-pass research artifact from the provided ScienceSwarm study context.",
+    `Study: ${bundle.projectTitle} (${bundle.projectSlug})`,
     `Artifact type: ${bundle.artifactType}`,
     `User intent: ${bundle.intent}`,
     "Return only JSON inside a ```json fenced block with keys:",
@@ -195,7 +195,7 @@ function renderArtifactPrompt(bundle: ArtifactContextBundle): string {
     "Use markdown for content. Keep assumptions and reviewFirst concrete and short.",
     "",
     "Context bundle",
-    renderDocumentSection("Project page", bundle.projectPage),
+    renderDocumentSection("Study page", bundle.projectPage),
     renderListSection("Recent decisions", bundle.decisions),
     renderListSection("Recent tasks", bundle.tasks),
     renderListSection("Recent artifacts", bundle.artifacts),

@@ -6,7 +6,7 @@ import {
 } from "@/lib/paper-library/contracts";
 import { buildLibraryCitationGraphContext } from "@/lib/paper-library/library-enrichment";
 
-import { paperLibraryBadRequest, requirePaperLibraryRequest } from "../_shared";
+import { paperLibraryBadRequest, readStudyOrProjectParam, requirePaperLibraryRequest } from "../_shared";
 
 const BooleanQuerySchema = z.preprocess((value) => {
   if (value == null) return false;
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const parsed = EnrichmentContextLookupSchema.safeParse({
-    project: url.searchParams.get("project"),
+    project: readStudyOrProjectParam(url),
     scanId: url.searchParams.get("scanId") ?? undefined,
     question: url.searchParams.get("question") ?? undefined,
     refresh: url.searchParams.get("refresh") ?? undefined,

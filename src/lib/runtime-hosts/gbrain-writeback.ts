@@ -232,7 +232,9 @@ export async function writeRuntimeArtifactsToGbrain(
           {
             type: "artifact",
             title: path.posix.basename(artifact.workspacePath),
-            project: projectId,
+            study: projectId,
+            study_slug: projectId,
+            legacy_project_slug: projectId,
             source_filename: path.posix.basename(artifact.workspacePath),
             relative_path: artifact.workspacePath,
             runtime_session_id: input.runtimeSessionId,

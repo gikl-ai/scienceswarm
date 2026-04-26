@@ -75,7 +75,7 @@ export function RuntimeDefaultsForm({
         <h2 className="text-lg font-semibold">Destination defaults</h2>
         <p className="mt-1 max-w-3xl text-sm text-muted">
           Draft defaults are local to this settings view until destination default
-          persistence lands. Project send surfaces still show the selected
+          persistence lands. Study send surfaces still show the selected
           destination before any third-party request.
         </p>
       </div>
@@ -83,7 +83,7 @@ export function RuntimeDefaultsForm({
       <div className="grid gap-4 md:grid-cols-2">
         <label className="space-y-2">
           <span className="text-sm font-medium text-foreground">
-            Project policy
+            Study policy
           </span>
           <select
             className="w-full rounded-lg border-2 border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"

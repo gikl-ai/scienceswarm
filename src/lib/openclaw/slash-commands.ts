@@ -206,7 +206,7 @@ export function renderOpenClawSlashHelp(
   return [
     "**ScienceSwarm slash commands**",
     "",
-    "Use `/<command> [arguments]` in the project chat composer.",
+    "Use `/<command> [arguments]` in the study chat composer.",
     "",
     "**Built-in**",
     ...builtIns.map(formatSlashCommandLine),

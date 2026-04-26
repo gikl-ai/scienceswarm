@@ -172,7 +172,9 @@ async function storeGenericWritebackFile(input: {
         {
           type: "artifact",
           title: path.basename(input.normalized),
-          project: input.project,
+          study: input.project,
+          study_slug: input.project,
+          legacy_project_slug: input.project,
           source_filename: path.basename(input.normalized),
           relative_path: input.normalized,
           checkout_id: input.checkoutId,

@@ -230,7 +230,7 @@ export function verifyRuntimeMcpAccessToken(
     return reject("expired-token", "Runtime MCP access token has expired.");
   }
   if (input.projectId !== undefined && claims.projectId !== input.projectId) {
-    return reject("wrong-project", "Runtime MCP access token is not scoped to this project.");
+    return reject("wrong-project", "Runtime MCP access token is not scoped to this study.");
   }
   if (
     input.runtimeSessionId !== undefined

@@ -1,7 +1,7 @@
 /**
  * Second Brain — Frontier Watch Loader
  *
- * Loads frontier items from the watch store for all active projects,
+ * Loads frontier items from the watch store for all active studys,
  * converting RankedWatchItems into SearchResult format for use in
  * the morning brief's frontier scoring pipeline.
  */
@@ -15,7 +15,7 @@ import { getProjectBrainRootForBrainRoot } from "@/lib/state/project-storage";
 
 /**
  * Load frontier watch items from the watch store for the given project
- * (or all active projects if no filter). Returns them as SearchResult[]
+ * (or all active studys if no filter). Returns them as SearchResult[]
  * so they can merge into the existing frontier scoring pipeline.
  */
 export async function loadFrontierWatchItems(
@@ -57,7 +57,7 @@ export async function loadFrontierWatchItems(
         const pageProject = parsed.data.project as string | undefined;
 
         // Always filter by the current slug — prevents duplicates when
-        // iterating over multiple active projects in all-projects mode.
+        // iterating over multiple active studys in all-projects mode.
         const tags = Array.isArray(parsed.data.tags) ? parsed.data.tags : [];
         const matchesProject =
           pageProject === slug ||
@@ -104,7 +104,7 @@ function normalizeProjectFilter(projectFilter: string): string[] {
 }
 
 /**
- * List active project slugs from canonical project roots plus any remaining
+ * List active study slugs from canonical project roots plus any remaining
  * legacy manifests under the configured brain root.
  */
 async function listActiveProjectSlugs(config: BrainConfig): Promise<string[]> {

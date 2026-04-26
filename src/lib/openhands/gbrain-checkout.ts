@@ -13,6 +13,7 @@ import {
 import { ensureBrainStoreReady, getBrainStore, type BrainStore } from "@/brain/store";
 import { listGbrainFileRefPages } from "@/lib/gbrain/file-ref-pages";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
+import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 
 export interface BuildGbrainCheckoutInput {
   project: string;
@@ -31,7 +32,7 @@ export async function buildGbrainCheckoutManifest(
   const pages = await listGbrainFileRefPages(store);
   const filesByPath = new Map<string, OpenHandsCheckoutManifest["files"][number]>();
   for (const page of pages) {
-    if (page.frontmatter?.project !== project) continue;
+    if (!frontmatterMatchesStudy(page.frontmatter, project)) continue;
     const refs = Array.isArray(page.frontmatter.file_refs)
       ? page.frontmatter.file_refs.filter(isPageFileRef)
       : [];

@@ -53,9 +53,11 @@ describe("buildArtifactPageMarkdown", () => {
 
     expect(parsed.data).toMatchObject({
       type: "artifact",
-      project: "project-alpha",
+      study: "project-alpha",
+      study_slug: "project-alpha",
       artifact_type: "next-experiment-plan",
       workspace_path: "artifacts/next-experiment-plan/plan.md",
     });
+    expect(parsed.data.project).toBeUndefined();
   });
 });
