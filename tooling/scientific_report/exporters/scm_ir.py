@@ -387,8 +387,12 @@ def build_spec(inference_summary_path: Path, classic_html_path: Path) -> dict[st
              "note": "share of donor ratios ≥ treated"},
             {"label": "Top donor", "value": info["closest_donor_placebos"][0]["unit"]
                 if info.get("closest_donor_placebos") else "—",
-             "note": f"placebo ratio {info['closest_donor_placebos'][0]['ratio']:.2f}"
-                if info.get("closest_donor_placebos") else ""},
+             "note": (
+                 f"placebo ratio {info['closest_donor_placebos'][0]['ratio']:.2f}"
+                 if info.get("closest_donor_placebos")
+                 and info["closest_donor_placebos"][0].get("ratio") is not None
+                 else ""
+             )},
             {"label": "Treatment year", "value": str(info.get("treatment_year", "—"))},
             {"label": "Cases compared", "value": "3", "note": "Brexit · Russia · Basque"},
         ]

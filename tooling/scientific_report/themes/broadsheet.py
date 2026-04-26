@@ -110,13 +110,17 @@ def render(spec: dict[str, Any]) -> str:
     explainer_html = _build_explainer(explainer) if explainer else ""
     glossary_html = _build_glossary(glossary) if glossary else ""
     footer_html = _build_colophon(meta, refs)
-    # JSON-island escape: any literal "</script>" or "<!--" sequence inside a
+    # JSON-island escape: any literal "<", "</script>", or "<!--" inside a
     # JSON value would prematurely close the script tag and let attacker-
-    # controlled spec text inject HTML/JS.  Escape both terminators per the
-    # standard json-in-html guidance.  json.dumps does not do this on its own.
+    # controlled spec text inject HTML/JS.  Replace every "<" with the JSON
+    # Unicode escape "<", which is a valid JSON sequence (so the data
+    # island still parses cleanly) and which prevents any HTML start
+    # sequence from surviving serialization.  This is the canonical
+    # JSON-in-HTML pattern used by Rails' `json_escape`, Django's
+    # `json_script`, Next.js, and others.
     plot_data_block = (
         '<script id="report-plot-data" type="application/json">'
-        + _json.dumps(plot_payload).replace("</", "<\\/").replace("<!--", "<\\!--")
+        + _json.dumps(plot_payload).replace("<", "\\u003C")
         + "</script>"
     )
 
