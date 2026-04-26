@@ -1,0 +1,15 @@
+{
+  "project": "project-alpha",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Summarize the placeholder source note.",
+      "createdAt": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "The placeholder source note is ready for migration testing.",
+      "createdAt": "2026-04-26T00:00:01.000Z"
+    }
+  ]
+}

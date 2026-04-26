@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "project": "project-alpha",
+  "enabled": true,
+  "paths": [
+    "sources"
+  ],
+  "updatedAt": "2026-04-26T00:00:00.000Z"
+}
