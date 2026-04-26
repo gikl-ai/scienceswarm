@@ -125,9 +125,10 @@ export async function updateProjectManifest(
     return updateJsonFile<ProjectManifest>(getProjectManifestPath(safeSlug, root), updater);
   }
   const current = await readProjectManifest(safeSlug);
-  const updated = updater(current);
-  await writeJsonFile(getLegacyProjectStudyFilePath(safeSlug, "manifest.json"), updated);
-  return updated;
+  return updateJsonFile<ProjectManifest>(
+    getLegacyProjectStudyFilePath(safeSlug, "manifest.json"),
+    (canonicalCurrent) => updater(canonicalCurrent ?? current),
+  );
 }
 
 interface ProjectMetadata {

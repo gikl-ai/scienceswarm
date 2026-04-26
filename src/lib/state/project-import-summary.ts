@@ -1,9 +1,8 @@
 import { join } from "node:path";
 import { readJsonFile, writeJsonFile } from "./atomic-json";
-import { planLegacyProjectStateMigration, readMigratedOrLegacyProjectFile } from "@/lib/studies/migration";
+import { getScienceSwarmBrainRoot } from "@/lib/scienceswarm-paths";
 import {
   getLegacyProjectStudyFilePath,
-  studyIdForLegacyProjectSlug,
   writeStudyStateForProjectRecord,
 } from "@/lib/studies/state";
 import { assertSafeProjectSlug } from "./project-manifests";
@@ -140,12 +139,9 @@ export async function writeProjectImportSummary(
 async function readDefaultProjectImportSummary(
   project: string,
 ): Promise<unknown | null> {
-  const plan = await planLegacyProjectStateMigration({
-    legacyProjectSlug: project,
-    studyId: studyIdForLegacyProjectSlug(project),
-  });
-  return readMigratedOrLegacyProjectFile({
-    plan,
-    classification: "import-summary",
-  });
+  return await readJsonFile<unknown>(getLegacyProjectStudyFilePath(project, "import-summary.json"))
+    ?? await readJsonFile<unknown>(getProjectLocalImportSummaryPath(project))
+    ?? await readJsonFile<unknown>(
+      getLegacyProjectImportSummaryPath(project, join(getScienceSwarmBrainRoot(), "state")),
+    );
 }
