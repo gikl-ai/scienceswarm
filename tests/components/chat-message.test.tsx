@@ -521,12 +521,13 @@ describe("ChatMessage", () => {
     );
 
     const progressLog = screen.getByRole("log");
+    const runState = screen.getByTestId("assistant-run-state");
     expect(progressLog).toHaveTextContent("Server");
     expect(progressLog).toHaveTextContent("Running");
     expect(progressLog).toHaveTextContent("Wait");
     expect(progressLog).toHaveTextContent("Waiting for OpenClaw to respond");
-    expect(screen.getByText("Server")).toHaveClass("text-body");
-    expect(screen.getByText("Running")).toHaveClass("text-amber-800");
+    expect(within(runState).getByText("Server")).toHaveClass("text-body");
+    expect(within(runState).getByText("Running")).toHaveClass("text-amber-800");
   });
 
   it("falls back to the structured progress source for run-state detail labels", () => {
