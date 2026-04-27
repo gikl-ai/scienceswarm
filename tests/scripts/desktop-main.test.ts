@@ -41,7 +41,7 @@ describe("desktop main", () => {
 
   it("resolves desktop diagnostics from the electron app paths", () => {
     expect(resolveDesktopDiagnostics({
-      getPath(name) {
+      getPath(name: string) {
         return name === "userData" ? "/tmp/user-data" : "/tmp/logs";
       },
     }, {})).toMatchObject({
