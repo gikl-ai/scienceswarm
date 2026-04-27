@@ -527,6 +527,29 @@ describe("ChatMessage", () => {
     expect(progressLog).toHaveTextContent("Waiting for OpenClaw to respond");
   });
 
+  it("falls back to the structured progress source for run-state detail labels", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text: "Queued follow-up execution",
+            source: "server",
+            status: "running",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:30.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent("Server");
+    expect(progressLog).toHaveTextContent("Queued follow-up execution");
+  });
+
   it("renders a dedicated run-state surface before transcript progress arrives", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));

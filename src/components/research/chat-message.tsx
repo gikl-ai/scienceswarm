@@ -1010,11 +1010,38 @@ type RunStateDetail = {
   text: string;
 };
 
+function summarizeProgressSourceLabel(
+  source: MessageProgressEntry["source"],
+): string | null {
+  if (source === "gateway") {
+    return "OpenClaw";
+  }
+  if (source === "agent") {
+    return "Agent";
+  }
+  if (source === "server") {
+    return "Server";
+  }
+  if (source === "client") {
+    return "Client";
+  }
+  return null;
+}
+
 function summarizeEntryDetailLabel(entry: MessageProgressEntry): string {
   if (entry.kind === "activity") {
-    return entry.label ?? inferProgressEntryLabel(entry.text) ?? PROGRESS_SECTION_META.activity.compactTitle;
+    return (
+      entry.label
+      ?? inferProgressEntryLabel(entry.text)
+      ?? summarizeProgressSourceLabel(entry.source)
+      ?? PROGRESS_SECTION_META.activity.compactTitle
+    );
   }
-  return entry.label ?? PROGRESS_SECTION_META.thinking.compactTitle;
+  return (
+    entry.label
+    ?? summarizeProgressSourceLabel(entry.source)
+    ?? PROGRESS_SECTION_META.thinking.compactTitle
+  );
 }
 
 function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunStateDetail | null {
