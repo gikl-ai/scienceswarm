@@ -1,10 +1,5 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import type { BrainStoreHealth } from "@/brain/store";
-
-export function hasGbrainMetadata(root: string): boolean {
-  return existsSync(join(root, "BRAIN.md")) || existsSync(join(root, "RESOLVER.md"));
-}
+import { hasGbrainMetadata, isGbrainRootReady } from "@/lib/brain/root-readiness";
 
 /**
  * Cheap on-disk readiness check. Confirms the gbrain layout exists
@@ -14,9 +9,7 @@ export function hasGbrainMetadata(root: string): boolean {
  * `probeGbrainEngineHealth` so a corrupt lock file or broken native
  * module is not painted over.
  */
-export function isGbrainRootReady(root: string): boolean {
-  return existsSync(root) && hasGbrainMetadata(root) && existsSync(join(root, "brain.pglite"));
-}
+export { hasGbrainMetadata, isGbrainRootReady };
 
 export interface GbrainEngineProbe {
   /** True only when the engine opened and `health()` returned `ok`. */

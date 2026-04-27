@@ -32,7 +32,7 @@
 import { constants as fsConstants, promises as fs } from "node:fs";
 import * as path from "node:path";
 
-import { isGbrainRootReady } from "@/lib/brain/readiness";
+import { isGbrainRootReady } from "@/lib/brain/root-readiness";
 import {
   expandHomeDir,
   resolveScienceSwarmBrainRootFromValues,
