@@ -2810,7 +2810,7 @@ describe("Project dashboard smoke test", () => {
     render(<ProjectPage />);
 
     const visualizer = await screen.findByLabelText("File visualizer");
-    const image = within(visualizer).getByRole("img", {
+    const image = await within(visualizer).findByRole("img", {
       name: "Brain Artifacts/gbrain:wiki/artifacts/cat-image",
     });
     expect(image).toHaveAttribute(

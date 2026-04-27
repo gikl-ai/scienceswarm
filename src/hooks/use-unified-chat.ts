@@ -147,10 +147,17 @@ interface StoredMessage {
 
 interface StoredChatState {
   version: 1;
+  localInstallId?: string | null;
   conversationId: string | null;
   conversationBackend?: Backend | null;
   messages: StoredMessage[];
   artifactProvenance?: ArtifactProvenanceEntry[];
+}
+
+export interface BrowserChatRecovery {
+  projectName: string;
+  messageCount: number;
+  latestMessageAt: string | null;
 }
 
 /**
@@ -208,6 +215,9 @@ export interface UseUnifiedChat {
   clearError: () => void;
   conversationId: string | null;
   artifactProvenance: ArtifactProvenanceEntry[];
+  browserChatRecovery: BrowserChatRecovery | null;
+  restoreBrowserChat: () => void;
+  dismissBrowserChatRecovery: () => void;
   runtimeCompareResult: RuntimeCompareResult | null;
   clearRuntimeCompareResult: () => void;
   /**
@@ -2127,6 +2137,7 @@ type RestoredChatState = {
   conversationBackend: Backend | null;
   artifactProvenance: ArtifactProvenanceEntry[];
   hasStoredState: boolean;
+  localInstallId: string | null;
 };
 
 type SendContext = {
@@ -2178,6 +2189,16 @@ function buildInitialMessages(projectName: string): Message[] {
 
 function getChatStorageKey(projectName: string): string {
   return `${CHAT_STORAGE_PREFIX}.${encodeURIComponent(projectName || "__no-project__")}`;
+}
+
+function getInstallScopedChatStorageKey(projectName: string, localInstallId: string): string {
+  return `${CHAT_STORAGE_PREFIX}.${encodeURIComponent(localInstallId)}.${encodeURIComponent(projectName || "__no-project__")}`;
+}
+
+function getActiveChatStorageKey(projectName: string, localInstallId: string | null): string {
+  return localInstallId
+    ? getInstallScopedChatStorageKey(projectName, localInstallId)
+    : getChatStorageKey(projectName);
 }
 
 function folderLabelForIngestType(type: string | undefined): string {
@@ -2510,48 +2531,57 @@ function restoreTaskPhases(value: unknown): ChatTaskPhase[] | undefined {
   return phases.length > 0 ? phases : undefined;
 }
 
-function loadStoredChat(projectName: string): RestoredChatState {
+function emptyRestoredChatState(localInstallId: string | null = null): RestoredChatState {
+  return {
+    messages: [],
+    conversationId: null,
+    conversationBackend: null,
+    artifactProvenance: [],
+    hasStoredState: false,
+    localInstallId,
+  };
+}
+
+function loadStoredChat(
+  projectName: string,
+  localInstallId: string | null = null,
+  options: { allowLegacy?: boolean } = {},
+): RestoredChatState {
   if (!projectName) {
-    return {
-      messages: [],
-      conversationId: null,
-      conversationBackend: null,
-      artifactProvenance: [],
-      hasStoredState: false,
-    };
+    return emptyRestoredChatState(localInstallId);
   }
 
   if (typeof window === "undefined") {
-    return {
-      messages: [],
-      conversationId: null,
-      conversationBackend: null,
-      artifactProvenance: [],
-      hasStoredState: false,
-    };
+    return emptyRestoredChatState(localInstallId);
   }
 
   try {
-    const raw = window.localStorage.getItem(getChatStorageKey(projectName));
+    const activeKey = localInstallId
+      ? getInstallScopedChatStorageKey(projectName, localInstallId)
+      : getChatStorageKey(projectName);
+    const raw =
+      window.localStorage.getItem(activeKey)
+      ?? (
+        options.allowLegacy && localInstallId
+          ? window.localStorage.getItem(getChatStorageKey(projectName))
+          : null
+      );
     if (!raw) {
-      return {
-        messages: [],
-        conversationId: null,
-        conversationBackend: null,
-        artifactProvenance: [],
-        hasStoredState: false,
-      };
+      return emptyRestoredChatState(localInstallId);
     }
 
     const parsed = JSON.parse(raw) as Partial<StoredChatState>;
     if (parsed.version !== CHAT_STORAGE_VERSION || !Array.isArray(parsed.messages)) {
-      return {
-        messages: [],
-        conversationId: null,
-        conversationBackend: null,
-        artifactProvenance: [],
-        hasStoredState: false,
-      };
+      return emptyRestoredChatState(localInstallId);
+    }
+
+    if (
+      localInstallId
+      && typeof parsed.localInstallId === "string"
+      && parsed.localInstallId !== localInstallId
+      && !options.allowLegacy
+    ) {
+      return emptyRestoredChatState(localInstallId);
     }
 
     const conversationId = typeof parsed.conversationId === "string" ? parsed.conversationId : null;
@@ -2573,15 +2603,10 @@ function loadStoredChat(projectName: string): RestoredChatState {
       artifactProvenance,
       hasStoredState:
         restoredMessages.length > 0 || conversationId !== null || artifactProvenance.length > 0,
+      localInstallId,
     };
   } catch {
-    return {
-      messages: [],
-      conversationId: null,
-      conversationBackend: null,
-      artifactProvenance: [],
-      hasStoredState: false,
-    };
+    return emptyRestoredChatState(localInstallId);
   }
 }
 
@@ -2591,6 +2616,7 @@ function persistChat(
   conversationId: string | null,
   conversationBackend: Backend | null,
   artifactProvenance: ArtifactProvenanceEntry[],
+  localInstallId: string | null = null,
 ): void {
   if (typeof window === "undefined") return;
   if (!projectName) return;
@@ -2599,6 +2625,7 @@ function persistChat(
     const persistedMessages = sanitizeMessagesForPersistence(messages);
     const stored: StoredChatState = {
       version: CHAT_STORAGE_VERSION,
+      localInstallId,
       conversationId,
       conversationBackend,
       messages: persistedMessages.slice(-MAX_PERSISTED_MESSAGES).map((message) => ({
@@ -2618,11 +2645,47 @@ function persistChat(
       artifactProvenance,
     };
     window.localStorage.setItem(
-      getChatStorageKey(projectName),
+      getActiveChatStorageKey(projectName, localInstallId),
       JSON.stringify(stored),
     );
   } catch {
     // Ignore storage quota and private-browsing failures.
+  }
+}
+
+function summarizeBrowserChatRecovery(
+  projectName: string,
+  localInstallId: string | null,
+): BrowserChatRecovery | null {
+  if (typeof window === "undefined" || !projectName || !localInstallId) {
+    return null;
+  }
+
+  try {
+    if (window.localStorage.getItem(getInstallScopedChatStorageKey(projectName, localInstallId))) {
+      return null;
+    }
+    const legacy = loadStoredChat(projectName, null);
+    if (!legacy.hasStoredState || legacy.messages.length === 0) {
+      return null;
+    }
+    const latestMs = getLatestMessageTimestamp(legacy.messages);
+    return {
+      projectName,
+      messageCount: legacy.messages.length,
+      latestMessageAt: latestMs > 0 ? new Date(latestMs).toISOString() : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function removeLegacyBrowserChat(projectName: string): void {
+  if (typeof window === "undefined" || !projectName) return;
+  try {
+    window.localStorage.removeItem(getChatStorageKey(projectName));
+  } catch {
+    // Best effort only.
   }
 }
 
@@ -2974,55 +3037,6 @@ function materializeMessages(projectName: string, state: RestoredChatState): Mes
   return state.messages.length > 0 ? state.messages : buildInitialMessages(projectName);
 }
 
-function sameMessages(left: Message[], right: Message[]): boolean {
-  if (left.length !== right.length) return false;
-  return left.every((message, index) => {
-    const candidate = right[index];
-    return Boolean(candidate)
-      && message.id === candidate.id
-      && message.role === candidate.role
-      && message.content === candidate.content
-      && message.thinking === candidate.thinking
-      && message.timestamp.getTime() === candidate.timestamp.getTime()
-      && message.chatMode === candidate.chatMode
-      && message.channel === candidate.channel
-      && message.userName === candidate.userName
-      && sameCaptureClarification(message.captureClarification, candidate.captureClarification)
-      && sameTaskPhases(message.taskPhases, candidate.taskPhases);
-  });
-}
-
-function sameCaptureClarification(
-  left: CaptureClarification | undefined,
-  right: CaptureClarification | undefined,
-): boolean {
-  if (!left && !right) return true;
-  if (!left || !right) return false;
-  return left.captureId === right.captureId
-    && left.rawPath === right.rawPath
-    && left.question === right.question
-    && left.capturedContent === right.capturedContent
-    && left.choices.length === right.choices.length
-    && left.choices.every((choice, index) => choice === right.choices[index]);
-}
-
-function sameTaskPhases(
-  left: ChatTaskPhase[] | undefined,
-  right: ChatTaskPhase[] | undefined,
-): boolean {
-  if (!left && !right) return true;
-  if (!left || !right) return false;
-  if (left.length !== right.length) return false;
-
-  return left.every((phase, index) => {
-    const candidate = right[index];
-    return Boolean(candidate)
-      && phase.id === candidate.id
-      && phase.label === candidate.label
-      && phase.status === candidate.status;
-  });
-}
-
 function choosePreferredChatState(localState: RestoredChatState, remoteState: RestoredChatState): RestoredChatState {
   if (localState.hasStoredState && !remoteState.hasStoredState) {
     return localState;
@@ -3087,7 +3101,21 @@ async function loadStoredChatFromServer(projectName: string): Promise<RestoredCh
       artifactProvenance,
       hasStoredState:
         restoredMessages.length > 0 || conversationId !== null || artifactProvenance.length > 0,
+      localInstallId: null,
     };
+  } catch {
+    return null;
+  }
+}
+
+async function loadLocalInstallId(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/local-install", { cache: "no-store" });
+    if (!res.ok) return null;
+    const raw = await res.json() as { localInstallId?: unknown };
+    return typeof raw.localInstallId === "string" && raw.localInstallId.trim().length > 0
+      ? raw.localInstallId.trim()
+      : null;
   } catch {
     return null;
   }
@@ -3154,6 +3182,8 @@ export function useUnifiedChat(
   const [generatedArtifacts, setGeneratedArtifacts] = useState<GeneratedArtifact[]>([]);
   const [conversationId, setConversationIdState] = useState<string | null>(null);
   const [conversationBackend, setConversationBackendState] = useState<Backend | null>(null);
+  const [localInstallId, setLocalInstallId] = useState<string | null>(null);
+  const [browserChatRecovery, setBrowserChatRecovery] = useState<BrowserChatRecovery | null>(null);
   const [openClawConnected, setOpenClawConnected] = useState<boolean | null>(null);
   const [artifactProvenance, setArtifactProvenanceState] = useState<ArtifactProvenanceEntry[]>([]);
   const [runtimeCompareResult, setRuntimeCompareResult] = useState<RuntimeCompareResult | null>(null);
@@ -3177,11 +3207,15 @@ export function useUnifiedChat(
   const liveMessagesRef = useRef<Message[]>(messages);
   const liveConversationIdRef = useRef<string | null>(conversationId);
   const liveConversationBackendRef = useRef<Backend | null>(conversationBackend);
+  const liveLocalInstallIdRef = useRef<string | null>(localInstallId);
   const liveArtifactProvenanceRef = useRef<ArtifactProvenanceEntry[]>(artifactProvenance);
   const liveUploadedFilesRef = useRef<UploadedFile[]>(uploadedFiles);
   const liveBackendRef = useRef<Backend>(backend);
   const liveChatModeRef = useRef<ChatMode>(chatMode);
   const liveProjectNameRef = useRef(projectName);
+  const liveBrowserChatRecoveryRef = useRef<BrowserChatRecovery | null>(browserChatRecovery);
+  const userThreadVersionRef = useRef(0);
+  const hydratedThreadVersionRef = useRef(0);
   const workspaceTreeSignatureRef = useRef<string>(workspaceTreeSignature([]));
   const workspaceWatchRevisionRef = useRef<string | null>(null);
   const workspaceWatchAvailableRef = useRef(false);
@@ -3200,6 +3234,7 @@ export function useUnifiedChat(
   // Keep state updater callbacks pure. The layout effect below mirrors the
   // committed state into live refs before passive cleanup reads them.
   const setMessages = useCallback((updater: SetStateAction<Message[]>) => {
+    userThreadVersionRef.current += 1;
     setMessagesState(updater);
   }, []);
 
@@ -3233,24 +3268,28 @@ export function useUnifiedChat(
     liveMessagesRef.current = messages;
     liveConversationIdRef.current = conversationId;
     liveConversationBackendRef.current = conversationBackend;
+    liveLocalInstallIdRef.current = localInstallId;
     liveArtifactProvenanceRef.current = artifactProvenance;
     liveUploadedFilesRef.current = uploadedFiles;
     liveBackendRef.current = backend;
     liveChatModeRef.current = chatMode;
     liveProjectNameRef.current = projectName;
+    liveBrowserChatRecoveryRef.current = browserChatRecovery;
   }, [
     artifactProvenance,
     backend,
+    browserChatRecovery,
     chatMode,
     conversationBackend,
     conversationId,
+    localInstallId,
     messages,
     projectName,
     uploadedFiles,
   ]);
 
   useLayoutEffect(() => {
-    const storageKey = getChatStorageKey(projectName);
+    const storageKey = getActiveChatStorageKey(projectName, localInstallId);
     if (pendingHydrationKeyRef.current !== storageKey) {
       return;
     }
@@ -3264,6 +3303,7 @@ export function useUnifiedChat(
     artifactProvenance,
     conversationBackend,
     conversationId,
+    localInstallId,
     messages,
     projectName,
   ]);
@@ -3281,74 +3321,126 @@ export function useUnifiedChat(
   }, []);
 
   useEffect(() => {
-    const storageKey = getChatStorageKey(projectName);
+    let cancelled = false;
+    userThreadVersionRef.current += 1;
+    const hydrationThreadVersion = userThreadVersionRef.current;
     setHasHydratedChat(false);
-    const restored = loadStoredChat(projectName);
     projectVersionRef.current += 1;
     hydratedChatKeyRef.current = null;
-    pendingHydrationKeyRef.current = storageKey;
-    skipHydrationPersistKeyRef.current = storageKey;
-    const hydratedMessages = materializeMessages(projectName, restored);
-    const restoredBackend: Backend = "openclaw";
-    const restoredChatMode: ChatMode =
-      deriveChatModeFromMessages(hydratedMessages) ?? "reasoning";
-    lastPollRef.current = getPollCursorSeed(hydratedMessages);
+    pendingHydrationKeyRef.current = null;
+    skipHydrationPersistKeyRef.current = null;
+    setLocalInstallId(null);
+    setBrowserChatRecovery(null);
     setIsStreaming(false);
     setError(null);
-    setMessages(hydratedMessages);
-    setBackend(restoredBackend);
-    setChatMode(restoredChatMode);
-    setConversationId(restored.conversationId);
-    setConversationBackend(restored.conversationBackend);
-    liveBackendRef.current = restoredBackend;
-    liveChatModeRef.current = restoredChatMode;
-    initialBackendSetRef.current = restored.conversationBackend === "openclaw";
-    setArtifactProvenance(restored.artifactProvenance);
-    setCrossChannelMessages(
-      hydratedMessages.filter((message) => message.channel && message.channel !== "web"),
-    );
-    setHasHydratedChat(true);
 
-    if (safeSlugOrNull(projectName)) {
-      void (async () => {
-        const remoteState = await loadStoredChatFromServer(projectName);
-        const activeHydrationKey = pendingHydrationKeyRef.current ?? hydratedChatKeyRef.current;
-        if (!remoteState || activeHydrationKey !== storageKey) {
-          return;
-        }
-        if (
-          liveConversationIdRef.current !== restored.conversationId
-          || !sameMessages(liveMessagesRef.current, hydratedMessages)
-        ) {
-          return;
-        }
-        const preferredState = choosePreferredChatState(restored, remoteState);
-        const preferredMessages = materializeMessages(projectName, preferredState);
-        lastPollRef.current = getPollCursorSeed(preferredMessages);
-        setMessages(preferredMessages);
-        // Only re-apply backend/chatMode when the preferred state actually has a
-        // known conversationBackend. Otherwise we'd clobber a backend that the
-        // auto-probe effect seeded in parallel (e.g. connected OpenClaw).
-        if (preferredState.conversationBackend !== null) {
-          const preferredBackend: Backend = "openclaw";
-          const preferredChatMode: ChatMode =
-            deriveChatModeFromMessages(preferredMessages)
-            ?? liveChatModeRef.current;
-          setBackend(preferredBackend);
-          setChatMode(preferredChatMode);
-          liveBackendRef.current = preferredBackend;
-          liveChatModeRef.current = preferredChatMode;
-          initialBackendSetRef.current = preferredState.conversationBackend === "openclaw";
-        }
-        setConversationId(preferredState.conversationId);
-        setConversationBackend(preferredState.conversationBackend);
-        setArtifactProvenance(preferredState.artifactProvenance);
-        setCrossChannelMessages(
-          preferredMessages.filter((message) => message.channel && message.channel !== "web"),
-        );
-      })();
+    const applyRestoredState = (
+      restored: RestoredChatState,
+      storageKey: string,
+      recovery: BrowserChatRecovery | null,
+    ) => {
+      if (cancelled) return;
+
+      pendingHydrationKeyRef.current = storageKey;
+      skipHydrationPersistKeyRef.current = storageKey;
+      const hydratedMessages = materializeMessages(projectName, restored);
+      const restoredBackend: Backend = "openclaw";
+      const restoredChatMode: ChatMode =
+        deriveChatModeFromMessages(hydratedMessages) ?? "reasoning";
+      lastPollRef.current = getPollCursorSeed(hydratedMessages);
+      setMessagesState(hydratedMessages);
+      setBackend(restoredBackend);
+      setChatMode(restoredChatMode);
+      setConversationId(restored.conversationId);
+      setConversationBackend(restored.conversationBackend);
+      liveBackendRef.current = restoredBackend;
+      liveChatModeRef.current = restoredChatMode;
+      initialBackendSetRef.current = restored.conversationBackend === "openclaw";
+      setArtifactProvenance(restored.artifactProvenance);
+      setCrossChannelMessages(
+        hydratedMessages.filter((message) => message.channel && message.channel !== "web"),
+      );
+      setBrowserChatRecovery(recovery);
+      hydratedThreadVersionRef.current = userThreadVersionRef.current;
+      setHasHydratedChat(true);
+    };
+
+    if (!safeSlugOrNull(projectName)) {
+      const restored = loadStoredChat(projectName, null, { allowLegacy: false });
+      applyRestoredState(restored, getActiveChatStorageKey(projectName, null), null);
+      return () => {
+        cancelled = true;
+      };
     }
-  }, [projectName]);
+
+    setMessagesState(buildInitialMessages(projectName));
+    setConversationId(null);
+    setConversationBackend(null);
+    setArtifactProvenance([]);
+    setCrossChannelMessages([]);
+
+    void (async () => {
+      const installId = await loadLocalInstallId();
+      if (cancelled) return;
+
+      const localState = loadStoredChat(projectName, installId, {
+        allowLegacy: installId === null,
+      });
+      const recovery = installId
+        ? summarizeBrowserChatRecovery(projectName, installId)
+        : null;
+      const storageKey = getActiveChatStorageKey(projectName, installId);
+      setLocalInstallId(installId);
+      if (userThreadVersionRef.current !== hydrationThreadVersion) {
+        pendingHydrationKeyRef.current = null;
+        skipHydrationPersistKeyRef.current = null;
+        hydratedChatKeyRef.current = storageKey;
+        setBrowserChatRecovery(recovery);
+        hydratedThreadVersionRef.current = hydrationThreadVersion;
+        setHasHydratedChat(true);
+        return;
+      }
+      applyRestoredState(
+        {
+          ...localState,
+          localInstallId: installId,
+        },
+        storageKey,
+        recovery,
+      );
+
+      const remoteHydrationThreadVersion = userThreadVersionRef.current;
+      const remoteState = await loadStoredChatFromServer(projectName);
+      if (cancelled || !remoteState) return;
+      if (userThreadVersionRef.current !== remoteHydrationThreadVersion) {
+        return;
+      }
+
+      const currentLocalState = loadStoredChat(projectName, installId, {
+        allowLegacy: installId === null,
+      });
+      const remoteCandidate = {
+        ...remoteState,
+        localInstallId: installId,
+      };
+      const preferredState = choosePreferredChatState(currentLocalState, remoteCandidate);
+      if (preferredState !== remoteCandidate) {
+        return;
+      }
+      applyRestoredState(remoteCandidate, storageKey, recovery);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    projectName,
+    setArtifactProvenance,
+    setBackend,
+    setChatMode,
+    setConversationBackend,
+    setConversationId,
+  ]);
 
   useEffect(() => {
     workspaceWatchRevisionRef.current = null;
@@ -3356,7 +3448,7 @@ export function useUnifiedChat(
   }, [projectName]);
 
   useEffect(() => {
-    const storageKey = getChatStorageKey(projectName);
+    const storageKey = getActiveChatStorageKey(projectName, localInstallId);
     if (hydratedChatKeyRef.current !== storageKey) {
       return;
     }
@@ -3364,7 +3456,13 @@ export function useUnifiedChat(
       skipHydrationPersistKeyRef.current = null;
       return;
     }
-    persistChat(projectName, messages, conversationId, conversationBackend, artifactProvenance);
+    if (
+      browserChatRecovery
+      && userThreadVersionRef.current === hydratedThreadVersionRef.current
+    ) {
+      return;
+    }
+    persistChat(projectName, messages, conversationId, conversationBackend, artifactProvenance, localInstallId);
     if (persistTimerRef.current) {
       clearTimeout(persistTimerRef.current);
     }
@@ -3377,10 +3475,18 @@ export function useUnifiedChat(
         artifactProvenance,
       );
     }, 150);
-  }, [artifactProvenance, conversationBackend, conversationId, messages, projectName]);
+  }, [
+    artifactProvenance,
+    browserChatRecovery,
+    conversationBackend,
+    conversationId,
+    localInstallId,
+    messages,
+    projectName,
+  ]);
 
   useEffect(() => {
-    const storageKey = getChatStorageKey(projectName);
+    const storageKey = getActiveChatStorageKey(projectName, localInstallId);
     unloadPersistedRef.current = false;
 
     const flushChatThread = () => {
@@ -3388,6 +3494,12 @@ export function useUnifiedChat(
         return;
       }
       if (unloadPersistedRef.current) {
+        return;
+      }
+      if (
+        liveBrowserChatRecoveryRef.current
+        && userThreadVersionRef.current === hydratedThreadVersionRef.current
+      ) {
         return;
       }
       unloadPersistedRef.current = true;
@@ -3400,6 +3512,7 @@ export function useUnifiedChat(
         liveConversationIdRef.current,
         liveConversationBackendRef.current,
         liveArtifactProvenanceRef.current,
+        liveLocalInstallIdRef.current,
       );
       void persistChatToServer(
         projectName,
@@ -3422,7 +3535,7 @@ export function useUnifiedChat(
       window.removeEventListener("pageshow", resetUnloadFlag);
       flushChatThread();
     };
-  }, [projectName]);
+  }, [localInstallId, projectName]);
 
   useEffect(() => {
     return () => {
@@ -3507,7 +3620,7 @@ export function useUnifiedChat(
       return;
     }
 
-    pollTimerRef.current = setInterval(async () => {
+    const pollOpenClawMessages = async () => {
       // Only poll when tab is visible
       if (document.hidden) return;
 
@@ -3632,7 +3745,17 @@ export function useUnifiedChat(
       } catch {
         // Polling is best-effort
       }
+    };
+
+    pollTimerRef.current = setInterval(() => {
+      void pollOpenClawMessages();
     }, 5000);
+    if (
+      !sendQueueProcessingRef.current
+      && liveMessagesRef.current.some((message) => isTransientAssistantScratchpad(message))
+    ) {
+      void pollOpenClawMessages();
+    }
 
     return () => {
       if (pollTimerRef.current) {
@@ -3640,7 +3763,18 @@ export function useUnifiedChat(
         pollTimerRef.current = null;
       }
     };
-  }, [backend, hasHydratedChat, projectName, recordGeneratedArtifacts, scopedConversationId, syncWorkspaceTreeAfterChat]);
+  }, [
+    backend,
+    hasHydratedChat,
+    projectName,
+    recordGeneratedArtifacts,
+    scopedConversationId,
+    setArtifactProvenance,
+    setConversationBackend,
+    setConversationId,
+    setMessages,
+    syncWorkspaceTreeAfterChat,
+  ]);
 
   const isSendContextCurrent = useCallback(
     (context: SendContext): boolean =>
@@ -4668,6 +4802,11 @@ export function useUnifiedChat(
     ): Promise<void> => {
       const requestContent = content.trim();
       if (!requestContent) return;
+      if (liveBrowserChatRecoveryRef.current) {
+        removeLegacyBrowserChat(liveBrowserChatRecoveryRef.current.projectName);
+        setBrowserChatRecovery(null);
+      }
+      userThreadVersionRef.current += 1;
 
       const runtimeOptions = normalizeRuntimeSendOptions(activeFileOrOptions);
       const runtimeMode = runtimeOptions.runtimeMode ?? "chat";
@@ -5222,8 +5361,60 @@ export function useUnifiedChat(
       userBackendOverrideVersionRef.current += 1;
       setBackend(value);
     },
-    [],
+    [setBackend],
   );
+
+  const restoreBrowserChat = useCallback(() => {
+    const installId = liveLocalInstallIdRef.current;
+    const project = liveProjectNameRef.current;
+    if (!installId || !safeSlugOrNull(project)) {
+      return;
+    }
+
+    const restored = loadStoredChat(project, null);
+    if (!restored.hasStoredState) {
+      setBrowserChatRecovery(null);
+      return;
+    }
+
+    const storageKey = getInstallScopedChatStorageKey(project, installId);
+    pendingHydrationKeyRef.current = storageKey;
+    skipHydrationPersistKeyRef.current = null;
+    const restoredMessages = materializeMessages(project, {
+      ...restored,
+      localInstallId: installId,
+    });
+    lastPollRef.current = getPollCursorSeed(restoredMessages);
+    setMessages(restoredMessages);
+    setConversationId(restored.conversationId);
+    setConversationBackend(restored.conversationBackend);
+    setArtifactProvenance(restored.artifactProvenance);
+    setCrossChannelMessages(
+      restoredMessages.filter((message) => message.channel && message.channel !== "web"),
+    );
+    setBrowserChatRecovery(null);
+    persistChat(
+      project,
+      restoredMessages,
+      restored.conversationId,
+      restored.conversationBackend,
+      restored.artifactProvenance,
+      installId,
+    );
+    void persistChatToServer(
+      project,
+      restoredMessages,
+      restored.conversationId,
+      restored.conversationBackend,
+      restored.artifactProvenance,
+    );
+  }, [setMessages, setConversationBackend, setConversationId, setArtifactProvenance]);
+
+  const dismissBrowserChatRecovery = useCallback(() => {
+    const project = liveProjectNameRef.current;
+    removeLegacyBrowserChat(project);
+    setBrowserChatRecovery(null);
+  }, []);
 
   return {
     messages,
@@ -5254,6 +5445,9 @@ export function useUnifiedChat(
     conversationId,
     openClawConnected,
     artifactProvenance,
+    browserChatRecovery,
+    restoreBrowserChat,
+    dismissBrowserChatRecovery,
     runtimeCompareResult,
     clearRuntimeCompareResult: () => setRuntimeCompareResult(null),
   };

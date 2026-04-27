@@ -1754,6 +1754,9 @@ function StudyPageContent() {
     cancelActiveTurn,
     conversationId,
     artifactProvenance,
+    browserChatRecovery,
+    restoreBrowserChat,
+    dismissBrowserChatRecovery,
     runtimeCompareResult,
     clearRuntimeCompareResult,
   } = useUnifiedChat(projectName);
@@ -4644,6 +4647,35 @@ function StudyPageContent() {
                     data-testid="project-chat-column"
                     className="mx-auto flex w-full max-w-[60rem] flex-col gap-6"
                   >
+                  {browserChatRecovery && (
+                    <section className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-sm">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="font-semibold">Previous browser chat found</p>
+                          <p className="mt-1 text-xs text-amber-900">
+                            Restore {browserChatRecovery.messageCount} browser-cached messages for{" "}
+                            {browserChatRecovery.projectName}, or start with a clean thread.
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={restoreBrowserChat}
+                            className="inline-flex h-8 items-center rounded border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-950 transition-colors hover:border-amber-500"
+                          >
+                            Restore
+                          </button>
+                          <button
+                            type="button"
+                            onClick={dismissBrowserChatRecovery}
+                            className="inline-flex h-8 items-center rounded border border-transparent px-3 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100"
+                          >
+                            Start fresh
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+                  )}
                   {!activeProjectSlug && messages.length === 0 && (
                     <section className="rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">
                       <div className="flex flex-col items-center text-center">
