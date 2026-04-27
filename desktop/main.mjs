@@ -4,6 +4,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
+/**
+ * @typedef {Record<string, string | undefined>} DesktopEnv
+ */
+
+/**
+ * @param {DesktopEnv} env
+ */
 export function resolveDesktopStartPath(env = process.env) {
   const configuredPath = env.SCIENCESWARM_DESKTOP_START_PATH?.trim();
   if (!configuredPath) {
@@ -13,6 +20,9 @@ export function resolveDesktopStartPath(env = process.env) {
   return configuredPath.startsWith("/") ? configuredPath : `/${configuredPath}`;
 }
 
+/**
+ * @param {DesktopEnv} env
+ */
 export function resolveDesktopStartUrl(env = process.env) {
   const explicitUrl = env.SCIENCESWARM_DESKTOP_URL?.trim();
   if (explicitUrl) {
