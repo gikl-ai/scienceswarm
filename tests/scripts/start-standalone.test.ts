@@ -1,8 +1,10 @@
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
 import {
+  isStandaloneEntrypoint,
   resolveStandaloneServerEnv,
   resolveStandaloneServerPath,
 } from "../../scripts/start-standalone.mjs";
@@ -32,5 +34,11 @@ describe("start-standalone", () => {
     expect(resolveStandaloneServerPath("/tmp/scienceswarm")).toBe(
       path.join("/tmp/scienceswarm", ".next", "standalone", "server.js"),
     );
+  });
+
+  it("matches cli entrypoints against file urls with encoded characters", () => {
+    const cliPath = path.join("/tmp", "Science Swarm", "start-standalone.mjs");
+
+    expect(isStandaloneEntrypoint(cliPath, pathToFileURL(cliPath).href)).toBe(true);
   });
 });
