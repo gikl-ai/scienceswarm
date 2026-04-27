@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 export function resolveBuildOutput(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): NextConfig["output"] {
   if (env.CAPACITOR_BUILD) {
     return "export";
