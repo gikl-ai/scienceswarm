@@ -958,6 +958,39 @@ function summarizeCompactSteps(steps: Step[]): string[] {
   return [];
 }
 
+function summarizeCompactProgressMetadata(entries: MessageProgressEntry[]): string[] {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    const summaries: string[] = [];
+
+    if (entry.source === "gateway") {
+      summaries.push("OpenClaw");
+    } else if (entry.source === "agent") {
+      summaries.push("Agent");
+    } else if (entry.source === "server") {
+      summaries.push("Server");
+    } else if (entry.source === "client") {
+      summaries.push("Client");
+    }
+
+    if (entry.status === "started") {
+      summaries.push("Started");
+    } else if (entry.status === "running") {
+      summaries.push("Running");
+    } else if (entry.status === "complete") {
+      summaries.push("Complete");
+    } else if (entry.status === "failed") {
+      summaries.push("Failed");
+    }
+
+    if (summaries.length > 0) {
+      return summaries;
+    }
+  }
+
+  return [];
+}
+
 type RunStateDetail = {
   label: string;
   text: string;
@@ -1799,10 +1832,16 @@ export function ChatMessage({
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
   const compactLiveRunSummary = isLiveAssistantTurn
-    ? [
-        ...summarizeCompactPhaseStatus(visibleTaskPhases),
-        ...summarizeCompactSteps(visibleSteps),
-      ]
+    ? (() => {
+        const summaries = [
+          ...summarizeCompactPhaseStatus(visibleTaskPhases),
+          ...summarizeCompactSteps(visibleSteps),
+        ];
+        if (summaries.length > 0) {
+          return summaries;
+        }
+        return summarizeCompactProgressMetadata(visibleProgressLog);
+      })()
     : [];
   const liveRunStateDetail = isLiveAssistantTurn
     ? summarizeLatestRunStateDetail(progressTranscript)
