@@ -8,6 +8,9 @@ export function resolveStandaloneServerPath(cwd = process.cwd()) {
   return path.join(cwd, ".next", "standalone", "server.js");
 }
 
+/**
+ * @param {Record<string, string | undefined>} env
+ */
 export function resolveStandaloneServerEnv(env = process.env) {
   return {
     ...env,
@@ -16,6 +19,9 @@ export function resolveStandaloneServerEnv(env = process.env) {
   };
 }
 
+/**
+ * @param {{ cwd?: string, env?: Record<string, string | undefined> }} [options]
+ */
 export async function startStandaloneServer(options = {}) {
   const serverPath = resolveStandaloneServerPath(options.cwd);
   if (!existsSync(serverPath)) {
