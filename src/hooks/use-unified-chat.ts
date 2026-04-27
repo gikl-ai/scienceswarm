@@ -2335,7 +2335,12 @@ function restoreMessage(value: unknown, conversationBackend: Backend | null): Me
     return null;
   }
 
+  const progressLog = restoreProgressLog(candidate.progressLog);
   const taskPhases = restoreTaskPhases(candidate.taskPhases);
+  const shouldPreferProgressLog =
+    candidate.role === "assistant"
+    && Array.isArray(progressLog)
+    && progressLog.length > 0;
 
   return {
     id: candidate.id,
@@ -2345,11 +2350,11 @@ function restoreMessage(value: unknown, conversationBackend: Backend | null): Me
         ? candidate.content
         : assistantTextForBackend(candidate.content, conversationBackend),
     thinking:
-      typeof candidate.thinking === "string"
+      !shouldPreferProgressLog && typeof candidate.thinking === "string"
         ? assistantTextForBackend(candidate.thinking, conversationBackend)
         : undefined,
-    activityLog: restoreActivityLog(candidate.activityLog),
-    progressLog: restoreProgressLog(candidate.progressLog),
+    activityLog: shouldPreferProgressLog ? undefined : restoreActivityLog(candidate.activityLog),
+    progressLog,
     timestamp,
     chatMode: normalizeChatMode(candidate.chatMode) ?? undefined,
     channel: typeof candidate.channel === "string" ? candidate.channel : undefined,

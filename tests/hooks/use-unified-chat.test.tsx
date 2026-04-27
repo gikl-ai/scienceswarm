@@ -1117,6 +1117,92 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
+  it("does not restore redundant legacy thinking or activity fields when progressLog exists", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        conversationId: "web:alpha-project:session-1",
+        conversationBackend: "openclaw",
+        messages: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "Persisted answer",
+            thinking: "Inspecting the saved chart.",
+            activityLog: ["Read docs/results_table.csv"],
+            timestamp: "2026-04-11T08:00:01.000Z",
+            progressLog: [
+              {
+                kind: "activity",
+                text: "Read docs/results_table.csv",
+                source: "agent",
+                phase: "result",
+                status: "complete",
+                label: "Read",
+                timestampMs: 1713523200123,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/thread?study=alpha-project") {
+        return new Promise<Response>(() => {});
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Promise.resolve(Response.json({ ok: true }));
+      }
+
+      if (url === "/api/chat/unified?action=health") {
+        return Promise.resolve(
+          Response.json({
+            agent: { type: "openclaw", status: "connected" },
+            openclaw: "connected",
+            nanoclaw: "disconnected",
+            openhands: "disconnected",
+          }),
+        );
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Promise.resolve(Response.json({ tree: [] }));
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("progress-log").textContent).toContain(
+        "assistant:activity:Read docs/results_table.csv",
+      );
+    });
+
+    expect(screen.getByTestId("thinking-log").textContent).not.toContain(
+      "Inspecting the saved chart.",
+    );
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
+      "Read docs/results_table.csv",
+    );
+    expect(screen.getByTestId("progress-log-meta").textContent).toContain(
+      "assistant:agent/result/complete/Read/1713523200123",
+    );
+  });
+
   it("does not persist redundant assistant activityLog when progressLog is present", async () => {
     const deferredStream = createDeferredSseResponse();
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
