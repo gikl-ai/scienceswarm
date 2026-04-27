@@ -1993,6 +1993,17 @@ function extractOpenClawProgressUpdate(progress: {
   let update = createOpenClawProgressUpdate();
 
   const eventName = normalizeGatewayProgressEventName(progress);
+  const data = asRecord(payload.data);
+  const structuredEntries = restoreProgressLog(
+    Array.isArray(payload.progressEntries)
+      ? payload.progressEntries
+      : Array.isArray(data?.progressEntries)
+        ? data.progressEntries
+        : undefined,
+  );
+  if (structuredEntries) {
+    update.progressEntries.push(...structuredEntries);
+  }
 
   if (eventName === "session.message") {
     update = mergeOpenClawProgressUpdate(
@@ -2018,7 +2029,6 @@ function extractOpenClawProgressUpdate(progress: {
   }
 
   const stream = firstNonEmptyString(payload.stream);
-  const data = asRecord(payload.data);
 
   if (stream === "thinking" || stream === "reasoning" || stream === "reasoning_text") {
     const nextThinking = firstNonEmptyString(data?.delta, data?.text, data?.reasoning);
@@ -2087,6 +2097,7 @@ function extractOpenClawProgressUpdate(progress: {
   if (
     !eventName.startsWith("chat.") &&
     !eventName.startsWith("agent.") &&
+    !structuredEntries?.length &&
     payloadNarration
   ) {
     update.activityLines.push(payloadNarration);
