@@ -7,9 +7,9 @@ import { assertSafeProjectSlug, InvalidSlugError } from "@/lib/state/project-man
 // ---------------------------------------------------------------------------
 // POST /api/pdf-extract
 //
-// Body: { projectId: string, path: string }
-//   - projectId: safe-slug validated project id (lowercase alnum + hyphen).
-//   - path: POSIX/relative path inside the project root (e.g. "papers/foo.pdf").
+// Body: { studyId: string, path: string }
+//   - studyId: safe-slug validated study id (lowercase alnum + hyphen).
+//   - path: POSIX/relative path inside the study root (e.g. "papers/foo.pdf").
 //
 // Security: the request-supplied `path` is resolved against the project
 // root and checked with a prefix guard so `..` traversal cannot escape.
@@ -18,8 +18,16 @@ import { assertSafeProjectSlug, InvalidSlugError } from "@/lib/state/project-man
 // ---------------------------------------------------------------------------
 
 interface PdfExtractBody {
+  study?: unknown;
+  studyId?: unknown;
+  studySlug?: unknown;
   projectId?: unknown;
   path?: unknown;
+}
+
+function readStudyScopedId(body: PdfExtractBody): string | null {
+  const value = body.studyId ?? body.studySlug ?? body.study ?? body.projectId;
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -34,9 +42,10 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { projectId, path: relativePath } = body;
-  if (typeof projectId !== "string" || projectId.length === 0) {
-    return Response.json({ error: "projectId is required" }, { status: 400 });
+  const projectId = readStudyScopedId(body);
+  const { path: relativePath } = body;
+  if (!projectId) {
+    return Response.json({ error: "studyId is required" }, { status: 400 });
   }
   if (typeof relativePath !== "string" || relativePath.length === 0) {
     return Response.json({ error: "path is required" }, { status: 400 });

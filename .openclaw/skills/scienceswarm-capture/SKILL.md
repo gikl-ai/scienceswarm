@@ -28,7 +28,7 @@ Send any text or document to the ScienceSwarm Telegram bot:
 - **PDF files**: Extracted, parsed, and stored with metadata
 - **Notes**: Quick thoughts saved to the inbox for later linking
 
-The bot replies with the capture path and any project it was linked to.
+The bot replies with the capture path and any study it was linked to.
 
 ## Brain Setup
 
@@ -92,4 +92,4 @@ URLs before presenting claims to the user.
 
 - **"No brain configured"**: Run `npm run install:gbrain` or send "set up my brain" to the bot
 - **File upload fails**: Check file size (Telegram limit) and supported formats (PDF, text)
-- **Captures not linking**: Ensure projects exist in `{BRAIN_ROOT}/state/projects/`
+- **Captures not linking**: Ensure the target study exists in ScienceSwarm

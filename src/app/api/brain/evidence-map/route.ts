@@ -52,6 +52,9 @@ type EvidenceMapPayload = {
 };
 
 type EvidenceMapRequestBody = {
+  study?: unknown;
+  studyId?: unknown;
+  studySlug?: unknown;
   projectId?: unknown;
   question?: unknown;
   focusBrainSlug?: unknown;
@@ -315,7 +318,7 @@ function normalizeEvidenceMapPayload(
 }
 
 function buildEvidenceMapMarkdown(args: {
-  projectId: string;
+  studySlug: string;
   payload: EvidenceMapPayload;
   generatedAt: string;
   generatedBy: string;
@@ -326,9 +329,9 @@ function buildEvidenceMapMarkdown(args: {
   const frontmatter = {
     title,
     type: "note",
-    study: args.projectId,
-    study_slug: args.projectId,
-    legacy_project_slug: args.projectId,
+    study: args.studySlug,
+    study_slug: args.studySlug,
+    legacy_project_slug: args.studySlug,
     analysis_kind: "evidence_map",
     question: args.question,
     generated_at: args.generatedAt,
@@ -507,15 +510,18 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const projectId = readNonEmptyString(body.projectId);
-  if (!projectId) {
-    return Response.json({ error: "projectId is required" }, { status: 400 });
+  const studySlug = readNonEmptyString(body.studyId)
+    ?? readNonEmptyString(body.studySlug)
+    ?? readNonEmptyString(body.study)
+    ?? readNonEmptyString(body.projectId);
+  if (!studySlug) {
+    return Response.json({ error: "studyId is required" }, { status: 400 });
   }
 
   try {
-    assertSafeProjectSlug(projectId);
+    assertSafeProjectSlug(studySlug);
   } catch {
-    return Response.json({ error: "projectId must be a safe bare slug" }, { status: 400 });
+    return Response.json({ error: "studyId must be a safe bare slug" }, { status: 400 });
   }
 
   const question =
@@ -526,7 +532,7 @@ export async function POST(request: Request) {
   try {
     await ensureBrainStoreReady();
     const allPages = await getBrainStore().listPages({ limit: PAGE_SCAN_LIMIT });
-    const projectPages = filterProjectPages(allPages, projectId)
+    const projectPages = filterProjectPages(allPages, studySlug)
       .filter((page) => {
         if (page.type === "project" || page.content.trim().length === 0) {
           return false;
@@ -535,7 +541,7 @@ export async function POST(request: Request) {
       });
     if (projectPages.length === 0) {
       return Response.json(
-        { error: `No readable study pages found for ${projectId}.` },
+        { error: `No readable study pages found for ${studySlug}.` },
         { status: 404 },
       );
     }
@@ -554,7 +560,7 @@ export async function POST(request: Request) {
     const completion = await llm.complete({
       system: SYSTEM_PROMPT,
       user: [
-        `Study: ${projectId}`,
+        `Study: ${studySlug}`,
         `Focused question: ${question}`,
         "",
         "Sources:",
@@ -590,12 +596,12 @@ export async function POST(request: Request) {
     const slug = [
       "analysis",
       "evidence-maps",
-      projectId,
+      studySlug,
       `${compactTimestampForSlug(timestamp)}-${slugifySegment(payload.focused_question)}-${randomUUID()}`,
     ].join("/");
 
     const markdown = buildEvidenceMapMarkdown({
-      projectId,
+      studySlug,
       payload,
       generatedAt: timestamp,
       generatedBy,
@@ -608,7 +614,8 @@ export async function POST(request: Request) {
 
     return Response.json({
       brain_slug: slug,
-      project_url: `/dashboard/study?name=${encodeURIComponent(projectId)}&brain_slug=${encodeURIComponent(slug)}`,
+      study_url: `/dashboard/study?name=${encodeURIComponent(studySlug)}&brain_slug=${encodeURIComponent(slug)}`,
+      project_url: `/dashboard/study?name=${encodeURIComponent(studySlug)}&brain_slug=${encodeURIComponent(slug)}`,
       summary: {
         question: payload.focused_question,
         claimCount: payload.claims.length,

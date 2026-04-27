@@ -2463,7 +2463,7 @@ function buildRevisionArtifactRules(
       : `- Keep the critique artifact at ${critiquePath} and the approval-gated revision plan at ${planPath} when those artifacts are relevant.`,
     "- Keep the plan explicitly approval-gated. Do not rewrite the manuscript until the user clearly approves the current plan.",
     asksForPlanChange
-      ? `- If the user asks for a plan change, update ${planPath} so the visible project artifact reflects the latest plan and state that it needs fresh approval.`
+      ? `- If the user asks for a plan change, update ${planPath} so the visible study artifact reflects the latest plan and state that it needs fresh approval.`
       : "- If the user later asks for a plan change, update the plan artifact and require fresh approval.",
     asksForPlanChange
       ? "- After changing the plan artifact, read it back and confirm the requested change is present before claiming success. If the requested change is not present, rewrite the full plan artifact or tell the user the visible plan could not be updated."
@@ -2700,7 +2700,7 @@ function isCoverLetterOnlyRequest(message: string): boolean {
     /\b(?:write|draft|create|produce|generate)\s+(?:the\s+)?revised manuscript\b/i.test(
       message,
     ) ||
-    /\b(?:write|draft|create|produce|generate)\b[^.?!\n]{0,100}\bvisible project artifacts?\b[^.?!\n]{0,160}\brevised manuscript\b/i.test(
+    /\b(?:write|draft|create|produce|generate)\b[^.?!\n]{0,100}\bvisible study artifacts?\b[^.?!\n]{0,160}\brevised manuscript\b/i.test(
       message,
     ) ||
     /\brevised manuscript\b[^.?!\n]{0,100}\b(?:and|plus)\b[^.?!\n]{0,100}\b(?:editor\s+)?cover letter\b/i.test(
@@ -5237,7 +5237,7 @@ function buildRevisionArtifactCompletenessRetryMessage(params: {
     return [
       `[Workspace: ${params.projectRoot} — use ABSOLUTE paths for all read/write/exec operations]`,
       "",
-      "The previous response claimed the revision plan was updated, but the visible project artifact does not yet contain the requested requirements.",
+      "The previous response claimed the revision plan was updated, but the visible study artifact does not yet contain the requested requirements.",
       `Plan artifact to update: ${path.join(params.projectRoot, params.paths.plan)}`,
       "",
       "Update the visible plan artifact now so it explicitly includes these requested requirements:",
@@ -8494,10 +8494,14 @@ export async function handleUnifiedChatPost(
       mode: rawMode,
       conversationId,
       files: rawFiles = [],
-      projectId = null,
+      studyId = null,
+      studySlug = null,
+      study = null,
+      projectId: legacyProjectId = null,
       streamPhases = false,
       activeFile: rawActiveFile,
     } = body;
+    const projectId = studyId ?? studySlug ?? study ?? legacyProjectId;
     const chatMode = normalizeChatMode(rawMode);
     responseChatMode = chatMode;
     const commandTransport = options.commandTransport === true;
@@ -8617,7 +8621,7 @@ export async function handleUnifiedChatPost(
         return finishChatTimingResponse(
           chatTiming,
           Response.json(
-            { error: "projectId must be a safe bare slug" },
+            { error: "studyId must be a safe bare slug" },
             { status: 400 },
           ),
           "invalid_project_id",
@@ -9608,7 +9612,10 @@ export async function GET(request: Request) {
       return Response.json({ messages: [], backend: "strict-local-only" });
     }
     const since = url.searchParams.get("since");
-    const projectId = url.searchParams.get("projectId");
+    const projectId = url.searchParams.get("studyId")
+      ?? url.searchParams.get("studySlug")
+      ?? url.searchParams.get("study")
+      ?? url.searchParams.get("projectId");
     const conversationId = url.searchParams.get("conversationId");
 
     if (!isValidTimestamp(since) || (!projectId && !conversationId)) {

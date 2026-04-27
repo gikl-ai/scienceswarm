@@ -187,7 +187,7 @@ recommendations:
 - Low embedding coverage -> refresh embeddings before relying on semantic
   search.
 - Many stale pages -> compile recent timeline evidence into current truth.
-- Many orphan pages -> run a targeted link pass around active projects and
+- Many orphan pages -> run a targeted link pass around active studies and
   papers.
 - Zero structured links -> preview a link extraction job.
 - Zero structured timeline entries -> preview a timeline extraction job.

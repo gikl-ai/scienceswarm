@@ -33,7 +33,7 @@ enough to interpret the post-period gap.
 
 When the `scienceswarm` MCP tools are available, save the fit note with
 `gbrain_capture` before answering. Use a clear title, the asset kind above,
-the active project, and links or references to the upstream study brief and
+the active study, and links or references to the upstream study brief and
 data manifest. If saving fails, report the exact save failure and do not
 present the note as durable.
 

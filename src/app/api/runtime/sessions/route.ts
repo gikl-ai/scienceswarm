@@ -7,6 +7,7 @@ import {
   dataIncludedFromBodyWithRuntimeContext,
   expandRuntimeSlashCommandPrompt,
   getRuntimeApiServices,
+  optionalStudyScopedIdFromSearchParams,
   optionalSafeProjectId,
   optionalRuntimeSessionStatusFromSearchParam,
   optionalStringArrayField,
@@ -14,6 +15,7 @@ import {
   parseJsonObject,
   projectPolicyFromBody,
   requireSafeProjectId,
+  studyScopedIdFromBody,
   requireStringField,
   runtimeAdapterForApi,
   runtimeErrorResponse,
@@ -45,9 +47,9 @@ export async function GET(request: Request): Promise<Response> {
     await assertRuntimeApiLocalRequest(request);
     const services = getRuntimeApiServices();
     const url = new URL(request.url);
-    const projectId = url.searchParams.has("projectId")
-      ? optionalSafeProjectId(url.searchParams.get("projectId"))
-      : undefined;
+    const projectId = optionalSafeProjectId(
+      optionalStudyScopedIdFromSearchParams(url.searchParams),
+    ) ?? undefined;
     const hostId = url.searchParams.get("hostId") ?? undefined;
     const status = optionalRuntimeSessionStatusFromSearchParam(
       url.searchParams.get("status"),
@@ -88,7 +90,7 @@ export async function POST(request: Request): Promise<Response> {
       requireStringField(body, "prompt"),
       hostId,
     );
-    const projectId = requireSafeProjectId(body.projectId);
+    const projectId = requireSafeProjectId(studyScopedIdFromBody(body));
     const conversationId = optionalStringField(body, "conversationId") ?? null;
     const approvalState = approvalStateFromBody(body);
     const inputFileRefs = optionalStringArrayField(body, "inputFileRefs") ?? [];

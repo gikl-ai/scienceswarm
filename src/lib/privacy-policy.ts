@@ -39,7 +39,7 @@ export async function enforceCloudPrivacy(projectId?: string | null): Promise<Re
 export async function enforceExecutionPrivacy(projectId?: string | null): Promise<Response | null> {
   if (!projectId) {
     return Response.json(
-      { error: "projectId is required before OpenHands execution is allowed." },
+      { error: "studyId is required before OpenHands execution is allowed." },
       { status: 400 },
     );
   }

@@ -44,7 +44,7 @@ which placebo families were fully run, approximated, or deferred.
 
 When the `scienceswarm` MCP tools are available, save the inference note with
 `gbrain_capture` before answering. Use a clear title, the asset kind above,
-the active project, and links or references to the upstream fit and method
+the active study, and links or references to the upstream fit and method
 comparison notes. If saving fails, report the exact save failure and do not
 present the note as durable.
 

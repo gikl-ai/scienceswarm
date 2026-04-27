@@ -28,7 +28,7 @@ scientific judgment step for non-expert MD users.
 
 When the `scienceswarm` MCP tools are available, save the ledger with
 `gbrain_capture` before answering. Use a clear title, the asset kind above,
-the active project, and links or references to the upstream study, evidence,
+the active study, and links or references to the upstream study, evidence,
 and system-definition assets. If saving fails, report the exact save failure
 and do not present the ledger as durable.
 

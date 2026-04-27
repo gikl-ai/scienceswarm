@@ -7,7 +7,7 @@ international-relations and political-economy shocks:
 - **Russia's 2022 sanctions**
 - **Basque Country / ETA terrorism (1975)**
 
-ScienceSwarm drives the workflow from the project UI with Claude Code. You
+ScienceSwarm drives the workflow from the study UI with Claude Code. You
 should not need to open a terminal or type Linux commands. The R scripts in
 this folder are the deterministic execution contract that the assistant runs
 for you: pull real World Bank panels, load the bundled Abadie & Gardeazabal
@@ -67,7 +67,7 @@ The report includes:
 
 ## Requirements
 
-- ScienceSwarm with project chat enabled
+- ScienceSwarm with study chat enabled
 - Claude Code available as an assistant destination
 - R 4.2 or newer available locally, or permission for the execution assistant
   to help install a local R runtime
@@ -82,28 +82,28 @@ ScienceSwarm's platform convention is:
   `$SCIENCESWARM_DIR/runtimes/` (default `~/.scienceswarm/runtimes/`),
 - this tutorial's R packages are installed by `setup.R` into
   `$SCIENCESWARM_DIR/runtimes/r/R-<major.minor>/<platform>/library/`, and
-- generated tutorial outputs stay inside the imported project tutorial folder
-  so the assistant can import, summarize, and save them as project artifacts.
+- generated tutorial outputs stay inside the imported study tutorial folder
+  so the assistant can import, summarize, and save them as study artifacts.
 
 Do not install CRAN packages into the app checkout or commit generated outputs
 to the repository.
 
 ---
 
-## 0. Create the Project
+## 0. Create the Study
 
 1. Start ScienceSwarm and complete setup if the app asks.
-2. Open the dashboard and create a project. A name like
+2. Open the dashboard and create a study. A name like
    `SCM IR quickstart` is fine.
-3. Open the project. You should see the project chat composer at the bottom of
+3. Open the study. You should see the study chat composer at the bottom of
    the page.
 4. Import this checkout, or just `docs/tutorials/scm-ir-quickstart/`, into the
-   project so Claude Code can see `setup.R` and `scripts/`.
-5. In the project chat composer, open the assistant selector and choose
+   study so Claude Code can see `setup.R` and `scripts/`.
+5. In the study chat composer, open the assistant selector and choose
    `Claude Code`.
 6. If ScienceSwarm shows a send-review sheet for Claude Code, confirm the
-   destination is `Claude Code`, the project is the SCM project, and the
-   included data is the prompt plus project context.
+   destination is `Claude Code`, the study is the SCM project, and the
+   included data is the prompt plus study context.
 
 Use Claude Code for the steps below.
 
@@ -111,18 +111,18 @@ Use Claude Code for the steps below.
 
 ## 1. Prepare the Runtime
 
-Paste this into the project chat:
+Paste this into the study chat:
 
 ```text
 Prepare the SCM-IR quickstart for execution.
 
 If the full ScienceSwarm checkout is imported, use
 docs/tutorials/scm-ir-quickstart/. If only this tutorial folder is imported,
-use the current project folder.
+use the current study folder.
 
 Use setup.R as the dependency contract. First check whether Rscript is
 available and report the R version. Then run setup.R from the tutorial root.
-Do not install R packages into the repository or the imported project folder.
+Do not install R packages into the repository or the imported study folder.
 Use the ScienceSwarm-managed R library under
 $SCIENCESWARM_DIR/runtimes/r/R-<major.minor>/<platform>/library/ unless the
 project explicitly sets a different runtime path.
@@ -155,8 +155,8 @@ Stop immediately if any validation gate fails. Keep generated files inside the
 tutorial folder. When finished, summarize the classic SCM fit diagnostics, the
 method-comparison sign-consistency gate, the placebo p-values, and the final
 HTML report path. Do not make the user run shell commands to view or manage
-artifacts; reference the ScienceSwarm project artifact path instead. Save a
-durable project-scoped SCM Run Log with gbrain_capture before answering.
+artifacts; reference the ScienceSwarm study artifact path instead. Save a
+durable study-scoped SCM Run Log with gbrain_capture before answering.
 ```
 
 If the run succeeds, Claude Code should list:
@@ -241,7 +241,7 @@ ratio.
 
 ## Done Checklist
 
-You are done when the project has:
+You are done when the study has:
 
 - a saved SCM Run Log in gbrain,
 - `data/prepared/brexit.rds`,

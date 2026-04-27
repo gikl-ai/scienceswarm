@@ -47,7 +47,7 @@ policy memo.
 
 When the `scienceswarm` MCP tools are available, save the report asset with
 `gbrain_capture` before answering. Use a clear title, the asset kind above,
-the active project, the report path, and links or references to the upstream
+the active study, the report path, and links or references to the upstream
 SCM notes. If saving fails, report the exact save failure and do not present
 the report as durable.
 

@@ -15,6 +15,8 @@ import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 type PersistCritiqueRequest = {
   job?: unknown;
   parentSlug?: unknown;
+  studySlug?: unknown;
+  studySlugs?: unknown;
   projectSlug?: unknown;
   projectSlugs?: unknown;
   sourceFilename?: unknown;
@@ -23,6 +25,8 @@ type PersistCritiqueRequest = {
 type PersistedCritiqueSummary = {
   brain_slug: string;
   parent_slug?: string;
+  study_slug?: string;
+  study_slugs?: string[];
   project_slug?: string;
   project_slugs?: string[];
   title: string;
@@ -31,6 +35,8 @@ type PersistedCritiqueSummary = {
   descartes_job_id?: string;
   finding_count?: number;
   url: string;
+  study_url?: string;
+  study_urls?: Record<string, string>;
   project_url?: string;
   project_urls?: Record<string, string>;
 };
@@ -186,10 +192,14 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({
       brain_slug: persisted.critiqueSlug,
       parent_slug: parentSlug,
+      study_slug: primaryProjectSlug,
+      study_slugs: projectSlugs,
       project_slug: primaryProjectSlug,
       project_slugs: projectSlugs,
       linked_parent: persisted.linkedParent,
       url: `/dashboard/reasoning?brain_slug=${encodedSlug}`,
+      study_url: primaryProjectSlug ? projectUrls[primaryProjectSlug] : undefined,
+      study_urls: projectUrls,
       project_url: primaryProjectSlug ? projectUrls[primaryProjectSlug] : undefined,
       project_urls: projectUrls,
       brief: persisted.built.brief,
@@ -238,6 +248,8 @@ function pageToPersistedCritiqueSummary(
   return {
     brain_slug: slug,
     parent_slug: parentSlug,
+    study_slug: projectSlug,
+    study_slugs: projectSlugs.length > 0 ? projectSlugs : undefined,
     project_slug: projectSlug,
     project_slugs: projectSlugs.length > 0 ? projectSlugs : undefined,
     title,
@@ -246,6 +258,8 @@ function pageToPersistedCritiqueSummary(
     descartes_job_id: descartesJobId,
     finding_count: findingCount,
     url: `/dashboard/reasoning?brain_slug=${encodedSlug}`,
+    study_url: projectSlug ? projectUrls[projectSlug] : undefined,
+    study_urls: Object.keys(projectUrls).length > 0 ? projectUrls : undefined,
     project_url: projectSlug ? projectUrls[projectSlug] : undefined,
     project_urls: Object.keys(projectUrls).length > 0 ? projectUrls : undefined,
   };
@@ -260,6 +274,10 @@ function readDestinationProjectSlugs(
     rawValues.push(body.projectSlug);
   }
 
+  if (body.studySlug !== undefined) {
+    rawValues.push(body.studySlug);
+  }
+
   if (body.projectSlugs !== undefined) {
     if (!Array.isArray(body.projectSlugs)) {
       return { error: "projectSlugs must be an array of project slugs" };
@@ -267,19 +285,26 @@ function readDestinationProjectSlugs(
     rawValues.push(...body.projectSlugs);
   }
 
+  if (body.studySlugs !== undefined) {
+    if (!Array.isArray(body.studySlugs)) {
+      return { error: "studySlugs must be an array of study slugs" };
+    }
+    rawValues.push(...body.studySlugs);
+  }
+
   if (rawValues.length === 0) {
-    return { error: "Choose at least one project before saving a critique" };
+    return { error: "Choose at least one study before saving a critique" };
   }
 
   const projectSlugs: string[] = [];
   const seen = new Set<string>();
   for (const value of rawValues) {
     if (typeof value !== "string" || value.trim().length === 0) {
-      return { error: "projectSlugs must contain non-empty project slugs" };
+      return { error: "studySlugs must contain non-empty study slugs" };
     }
     const slug = value.trim();
     if (!isValidCritiqueSlug(slug)) {
-      return { error: "projectSlugs must contain safe audit-revise slugs" };
+      return { error: "studySlugs must contain safe audit-revise slugs" };
     }
     if (seen.has(slug)) continue;
     seen.add(slug);

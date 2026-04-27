@@ -62,6 +62,15 @@ function resolveWorkspaceRoot(
   return root;
 }
 
+function readStudyScopedId(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
 async function isOpenHandsAvailable(): Promise<boolean> {
   try {
     const res = await fetch(`${getOpenHandsUrl()}/api/options/config`, {
@@ -996,7 +1005,12 @@ export async function POST(request: Request) {
     // JSON actions
     const body = await request.json();
     const action = body.action as string;
-    const projectId = typeof body.projectId === "string" ? body.projectId : null;
+    const projectId = readStudyScopedId(
+      body.studyId,
+      body.studySlug,
+      body.study,
+      body.projectId,
+    );
 
     if (action === "check-changes") {
       return await withWorkspaceMutationLock(projectId, () =>
@@ -1039,7 +1053,12 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
-    const projectId = searchParams.get("projectId");
+    const projectId = readStudyScopedId(
+      searchParams.get("studyId"),
+      searchParams.get("studySlug"),
+      searchParams.get("study"),
+      searchParams.get("projectId"),
+    );
 
     if (action === "tree") return await handleList(projectId);
     if (action === "watch") return await handleWatch(projectId, searchParams.get("since"));
@@ -1096,7 +1115,12 @@ export async function GET(request: Request) {
 
 async function handleUpload(request: Request) {
   const formData = await request.formData();
-  const projectId = (formData.get("projectId") as string | null) || null;
+  const projectId = readStudyScopedId(
+    formData.get("studyId"),
+    formData.get("studySlug"),
+    formData.get("study"),
+    formData.get("projectId"),
+  );
   const root = resolveWorkspaceRoot(projectId, { create: true });
   const refs = readRefs(root);
   const results: Array<{ name: string; folder: string; workspacePath: string }> = [];

@@ -2631,7 +2631,7 @@ function StructuredCritiquePageContent() {
       const silent = options?.silent === true;
       const projectSlugs = dedupeStrings(options.projectSlugs.map((slug) => slug.trim()));
       if (projectSlugs.length === 0) {
-        const message = "Choose at least one project before saving a critique";
+        const message = "Choose at least one study before saving a critique";
         setBrainSaveByJobId((previous) => ({
           ...previous,
           [job.id]: {
@@ -2755,7 +2755,7 @@ function StructuredCritiquePageContent() {
           setProjectListStatus("loaded");
         } catch (err) {
           setSavePanelError(
-            err instanceof Error ? err.message : "Failed to create project",
+            err instanceof Error ? err.message : "Failed to create study",
           );
           setIsCreatingProjectForSave(false);
           return;
@@ -2764,7 +2764,7 @@ function StructuredCritiquePageContent() {
       }
 
       if (projectSlugs.length === 0) {
-        setSavePanelError("Choose at least one project before saving a critique");
+        setSavePanelError("Choose at least one study before saving a critique");
         return;
       }
 

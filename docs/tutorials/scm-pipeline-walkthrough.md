@@ -8,7 +8,7 @@ sanctions, and Basque Country / ETA terrorism.
 
 The expected final state is:
 
-- project-scoped SCM decision assets saved in gbrain,
+- study-scoped SCM decision assets saved in gbrain,
 - a completed deterministic R pipeline run,
 - an interactive `output/scm-ir-report.html` with its sibling `output/lib/`
   assets,
@@ -20,24 +20,24 @@ The example is a tutorial scaffold, not a new political-science result.
 
 ---
 
-## 0. Create the project and choose Claude Code
+## 0. Create the study and choose Claude Code
 
 1. Start ScienceSwarm and complete setup if the app asks.
-2. Open the dashboard and create a project. A name like `SCM IR quickstart`
+2. Open the dashboard and create a study. A name like `SCM IR quickstart`
    is fine.
-3. Open the project. You should see the project chat composer at the bottom of
+3. Open the study. You should see the study chat composer at the bottom of
    the page.
 4. Import this checkout, or the `docs/tutorials/scm-ir-quickstart/` folder,
-   into the project. The important imported files are `setup.R` and the
+   into the study. The important imported files are `setup.R` and the
    `scripts/` folder.
 5. If the import says `README.md`, `setup.R`, or the R scripts were saved
    without typed conversion, continue. They are still available to Claude Code
-   as project files.
-6. In the project chat composer, open the assistant selector and choose
+   as study files.
+6. In the study chat composer, open the assistant selector and choose
    `Claude Code`.
 7. If ScienceSwarm shows a send-review sheet for Claude Code, confirm the
-   destination is `Claude Code`, the project is the SCM project, and the
-   included data is the prompt plus project context. Then click the send
+   destination is `Claude Code`, the study is the SCM project, and the
+   included data is the prompt plus study context. Then click the send
    button in that sheet.
 
 Use Claude Code for every step below.
@@ -48,7 +48,7 @@ Use Claude Code for every step below.
 
 For each step:
 
-1. Stay on the project page.
+1. Stay on the study page.
 2. Confirm the assistant selector says `Claude Code`.
 3. Click the message box.
 4. Paste the text block for the step.
@@ -71,7 +71,7 @@ The SCM slash commands used here are:
 
 ## 1. Design the SCM question
 
-Paste this into the project chat:
+Paste this into the study chat:
 
 ```text
 /scm-question Create an SCM Study Brief for the SCM-IR quickstart.
@@ -93,7 +93,7 @@ political-science finding.
 
 Map each case to treated unit, treatment date, donor pool inclusion/exclusion
 criteria, primary outcome, secondary predictors, pre/post windows, suitability
-verdict, stop criteria, and confidence boundary. Save a durable project-scoped
+verdict, stop criteria, and confidence boundary. Save a durable study-scoped
 SCM Study Brief with gbrain_capture before answering.
 ```
 
@@ -110,20 +110,20 @@ Paste:
 ```text
 /scm-data Build the SCM Data Manifest for the SCM-IR quickstart.
 
-Use the latest project-scoped SCM Study Brief from this project and the
+Use the latest study-scoped SCM Study Brief from this study and the
 imported tutorial files. If the full ScienceSwarm checkout is imported, use
 docs/tutorials/scm-ir-quickstart/. If only the tutorial folder is imported, use
-the current project folder.
+the current study folder.
 
 Use setup.R as the dependency contract, then run scripts/01_fetch_data.R and
 scripts/02_prepare_panels.R from the tutorial root. Do not install R packages
-into the app checkout or imported project folder. Use the ScienceSwarm-managed
+into the app checkout or imported study folder. Use the ScienceSwarm-managed
 R library under $SCIENCESWARM_DIR/runtimes/r/R-<major.minor>/<platform>/library/.
 
 Record every source, indicator code, data vintage if available, license or
 source note, donor exclusion, cache path, and balance check. Stop if any case
 has fewer than 10 pre-treatment years or fewer than 15 donor candidates. Save a
-durable project-scoped SCM Data Manifest with gbrain_capture before answering.
+durable study-scoped SCM Data Manifest with gbrain_capture before answering.
 ```
 
 Expected sources:
@@ -148,14 +148,14 @@ Paste:
 ```text
 /scm-fit Fit classic Abadie synthetic control for the SCM-IR quickstart.
 
-Use the project SCM Study Brief and Data Manifest. Run
+Use the study SCM Study Brief and Data Manifest. Run
 scripts/03_fit_classic_scm.R from the tutorial root. Stop if the script reports
 a failed pre-period RMSPE / outcome-SD gate.
 
 For each case, report treated unit, treatment year, donor-weight concentration,
 pre-RMSPE, pre-RMSPE / outcome SD, post/pre RMSPE ratio, average post-treatment
 gap, and placebo p-value. Explain whether each classic fit is interpretable as
-a counterfactual under the tutorial gate. Save a durable project-scoped SCM
+a counterfactual under the tutorial gate. Save a durable study-scoped SCM
 Pretreatment Fit Note with gbrain_capture before answering.
 ```
 
@@ -173,7 +173,7 @@ Paste:
 /scm-methods Compare classic SCM against modern SCM variants for the SCM-IR
 quickstart.
 
-Use the project SCM Study Brief, Data Manifest, and Pretreatment Fit Note. Run
+Use the study SCM Study Brief, Data Manifest, and Pretreatment Fit Note. Run
 scripts/04_fit_alternative_methods.R from the tutorial root. Treat synthdid as
 optional if it is unavailable in the managed R library; do not block the whole
 tutorial solely because synthdid is skipped.
@@ -181,7 +181,7 @@ tutorial solely because synthdid is skipped.
 For each case, report the available estimates from classic SCM, gsynth,
 synthetic DiD if available, and the doubly-robust SC approximation. Apply the
 sign-consistency gate from the script and explain whether the result is robust
-enough to carry forward. Save a durable project-scoped SCM Method Comparison
+enough to carry forward. Save a durable study-scoped SCM Method Comparison
 Note with gbrain_capture before answering.
 ```
 
@@ -197,7 +197,7 @@ Paste:
 ```text
 /scm-inference Create the SCM Inference Note for the SCM-IR quickstart.
 
-Use the project SCM Study Brief, Data Manifest, Pretreatment Fit Note, Method
+Use the study SCM Study Brief, Data Manifest, Pretreatment Fit Note, Method
 Comparison Note, and the generated classic fit files under output/fits/. Run
 scripts/05_summarize_inference.R from the tutorial root and use
 output/inference_summary.md as the primary source for the note; do not paste
@@ -208,7 +208,7 @@ which donor placebos are closest to the treated unit, and what the in-time
 falsification and leave-one-out sensitivity checks support or do not support.
 If the existing script output approximates an inference family rather than
 fully refitting it, label that clearly in the confidence boundary. Save a
-durable project-scoped SCM Inference Note with gbrain_capture before answering.
+durable study-scoped SCM Inference Note with gbrain_capture before answering.
 ```
 
 Check that the note does not report only a single ATT point estimate. It should
@@ -223,7 +223,7 @@ Paste:
 ```text
 /scm-report Render the final SCM-IR interactive report.
 
-Use the project SCM Study Brief, Data Manifest, Pretreatment Fit Note, Method
+Use the study SCM Study Brief, Data Manifest, Pretreatment Fit Note, Method
 Comparison Note, Inference Note, and generated fit files. Run
 scripts/06_render_html.R from the tutorial root. Keep the HTML and sibling
 lib/ folder together.
@@ -232,7 +232,7 @@ Report the final output path, total HTML plus lib/ asset size, the three case
 headlines, and whether the report validation markers passed. Do not tell the
 user to run `open` or another shell command; reference the ScienceSwarm project
 artifact path and keep the HTML plus lib/ folder together. Save a durable
-project-scoped SCM Results Report with gbrain_capture before answering.
+study-scoped SCM Results Report with gbrain_capture before answering.
 ```
 
 The report is valid only if:
@@ -251,7 +251,7 @@ The report is valid only if:
 If the previous steps did not already create a run log, paste:
 
 ```text
-Create a project-scoped SCM Run Log for the completed SCM-IR quickstart.
+Create a study-scoped SCM Run Log for the completed SCM-IR quickstart.
 
 Summarize the R version, managed R library path, scripts run, generated files,
 validation gates, optional methods skipped or included, and final report path.
@@ -277,7 +277,7 @@ You are done when gbrain contains:
 - SCM Results Report
 - SCM Run Log
 
-And the project workspace contains:
+And the study workspace contains:
 
 - `data/raw/wdi_panel.rds`
 - `data/raw/basque_bundled.rds`
@@ -309,7 +309,7 @@ with different treatment dates, or heterogeneous-treatment-effect questions.
 ScienceSwarm should keep:
 
 - scientific runtime dependencies under `$SCIENCESWARM_DIR/runtimes/`,
-- generated tutorial outputs inside the imported project tutorial folder, and
+- generated tutorial outputs inside the imported study tutorial folder, and
 - durable interpretation, provenance, and decision notes in gbrain via
   `gbrain_capture`.
 

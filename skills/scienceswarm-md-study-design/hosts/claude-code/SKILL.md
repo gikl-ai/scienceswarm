@@ -24,7 +24,7 @@ into an MD study question before any files or parameters are generated.
 
 When the `scienceswarm` MCP tools are available, save the brief with
 `gbrain_capture` before answering. Use a clear title, the asset kind above, and
-the active project. If saving fails, report the exact save failure and do not
+the active study. If saving fails, report the exact save failure and do not
 present the brief as durable.
 
 Do not start parameter planning until the simulation question and method

@@ -24,7 +24,7 @@ packet exists.
 
 When the `scienceswarm` MCP tools are available, save the interpretation note
 with `gbrain_capture` before answering. Use a clear title, the asset kind
-above, the active project, and links or references to the upstream run log,
+above, the active study, and links or references to the upstream run log,
 analysis packet, and planning assets. If saving fails, report the exact save
 failure and do not present the interpretation as durable.
 

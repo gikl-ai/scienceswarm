@@ -146,7 +146,7 @@ export function ResizableLayout({
 }
 
 /* ------------------------------------------------------------------ */
-/* Project-list / chat resize hook                                     */
+/* Study-list / chat resize hook                                       */
 /* ------------------------------------------------------------------ */
 
 const PROJECT_LIST_MIN = 160;
@@ -156,7 +156,7 @@ const STORAGE_KEY_PROJECT_LIST = "scienceswarm:project-list-width";
 
 /**
  * Hook for the project-list <-> chat panel resize handle inside the
- * project page. Returns the current width and a mouseDown handler to
+ * study page. Returns the current width and a mouseDown handler to
  * attach to the drag handle div.
  */
 export function useProjectListResize() {

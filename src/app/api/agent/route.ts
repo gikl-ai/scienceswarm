@@ -10,6 +10,11 @@ import { enforceExecutionPrivacy } from "@/lib/privacy-policy";
 import { isLocalRequest } from "@/lib/local-guard";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
+function readStudyScopedId(body: Record<string, unknown>): string | null {
+  const value = body.studyId ?? body.studySlug ?? body.study ?? body.projectId;
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
 // POST /api/agent — start conversation or send message
 export async function POST(request: Request) {
   if (!(await isLocalRequest(request))) {
@@ -19,17 +24,17 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { action } = body;
-    const projectId = typeof body.projectId === "string" ? body.projectId : null;
+    const projectId = readStudyScopedId(body);
 
     if (action === "start" || action === "message") {
       if (!projectId) {
-        return Response.json({ error: "projectId is required for agent start/message actions" }, { status: 400 });
+        return Response.json({ error: "studyId is required for agent start/message actions" }, { status: 400 });
       }
 
       try {
         assertSafeProjectSlug(projectId);
       } catch {
-        return Response.json({ error: "projectId must be a safe bare slug" }, { status: 400 });
+        return Response.json({ error: "studyId must be a safe bare slug" }, { status: 400 });
       }
 
       const privacyError = await enforceExecutionPrivacy(projectId);
