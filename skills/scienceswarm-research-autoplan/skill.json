@@ -1,7 +1,7 @@
 {
   "slug": "scienceswarm-research-autoplan",
   "name": "ScienceSwarm Research Autoplan",
-  "description": "Run the full pre-execution research review sequence and consolidate an idea, brief, protocol, or study plan into a saved decision-audited research execution plan.",
+  "description": "Run the full pre-execution research review sequence and consolidate an idea, brief, protocol, or study plan into a saved decision-audited research execution plan with conflict synthesis and a one-page command decision.",
   "visibility": "public",
   "status": "ready",
   "tags": [
@@ -16,7 +16,7 @@
     "codex"
   ],
   "owner": "scienceswarm",
-  "summary": "A full research planning gauntlet for scientists, mathematicians, social scientists, and engineers. It combines idea stress testing, literature landscape, design review, methods review, reproducibility planning, publication fit, and decision logging into one execution-ready research autoplan.",
+  "summary": "A full research planning gauntlet for scientists, mathematicians, social scientists, and engineers. It combines idea stress testing, literature landscape, design review, methods review, reproducibility planning, publication fit, conflict synthesis, and decision logging into one execution-ready research autoplan with a one-page command decision.",
   "source": {
     "kind": "local"
   },

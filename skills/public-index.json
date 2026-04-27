@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-27T15:37:21.672Z",
+  "generatedAt": "2026-04-27T17:57:28.045Z",
   "skills": [
     {
       "slug": "db-arxiv",
@@ -285,7 +285,7 @@
     {
       "slug": "scienceswarm-brown-bag",
       "name": "ScienceSwarm Brown Bag",
-      "description": "Stress-test an early research idea into a durable written brief with a sharper research question, landscape/novelty pass, decisive test, hard-objection map, publication fit, publication roadmap, review loop, and next research assignment.",
+      "description": "Stress-test an early research idea into a durable written brief with a sharper research question, landscape/novelty pass, decisive test, hard-objection map, hard pursuit verdict, evidence grading, publication fit, publication roadmap, review loop, and next research assignment.",
       "tags": [
         "science",
         "research-design",
@@ -299,7 +299,7 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "A rigorous brown-bag partner for scientists, mathematicians, social scientists, and engineers: turn a rough research idea into a saved and reviewed Research Brown Bag Brief with landscape/novelty synthesis, premises, objections, alternative framings, publication fit, publication pathway, and the smallest decisive next test."
+      "summary": "A rigorous brown-bag partner for scientists, mathematicians, social scientists, and engineers: turn a rough research idea into a saved and reviewed Research Brown Bag Brief with landscape/novelty synthesis, evidence grades, hard objections, alternative framings, a pursue/narrow/park/kill verdict, publication fit, publication pathway, and the smallest decisive next test."
     },
     {
       "slug": "scienceswarm-evidence-triangulation",
@@ -339,7 +339,7 @@
     {
       "slug": "scienceswarm-literature-landscape",
       "name": "ScienceSwarm Literature Landscape",
-      "description": "Map the literature around a research idea using supplied and searched sources, identifying canonical anchors, closest prior art, frontier work, disagreements, gaps, and publishable positioning.",
+      "description": "Map the literature around a research idea using supplied and searched sources, identifying source sufficiency, canonical anchors, closest prior art, frontier work, disagreements, novelty threats, gaps, and publishable positioning.",
       "tags": [
         "science",
         "literature",
@@ -353,7 +353,7 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "A literature-positioning skill for scientists, mathematicians, social scientists, and engineers. Produces a saved Literature Landscape Map with search strategy, source corpus, prior-art map, disagreements, novelty risks, positioning options, and read-next priorities."
+      "summary": "A literature-positioning skill for scientists, mathematicians, social scientists, and engineers. Produces a saved Literature Landscape Map with search audit, source sufficiency verdict, source tiers, evidence grades, prior-art map, novelty threats, disagreements, positioning options, and read-next priorities."
     },
     {
       "slug": "scienceswarm-md-evidence-grounding",
@@ -502,7 +502,7 @@
     {
       "slug": "scienceswarm-methods-review",
       "name": "ScienceSwarm Methods Review",
-      "description": "Review whether a proposed research method can support the claim, with assumptions, validity threats, alternatives, diagnostics, robustness checks, and stop conditions.",
+      "description": "Review whether a proposed research method can support the claim, with method-specific checks, fatal-flaw detection, assumptions, validity threats, alternatives, diagnostics, robustness checks, and stop conditions.",
       "tags": [
         "science",
         "methods",
@@ -516,7 +516,7 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "A focused methods and validity review for empirical, theoretical, computational, social-science, mathematical, and engineering research plans. Produces a saved Methods Review Report with assumptions, alternatives, diagnostics, robustness checks, and a verdict."
+      "summary": "A focused methods and validity review for empirical, theoretical, computational, social-science, mathematical, and engineering research plans. Produces a saved Methods Review Report with method-specific checks, fatal-flaw assessment, assumptions, alternatives, diagnostics, robustness checks, and a verdict."
     },
     {
       "slug": "scienceswarm-paper-to-plan",
@@ -539,7 +539,7 @@
     {
       "slug": "scienceswarm-research-autoplan",
       "name": "ScienceSwarm Research Autoplan",
-      "description": "Run the full pre-execution research review sequence and consolidate an idea, brief, protocol, or study plan into a saved decision-audited research execution plan.",
+      "description": "Run the full pre-execution research review sequence and consolidate an idea, brief, protocol, or study plan into a saved decision-audited research execution plan with conflict synthesis and a one-page command decision.",
       "tags": [
         "science",
         "research-design",
@@ -553,12 +553,12 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "A full research planning gauntlet for scientists, mathematicians, social scientists, and engineers. It combines idea stress testing, literature landscape, design review, methods review, reproducibility planning, publication fit, and decision logging into one execution-ready research autoplan."
+      "summary": "A full research planning gauntlet for scientists, mathematicians, social scientists, and engineers. It combines idea stress testing, literature landscape, design review, methods review, reproducibility planning, publication fit, conflict synthesis, and decision logging into one execution-ready research autoplan with a one-page command decision."
     },
     {
       "slug": "scienceswarm-research-design-review",
       "name": "ScienceSwarm Research Design Review",
-      "description": "Review and upgrade a research idea, protocol, brown-bag brief, or study plan into an execution-ready research design document with validity checks, analysis plan, reproducibility package, and handoff tasks.",
+      "description": "Review and upgrade a research idea, protocol, brown-bag brief, or study plan into an execution-ready research design document with validity checks, concrete Day 1 execution packet, analysis plan, reproducibility package, and handoff tasks.",
       "tags": [
         "science",
         "research-design",
@@ -572,7 +572,7 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "A rigorous pre-execution research design review for scientists, mathematicians, social scientists, and engineers. Produces a saved Execution-Ready Research Design with claims, method fit, validity threats, workstreams, tests, reproducibility, and publication fit."
+      "summary": "A rigorous pre-execution research design review for scientists, mathematicians, social scientists, and engineers. Produces a saved Execution-Ready Research Design with claims, method fit, validity threats, workstreams, tests, reproducibility, publication fit, a Cannot Execute Until gate, and a Day 1 Execution Packet."
     },
     {
       "slug": "scienceswarm-research-reasoning",

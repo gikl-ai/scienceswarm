@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-methods-review
-description: Review whether a proposed research method can support the claim, with assumptions, validity threats, alternatives, diagnostics, robustness checks, and stop conditions.
+description: Review whether a proposed research method can support the claim, with method-specific checks, fatal-flaw detection, assumptions, validity threats, alternatives, diagnostics, robustness checks, and stop conditions.
 owner: scienceswarm
 runtime: in-session
 tier: research-planning
@@ -11,6 +11,7 @@ aliases:
 outputs:
   - Methods Review Report brain asset with asset_kind research_methods_review
   - assumption ledger
+  - fatal method flaw assessment
   - method alternatives table
   - robustness and diagnostic plan
 ---
@@ -64,6 +65,7 @@ Core instincts:
 4. Require diagnostics that can reveal failure.
 5. Define pass, fail, and inconclusive outcomes before execution.
 6. Prefer narrower claims over overextended methods.
+7. Say `FATAL_METHOD_FLAW` when the method cannot support the claim.
 
 ## Choose The Method Lens
 
@@ -87,6 +89,35 @@ Pick the lens that fits the plan:
 - Methods research: user of the method, assumptions, comparison methods,
   stress tests, adoption barriers, and known failure cases.
 
+Do not stop at the generic review flow. Add the method-specific checks below
+for the selected lens.
+
+### Method-Specific Checks
+
+- Experimental or empirical science: manipulation or exposure definition,
+  control logic, randomization or assignment, blinding where relevant,
+  measurement reliability, sample size rationale, confounds, batch effects,
+  mechanism, replication unit, and exclusion rules.
+- Causal or quasi-experimental social science: estimand, treatment timing,
+  counterfactual construction, comparison set, anticipation, spillovers,
+  interference, pre-trends or placebo logic, covariate balance, measurement of
+  treatment, sensitivity to donor/control choices, and external validity.
+- Computational, simulation, or machine-learning research: leakage audit,
+  baseline adequacy, benchmark representativeness, ablations, seed and
+  nondeterminism plan, compute budget, hyperparameter protocol, failure cases,
+  reporting standard, and reproducibility package.
+- Mathematics or theory: definitions, minimal examples, boundary cases,
+  dependency lemmas, proof route, counterexample search, hidden regularity
+  assumptions, generality loss, and independent check strategy.
+- Qualitative or interpretive research: case selection logic, sampling,
+  positionality, construct validity, rival explanations, coding reliability,
+  triangulation, negative cases, ethics, and transferability.
+- Engineering or systems research: capability claim, operating envelope,
+  instrumentation, load/stress profile, reliability targets, comparator system,
+  failure modes, safety margins, maintainability, and artifact reproducibility.
+- Methods research: intended user, assumption surface, comparison methods,
+  stress-test suite, failure envelope, usability barrier, and adoption evidence.
+
 ## Review Flow
 
 ### Step 1: Claim-Method Alignment
@@ -98,6 +129,10 @@ State:
 - whether the claim must be narrowed
 - the exact target: estimand, theorem, mechanism, parameter, capability,
   construct, or design requirement
+- whether there is any fatal mismatch between the method and the target
+
+If the method cannot in principle answer the claim, stop normal polishing and
+return a `FATAL_METHOD_FLAW` assessment with the smallest viable replacement.
 
 ### Step 2: Assumption Ledger
 
@@ -162,6 +197,8 @@ Use one of:
 - `METHOD_FIT_WITH_GATES`: method can support the claim only if listed
   diagnostics pass before full-scale execution.
 - `NARROW_CLAIM`: method is useful, but only for a narrower claim.
+- `FATAL_METHOD_FLAW`: method cannot answer the claim even with robustness
+  checks.
 - `CHANGE_METHOD`: proposed method cannot support the claim; use a different
   design.
 - `BLOCKED`: missing data, missing definition, ethical/compliance issue,
@@ -184,6 +221,10 @@ Produce a `Methods Review Report`:
 
 ## What The Method Can And Cannot Establish
 
+## Fatal Method Flaw Assessment
+
+Use one of: `NONE_FOUND`, `POSSIBLE_FATAL_FLAW`, `FATAL_METHOD_FLAW`.
+
 ## Assumption Ledger
 
 | Assumption | Why Needed | How To Check | Consequence If False |
@@ -204,6 +245,11 @@ Produce a `Methods Review Report`:
 | Check | Purpose | Pass | Fail | Inconclusive |
 |---|---|---|---|---|
 
+## Method-Specific Checklist
+
+| Check | Status | Consequence If Missing |
+|---|---|---|
+
 ## Recommended Claim Revision
 
 ## Execution Gates
@@ -219,6 +265,8 @@ Before finalizing, verify:
 
 - The report separates the claim from the method.
 - The target of inference, proof, measurement, or evaluation is explicit.
+- The selected method lens appears in the report with method-specific checks.
+- Fatal method flaws are explicitly assessed.
 - Assumptions are tabled and checkable.
 - At least two method alternatives are considered when plausible.
 - Validity threats have diagnostics and stop conditions.

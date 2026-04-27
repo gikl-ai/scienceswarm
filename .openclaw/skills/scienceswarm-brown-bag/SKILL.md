@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-brown-bag
-description: Stress-test an early research idea into a durable written brief with a sharper research question, landscape/novelty pass, decisive test, hard-objection map, publication fit, publication roadmap, review loop, and next research assignment.
+description: Stress-test an early research idea into a durable written brief with a sharper research question, landscape/novelty pass, decisive test, hard-objection map, hard pursuit verdict, publication fit, publication roadmap, review loop, and next research assignment.
 owner: scienceswarm
 runtime: in-session
 tier: research-planning
@@ -13,6 +13,8 @@ outputs:
   - landscape and novelty synthesis
   - hard-objection map
   - smallest decisive test
+  - hard pursuit verdict
+  - evidence quality dashboard
   - publication fit recommendation
   - publication pathway roadmap
   - brief review report or explicit skipped-review reason
@@ -34,9 +36,8 @@ or start a domain pipeline. The output is a durable written research design
 artifact and a next assignment. Downstream execution can happen after the
 research question survives the brown-bag pass.
 
-Do not include business, investor, commercialization, grant-writing, or
-promotional framing unless the user's research topic itself studies those
-phenomena.
+Do not include non-research or promotional framing unless the user's research
+topic itself studies those phenomena.
 
 ## Artifact Requirement
 
@@ -68,6 +69,7 @@ the result as chat-only.
 6. Keep the user in their discipline. Do not force biology, math, social
    science, or engineering ideas into the same template when the epistemology is
    different.
+7. Be willing to say the project should not proceed in its current form.
 
 Good brown-bag pressure sounds like:
 
@@ -77,6 +79,28 @@ Good brown-bag pressure sounds like:
 Not:
 
 > This is an interesting space with many possible directions.
+
+## Evidence Grades And No-Go Discipline
+
+Every major recommendation must state the evidence grade behind it:
+
+- `strong`: multiple credible sources or direct observations support it.
+- `suggestive`: plausible and supported, but not yet decisive.
+- `weak`: speculative, indirect, stale, or based on one fragile source.
+- `unknown`: not checked or not supplied.
+- `contradicted`: credible sources or observations point the other way.
+
+The final brief must include a hard pursuit verdict:
+
+- `KILL`: do not pursue this version; the claim is already covered, incoherent,
+  non-testable, or methodologically untenable.
+- `PARK`: interesting, but missing evidence, access, definitions, or timing.
+- `NARROW`: pursue only a smaller claim or sharper case.
+- `EXPLORE`: run a cheap learning step before committing.
+- `PURSUE`: proceed to research design review.
+
+Do not soften a `KILL`, `PARK`, or `NARROW` verdict just because the idea is
+interesting. Name the likely way the project wastes six months.
 
 ## Domain Adaptation
 
@@ -171,6 +195,16 @@ Push for ambition without hand-waving. Name the new measurement, theorem family,
 instrument, data resource, benchmark, policy evidence base, experimental model,
 or engineering capability that becomes possible.
 
+### Q7: Six-Month Waste Test
+
+Ask unless already answered:
+
+> What is the most likely way this project wastes six months?
+
+Push for a concrete failure mode: unmeasurable construct, already-covered
+novelty, unavailable data, underpowered design, weak comparison, non-decisive
+pilot, brittle proof route, uninterpretable benchmark, or stakeholder mismatch.
+
 ## Fast-Pass Escape Hatch
 
 If the user says "just do it", "fast pass", or provides a fully formed plan,
@@ -210,6 +244,7 @@ If the user says yes:
    - what the proposed work adds
    - novelty risk
    - evidence gap
+   - evidence grade for each major landscape claim
    - source citations or explicit `source needed` markers
 5. Feed this synthesis into the premise challenge, alternatives, publication
    fit, and hard-objection map.
@@ -259,6 +294,15 @@ For each:
 Then recommend one approach and say what evidence would change that
 recommendation.
 
+## Hard Verdict Gate
+
+Before writing the final brief, choose the hard pursuit verdict. The verdict
+must be based on the evidence grades, novelty risk, objection severity, and
+smallest decisive test. If the verdict is `PURSUE`, explain why the project
+does not merely sound interesting but deserves execution time. If the verdict
+is not `PURSUE`, the `Next Research Assignment` should be the smallest action
+that could upgrade the verdict or confirm that the project should stop.
+
 ## Output Shape
 
 Produce a `Research Brown Bag Brief`:
@@ -273,6 +317,11 @@ Produce a `Research Brown Bag Brief`:
 ## Strongest Version Of The Idea
 
 ## Existing Evidence And Status Quo
+
+## Evidence Quality Dashboard
+
+| Claim Or Premise | Grade | Basis | What Would Upgrade Or Downgrade It |
+|---|---|---|---|
 
 ## Hard Objections
 
@@ -296,7 +345,13 @@ Produce a `Research Brown Bag Brief`:
 
 ## Open Questions
 
+## Six-Month Waste Risk
+
 ## Next Research Assignment
+
+## Hard Pursuit Verdict
+
+Use one of: `KILL`, `PARK`, `NARROW`, `EXPLORE`, `PURSUE`.
 
 ## Publication Fit
 
@@ -378,6 +433,8 @@ Review dimensions:
 6. Publication pathway: does the roadmap cover the plausible path to a strong
    paper without pretending every step is mandatory?
 7. Save readiness: does the brief contain enough context to be useful later?
+8. Verdict discipline: does the brief make a real pursue/narrow/park/kill
+   decision?
 
 If the review finds fixable issues, revise the brief before saving. If issues
 remain, add:
@@ -411,6 +468,9 @@ Before finalizing, verify:
 - The main claim is specific enough to criticize.
 - The strongest objection is not a strawman.
 - The landscape/novelty pass is complete or explicitly skipped.
+- Major claims and recommendations have evidence grades.
+- The six-month waste risk is concrete.
+- The hard pursuit verdict is explicit and justified.
 - The recommended wedge can actually change the user's belief.
 - Success, failure, and inconclusive outcomes are distinct.
 - The brief names what would be learned, not just what would be done.

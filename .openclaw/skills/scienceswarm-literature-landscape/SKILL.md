@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-literature-landscape
-description: Map the literature around a research idea using supplied and searched sources, identifying canonical anchors, closest prior art, frontier work, disagreements, gaps, and publishable positioning.
+description: Map the literature around a research idea using supplied and searched sources, identifying source sufficiency, canonical anchors, closest prior art, frontier work, disagreements, novelty threats, gaps, and publishable positioning.
 owner: scienceswarm
 runtime: in-session
 tier: research-planning
@@ -11,6 +11,7 @@ aliases:
 outputs:
   - Literature Landscape Map brain asset with asset_kind literature_landscape_map
   - source corpus table
+  - search sufficiency verdict
   - prior-art and novelty map
   - read-next plan
 ---
@@ -40,6 +41,15 @@ If live search is unavailable, proceed only from supplied sources and clearly
 label the output `SUPPLIED_SOURCES_ONLY`. Do not make current-literature claims
 without either search results or supplied sources.
 
+Search status is not enough. Also give a source sufficiency verdict:
+
+- `SUFFICIENT_TO_POSITION`: enough close sources were checked to make a
+  defensible positioning recommendation.
+- `PARTIAL_BUT_USEFUL`: enough to guide the next reading/design step, but not
+  enough to claim novelty.
+- `NOT_ENOUGH_EVIDENCE_TO_POSITION`: the corpus is too thin, stale, or broad.
+- `BLOCKED_ON_ACCESS`: key sources, databases, or full texts are unavailable.
+
 Default save path in ScienceSwarm/OpenClaw:
 
 1. Draft the full map in Markdown.
@@ -68,6 +78,17 @@ Core instincts:
    done.
 6. Separate "important literature to read" from "literature that changes the
    research design."
+7. Prefer a short list of novelty-threatening sources over a long bibliography.
+
+## Evidence Grades
+
+Grade every major landscape and novelty claim:
+
+- `strong`: multiple close, credible sources support it.
+- `suggestive`: supported but incomplete or partly indirect.
+- `weak`: based on thin, stale, broad, or secondary evidence.
+- `unknown`: not checked.
+- `contradicted`: credible sources point against it.
 
 ## Workflow
 
@@ -91,6 +112,9 @@ Build a search plan with at least three query families when possible:
 - adjacent terminology or older terminology
 - competing explanations, rival methods, or neighboring disciplines
 
+Record the query log, inclusion criteria, exclusion criteria, and stop rule.
+Do not claim the field is mapped without saying why the search was enough.
+
 Use domain-appropriate sources. Examples:
 
 - biomedical and life sciences: PubMed, bioRxiv, medRxiv, Crossref, OpenAlex
@@ -108,11 +132,18 @@ Use domain-appropriate sources. Examples:
 Create a concise source corpus:
 
 ```markdown
-| Source | Type | Why It Matters | Relationship To Idea | Confidence |
-|---|---|---|---|---|
+| Source | Type | Source Tier | Why It Matters | Relationship To Idea | Evidence Grade |
+|---|---|---|---|---|---|
 ```
 
-Use confidence to mark uncertainty about relevance, not paper quality.
+Use source tiers:
+
+- `T1`: closest prior art, primary evidence, canonical proof, direct dataset,
+  or official technical artifact.
+- `T2`: adjacent primary source, benchmark, method paper, or high-quality
+  review that changes positioning.
+- `T3`: background, commentary, broad review, blog, or source useful only for
+  orientation.
 
 ### Step 4: Map The Field
 
@@ -125,6 +156,9 @@ Identify:
 - datasets, benchmarks, cases, systems, or proof techniques the field relies on
 - live disagreements
 - neglected cases or assumptions
+
+Separately name the 3 to 7 sources most likely to make the user's idea less
+novel. These are the novelty threats; they matter more than general background.
 
 ### Step 5: Novelty And Positioning
 
@@ -167,22 +201,41 @@ Produce a `Literature Landscape Map`:
 Use one of: `SEARCHED_CURRENT_SOURCES`, `SUPPLIED_SOURCES_ONLY`,
 `BLOCKED_ON_SEARCH`.
 
+## Source Sufficiency Verdict
+
+Use one of: `SUFFICIENT_TO_POSITION`, `PARTIAL_BUT_USEFUL`,
+`NOT_ENOUGH_EVIDENCE_TO_POSITION`, `BLOCKED_ON_ACCESS`.
+
 ## Search Strategy
 
 | Query Family | Terms / Sources | Purpose | Result |
 |---|---|---|---|
 
+## Search Audit
+
+| Item | Detail |
+|---|---|
+| Inclusion criteria | |
+| Exclusion criteria | |
+| Stop rule | |
+| Known blind spots | |
+
 ## Source Corpus
 
-| Source | Type | Why It Matters | Relationship To Idea | Confidence |
-|---|---|---|---|---|
+| Source | Type | Source Tier | Why It Matters | Relationship To Idea | Evidence Grade |
+|---|---|---|---|---|---|
 
 ## Canonical Anchors
 
 ## Closest Prior Art
 
-| Source | Overlap | Difference | Threat To Novelty | Design Implication |
-|---|---|---|---|---|
+| Source | Overlap | Difference | Threat To Novelty | Evidence Grade | Design Implication |
+|---|---|---|---|---|---|
+
+## Top Novelty Threats
+
+| Source | Why It Threatens Novelty | What Would Distinguish The New Work |
+|---|---|---|
 
 ## Current Frontier
 
@@ -220,6 +273,9 @@ Use one of: `CLEAR_GAP`, `REFRAMING`, `METHOD_TRANSFER`, `INCREMENTAL`,
 Before finalizing, verify:
 
 - The map distinguishes closest prior art from general background.
+- The map names a source sufficiency verdict and search blind spots.
+- The source corpus includes tiers and evidence grades.
+- The top novelty threats are explicit.
 - Current-literature claims are backed by live search or supplied sources.
 - The novelty verdict is explicit and evidence-based.
 - The user gets concrete design implications, not just bibliography.

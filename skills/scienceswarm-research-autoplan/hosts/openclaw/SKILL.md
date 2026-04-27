@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-research-autoplan
-description: Run the full pre-execution research review sequence and consolidate an idea, brief, protocol, or study plan into a saved decision-audited research execution plan.
+description: Run the full pre-execution research review sequence and consolidate an idea, brief, protocol, or study plan into a saved decision-audited research execution plan with conflict synthesis and a one-page command decision.
 owner: scienceswarm
 runtime: in-session
 tier: research-planning
@@ -11,6 +11,8 @@ aliases:
 outputs:
   - Research Autoplan Dossier brain asset with asset_kind research_autoplan_dossier
   - decision audit trail
+  - conflict synthesis
+  - one-page command decision
   - execution readiness dashboard
   - staged research plan with gates and handoffs
 ---
@@ -69,11 +71,19 @@ Decision principles:
 4. Validity before scale: do not scale a study whose core inference is weak.
 5. Reproducibility is part of design, not an end-stage cleanup task.
 6. Publication fit determines the evidence bar.
+7. Synthesis beats aggregation: resolve contradictions across phases instead
+   of pasting all phase outputs together.
 
 ## Phases
 
 Run the phases in order. If an adjacent ScienceSwarm skill is available, use
 its logic for the relevant phase. If not, run the summarized pass here.
+
+Consume prior artifacts rather than redoing them. If a Brown Bag brief,
+Literature Landscape Map, Methods Review Report, or Execution-Ready Research
+Design already exists, audit its freshness and quality, then reuse or repair
+it. Do not repeat the same generic sections unless the prior artifact is stale
+or insufficient.
 
 ### Phase 0: Intake And Readiness
 
@@ -178,6 +188,34 @@ Define:
 - first assignment
 - explicit gates before full execution
 
+### Phase 7: Conflict Synthesis
+
+Reconcile conflicts across phases. Examples:
+
+- Brown Bag says pursue, but literature says crowded.
+- Literature says clear gap, but methods review says the design cannot answer
+  it.
+- Methods review says feasible, but publication fit requires more evidence
+  than the project can produce.
+- Design review says ready, but execution packet lacks inputs or stop
+  conditions.
+
+For each conflict, state the controlling decision. Do not let conflicting
+recommendations coexist unresolved.
+
+### Phase 8: One-Page Command Decision
+
+End with the command decision:
+
+- `KILL`: stop this version.
+- `PARK`: wait for missing data, access, definitions, or timing.
+- `NARROW`: execute only the narrower version named in the dossier.
+- `PILOT`: run the smallest decisive test first.
+- `EXECUTE`: begin the staged execution plan.
+
+The command decision must fit the weakest serious phase finding, not the most
+optimistic one.
+
 ## Decision Audit Trail
 
 Every material decision must be recorded:
@@ -226,6 +264,15 @@ Use one of: `READY_TO_EXECUTE`, `READY_WITH_GATES`, `NEEDS_REVISION`,
 ## Design Summary
 
 ## Methods Review
+
+## Cross-Phase Conflict Synthesis
+
+| Conflict | Evidence From Phases | Controlling Decision | Rationale |
+|---|---|---|---|
+
+## One-Page Command Decision
+
+Use one of: `KILL`, `PARK`, `NARROW`, `PILOT`, `EXECUTE`.
 
 ## Validity And Failure Register
 
@@ -277,6 +324,8 @@ Before finalizing, verify:
 - The method is justified against alternatives.
 - The literature landscape distinguishes supplied-source claims from searched
   claims.
+- Cross-phase conflicts are resolved rather than merely listed.
+- The command decision follows the weakest serious phase finding.
 - Every major validity threat has a diagnostic and stop condition.
 - The execution plan has gates, not just tasks.
 - The first assignment is small, decisive, and useful even if it fails.

@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-research-design-review
-description: Review and upgrade a research idea, protocol, brown-bag brief, or study plan into an execution-ready research design document with validity checks, analysis plan, reproducibility package, and handoff tasks.
+description: Review and upgrade a research idea, protocol, brown-bag brief, or study plan into an execution-ready research design document with validity checks, concrete execution packet, analysis plan, reproducibility package, and handoff tasks.
 owner: scienceswarm
 runtime: in-session
 tier: research-planning
@@ -12,6 +12,7 @@ outputs:
   - Execution-Ready Research Design brain asset with asset_kind execution_ready_research_design
   - research readiness dashboard
   - validity threat register
+  - Day 1 execution packet
   - execution workstream plan
   - reproducibility and publication package checklist
 ---
@@ -32,6 +33,10 @@ Do not begin execution. The output is a saved `Execution-Ready Research Design`
 and a list of decisions or blockers. Downstream execution can start only after
 the design states what will be done, why it is valid, what would falsify it, and
 what artifacts must be produced.
+
+Do not award `READY_TO_EXECUTE` unless the design includes a Day 1 execution
+packet specific enough for a researcher or execution agent to begin without
+guessing.
 
 Do not include business, commercialization, or promotional framing unless the
 research topic itself studies those phenomena.
@@ -78,6 +83,8 @@ Review instincts to apply throughout:
 6. Publication fit shapes evidence: the venue and audience determine the bar.
 7. Scope discipline: defer work that does not change the core inference,
    proof, benchmark, mechanism, or artifact.
+8. Execution specificity: plans that cannot name their first artifact are not
+   execution-ready.
 
 ## Discipline Lens
 
@@ -195,6 +202,8 @@ Include:
 
 - ordered workstreams
 - inputs and dependencies
+- exact first artifact to create
+- data, code, proof, protocol, instrument, or corpus access requirements
 - decision gates
 - expected outputs
 - failure modes
@@ -207,6 +216,20 @@ If workstreams can run in parallel, produce a lane plan:
 | Lane | Workstream | Inputs | Output | Depends On |
 |---|---|---|---|---|
 ```
+
+### Section 4.5: Day 1 Execution Packet
+
+Define the first concrete execution step:
+
+- first task
+- exact inputs or sources needed
+- artifact to create
+- expected contents of that artifact
+- pass/fail/inconclusive criteria
+- stop condition
+- what to report back
+
+If these cannot be specified, the verdict cannot be `READY_TO_EXECUTE`.
 
 ### Section 5: Evidence And Verification Plan
 
@@ -310,6 +333,23 @@ Produce an `Execution-Ready Research Design`:
 | Lane | Workstream | Inputs | Output | Depends On |
 |---|---|---|---|---|
 
+## Day 1 Execution Packet
+
+| Field | Detail |
+|---|---|
+| First task | |
+| Inputs needed | |
+| Artifact to create | |
+| Expected contents | |
+| Pass / fail / inconclusive criteria | |
+| Stop condition | |
+| Report back | |
+
+## Cannot Execute Until
+
+| Blocker | Why It Blocks Execution | How To Clear It |
+|---|---|---|
+
 ## Reproducibility And Artifact Plan
 
 ## Publication Fit
@@ -347,6 +387,10 @@ Use one of:
 If the verdict is not `READY_TO_EXECUTE`, list the exact blockers and the first
 action needed to clear each one.
 
+If the Day 1 Execution Packet contains placeholders, unknown inputs, or vague
+tasks such as "analyze data" or "review literature", use `READY_WITH_GATES` or
+`NEEDS_REVISION`, not `READY_TO_EXECUTE`.
+
 ## Quality Checks
 
 Before finalizing, verify:
@@ -355,6 +399,9 @@ Before finalizing, verify:
 - The method is justified against at least one plausible alternative.
 - Validity threats have diagnostics and stop conditions.
 - Execution steps are concrete enough for a researcher or agent to begin.
+- The Day 1 Execution Packet names the first artifact, inputs, stop condition,
+  and report-back format.
+- The `Cannot Execute Until` section is empty or justifies each remaining gate.
 - Verification checks distinguish pass, fail, and inconclusive outcomes.
 - Reproducibility artifacts are specified before execution starts.
 - Publication fit names the audience, venue type, evidence bar, reviewer
