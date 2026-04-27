@@ -1,0 +1,25 @@
+{
+  "slug": "scienceswarm-research-design-review",
+  "name": "ScienceSwarm Research Design Review",
+  "description": "Review and upgrade a research idea, protocol, brown-bag brief, or study plan into an execution-ready research design document with validity checks, concrete Day 1 execution packet, analysis plan, reproducibility package, and handoff tasks.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "research-design",
+    "review",
+    "planning"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "A rigorous pre-execution research design review for scientists, mathematicians, social scientists, and engineers. Produces a saved Execution-Ready Research Design with claims, method fit, validity threats, workstreams, tests, reproducibility, publication fit, a Cannot Execute Until gate, and a Day 1 Execution Packet.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-27T00:00:00.000Z",
+  "updatedAt": "2026-04-27T00:00:00.000Z"
+}
