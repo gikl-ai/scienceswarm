@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  resolveDesktopDiagnostics,
   resolveDesktopStartPath,
   resolveDesktopStartUrl,
   resolveStandaloneEntry,
@@ -31,6 +32,19 @@ describe("desktop main", () => {
       FRONTEND_PORT: "4100",
       FRONTEND_USE_HTTPS: "false",
     })).toBe("http://0.0.0.0:4100/setup");
+  });
+
+  it("resolves desktop diagnostics from the electron app paths", () => {
+    expect(resolveDesktopDiagnostics({
+      getPath(name) {
+        return name === "userData" ? "/tmp/user-data" : "/tmp/logs";
+      },
+    })).toMatchObject({
+      shell: "electron",
+      startUrl: "https://127.0.0.1:3001/setup",
+      userDataPath: "/tmp/user-data",
+      logsPath: "/tmp/logs",
+    });
   });
 
   it("resolves the standalone launcher path from the project root", () => {
