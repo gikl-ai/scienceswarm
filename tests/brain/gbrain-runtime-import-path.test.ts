@@ -77,4 +77,20 @@ describe("gbrain runtime bridge import paths", () => {
       await rm(brainDir, { recursive: true, force: true });
     }
   });
+
+  it("keeps config-status on the cheap root-readiness path", async () => {
+    const configStatusSource = await readFile(
+      new URL("../../src/lib/setup/config-status.ts", import.meta.url),
+      "utf-8",
+    );
+    const rootReadinessSource = await readFile(
+      new URL("../../src/lib/brain/root-readiness.ts", import.meta.url),
+      "utf-8",
+    );
+
+    expect(configStatusSource).toContain('from "@/lib/brain/root-readiness"');
+    expect(configStatusSource).not.toContain('from "@/lib/brain/readiness"');
+    expect(rootReadinessSource).not.toContain('@/brain/store');
+    expect(rootReadinessSource).not.toContain("probeGbrainEngineHealth");
+  });
 });

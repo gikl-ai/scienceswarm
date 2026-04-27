@@ -16,7 +16,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { isGbrainRootReady } from "@/lib/brain/readiness";
+import { isGbrainRootReady } from "@/lib/brain/root-readiness";
 import { hasRecommendedOllamaModel } from "@/lib/ollama-models";
 import { getOllamaInstallStatus } from "@/lib/ollama-install";
 import { getOpenClawSetupSummary } from "@/lib/openclaw-status";
