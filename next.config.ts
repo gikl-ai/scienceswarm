@@ -4,8 +4,20 @@ import type { NextConfig } from "next";
 
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
+export function resolveBuildOutput(
+  env: NodeJS.ProcessEnv = process.env,
+): NextConfig["output"] {
+  if (env.CAPACITOR_BUILD) {
+    return "export";
+  }
+  if (env.SCIENCESWARM_STANDALONE_BUILD) {
+    return "standalone";
+  }
+  return undefined;
+}
+
 const nextConfig: NextConfig = {
-  output: process.env.CAPACITOR_BUILD ? "export" : undefined,
+  output: resolveBuildOutput(),
   // E2E smoke tests may launch a second Next dev server with a
   // different runtime env. Give that server its own cache/lock dir
   // without changing the default app behavior.
