@@ -1061,6 +1061,31 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunSt
   return null;
 }
 
+function runStateSummaryChipClassName(summary: string): string {
+  if (summary === "Failed") {
+    return "border-danger/30 bg-danger/10 text-danger";
+  }
+  if (summary === "Running") {
+    return "border-amber-300/70 bg-amber-50 text-amber-800";
+  }
+  if (summary === "Started") {
+    return "border-accent/30 bg-accent/10 text-accent";
+  }
+  if (summary === "Complete") {
+    return "border-ok/30 bg-ok/10 text-ok";
+  }
+  if (summary === "Agent") {
+    return "border-emerald-300/70 bg-emerald-50 text-emerald-800";
+  }
+  if (summary === "OpenClaw") {
+    return "border-sky-300/70 bg-sky-50 text-sky-800";
+  }
+  if (summary === "Client") {
+    return "border-violet-300/70 bg-violet-50 text-violet-800";
+  }
+  return "border-rule bg-raised text-body";
+}
+
 function ActiveRunStateSurface({
   workingElapsed,
   summaries,
@@ -1091,7 +1116,7 @@ function ActiveRunStateSurface({
         {summaries.map((summary, index) => (
           <span
             key={`${summary}-${index}`}
-            className="inline-flex items-center rounded-full border border-rule bg-raised px-2 py-0.5 text-[10px] font-medium text-body"
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${runStateSummaryChipClassName(summary)}`}
           >
             {summary}
           </span>
