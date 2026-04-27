@@ -2815,6 +2815,16 @@ describe("POST /api/chat/unified", () => {
       phase: "send",
       status: "started",
       label: "Send",
+      progressEntries: [
+        {
+          kind: "activity",
+          text: "Sending request to OpenClaw",
+          source: "server",
+          phase: "send",
+          status: "started",
+          label: "Send",
+        },
+      ],
     });
     expect(waitProgress?.payload).toMatchObject({
       text: "Waiting for OpenClaw to respond",
@@ -2822,6 +2832,16 @@ describe("POST /api/chat/unified", () => {
       phase: "waiting",
       status: "running",
       label: "Wait",
+      progressEntries: [
+        {
+          kind: "activity",
+          text: "Waiting for OpenClaw to respond",
+          source: "server",
+          phase: "waiting",
+          status: "running",
+          label: "Wait",
+        },
+      ],
     });
     expect(sendProgress?.payload?.timestampMs).toEqual(expect.any(Number));
     expect(waitProgress?.payload?.timestampMs).toEqual(expect.any(Number));

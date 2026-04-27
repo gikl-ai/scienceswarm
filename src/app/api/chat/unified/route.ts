@@ -353,6 +353,16 @@ type ChatTimingMetaName =
 
 type ServerProgressStatus = "started" | "running" | "complete" | "failed";
 
+type ServerProgressEntryPayload = {
+  kind: "activity";
+  text: string;
+  source: "server";
+  timestampMs: number;
+  phase?: string;
+  status?: ServerProgressStatus;
+  label?: string;
+};
+
 type ServerProgressPayload = {
   text: string;
   source: "server";
@@ -360,6 +370,7 @@ type ServerProgressPayload = {
   phase?: string;
   status?: ServerProgressStatus;
   label?: string;
+  progressEntries?: ServerProgressEntryPayload[];
 };
 
 function finishChatTimingResponse(
@@ -7724,27 +7735,45 @@ function streamOpenClawResponse(params: {
         const sendServerProgress = (
           text: string,
           meta: Omit<Partial<ServerProgressPayload>, "source" | "text"> = {},
-        ): boolean =>
-          sendEvent({
-            progress: {
-              type: "server_progress",
-              payload: {
+        ): boolean => {
+          const timestampMs =
+            typeof meta.timestampMs === "number" && Number.isFinite(meta.timestampMs)
+              ? Math.floor(meta.timestampMs)
+              : Date.now();
+          const phase =
+            typeof meta.phase === "string" && meta.phase.trim().length > 0
+              ? meta.phase.trim()
+              : undefined;
+          const label =
+            typeof meta.label === "string" && meta.label.trim().length > 0
+              ? meta.label.trim()
+              : undefined;
+          const payload: ServerProgressPayload = {
+            text,
+            source: "server",
+            timestampMs,
+            ...(phase ? { phase } : {}),
+            ...(meta.status ? { status: meta.status } : {}),
+            ...(label ? { label } : {}),
+            progressEntries: [
+              {
+                kind: "activity",
                 text,
                 source: "server",
-                timestampMs:
-                  typeof meta.timestampMs === "number" && Number.isFinite(meta.timestampMs)
-                    ? Math.floor(meta.timestampMs)
-                    : Date.now(),
-                ...(typeof meta.phase === "string" && meta.phase.trim().length > 0
-                  ? { phase: meta.phase.trim() }
-                  : {}),
+                timestampMs,
+                ...(phase ? { phase } : {}),
                 ...(meta.status ? { status: meta.status } : {}),
-                ...(typeof meta.label === "string" && meta.label.trim().length > 0
-                  ? { label: meta.label.trim() }
-                  : {}),
-              } satisfies ServerProgressPayload,
+                ...(label ? { label } : {}),
+              },
+            ],
+          };
+          return sendEvent({
+            progress: {
+              type: "server_progress",
+              payload,
             },
           });
+        };
         const closeStream = () => {
           if (streamClosed) {
             return;
