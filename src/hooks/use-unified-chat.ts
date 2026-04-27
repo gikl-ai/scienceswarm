@@ -1912,6 +1912,60 @@ function extractSessionMessageProgressUpdate(
   return update;
 }
 
+function extractServerProgressUpdate(
+  progress: {
+    type?: unknown;
+  },
+  payload: Record<string, unknown>,
+): OpenClawProgressUpdate {
+  const payloadType = firstNonEmptyString(
+    progress.type,
+    payload.type,
+    payload.event,
+    payload.kind,
+  );
+  if (payloadType !== "server_progress") {
+    return createOpenClawProgressUpdate();
+  }
+
+  const text = firstNonEmptyTextContent(
+    payload.text,
+    payload.content,
+    typeof payload.message === "string" ? payload.message : undefined,
+  );
+  if (!text) {
+    return createOpenClawProgressUpdate();
+  }
+
+  const phase = firstNonEmptyString(payload.phase);
+  const status = firstNonEmptyString(payload.status);
+  const label = firstNonEmptyString(payload.label);
+  const timestampMs =
+    typeof payload.timestampMs === "number"
+    && Number.isFinite(payload.timestampMs)
+    && payload.timestampMs >= 0
+      ? Math.floor(payload.timestampMs)
+      : undefined;
+
+  const update = createOpenClawProgressUpdate();
+  update.progressEntries.push(
+    ...buildOptionalActivityProgressEntries([text], {
+      source: "server",
+      phase,
+      status:
+        status === "started"
+        || status === "running"
+        || status === "complete"
+        || status === "failed"
+          ? status
+          : undefined,
+      label,
+      timestampMs,
+    }),
+  );
+  return update;
+}
+
 function extractOpenClawProgressUpdate(progress: {
   type?: unknown;
   method?: unknown;
@@ -1921,6 +1975,11 @@ function extractOpenClawProgressUpdate(progress: {
   const payload = asRecord(progress.payload);
   if (!payload) {
     return createOpenClawProgressUpdate();
+  }
+
+  const serverProgressUpdate = extractServerProgressUpdate(progress, payload);
+  if (serverProgressUpdate.progressEntries.length > 0) {
+    return serverProgressUpdate;
   }
 
   let update = createOpenClawProgressUpdate();
