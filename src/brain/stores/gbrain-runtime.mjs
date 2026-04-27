@@ -4,6 +4,7 @@ import { dirname, resolve as resolvePath } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
+const GBRAIN_PACKAGE_NAME = ["gbrain"].join("");
 
 /**
  * Runtime bridge for the installed gbrain package.
@@ -72,7 +73,10 @@ function wrapRuntimeEngine(engine) {
 }
 
 function resolveGbrainSourceSpecifier(relativePathFromCore) {
-  const gbrainEntryPath = require.resolve("gbrain");
+  // Keep the package name non-literal here. Turbopack tries to pre-resolve
+  // this resolver call inside the app-route graph and can fail the build
+  // before Node ever gets a chance to resolve the installed package.
+  const gbrainEntryPath = require.resolve(GBRAIN_PACKAGE_NAME);
   return pathToFileURL(
     resolvePath(dirname(gbrainEntryPath), relativePathFromCore),
   ).href;

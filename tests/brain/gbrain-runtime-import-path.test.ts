@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -32,6 +32,16 @@ describe("gbrain runtime bridge import paths", () => {
     const runtimeBridge = await import("@/brain/stores/gbrain-runtime.mjs");
 
     expect(runtimeBridge.createRuntimeEngine).toEqual(expect.any(Function));
+  });
+
+  it("avoids a static require.resolve gbrain literal in the runtime bridge source", async () => {
+    const source = await readFile(
+      new URL("../../src/brain/stores/gbrain-runtime.mjs", import.meta.url),
+      "utf-8",
+    );
+
+    expect(source).not.toContain('require.resolve("gbrain")');
+    expect(source).toContain("require.resolve(GBRAIN_PACKAGE_NAME)");
   });
 
   it("falls back to the installed gbrain extract source when the package subpath is absent", async () => {
