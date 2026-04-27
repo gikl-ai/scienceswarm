@@ -36,11 +36,17 @@ function detectPythonPath(): string {
   }
   return _cachedPythonPath;
 }
+
+async function loadReadyBrainStore() {
+  const { ensureBrainStoreReady, getBrainStore } = await import("@/brain/store");
+  await ensureBrainStoreReady();
+  return getBrainStore();
+}
+
 import {
   resolveAgentConfig,
   agentHealthCheck,
 } from "@/lib/agent-client";
-import { ensureBrainStoreReady, getBrainStore } from "@/brain/store";
 import {
   completeSetup,
   createSetupState,
@@ -1738,8 +1744,8 @@ async function buildWorkspaceFileContext(
       file.brainSlug || gbrainSlugFromReference(file.workspacePath);
     if (gbrainSlug) {
       try {
-        await ensureBrainStoreReady();
-        const page = await getBrainStore().getPage(gbrainSlug);
+        const store = await loadReadyBrainStore();
+        const page = await store.getPage(gbrainSlug);
         if (!page) {
           missingFiles.push(`gbrain:${gbrainSlug}`);
           continue;
@@ -3303,8 +3309,7 @@ async function resolveArtifactSourceSnapshots(
   }
 
   try {
-    await ensureBrainStoreReady();
-    const store = getBrainStore();
+    const store = await loadReadyBrainStore();
     const resolvedSnapshots = new Map<
       string,
       import("@/lib/artifact-provenance").ArtifactSourceSnapshot
@@ -4123,8 +4128,8 @@ async function findLatestPriorExperimentDesignCritique(params: {
 }): Promise<{
   findings: Array<{ flaw_type?: string; description: string }>;
   } | null> {
-  await ensureBrainStoreReady();
-  const pages = await getBrainStore().listPages({ type: "critique", limit: 250 });
+  const store = await loadReadyBrainStore();
+  const pages = await store.listPages({ type: "critique", limit: 250 });
   const matchingPages = pages.filter((page) => {
     const frontmatter = page.frontmatter ?? {};
     return (
