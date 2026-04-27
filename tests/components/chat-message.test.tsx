@@ -501,6 +501,32 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("log")).toHaveTextContent("Read docs/results_table.csv");
   });
 
+  it("uses structured progress metadata for compact run-state summary chips when phases are absent", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text: "Waiting for OpenClaw to respond",
+            source: "server",
+            status: "running",
+            label: "Wait",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:30.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent("Server");
+    expect(progressLog).toHaveTextContent("Running");
+    expect(progressLog).toHaveTextContent("Wait");
+    expect(progressLog).toHaveTextContent("Waiting for OpenClaw to respond");
+  });
+
   it("renders a dedicated run-state surface before transcript progress arrives", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
