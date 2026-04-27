@@ -44,6 +44,10 @@ export function resolveStandaloneEntry(root = projectRoot) {
   return path.join(root, "scripts", "start-standalone.mjs");
 }
 
+/**
+ * @param {{ getPath(name: string): string }} app
+ * @param {DesktopEnv} env
+ */
 export function resolveDesktopDiagnostics(app, env = process.env) {
   return {
     shell: "electron",
