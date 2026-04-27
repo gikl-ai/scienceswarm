@@ -4249,10 +4249,13 @@ describe("useUnifiedChat persistence", () => {
     render(<ChatHarness projectName="alpha-project" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("thinking-log").textContent).toContain(
-        "assistant:Scanning the import manifest...",
+      expect(screen.getByTestId("progress-log").textContent).toContain(
+        "thinking:Scanning the import manifest...",
       );
     });
+    expect(screen.getByTestId("thinking-log").textContent).not.toContain(
+      "assistant:Scanning the import manifest...",
+    );
     expect(screen.getByTestId("progress-log").textContent).toContain(
       "thinking:Scanning the import manifest... | thinking:Counting PDF entries by committed file ref.",
     );
