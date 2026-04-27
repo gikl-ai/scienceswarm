@@ -1,3 +1,4 @@
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -10,12 +11,21 @@ const DESKTOP_DIAGNOSTICS_CHANNEL = "scienceswarm:desktop-diagnostics";
  */
 
 /**
- * @param {DesktopEnv} env
+ * @typedef {{ firstLaunchComplete?: boolean }} DesktopStartOptions
  */
-export function resolveDesktopStartPath(env = process.env) {
+
+export function resolveDesktopLaunchMarkerPath(app) {
+  return path.join(app.getPath("userData"), "desktop-first-launch.json");
+}
+
+/**
+ * @param {DesktopEnv} env
+ * @param {DesktopStartOptions} options
+ */
+export function resolveDesktopStartPath(env = process.env, options = {}) {
   const configuredPath = env.SCIENCESWARM_DESKTOP_START_PATH?.trim();
   if (!configuredPath) {
-    return "/setup";
+    return options.firstLaunchComplete ? "/" : "/setup";
   }
 
   return configuredPath.startsWith("/") ? configuredPath : `/${configuredPath}`;
@@ -23,8 +33,9 @@ export function resolveDesktopStartPath(env = process.env) {
 
 /**
  * @param {DesktopEnv} env
+ * @param {DesktopStartOptions} options
  */
-export function resolveDesktopStartUrl(env = process.env) {
+export function resolveDesktopStartUrl(env = process.env, options = {}) {
   const explicitUrl = env.SCIENCESWARM_DESKTOP_URL?.trim();
   if (explicitUrl) {
     return explicitUrl;
@@ -36,7 +47,7 @@ export function resolveDesktopStartUrl(env = process.env) {
   const port = env.FRONTEND_PORT?.trim() || "3001";
   const protocol = env.FRONTEND_USE_HTTPS === "false" ? "http" : "https";
   const url = new URL(`${protocol}://${host}:${port}`);
-  url.pathname = resolveDesktopStartPath(env);
+  url.pathname = resolveDesktopStartPath(env, options);
   return url.toString();
 }
 
@@ -44,6 +55,16 @@ export function resolveStandaloneEntry(root = projectRoot) {
   return path.join(root, "scripts", "start-standalone.mjs");
 }
 
+export function markDesktopFirstLaunchComplete(app) {
+  const markerPath = resolveDesktopLaunchMarkerPath(app);
+  mkdirSync(path.dirname(markerPath), { recursive: true });
+  writeFileSync(markerPath, JSON.stringify({ completedAt: new Date().toISOString() }));
+}
+
+/**
+ * @param {{ getPath(name: string): string }} app
+ * @param {DesktopEnv} env
+ */
 export function resolveDesktopDiagnostics(app, env = process.env) {
   return {
     shell: "electron",
@@ -60,9 +81,9 @@ export async function launchDesktopShell(options = {}) {
     import(pathToFileURL(resolveStandaloneEntry(options.projectRoot)).href),
   ]);
 
-  const startUrl = resolveDesktopStartUrl(options.env);
-
   await app.whenReady();
+  const firstLaunchComplete = existsSync(resolveDesktopLaunchMarkerPath(app));
+  const startUrl = resolveDesktopStartUrl(options.env, { firstLaunchComplete });
   await startStandaloneServer({
     cwd: options.projectRoot,
     env: options.env,
@@ -86,6 +107,9 @@ export async function launchDesktopShell(options = {}) {
   });
 
   await window.loadURL(startUrl);
+  if (!firstLaunchComplete) {
+    markDesktopFirstLaunchComplete(app);
+  }
 
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -102,7 +126,9 @@ export async function launchDesktopShell(options = {}) {
           preload: path.join(__dirname, "preload.mjs"),
         },
       });
-      await nextWindow.loadURL(startUrl);
+      await nextWindow.loadURL(
+        resolveDesktopStartUrl(options.env, { firstLaunchComplete: true }),
+      );
     }
   });
 
