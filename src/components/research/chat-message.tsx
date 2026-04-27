@@ -1088,6 +1088,25 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunSt
   return null;
 }
 
+function runStateDetailChipClassName(label: string): string {
+  if (label === "Failed") {
+    return "border-danger/30 bg-danger/10 text-danger";
+  }
+  if (label === "Agent") {
+    return "border-emerald-300/70 bg-emerald-50 text-emerald-800";
+  }
+  if (label === "OpenClaw") {
+    return "border-sky-300/70 bg-sky-50 text-sky-800";
+  }
+  if (label === "Client") {
+    return "border-violet-300/70 bg-violet-50 text-violet-800";
+  }
+  if (label === "Server") {
+    return "border-rule bg-raised text-body";
+  }
+  return "border-rule/80 bg-raised text-dim";
+}
+
 function ActiveRunStateSurface({
   workingElapsed,
   summaries,
@@ -1126,7 +1145,7 @@ function ActiveRunStateSurface({
       </div>
       {detail && (
         <div className="mt-2 flex flex-wrap items-start gap-2 text-[12px] leading-6 text-dim">
-          <span className="inline-flex items-center rounded-full border border-rule/80 bg-raised px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dim">
+          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${runStateDetailChipClassName(detail.label)}`}>
             {detail.label}
           </span>
           <span className="min-w-0 flex-1 break-words text-body/80">

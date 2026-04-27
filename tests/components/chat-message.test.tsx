@@ -536,7 +536,7 @@ describe("ChatMessage", () => {
           {
             kind: "activity",
             text: "Queued follow-up execution",
-            source: "server",
+            source: "gateway",
             status: "running",
           },
         ]}
@@ -546,8 +546,11 @@ describe("ChatMessage", () => {
     );
 
     const progressLog = screen.getByRole("log");
-    expect(progressLog).toHaveTextContent("Server");
+    expect(progressLog).toHaveTextContent("OpenClaw");
     expect(progressLog).toHaveTextContent("Queued follow-up execution");
+    expect(
+      screen.getAllByText("OpenClaw").some((element) => element.className.includes("text-sky-800")),
+    ).toBe(true);
   });
 
   it("renders a dedicated run-state surface before transcript progress arrives", () => {
