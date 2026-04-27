@@ -70,6 +70,37 @@ describe("GET /api/brain/study-organizer", () => {
     );
   });
 
+  it("falls back to legacy project when canonical study is blank", async () => {
+    mockBuildProjectOrganizerReadout.mockResolvedValue({
+      project: "alpha",
+      generatedAt: "2026-04-19T12:00:00.000Z",
+      pageCount: 0,
+      pageScanLimit: 5000,
+      pageScanLimitReached: false,
+      pageCountsByType: {},
+      importSummary: null,
+      threads: [],
+      duplicatePapers: [],
+      importDuplicateGroups: [],
+      trackedExportCount: 0,
+      staleExports: [],
+      nextMove: { recommendation: "Review the imported notes." },
+      dueTasks: [],
+      frontier: [],
+      suggestedPrompts: [],
+    });
+
+    const { GET } = await import("@/app/api/brain/study-organizer/route");
+    const response = await GET(
+      new Request("http://localhost/api/brain/study-organizer?study=&project=alpha"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockBuildProjectOrganizerReadout).toHaveBeenCalledWith(
+      expect.objectContaining({ project: "alpha" }),
+    );
+  });
+
   it("rejects missing study parameter", async () => {
     const { GET } = await import("@/app/api/brain/study-organizer/route");
     const response = await GET(

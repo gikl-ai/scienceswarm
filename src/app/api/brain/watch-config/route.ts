@@ -24,6 +24,10 @@ function normalizeStudy(study: string): string {
   return assertSafeProjectSlug(study.trim());
 }
 
+function readStudyOrProjectValue(study: string | undefined, project: string | undefined): string | undefined {
+  return study?.trim() || project;
+}
+
 function watchErrorResponse(error: unknown): Response {
   if (error instanceof WatchConfigError) {
     return Response.json({ error: error.message }, { status: error.status });
@@ -40,7 +44,10 @@ export async function GET(request: Request): Promise<Response> {
   if (isErrorResponse(configOrError)) return configOrError;
 
   const url = new URL(request.url);
-  const studyParam = url.searchParams.get("study") ?? url.searchParams.get("project");
+  const studyParam = readStudyOrProjectValue(
+    url.searchParams.get("study") ?? undefined,
+    url.searchParams.get("project") ?? undefined,
+  );
   if (!studyParam) {
     return Response.json({ error: "Missing study parameter" }, { status: 400 });
   }
@@ -87,7 +94,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const requestedStudy = body.study ?? body.project;
+  const requestedStudy = readStudyOrProjectValue(body.study, body.project);
   if (typeof requestedStudy !== "string" || !requestedStudy.trim()) {
     return Response.json({ error: "Missing study field" }, { status: 400 });
   }

@@ -8537,7 +8537,9 @@ export async function handleUnifiedChatPost(
       streamPhases = false,
       activeFile: rawActiveFile,
     } = body;
-    const projectId = studyId ?? studySlug ?? study ?? legacyProjectId;
+    const projectId = [studyId, studySlug, study, legacyProjectId].find(
+      (value): value is string => typeof value === "string" && value.trim().length > 0,
+    ) ?? null;
     const chatMode = normalizeChatMode(rawMode);
     responseChatMode = chatMode;
     const commandTransport = options.commandTransport === true;

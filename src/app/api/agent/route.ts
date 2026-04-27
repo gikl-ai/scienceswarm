@@ -11,8 +11,10 @@ import { isLocalRequest } from "@/lib/local-guard";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
 function readStudyScopedId(body: Record<string, unknown>): string | null {
-  const value = body.studyId ?? body.studySlug ?? body.study ?? body.projectId;
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  for (const value of [body.studyId, body.studySlug, body.study, body.projectId]) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
 }
 
 // POST /api/agent — start conversation or send message

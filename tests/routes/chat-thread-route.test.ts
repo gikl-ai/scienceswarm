@@ -156,6 +156,29 @@ describe("chat thread route", () => {
     });
   });
 
+  it("falls back to legacy project when canonical study is blank", async () => {
+    const { GET, POST } = await import("@/app/api/chat/thread/route");
+
+    const writeResponse = await POST(new Request("http://localhost/api/chat/thread", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        study: "",
+        project: "alpha-project",
+        messages: [],
+        artifactProvenance: [],
+      }),
+    }));
+    expect(writeResponse.status).toBe(200);
+
+    const readResponse = await GET(new Request("http://localhost/api/chat/thread?study=&project=alpha-project"));
+    expect(readResponse.status).toBe(200);
+    await expect(readResponse.json()).resolves.toMatchObject({
+      study: "alpha-project",
+      project: "alpha-project",
+    });
+  });
+
   it("sanitizes internal OpenClaw noise when reading a persisted thread", async () => {
     await writeChatThread({
       version: 1,

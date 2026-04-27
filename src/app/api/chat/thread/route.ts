@@ -146,7 +146,9 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const project = normalizeProject(url.searchParams.get("study") ?? url.searchParams.get("project"));
+  const project =
+    normalizeProject(url.searchParams.get("study"))
+    ?? normalizeProject(url.searchParams.get("project"));
   if (!project) {
     return Response.json({ error: "Missing study" }, { status: 400 });
   }
@@ -195,7 +197,9 @@ export async function POST(request: Request) {
     artifactProvenance?: unknown;
   };
 
-  const project = normalizeProject(candidate.study ?? candidate.project);
+  const project =
+    normalizeProject(candidate.study)
+    ?? normalizeProject(candidate.project);
   if (!project) {
     return Response.json({ error: "Missing study" }, { status: 400 });
   }

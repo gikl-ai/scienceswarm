@@ -27,7 +27,12 @@ const ScanCancelRequestSchema = z.object({
 function readStudySlugFromUnknown(input: unknown): unknown {
   if (!input || typeof input !== "object") return undefined;
   const record = input as Record<string, unknown>;
-  return record.study ?? record.project;
+  const study = typeof record.study === "string" ? record.study.trim() : record.study;
+  return typeof study === "string" ? study || record.project : study ?? record.project;
+}
+
+function readStudyOrProjectParam(url: URL): string | null {
+  return url.searchParams.get("study")?.trim() || url.searchParams.get("project");
 }
 
 function badRequest(error: unknown): Response {
@@ -55,7 +60,7 @@ export async function GET(request: Request) {
 
   if (wantsLatest) {
     const study = ProjectSlugSchema.safeParse(
-      url.searchParams.get("study") ?? url.searchParams.get("project"),
+      readStudyOrProjectParam(url),
     );
     if (!study.success) return badRequest(study.error);
 
@@ -68,7 +73,7 @@ export async function GET(request: Request) {
   }
 
   const lookup = ScanLookupRequestSchema.safeParse({
-    study: url.searchParams.get("study") ?? url.searchParams.get("project"),
+    study: readStudyOrProjectParam(url),
     id: url.searchParams.get("id"),
   });
   if (!lookup.success) return badRequest(lookup.error);

@@ -78,7 +78,8 @@ export async function POST(request: Request): Promise<Response> {
     capture.userId = body.userId;
   }
 
-  const requestedStudy = body.study ?? body.project;
+  const hasStudy = Object.prototype.hasOwnProperty.call(body, "study");
+  const requestedStudy = hasStudy ? body.study : body.project;
   if (requestedStudy !== undefined && requestedStudy !== null && typeof requestedStudy !== "string") {
     return Response.json({ error: "study must be a string, null, or omitted" }, { status: 400 });
   }

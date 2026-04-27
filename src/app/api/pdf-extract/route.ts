@@ -26,8 +26,10 @@ interface PdfExtractBody {
 }
 
 function readStudyScopedId(body: PdfExtractBody): string | null {
-  const value = body.studyId ?? body.studySlug ?? body.study ?? body.projectId;
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  for (const value of [body.studyId, body.studySlug, body.study, body.projectId]) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
 }
 
 export async function POST(request: Request): Promise<Response> {

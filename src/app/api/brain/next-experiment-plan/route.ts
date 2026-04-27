@@ -31,7 +31,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const study = body.study?.trim() ?? body.project?.trim();
+  const study = body.study?.trim() || body.project?.trim();
   const prompt = body.prompt?.trim();
 
   if (!study) {

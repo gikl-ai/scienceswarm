@@ -457,16 +457,20 @@ export function optionalSafeProjectId(value: unknown): string | null {
 }
 
 export function studyScopedIdFromBody(body: Record<string, unknown>): unknown {
-  return body.studyId ?? body.studySlug ?? body.study ?? body.projectId;
+  for (const value of [body.studyId, body.studySlug, body.study, body.projectId]) {
+    if (typeof value === "string" && value.trim().length > 0) return value;
+    if (value !== undefined && value !== null && typeof value !== "string") return value;
+  }
+  return undefined;
 }
 
 export function optionalStudyScopedIdFromSearchParams(
   searchParams: URLSearchParams,
 ): unknown {
   return searchParams.get("studyId")
-    ?? searchParams.get("studySlug")
-    ?? searchParams.get("study")
-    ?? searchParams.get("projectId");
+    || searchParams.get("studySlug")
+    || searchParams.get("study")
+    || searchParams.get("projectId");
 }
 
 function dataIncludedFromRaw(value: unknown): RuntimeDataIncluded[] | null {

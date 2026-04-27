@@ -11,7 +11,7 @@ export async function GET(request: Request): Promise<Response> {
   const config = configOrError;
 
   const url = new URL(request.url);
-  const study = url.searchParams.get("study") ?? url.searchParams.get("project");
+  const study = url.searchParams.get("study") || url.searchParams.get("project");
   if (!study) {
     return Response.json({ error: "Missing study parameter" }, { status: 400 });
   }

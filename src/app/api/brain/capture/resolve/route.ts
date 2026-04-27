@@ -27,7 +27,12 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Missing required field: captureId" }, { status: 400 });
   }
 
-  const requestedStudy = body.study ?? body.project;
+  const requestedStudy =
+    typeof body.study === "string"
+      ? body.study.trim() || body.project
+      : body.study !== undefined && body.study !== null
+        ? body.study
+        : body.project;
   if (typeof requestedStudy !== "string" || !requestedStudy.trim()) {
     return Response.json({ error: "Missing required field: study" }, { status: 400 });
   }

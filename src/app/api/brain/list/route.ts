@@ -22,7 +22,7 @@ import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const study = url.searchParams.get("study") ?? url.searchParams.get("project");
+  const study = url.searchParams.get("study") || url.searchParams.get("project");
   if (!study || typeof study !== "string" || study.trim().length === 0) {
     return Response.json(
       { error: "Missing required query parameter: study" },

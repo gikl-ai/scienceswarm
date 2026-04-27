@@ -42,14 +42,19 @@ export async function readJsonBody(request: Request): Promise<unknown> {
 }
 
 export function readStudyOrProjectParam(url: URL): string | null {
-  return url.searchParams.get("study") ?? url.searchParams.get("project");
+  const study = url.searchParams.get("study")?.trim();
+  return study || url.searchParams.get("project");
 }
 
 export function normalizeStudyBody(body: unknown): unknown {
   if (!body || typeof body !== "object") return body;
   const record = body as Record<string, unknown>;
+  const study = typeof record.study === "string" ? record.study.trim() : record.study;
   return {
     ...record,
-    project: record.study ?? record.project,
+    project:
+      typeof study === "string"
+        ? study || record.project
+        : study ?? record.project,
   };
 }
