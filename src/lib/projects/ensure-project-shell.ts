@@ -1,5 +1,4 @@
 import type { BrainPage } from "@/brain/store";
-import { ensureBrainStoreReady, getBrainStore } from "@/brain/store";
 import type { ProjectRecord } from "@/brain/gbrain-data-contracts";
 import {
   createProjectRepository,
@@ -52,9 +51,15 @@ function readPageTimestamp(page: BrainPage): number {
   return 0;
 }
 
-async function listRelatedProjectPages(projectSlug: string): Promise<BrainPage[]> {
+async function loadReadyBrainStore() {
+  const { ensureBrainStoreReady, getBrainStore } = await import("@/brain/store");
   await ensureBrainStoreReady();
-  const pages = await getBrainStore().listPages({ limit: 5000 });
+  return getBrainStore();
+}
+
+async function listRelatedProjectPages(projectSlug: string): Promise<BrainPage[]> {
+  const store = await loadReadyBrainStore();
+  const pages = await store.listPages({ limit: 5000 });
   return pages
     .filter((page) => {
       const frontmatter = page.frontmatter ?? {};
