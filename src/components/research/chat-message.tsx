@@ -812,6 +812,34 @@ function normalizeProgressTextForDisplay(text: string): string | null {
   return trimmed;
 }
 
+function inferProgressEntryLabel(text: string): string | undefined {
+  const normalized = text.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const directMatch = normalized.match(/^(Read|Search|Write|Edit|Run|List|Plan)\b/i);
+  if (directMatch?.[1]) {
+    return directMatch[1][0].toUpperCase() + directMatch[1].slice(1).toLowerCase();
+  }
+  if (/^Sending request to OpenClaw$/i.test(normalized)) {
+    return "Send";
+  }
+  if (/^Waiting for OpenClaw to respond$/i.test(normalized)) {
+    return "Wait";
+  }
+  if (/^Generate image\b/i.test(normalized)) {
+    return "Generate image";
+  }
+  if (/^Chat failed\b/i.test(normalized)) {
+    return "Failed";
+  }
+  if (/^Chat aborted\b/i.test(normalized)) {
+    return "Aborted";
+  }
+  return undefined;
+}
+
 function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTranscriptBlock[] {
   const blocks: ProgressTranscriptBlock[] = [];
   let exploredLines: string[] = [];
@@ -845,7 +873,14 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
     flushExploredLines();
     blocks.push({
       type: "narrative",
-      entry: { ...entry, text },
+      entry: {
+        ...entry,
+        text,
+        label:
+          entry.kind === "activity"
+            ? (entry.label ?? inferProgressEntryLabel(text))
+            : entry.label,
+      },
       section: entry.kind,
     });
   }
@@ -1129,6 +1164,13 @@ type RunStateDetail = {
   text: string;
 };
 
+function summarizeEntryDetailLabel(entry: MessageProgressEntry): string {
+  if (entry.kind === "activity") {
+    return entry.label ?? inferProgressEntryLabel(entry.text) ?? PROGRESS_SECTION_META.activity.compactTitle;
+  }
+  return entry.label ?? PROGRESS_SECTION_META.thinking.compactTitle;
+}
+
 function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunStateDetail | null {
   const compactDetail = (value: string): string | null => {
     const trimmed = value.trim();
@@ -1147,7 +1189,7 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunSt
       const detail = compactDetail(block.entry.text);
       if (detail) {
         return {
-          label: PROGRESS_SECTION_META[block.section].compactTitle,
+          label: summarizeEntryDetailLabel(block.entry),
           text: detail,
         };
       }
@@ -1156,14 +1198,14 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunSt
     if (block.lines.length > 0) {
       if (block.rawCount > 1) {
         return {
-          label: PROGRESS_SECTION_META[block.section].compactTitle,
+          label: "Explored",
           text: `Explored ${block.rawCount} actions`,
         };
       }
       const detail = compactDetail(block.lines[block.lines.length - 1]);
       if (detail) {
         return {
-          label: PROGRESS_SECTION_META[block.section].compactTitle,
+          label: "Explored",
           text: detail,
         };
       }

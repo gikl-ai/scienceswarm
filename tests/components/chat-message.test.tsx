@@ -588,7 +588,7 @@ describe("ChatMessage", () => {
     );
 
     expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
-      "Activity",
+      "Explored",
     );
     expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
       "Explored 3 actions",
@@ -690,9 +690,35 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(runState).toHaveTextContent("Activity");
+    expect(runState).toHaveTextContent("Read");
     expect(runState).toHaveTextContent("Read docs/results_table.csv");
     expect(runState).not.toHaveTextContent("Plan: inspect the saved chart.");
+  });
+
+  it("prefers explicit progress metadata labels in the live run-state detail", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text: "Waiting for OpenClaw to respond",
+            source: "server",
+            phase: "waiting",
+            status: "running",
+            label: "Wait",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const runState = screen.getByTestId("assistant-run-state");
+    expect(runState).toHaveTextContent("Wait");
+    expect(runState).toHaveTextContent("Waiting for OpenClaw to respond");
+    expect(runState).not.toHaveTextContent("Activity");
   });
 
   it("wraps long run-state detail content without forcing horizontal overflow", () => {
