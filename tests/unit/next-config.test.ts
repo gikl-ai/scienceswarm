@@ -18,4 +18,13 @@ describe("next.config", () => {
   it("leaves output unchanged for the default web app build", () => {
     expect(resolveBuildOutput({})).toBeUndefined();
   });
+
+  it("keeps capacitor export precedence over standalone desktop packaging", () => {
+    expect(
+      resolveBuildOutput({
+        CAPACITOR_BUILD: "1",
+        SCIENCESWARM_STANDALONE_BUILD: "1",
+      }),
+    ).toBe("export");
+  });
 });
