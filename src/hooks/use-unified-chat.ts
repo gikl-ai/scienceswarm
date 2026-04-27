@@ -1966,6 +1966,41 @@ function extractServerProgressUpdate(
   return update;
 }
 
+function extractAssistantTranscriptEvent(
+  parsed: Record<string, unknown>,
+): { text: string; mode: "append" | "replace" } | null {
+  const transcript = asRecord(parsed.transcript);
+  if (!transcript) {
+    return null;
+  }
+
+  const transcriptType = firstNonEmptyString(
+    transcript.type,
+    transcript.event,
+    transcript.kind,
+  );
+  if (transcriptType && transcriptType !== "assistant_transcript") {
+    return null;
+  }
+
+  const text = firstNonEmptyTextContent(
+    transcript.text,
+    transcript.delta,
+    transcript.content,
+    transcript.message,
+  );
+  if (!text) {
+    return null;
+  }
+
+  return {
+    text: sanitizeOpenClawUserVisibleResponse(text, {
+      trimEnd: false,
+    }),
+    mode: transcript.mode === "replace" ? "replace" : "append",
+  };
+}
+
 function extractOpenClawProgressUpdate(progress: {
   type?: unknown;
   method?: unknown;
@@ -3676,6 +3711,25 @@ export function useUnifiedChat(
 
           // Keep timing meta in the SSE stream for benchmark/debug consumers,
           // but do not surface it as visible transcript rows in the chat UI.
+
+          const transcriptEvent = extractAssistantTranscriptEvent(parsed);
+          if (transcriptEvent && isSendContextCurrent(context)) {
+            sawProgressEvent = true;
+            applyMessagesUpdate((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      content:
+                        transcriptEvent.mode === "replace"
+                          ? transcriptEvent.text
+                          : mergeStreamingText(m.content, transcriptEvent.text),
+                    }
+                  : m,
+              ),
+            );
+            continue;
+          }
 
           // Handle gateway WebSocket progress events — intermediate agent
           // activity forwarded as { progress: { type, method, payload } }.
