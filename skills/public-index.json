@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-27T06:10:46.884Z",
+  "generatedAt": "2026-04-27T06:22:09.765Z",
   "skills": [
     {
       "slug": "db-arxiv",
@@ -497,6 +497,25 @@
       "owner": "scienceswarm",
       "status": "ready",
       "summary": "A cross-host planning skill for moving from a source artifact to an executable reproduction or implementation plan."
+    },
+    {
+      "slug": "scienceswarm-research-design-review",
+      "name": "ScienceSwarm Research Design Review",
+      "description": "Review and upgrade a research idea, protocol, brown-bag brief, or study plan into an execution-ready research design document with validity checks, analysis plan, reproducibility package, and handoff tasks.",
+      "tags": [
+        "science",
+        "research-design",
+        "review",
+        "planning"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A rigorous pre-execution research design review for scientists, mathematicians, social scientists, and engineers. Produces a saved Execution-Ready Research Design with claims, method fit, validity threats, workstreams, tests, reproducibility, and publication fit."
     },
     {
       "slug": "scienceswarm-research-reasoning",
