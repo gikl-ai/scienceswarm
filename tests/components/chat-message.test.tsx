@@ -1373,6 +1373,36 @@ describe("ChatMessage", () => {
     expect(progressLog).not.toHaveTextContent("Working (");
   });
 
+  it("collapses long stored progress transcripts until the user expands them", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        progressLog={[
+          { kind: "thinking", text: "Planning how to inspect the chart files." },
+          { kind: "activity", text: "Preparing workspace context" },
+          { kind: "thinking", text: "Comparing prior chart revisions." },
+          { kind: "activity", text: "Waiting for OpenClaw to respond" },
+          { kind: "thinking", text: "Drafting the summary notes." },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:00.000Z")}
+        isStreaming={false}
+      />,
+    );
+
+    const transcript = screen.getByTestId("assistant-progress-transcript");
+    expect(within(transcript).getByText("Planning how to inspect the chart files.")).toBeInTheDocument();
+    expect(within(transcript).getByText("Preparing workspace context")).toBeInTheDocument();
+    expect(within(transcript).queryByText("Drafting the summary notes.")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("assistant-progress-transcript-toggle"));
+
+    expect(within(transcript).getByText("Drafting the summary notes.")).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-progress-transcript-toggle")).toHaveTextContent(
+      "Hide transcript",
+    );
+  });
+
   it("renders workspace media hints as chat media", () => {
     render(
       <ChatMessage
