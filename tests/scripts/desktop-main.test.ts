@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   resolveDesktopDiagnostics,
+  resolveDesktopLaunchMarkerPath,
   resolveDesktopStartPath,
   resolveDesktopStartUrl,
   resolveStandaloneEntry,
@@ -18,6 +19,10 @@ describe("desktop main", () => {
 
   it("defaults the desktop shell to the setup route", () => {
     expect(resolveDesktopStartPath({})).toBe("/setup");
+  });
+
+  it("defaults returning users to the main route", () => {
+    expect(resolveDesktopStartPath({}, { firstLaunchComplete: true })).toBe("/");
   });
 
   it("normalizes a custom desktop start path override", () => {
@@ -45,6 +50,14 @@ describe("desktop main", () => {
       userDataPath: "/tmp/user-data",
       logsPath: "/tmp/logs",
     });
+  });
+
+  it("resolves the desktop first-launch marker path under userData", () => {
+    expect(resolveDesktopLaunchMarkerPath({
+      getPath() {
+        return "/tmp/user-data";
+      },
+    })).toBe(path.join("/tmp/user-data", "desktop-first-launch.json"));
   });
 
   it("resolves the standalone launcher path from the project root", () => {
