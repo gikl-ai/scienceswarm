@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-26T22:47:40.403Z",
+  "generatedAt": "2026-04-27T05:31:46.912Z",
   "skills": [
     {
       "slug": "db-arxiv",
@@ -189,22 +189,6 @@
       "summary": "Fetch structures from RCSB PDB by PDB ID or search PDB entries"
     },
     {
-      "slug": "study-organizer",
-      "name": "Study Organizer",
-      "description": "Use when the user asks to organize a study, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm.",
-      "tags": [
-        "scienceswarm",
-        "product",
-        "organization"
-      ],
-      "hosts": [
-        "openclaw"
-      ],
-      "owner": "scienceswarm",
-      "status": "ready",
-      "summary": "Use when the user asks to organize a study, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm."
-    },
-    {
       "slug": "db-pubmed",
       "name": "PubMed Database Wrapper",
       "description": "Fetch papers from PubMed by PMID or DOI, or search PubMed by query",
@@ -297,6 +281,25 @@
       "owner": "scienceswarm",
       "status": "ready",
       "summary": "Help users set up and use the Research Radar feature for personalized daily briefings. Use when someone asks about monitoring papers, getting research updates, configuring radar topics, or running on-demand briefings."
+    },
+    {
+      "slug": "scienceswarm-brown-bag",
+      "name": "ScienceSwarm Brown Bag",
+      "description": "Stress-test an early research idea into a sharper research question, decisive test, hard-objection map, and next research assignment.",
+      "tags": [
+        "science",
+        "research-design",
+        "planning",
+        "brown-bag"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A rigorous brown-bag partner for scientists, mathematicians, social scientists, and engineers: turn a rough research idea into a Research Brown Bag Brief with premises, objections, alternative framings, and the smallest decisive next test."
     },
     {
       "slug": "scienceswarm-evidence-triangulation",
@@ -746,6 +749,24 @@
       "summary": "Sixth and final step of the SCM pipeline: produce the publication-grade HTML deliverable."
     },
     {
+      "slug": "scientific-report-html",
+      "name": "Scientific Report (HTML)",
+      "description": "Render a typed JSON spec into a sophisticated, themed HTML report — magazine-grade typography, embedded interactive Plotly figures, plot/figure captions, validation tables, and glossary. Currently ships a 'broadsheet' theme used by the SCM-IR quickstart; intended as the shared renderer for any ScienceSwarm tutorial that wants a polished output page alongside its raw artifacts.",
+      "tags": [
+        "scienceswarm",
+        "tutorial",
+        "presentation",
+        "html",
+        "renderer"
+      ],
+      "hosts": [
+        "cli"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Theme-driven HTML report renderer. Consumes a JSON spec and emits a single HTML file (interactive Plotly charts and Google Fonts loaded from CDNs at view time)."
+    },
+    {
       "slug": "db-semantic-scholar",
       "name": "Semantic Scholar Database Wrapper",
       "description": "Fetch papers from Semantic Scholar by ID, or search Semantic Scholar by query",
@@ -761,6 +782,22 @@
       "owner": "scienceswarm",
       "status": "ready",
       "summary": "Fetch papers from Semantic Scholar by ID, or search Semantic Scholar by query"
+    },
+    {
+      "slug": "study-organizer",
+      "name": "Study Organizer",
+      "description": "Use when the user asks to organize a study, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm.",
+      "tags": [
+        "scienceswarm",
+        "product",
+        "organization"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Use when the user asks to organize a study, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm."
     },
     {
       "slug": "db-uniprot",
