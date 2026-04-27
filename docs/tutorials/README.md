@@ -7,6 +7,7 @@
 | [ScienceSwarm MD pipeline walkthrough](md-pipeline-walkthrough.md) | The eight MD planning skills (`scienceswarm-md-*`) walked end-to-end on the lysozyme example, with the asset shapes each skill produces. | reading-time |
 | [SCM-IR quickstart — synthetic control for international relations shocks](scm-ir-quickstart/README.md) | UI-driven Claude Code workflow: pull World Bank panels, fit classic Abadie SCM plus modern variants, run placebos, and render a single interactive HTML report for Brexit, Russia 2022, and Basque Country / ETA terrorism. | ~10 min after R setup |
 | [ScienceSwarm SCM pipeline walkthrough](scm-pipeline-walkthrough.md) | The six SCM skills (`/scm-question` through `/scm-report`) walked end-to-end from the ScienceSwarm UI, including gbrain assets and execution provenance. | reading-time |
+| [SCM from scratch](scm-from-scratch/README.md) | Advanced UI-only path for the same SCM-IR question: plan the analysis first, generate R code stage by stage, approve each action, and surface comparable reports and diagnostics from an empty project. | reading-time |
 
 Tutorials are deliberately conservative: they use textbook test
 systems (lysozyme, q=4 SYK at moderate N), well-established reference
