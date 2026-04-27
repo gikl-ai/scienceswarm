@@ -29,6 +29,9 @@ function ChatHarness({ projectName }: { projectName: string }) {
     artifactProvenance,
     generatedArtifacts,
     runtimeCompareResult,
+    browserChatRecovery,
+    restoreBrowserChat,
+    dismissBrowserChatRecovery,
     uploadedFiles,
     addWorkspaceFileToChatContext,
     checkChanges,
@@ -116,6 +119,8 @@ function ChatHarness({ projectName }: { projectName: string }) {
       <button onClick={() => setChatMode("openclaw-tools")}>Use OpenClaw tools</button>
       <button onClick={() => setChatMode("reasoning")}>Use Reasoning</button>
       <button onClick={() => void checkChanges()}>Check changes</button>
+      <button onClick={restoreBrowserChat}>Restore browser chat</button>
+      <button onClick={dismissBrowserChatRecovery}>Dismiss browser chat</button>
       <button
         onClick={() => {
           setLastAddResult(String(addWorkspaceFileToChatContext({
@@ -167,6 +172,11 @@ function ChatHarness({ projectName }: { projectName: string }) {
       <div data-testid="last-add-result">{lastAddResult}</div>
       <div data-testid="artifact-count">{String(artifactProvenance.length)}</div>
       <div data-testid="generated-artifact-count">{String(generatedArtifacts.length)}</div>
+      <div data-testid="browser-chat-recovery">
+        {browserChatRecovery
+          ? `${browserChatRecovery.projectName}:${browserChatRecovery.messageCount}:${browserChatRecovery.latestMessageAt ?? ""}`
+          : ""}
+      </div>
       <div data-testid="generated-artifact-log">
         {generatedArtifacts.map((artifact) => artifact.path).join("\n")}
       </div>
@@ -349,6 +359,142 @@ describe("useUnifiedChat persistence", () => {
         expect.stringContaining("/api/workspace"),
       ]),
     );
+  });
+
+  it("does not silently restore legacy browser chat for a new local install", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        localInstallId: "old-install",
+        conversationId: "old-conversation",
+        conversationBackend: "openclaw",
+        messages: [
+          {
+            id: "old-user",
+            role: "user",
+            content: "Old browser-only prompt",
+            timestamp: "2026-04-20T12:00:00.000Z",
+            channel: "web",
+          },
+          {
+            id: "old-assistant",
+            role: "assistant",
+            content: "Old browser-only answer",
+            timestamp: "2026-04-20T12:00:01.000Z",
+          },
+        ],
+      }),
+    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/local-install") {
+        return Response.json({ localInstallId: "new-install" });
+      }
+      if (url === "/api/chat/thread?study=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          conversationBackend: null,
+          messages: [],
+          artifactProvenance: [],
+        });
+      }
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ tree: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("browser-chat-recovery").textContent).toContain(
+        "alpha-project:2:",
+      );
+    });
+    expect(screen.getByTestId("message-log").textContent).not.toContain("Old browser-only");
+    expect(screen.getByTestId("conversation-id").textContent).toBe("");
+
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    expect(window.localStorage.getItem("scienceswarm.chat.new-install.alpha-project")).toBeNull();
+    expect(window.localStorage.getItem("scienceswarm.chat.alpha-project")).not.toBeNull();
+  });
+
+  it("restores legacy browser chat only after the user chooses restore", async () => {
+    window.localStorage.setItem(
+      "scienceswarm.chat.alpha-project",
+      JSON.stringify({
+        version: 1,
+        localInstallId: "old-install",
+        conversationId: "old-conversation",
+        conversationBackend: "openclaw",
+        messages: [
+          {
+            id: "old-user",
+            role: "user",
+            content: "Old browser-only prompt",
+            timestamp: "2026-04-20T12:00:00.000Z",
+            channel: "web",
+          },
+        ],
+      }),
+    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+      if (url === "/api/local-install") {
+        return Response.json({ localInstallId: "new-install" });
+      }
+      if (url === "/api/chat/thread?study=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          conversationBackend: null,
+          messages: [],
+          artifactProvenance: [],
+        });
+      }
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({ openclaw: "connected" });
+      }
+      if (url.startsWith("/api/workspace")) {
+        return Response.json({ tree: [] });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("browser-chat-recovery").textContent).toContain("alpha-project:1:");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore browser chat" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("Old browser-only prompt");
+    });
+    expect(screen.getByTestId("conversation-id").textContent).toBe("old-conversation");
+    expect(screen.getByTestId("browser-chat-recovery").textContent).toBe("");
+
+    const scoped = JSON.parse(
+      window.localStorage.getItem("scienceswarm.chat.new-install.alpha-project") ?? "{}",
+    ) as { localInstallId?: string; conversationId?: string };
+    expect(scoped.localInstallId).toBe("new-install");
+    expect(scoped.conversationId).toBe("old-conversation");
   });
 
   it("restores the prior project conversation and conversationId after remount", async () => {
