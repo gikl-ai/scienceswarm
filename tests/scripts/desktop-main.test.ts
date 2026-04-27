@@ -44,7 +44,7 @@ describe("desktop main", () => {
       getPath(name) {
         return name === "userData" ? "/tmp/user-data" : "/tmp/logs";
       },
-    })).toMatchObject({
+    }, {})).toMatchObject({
       shell: "electron",
       startUrl: "https://127.0.0.1:3001/setup",
       userDataPath: "/tmp/user-data",
