@@ -29,7 +29,7 @@ import { getProjectBrainRootPath } from "@/lib/state/project-storage";
 import { readProjectManifest } from "@/lib/state/project-manifests";
 import { readJsonFile, writeJsonFile } from "@/lib/state/atomic-json";
 import { hashContent } from "@/lib/workspace-manager";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 import { shouldSkipImportDirectory, shouldSkipImportFile } from "@/lib/import/ignore";
 
 const MAX_FILE_SIZE = LARGE_FILE_FINGERPRINT_THRESHOLD_BYTES;
