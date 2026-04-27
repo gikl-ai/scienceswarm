@@ -169,6 +169,8 @@ const EXPLORE_COMMAND_PREFIXES = [
   "Waited for background terminal",
   "Interacted with background terminal",
 ];
+const COLLAPSED_PROGRESS_BLOCK_LIMIT = 3;
+const MIN_PROGRESS_BLOCKS_TO_COLLAPSE = 5;
 const COMPACT_STEP_VERB_LABELS: Record<Step["verb"], string> = {
   reading: "Reading",
   searching: "Searching",
@@ -1848,6 +1850,7 @@ export function ChatMessage({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const copyFeedbackTimerRef = useRef<number | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [isStoredTranscriptExpanded, setIsStoredTranscriptExpanded] = useState(false);
   const hasCopyableText = content.trim().length > 0 && !isStreaming;
   const timestampText = `${timestamp.toLocaleDateString(undefined, {
     month: "short",
@@ -1907,6 +1910,17 @@ export function ChatMessage({
   const footerRowClass = isAssistantTurn
     ? "mt-4 flex items-center justify-end"
     : "mt-3 flex items-center justify-end gap-3";
+  const shouldCollapseStoredTranscript =
+    useCompactAssistantTranscript
+    && progressTranscript.length >= MIN_PROGRESS_BLOCKS_TO_COLLAPSE;
+  const visibleStoredTranscript =
+    shouldCollapseStoredTranscript && !isStoredTranscriptExpanded
+      ? progressTranscript.slice(0, COLLAPSED_PROGRESS_BLOCK_LIMIT)
+      : progressTranscript;
+  const hiddenStoredTranscriptCount = Math.max(
+    0,
+    progressTranscript.length - COLLAPSED_PROGRESS_BLOCK_LIMIT,
+  );
 
   useEffect(() => () => {
     if (copyFeedbackTimerRef.current !== null) {
@@ -2024,12 +2038,24 @@ export function ChatMessage({
           role="log"
         >
           <AssistantProgressTranscript
-            blocks={progressTranscript}
+            blocks={visibleStoredTranscript}
             workingElapsed={workingElapsed}
             renderInlineContent={renderInlineMarkdownLite}
             shouldRenderMarkdownBlock={shouldRenderProgressMarkdownBlock}
             renderMarkdownBlock={renderProgressMarkdown}
           />
+          {shouldCollapseStoredTranscript && (
+            <button
+              type="button"
+              data-testid="assistant-progress-transcript-toggle"
+              className="inline-flex items-center gap-2 rounded-full border border-rule bg-raised px-3 py-1 text-[11px] font-medium text-body transition hover:bg-sunk"
+              onClick={() => setIsStoredTranscriptExpanded((current) => !current)}
+            >
+              {isStoredTranscriptExpanded
+                ? "Hide transcript"
+                : `Show full transcript (${hiddenStoredTranscriptCount} more block${hiddenStoredTranscriptCount === 1 ? "" : "s"})`}
+            </button>
+          )}
         </div>
       )}
 
