@@ -120,6 +120,7 @@ describe("SCM from-scratch skill pack", () => {
           expect(raw).toContain("treated and donor identifiers");
           expect(raw).toContain("non-empty pre/post windows");
           expect(raw).toContain("placebo-summary.csv");
+          expect(raw).toContain("in-time-placebo.csv");
           expect(raw).toContain("leave-one-out.csv");
         }
       }

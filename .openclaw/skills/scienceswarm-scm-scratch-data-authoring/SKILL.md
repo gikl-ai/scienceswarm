@@ -34,14 +34,14 @@ Do not write `install.packages(...)`, `remotes::install_*`, `pak::pkg_install(..
    - analysis/scm-from-scratch/code/02_build_panels.R
 4. For the SCM-IR from-scratch tutorial, pull World Bank Development Indicators for Brexit and Russia cases, use the public Synth::basque data for the Basque case, and build the same unit-time case structure as the quickstart without copying its scripts. Preserve quickstart-comparable main donor pools unless the user approves a redesign: do not exclude Madrid, Catalonia, or Navarre from the Basque main specification by default; record them as sensitivity exclusions instead.
 5. Treat outcome coverage, minimum donor count, and minimum pre-treatment length as hard gates. Treat sparse auxiliary predictors, including human-capital or schooling proxies, as optional: drop them with an audit note when coverage is weak instead of failing an otherwise usable panel.
-5. Validate raw and prepared outputs:
+6. Validate raw and prepared outputs:
    - analysis/scm-from-scratch/data/raw/
    - analysis/scm-from-scratch/data/prepared/brexit.rds
    - analysis/scm-from-scratch/data/prepared/russia.rds
    - analysis/scm-from-scratch/data/prepared/basque.rds
    - analysis/scm-from-scratch/output/tables/data-audit.csv
-6. Stop if any case has too few pre-treatment observations, too few donors, missing outcome coverage, or undocumented exclusions. Do not stop only because an optional predictor is sparse; revise the predictor set and record the decision in the data audit.
-7. Produce an SCM From-Scratch Data Plan with asset_kind: scm_scratch_data_plan.
+7. Stop if any case has too few pre-treatment observations, too few donors, missing outcome coverage, or undocumented exclusions. Do not stop only because an optional predictor is sparse; revise the predictor set and record the decision in the data audit.
+8. Produce an SCM From-Scratch Data Plan with asset_kind: scm_scratch_data_plan.
 
 ## Execution Gate
 

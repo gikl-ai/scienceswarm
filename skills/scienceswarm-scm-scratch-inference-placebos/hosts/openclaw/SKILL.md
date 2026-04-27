@@ -40,6 +40,7 @@ Before each placebo, in-time, or leave-one-out refit, generated code must valida
 4. Label any fast tutorial approximation separately from full refitting.
 5. Write outputs to:
    - analysis/scm-from-scratch/output/tables/placebo-summary.csv
+   - analysis/scm-from-scratch/output/tables/in-time-placebo.csv
    - analysis/scm-from-scratch/output/tables/leave-one-out.csv
    - analysis/scm-from-scratch/output/figures/placebo-distribution.*
    - analysis/scm-from-scratch/output/notes/inference.md
