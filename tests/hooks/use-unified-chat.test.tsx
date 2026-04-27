@@ -1117,6 +1117,106 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
+  it("does not persist redundant assistant activityLog when progressLog is present", async () => {
+    const deferredStream = createDeferredSseResponse();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return deferredStream.response;
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    act(() => {
+      deferredStream.send({
+        progress: {
+          method: "agent.tool",
+          payload: {
+            data: {
+              phase: "start",
+              name: "read_file",
+              input: { path: "docs/results_table.csv" },
+            },
+          },
+        },
+      });
+      deferredStream.send({ text: "Done" });
+      deferredStream.close();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem("scienceswarm.chat.alpha-project") || "null",
+    ) as {
+      messages?: Array<{
+        role?: string;
+        content?: string;
+        activityLog?: string[];
+        progressLog?: Array<{ text?: string }>;
+      }>;
+    } | null;
+
+    const storedAssistant = persisted?.messages?.find((message) =>
+      message.role === "assistant" && message.content === "Done"
+    );
+
+    expect(storedAssistant?.progressLog).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: "Sending request to OpenClaw",
+        }),
+        expect.objectContaining({
+          text: "Waiting for OpenClaw to respond",
+        }),
+        expect.objectContaining({
+          text: "Read docs/results_table.csv",
+        }),
+      ]),
+    );
+    expect(storedAssistant?.activityLog).toBeUndefined();
+  });
+
   it("does not POST the restored thread back to the server on the first hydration render", async () => {
     window.localStorage.setItem(
       "scienceswarm.chat.alpha-project",
@@ -5098,6 +5198,87 @@ describe("useUnifiedChat persistence", () => {
     await waitFor(() => {
       expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
     });
+  });
+
+  it("captures structured server progress metadata from the SSE stream", async () => {
+    const deferredStream = createDeferredSseResponse();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return deferredStream.response;
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    act(() => {
+      deferredStream.send({
+        progress: {
+          type: "server_progress",
+          payload: {
+            text: "Preparing workspace context",
+            source: "server",
+            phase: "workspace",
+            status: "running",
+            label: "Workspace",
+            timestampMs: 1713523200456,
+          },
+        },
+      });
+      deferredStream.send({ text: "Done" });
+      deferredStream.close();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+
+    expect(screen.getByTestId("progress-log").textContent).toContain(
+      "activity:Preparing workspace context",
+    );
+    expect(screen.getByTestId("progress-log-meta").textContent).toContain(
+      "server/workspace/running/Workspace/1713523200456",
+    );
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
+      "Preparing workspace context",
+    );
   });
 
   it("does not emit the waiting narration when a non-streaming chat response fails", async () => {

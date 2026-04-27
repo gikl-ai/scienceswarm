@@ -1,0 +1,25 @@
+{
+  "slug": "scienceswarm-scm-scratch-method-choice",
+  "name": "ScienceSwarm SCM From-Scratch Method Choice",
+  "description": "Author method-comparison code for from-scratch SCM results and decide whether classic SCM is robust enough to carry forward.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "robustness",
+    "from-scratch"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Fourth step of the from-scratch SCM workflow: compare classic SCM with modern variants and gate reporting on method-level robustness.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-26T00:00:00.000Z",
+  "updatedAt": "2026-04-26T00:00:00.000Z"
+}

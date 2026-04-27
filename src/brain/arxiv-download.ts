@@ -57,11 +57,47 @@ export function isArxivReference(source: string): boolean {
   return resolveArxivSource(source) !== null;
 }
 
-// Track the last download time for rate limiting
+// Track the last arXiv host hit for rate limiting. Module-level so the
+// limiter is shared across every consumer that imports
+// `applyArxivRateLimit` — arxiv.org's 3 s policy is per-IP, so the
+// PDF downloader and the e-print source downloader (and any future
+// arxiv.org consumer) must all serialise through one timer.
 let lastDownloadTime = 0;
 const ARXIV_RATE_LIMIT_MS = 3000;
 // Allow real-world PDF downloads to complete while still bounding ingest latency.
 const ARXIV_FETCH_TIMEOUT_MS = 15000;
+
+/**
+ * Cooperative rate-limit gate for outbound arxiv.org requests.
+ *
+ * Sleeps if needed so that successive callers honour arxiv's
+ * recommended 3 s gap between requests. Exported so the e-print
+ * source downloader (`arxiv-source.ts`) can serialise through the
+ * same timer as `downloadArxivPdf`.
+ *
+ * Reservation discipline: when the caller has to wait, we set
+ * `lastDownloadTime` to the *target wake-up time* before yielding,
+ * not after. Otherwise two concurrent callers entering this function
+ * with a stale `lastDownloadTime` would read the same value, compute
+ * identical sleep durations, wake up together, and fire two requests
+ * simultaneously — exactly the race the shared timer is meant to
+ * prevent. With reservation in place, a second caller observing a
+ * `lastDownloadTime` that's still in the future sleeps for an
+ * additional full window past it instead.
+ */
+export async function applyArxivRateLimit(opts: { rateLimitMs?: number } = {}): Promise<void> {
+  const rateLimitMs = opts.rateLimitMs ?? ARXIV_RATE_LIMIT_MS;
+  const now = Date.now();
+  const elapsed = now - lastDownloadTime;
+  if (lastDownloadTime > 0 && elapsed < rateLimitMs) {
+    const waitMs = rateLimitMs - elapsed;
+    // Reserve the slot at the target wake time before yielding.
+    lastDownloadTime = now + waitMs;
+    await sleep(waitMs);
+  } else {
+    lastDownloadTime = now;
+  }
+}
 
 /**
  * Download an arXiv PDF to the destination directory.
@@ -92,15 +128,8 @@ export async function downloadArxivPdf(
     // Otherwise re-download (corrupt/incomplete)
   }
 
-  // Rate limiting: wait if needed
-  const now = Date.now();
-  const elapsed = now - lastDownloadTime;
-  if (elapsed < ARXIV_RATE_LIMIT_MS && lastDownloadTime > 0) {
-    const waitMs = ARXIV_RATE_LIMIT_MS - elapsed;
-    await sleep(waitMs);
-  }
-
-  lastDownloadTime = Date.now();
+  // Rate limiting: wait if needed (shared timer with arxiv-source).
+  await applyArxivRateLimit();
 
   let response: Response;
   try {

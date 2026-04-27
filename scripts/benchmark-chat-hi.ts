@@ -40,6 +40,7 @@ export interface ChatBenchmarkSummary {
   firstChunkMs: number | null;
   firstChunkSharedHeadersTick: boolean;
   totalMs: number;
+  observedLatencySplit?: ChatBenchmarkObservedLatencySplit;
   bytes: number;
   eventCount: number;
   progressEventCount: number;
@@ -58,8 +59,25 @@ export interface ChatBenchmarkReportRowMetadata {
 export interface ChatBenchmarkTimingPhaseSummary {
   name: string;
   durationMs: number;
+  startedAtMs?: number;
+  endedAtMs?: number;
   skipped?: boolean;
   inferred?: boolean;
+}
+
+export interface ChatBenchmarkObservedSplit {
+  chatReadinessDurationMs: number | null;
+  gatewayConnectAuthDurationMs: number | null;
+  requestToSendAckMs: number | null;
+  requestToFirstGatewayEventMs: number | null;
+  requestToFirstAssistantTextMs: number | null;
+  requestToFinalAssistantTextMs: number | null;
+}
+
+export interface ChatBenchmarkObservedLatencySplit {
+  browserToServerHeadersMs: number;
+  serverToFirstChunkMs: number | null;
+  firstChunkToCompleteMs: number | null;
 }
 
 export interface ChatBenchmarkTimingArtifactSummary {
@@ -71,6 +89,7 @@ export interface ChatBenchmarkTimingArtifactSummary {
   phaseCount: number;
   phases: ChatBenchmarkTimingPhaseSummary[];
   promptCharCounts: Record<string, number>;
+  observedSplit: ChatBenchmarkObservedSplit | null;
 }
 
 export type ChatBenchmarkTimingArtifactUnavailableReason =
@@ -224,6 +243,17 @@ export function summarizeChatBenchmarkResponse(params: {
     typeof params.firstChunkMs === "number"
       ? Math.round(params.firstChunkMs)
       : null;
+  const observedLatencySplit: ChatBenchmarkObservedLatencySplit = {
+    browserToServerHeadersMs: roundedHeadersMs,
+    serverToFirstChunkMs:
+      roundedFirstChunkMs === null
+        ? null
+        : Math.max(0, roundedFirstChunkMs - roundedHeadersMs),
+    firstChunkToCompleteMs:
+      roundedFirstChunkMs === null
+        ? null
+        : Math.max(0, Math.round(params.totalMs) - roundedFirstChunkMs),
+  };
 
   return {
     status: params.status,
@@ -236,6 +266,7 @@ export function summarizeChatBenchmarkResponse(params: {
     firstChunkSharedHeadersTick:
       roundedFirstChunkMs !== null && roundedFirstChunkMs === roundedHeadersMs,
     totalMs: Math.round(params.totalMs),
+    observedLatencySplit,
     bytes: params.bytes,
     eventCount: events.length,
     progressEventCount,
@@ -337,6 +368,102 @@ function formatPromptBudgetHighlights(
   return highlights.length === 0 ? "none" : highlights.join(", ");
 }
 
+function timingPhaseByName(
+  phases: ChatBenchmarkTimingPhaseSummary[],
+  name: string,
+): ChatBenchmarkTimingPhaseSummary | null {
+  for (const phase of phases) {
+    if (phase.name === name && !phase.skipped) {
+      return phase;
+    }
+  }
+  return null;
+}
+
+function timingPhaseStartAnchorMs(
+  phases: ChatBenchmarkTimingPhaseSummary[],
+): number | null {
+  for (const phase of phases) {
+    if (typeof phase.startedAtMs !== "number") {
+      continue;
+    }
+    return phase.startedAtMs;
+  }
+  return null;
+}
+
+function phaseEndedOffsetMs(
+  phases: ChatBenchmarkTimingPhaseSummary[],
+  name: string,
+): number | null {
+  const requestStartedAtMs = timingPhaseStartAnchorMs(phases);
+  const phase = timingPhaseByName(phases, name);
+  if (
+    requestStartedAtMs === null ||
+    !phase ||
+    typeof phase.endedAtMs !== "number"
+  ) {
+    return null;
+  }
+  return Math.max(0, Math.round(phase.endedAtMs - requestStartedAtMs));
+}
+
+function buildObservedTimingSplit(
+  phases: ChatBenchmarkTimingPhaseSummary[],
+): ChatBenchmarkObservedSplit | null {
+  const observedSplit: ChatBenchmarkObservedSplit = {
+    chatReadinessDurationMs:
+      timingPhaseByName(phases, "chat_readiness")?.durationMs ?? null,
+    gatewayConnectAuthDurationMs:
+      timingPhaseByName(phases, "gateway_connect_auth")?.durationMs ?? null,
+    requestToSendAckMs: phaseEndedOffsetMs(phases, "chat_send_ack"),
+    requestToFirstGatewayEventMs: phaseEndedOffsetMs(phases, "first_gateway_event"),
+    requestToFirstAssistantTextMs: phaseEndedOffsetMs(
+      phases,
+      "first_assistant_text",
+    ),
+    requestToFinalAssistantTextMs: phaseEndedOffsetMs(
+      phases,
+      "final_assistant_text",
+    ),
+  };
+
+  return Object.values(observedSplit).some((value) => value !== null)
+    ? observedSplit
+    : null;
+}
+
+function formatObservedTimingArtifactSplit(
+  observedSplit: ChatBenchmarkObservedSplit | null | undefined,
+): string | null {
+  if (!observedSplit) {
+    return null;
+  }
+
+  const parts = [
+    observedSplit.chatReadinessDurationMs === null
+      ? null
+      : `readiness ${observedSplit.chatReadinessDurationMs} ms`,
+    observedSplit.gatewayConnectAuthDurationMs === null
+      ? null
+      : `connect/auth ${observedSplit.gatewayConnectAuthDurationMs} ms`,
+    observedSplit.requestToSendAckMs === null
+      ? null
+      : `request->ack ${observedSplit.requestToSendAckMs} ms`,
+    observedSplit.requestToFirstGatewayEventMs === null
+      ? null
+      : `request->first gateway event ${observedSplit.requestToFirstGatewayEventMs} ms`,
+    observedSplit.requestToFirstAssistantTextMs === null
+      ? null
+      : `request->first assistant text ${observedSplit.requestToFirstAssistantTextMs} ms`,
+    observedSplit.requestToFinalAssistantTextMs === null
+      ? null
+      : `request->final text ${observedSplit.requestToFinalAssistantTextMs} ms`,
+  ].filter((part): part is string => Boolean(part));
+
+  return parts.length === 0 ? null : parts.join(", ");
+}
+
 function isTimingArtifactUnavailable(
   timingArtifact: ChatBenchmarkTimingArtifactResult | null | undefined,
 ): timingArtifact is ChatBenchmarkTimingArtifactUnavailableSummary {
@@ -364,23 +491,29 @@ function formatTimingArtifactUnavailableReason(
 }
 
 function formatObservedLatencySplit(summary: ChatBenchmarkSummary): string {
-  const browserToServerMs = summary.headersMs;
-  const serverToFirstChunkMs =
-    typeof summary.firstChunkMs === "number"
-      ? Math.max(0, summary.firstChunkMs - summary.headersMs)
-      : null;
-  const firstChunkToCompleteMs =
-    typeof summary.firstChunkMs === "number"
-      ? Math.max(0, summary.totalMs - summary.firstChunkMs)
-      : null;
+  const observedLatencySplit = summary.observedLatencySplit ?? {
+    browserToServerHeadersMs: summary.headersMs,
+    serverToFirstChunkMs:
+      typeof summary.firstChunkMs === "number"
+        ? Math.max(0, summary.firstChunkMs - summary.headersMs)
+        : null,
+    firstChunkToCompleteMs:
+      typeof summary.firstChunkMs === "number"
+        ? Math.max(0, summary.totalMs - summary.firstChunkMs)
+        : null,
+  };
 
   return [
-    `browser->server headers ${browserToServerMs} ms`,
+    `browser->server headers ${observedLatencySplit.browserToServerHeadersMs} ms`,
     `server->first chunk ${
-      serverToFirstChunkMs === null ? "n/a" : `${serverToFirstChunkMs} ms`
+      observedLatencySplit.serverToFirstChunkMs === null
+        ? "n/a"
+        : `${observedLatencySplit.serverToFirstChunkMs} ms`
     }`,
     `first chunk->complete ${
-      firstChunkToCompleteMs === null ? "n/a" : `${firstChunkToCompleteMs} ms`
+      observedLatencySplit.firstChunkToCompleteMs === null
+        ? "n/a"
+        : `${observedLatencySplit.firstChunkToCompleteMs} ms`
     }`,
   ].join(", ");
 }
@@ -446,6 +579,10 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
     timingArtifact && !isTimingArtifactUnavailable(timingArtifact)
       ? formatSkippedTimingPhasesForSummary(timingArtifact.phases)
       : null;
+  const observedTimingArtifactSplit =
+    timingArtifact && !isTimingArtifactUnavailable(timingArtifact)
+      ? formatObservedTimingArtifactSplit(timingArtifact.observedSplit)
+      : null;
   return [
     "Chat Hi Benchmark",
     `Status: ${summary.status} ${summary.ok ? "ok" : "failed"}`,
@@ -475,6 +612,9 @@ export function formatBenchmarkSummary(summary: ChatBenchmarkSummary): string {
             `Timing artifact: ${timingArtifact.totalDurationMs} ms, outcome ${
               timingArtifact.outcome ?? "unknown"
             }, status ${timingArtifact.status ?? "unknown"}`,
+            ...(observedTimingArtifactSplit
+              ? [`Server timing: ${observedTimingArtifactSplit}`]
+              : []),
             `Timing phases: ${formatTimingPhasesForSummary(timingArtifact.phases)}`,
             ...(skippedTimingPhases
               ? [`Skipped phases: ${skippedTimingPhases}`]
@@ -497,14 +637,14 @@ export function benchmarkHelpText(): string {
     "Usage: npx tsx scripts/benchmark-chat-hi.ts [options]",
     "",
     "Options:",
-    "  --url <url>              ScienceSwarm origin; path/query/hash are stripped (default: http://127.0.0.1:3001)",
+    "  --url <url>              ScienceSwarm origin; path/query/hash are stripped (default: http://localhost:3001)",
     "  --project <slug>         Project slug (default: test)",
     "  --message <text>         Message to send (default: Hi)",
     "  --conversation-id <id>   Conversation id for the benchmark turn",
     "  --timeout-ms <ms>        Abort after this many ms (default: 120000)",
     "  --no-stream-phases       Disable streamPhases for comparison",
     "  --timing-artifact        Fetch the latest local /api/chat/timing artifact after the run",
-    "  --json                   Print machine-readable JSON",
+    "  --json                   Print machine-readable JSON, including observedLatencySplit and timingArtifact details when available",
   ].join("\n");
 }
 
@@ -514,7 +654,7 @@ export function parseBenchmarkArgs(
 ): ChatBenchmarkOptions {
   const options: ChatBenchmarkOptions = {
     baseUrl: normalizeBenchmarkBaseUrl(
-      env.SCIENCESWARM_CHAT_URL ?? "http://127.0.0.1:3001",
+      env.SCIENCESWARM_CHAT_URL ?? "http://localhost:3001",
     ),
     projectId: env.SCIENCESWARM_CHAT_PROJECT ?? "test",
     message: env.SCIENCESWARM_CHAT_MESSAGE ?? "Hi",
@@ -608,6 +748,12 @@ export function summarizeLatestTimingArtifact(
         return [{
           name,
           durationMs: Math.round(durationMs),
+          ...(typeof phase.startedAtMs === "number"
+            ? { startedAtMs: Math.round(phase.startedAtMs) }
+            : {}),
+          ...(typeof phase.endedAtMs === "number"
+            ? { endedAtMs: Math.round(phase.endedAtMs) }
+            : {}),
           ...(typeof phase.skipped === "boolean"
             ? { skipped: phase.skipped }
             : {}),
@@ -636,6 +782,7 @@ export function summarizeLatestTimingArtifact(
     phaseCount: phases.length,
     phases,
     promptCharCounts,
+    observedSplit: buildObservedTimingSplit(phases),
   };
 }
 

@@ -310,6 +310,18 @@ planning, acceptance, and launch-process docs are not part of this release.
 See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
 and [SECURITY.md](SECURITY.md).
 
+If a change affects OpenClaw chat latency or progress rendering, run the local
+benchmark helper and include the key timing output in the PR body:
+
+```bash
+SCIENCESWARM_CHAT_TIMING=1 npx tsx scripts/benchmark-chat-hi.ts --timing-artifact
+```
+
+See [`docs/local-chat-benchmark.md`](docs/local-chat-benchmark.md) for the
+timing field guide and JSON inspection examples.
+Use `Observed split` to reason about the local route path and `Server timing`
+to reason about downstream OpenClaw or model latency.
+
 ## License
 
 [MIT](LICENSE)

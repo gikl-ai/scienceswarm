@@ -41,6 +41,12 @@ progress behavior:
 SCIENCESWARM_CHAT_TIMING=1 npx tsx scripts/benchmark-chat-hi.ts --timing-artifact
 ```
 
+The helper targets `http://localhost:3001` by default. Use `--url` when your
+local app is bound to a different origin.
+
+For the field-by-field timing guide and JSON inspection examples, see
+[`docs/local-chat-benchmark.md`](docs/local-chat-benchmark.md).
+
 What the key lines mean:
 
 - `Observed split` is the client-visible breakdown from browser request start to
@@ -51,6 +57,11 @@ What the key lines mean:
 - `Server timing` appears when the timing artifact contains the server-side
   milestones, including readiness, connect/auth, send acknowledgement, and the
   first OpenClaw or assistant events.
+
+If `Observed split` is slow before the first streamed chunk, investigate the
+local ScienceSwarm route path first. If `Server timing` is slow after send
+acknowledgement or the first gateway event, the delay is downstream in
+OpenClaw or model execution.
 
 If you include benchmark numbers in a PR body, note the local environment, the
 final text sample, and whether timing artifacts were enabled for that run.

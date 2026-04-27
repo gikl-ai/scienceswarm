@@ -74,6 +74,11 @@ describe("benchmark-chat-hi", () => {
       firstChunkMs: 25,
       firstChunkSharedHeadersTick: false,
       totalMs: 1234,
+      observedLatencySplit: {
+        browserToServerHeadersMs: 13,
+        serverToFirstChunkMs: 12,
+        firstChunkToCompleteMs: 1209,
+      },
       bytes: 321,
       eventCount: 3,
       progressEventCount: 2,
@@ -111,6 +116,11 @@ describe("benchmark-chat-hi", () => {
       finalEventCount: 1,
       finalTextSample: "Hello there.",
       firstChunkSharedHeadersTick: false,
+      observedLatencySplit: {
+        browserToServerHeadersMs: 10,
+        serverToFirstChunkMs: 10,
+        firstChunkToCompleteMs: 80,
+      },
     });
   });
 
@@ -132,6 +142,11 @@ describe("benchmark-chat-hi", () => {
       headersMs: 58,
       firstChunkMs: 58,
       firstChunkSharedHeadersTick: true,
+      observedLatencySplit: {
+        browserToServerHeadersMs: 58,
+        serverToFirstChunkMs: 0,
+        firstChunkToCompleteMs: 62,
+      },
       finalTextSample: "Done.",
     });
   });
@@ -161,6 +176,11 @@ describe("benchmark-chat-hi", () => {
       progressEventCount: 1,
       finalEventCount: 1,
       finalTextSample: "Done.",
+      observedLatencySplit: {
+        browserToServerHeadersMs: 10,
+        serverToFirstChunkMs: 10,
+        firstChunkToCompleteMs: 80,
+      },
     });
   });
 
@@ -183,7 +203,19 @@ describe("benchmark-chat-hi", () => {
       progressEventCount: 0,
       finalEventCount: 0,
       finalTextSample: "Hello from JSON.",
+      observedLatencySplit: {
+        browserToServerHeadersMs: 10,
+        serverToFirstChunkMs: null,
+        firstChunkToCompleteMs: null,
+      },
     });
+  });
+
+  it("defaults the benchmark base URL to localhost for local browser access", () => {
+    expect(parseBenchmarkArgs([], {})).toMatchObject({
+      baseUrl: "http://localhost:3001",
+    });
+    expect(benchmarkHelpText()).toContain("default: http://localhost:3001");
   });
 
   it("parses CLI flags and formats stable output", () => {
@@ -229,6 +261,7 @@ describe("benchmark-chat-hi", () => {
       "http://localhost:4000/api/chat/unified",
     );
     expect(benchmarkHelpText()).toContain("path/query/hash are stripped");
+    expect(benchmarkHelpText()).toContain("observedLatencySplit");
     const formattedWithTiming = formatBenchmarkSummary({
       status: 200,
       ok: true,
@@ -262,6 +295,14 @@ describe("benchmark-chat-hi", () => {
           workspace_files: 0,
           total: 42,
         },
+        observedSplit: {
+          chatReadinessDurationMs: 7,
+          gatewayConnectAuthDurationMs: null,
+          requestToSendAckMs: null,
+          requestToFirstGatewayEventMs: null,
+          requestToFirstAssistantTextMs: null,
+          requestToFinalAssistantTextMs: null,
+        },
       },
     });
     expect(formattedWithTiming).toContain("Total: 100 ms");
@@ -271,6 +312,7 @@ describe("benchmark-chat-hi", () => {
     expect(formattedWithTiming).toContain(
       "Timing phases: project_materialization skipped, chat_readiness 7 ms (inferred)",
     );
+    expect(formattedWithTiming).toContain("Server timing: readiness 7 ms");
     expect(formattedWithTiming).toContain(
       "Skipped phases: project_materialization",
     );
@@ -306,6 +348,7 @@ describe("benchmark-chat-hi", () => {
           phaseCount: 0,
           phases: [],
           promptCharCounts: {},
+          observedSplit: null,
         },
       }),
     ).toContain(
@@ -336,6 +379,7 @@ describe("benchmark-chat-hi", () => {
           phaseCount: 0,
           phases: [],
           promptCharCounts: {},
+          observedSplit: null,
         },
       }),
     ).not.toContain("Skipped phases:");
@@ -495,6 +539,14 @@ describe("benchmark-chat-hi", () => {
             phaseCount: 1,
             phases: [{ name: "chat_readiness", durationMs: 7 }],
             promptCharCounts: { total: 12 },
+            observedSplit: {
+              chatReadinessDurationMs: 7,
+              gatewayConnectAuthDurationMs: null,
+              requestToSendAckMs: null,
+              requestToFirstGatewayEventMs: null,
+              requestToFirstAssistantTextMs: null,
+              requestToFinalAssistantTextMs: null,
+            },
           },
         },
         {
@@ -744,18 +796,145 @@ describe("benchmark-chat-hi", () => {
       status: 200,
       phaseCount: 3,
       phases: [
-        { name: "request_parse", durationMs: 1 },
-        { name: "project_materialization", durationMs: 0, skipped: true },
-        { name: "chat_readiness", durationMs: 8, inferred: true },
+        { name: "request_parse", startedAtMs: 1000, durationMs: 1 },
+        {
+          name: "project_materialization",
+          startedAtMs: 1001,
+          durationMs: 0,
+          skipped: true,
+        },
+        {
+          name: "chat_readiness",
+          startedAtMs: 1002,
+          durationMs: 8,
+          inferred: true,
+        },
       ],
       promptCharCounts: {
         user_text: 2,
         guardrails: 40,
         total: 42,
       },
+      observedSplit: {
+        chatReadinessDurationMs: 8,
+        gatewayConnectAuthDurationMs: null,
+        requestToSendAckMs: null,
+        requestToFirstGatewayEventMs: null,
+        requestToFirstAssistantTextMs: null,
+        requestToFinalAssistantTextMs: null,
+      },
     });
 
     expect(summarizeLatestTimingArtifact({ timings: [] })).toBeNull();
+  });
+
+  it("derives observed server timing milestones from sanitized timing phases", () => {
+    expect(
+      summarizeLatestTimingArtifact({
+        timings: [
+          {
+            turnId: "turn-server-split",
+            totalDurationMs: 150,
+            outcome: "streamed",
+            status: 200,
+            phases: [
+              {
+                name: "request_parse",
+                startedAtMs: 1000,
+                endedAtMs: 1010,
+                durationMs: 10,
+              },
+              {
+                name: "chat_readiness",
+                startedAtMs: 1010,
+                endedAtMs: 1025,
+                durationMs: 15,
+              },
+              {
+                name: "gateway_connect_auth",
+                startedAtMs: 1026,
+                endedAtMs: 1040,
+                durationMs: 14,
+              },
+              {
+                name: "chat_send_ack",
+                startedAtMs: 1042,
+                endedAtMs: 1042,
+                durationMs: 0,
+              },
+              {
+                name: "first_gateway_event",
+                startedAtMs: 1068,
+                endedAtMs: 1068,
+                durationMs: 0,
+              },
+              {
+                name: "first_assistant_text",
+                startedAtMs: 1080,
+                endedAtMs: 1080,
+                durationMs: 0,
+              },
+              {
+                name: "final_assistant_text",
+                startedAtMs: 1150,
+                endedAtMs: 1150,
+                durationMs: 0,
+              },
+            ],
+            promptCharCounts: { total: 2 },
+          },
+        ],
+      }),
+    ).toMatchObject({
+      observedSplit: {
+        chatReadinessDurationMs: 15,
+        gatewayConnectAuthDurationMs: 14,
+        requestToSendAckMs: 42,
+        requestToFirstGatewayEventMs: 68,
+        requestToFirstAssistantTextMs: 80,
+        requestToFinalAssistantTextMs: 150,
+      },
+    });
+  });
+
+  it("ignores skipped phases when deriving observed server timing milestones", () => {
+    expect(
+      summarizeLatestTimingArtifact({
+        timings: [
+          {
+            turnId: "turn-skipped-split",
+            totalDurationMs: 150,
+            outcome: "streamed",
+            status: 200,
+            phases: [
+              {
+                name: "request_parse",
+                startedAtMs: 1000,
+                endedAtMs: 1010,
+                durationMs: 10,
+              },
+              {
+                name: "chat_readiness",
+                startedAtMs: 1010,
+                endedAtMs: 1010,
+                durationMs: 0,
+                skipped: true,
+              },
+              {
+                name: "chat_send_ack",
+                startedAtMs: 1042,
+                endedAtMs: 1042,
+                durationMs: 0,
+                skipped: true,
+              },
+            ],
+            promptCharCounts: { total: 2 },
+          },
+        ],
+      }),
+    ).toMatchObject({
+      observedSplit: null,
+    });
   });
 
   it("filters timing artifacts to turns that started after the benchmark request", () => {

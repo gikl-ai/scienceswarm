@@ -321,6 +321,81 @@ describe("runtime session APIs", () => {
     );
   });
 
+  it("passes unrecognized slash commands through to Claude Code's native command layer", async () => {
+    const turns: RuntimeTurnRequest[] = [];
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      adapters: [
+        adapter(requireRuntimeHostProfile("claude-code"), {
+          onTurn: (turn) => turns.push(turn),
+        }),
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+
+    const response = await streamPOST(jsonRequest(
+      "http://localhost/api/runtime/sessions/stream",
+      {
+        hostId: "claude-code",
+        projectId: "project-alpha",
+        projectPolicy: "cloud-ok",
+        mode: "chat",
+        prompt: "/clear",
+        approvalState: "approved",
+      },
+    ));
+    const payloads = await readSsePayloads(response);
+
+    expect(response.status).toBe(200);
+    expect(turns).toHaveLength(1);
+    expect(turns[0].prompt).toBe("/clear");
+    expect(payloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: expect.objectContaining({
+            type: "message",
+            payload: expect.objectContaining({
+              text: "stream from claude-code: /clear",
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("continues to reject unrecognized OpenClaw slash commands before dispatch", async () => {
+    const turns: RuntimeTurnRequest[] = [];
+    __setRuntimeApiServicesForTests({
+      sessionStore: sessions,
+      eventStore: createRuntimeEventStore({ sessions }),
+      adapters: [
+        adapter(requireRuntimeHostProfile("openclaw"), {
+          onTurn: (turn) => turns.push(turn),
+        }),
+      ],
+      now: () => new Date("2026-04-22T12:00:00Z"),
+    });
+
+    const response = await sessionsPOST(jsonRequest(
+      "http://localhost/api/runtime/sessions",
+      {
+        hostId: "openclaw",
+        projectId: "project-alpha",
+        projectPolicy: "local-only",
+        mode: "chat",
+        prompt: "/clear",
+        approvalState: "approved",
+      },
+    ));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("Unknown command: /clear");
+    expect(turns).toHaveLength(0);
+    expect(sessions.listSessions()).toHaveLength(0);
+  });
+
   it("does not duplicate adapter-provided message events on non-streaming sessions", async () => {
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
