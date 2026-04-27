@@ -10,7 +10,7 @@ import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { createIngestService } from "@/brain/ingest/service";
 import { commitImportedProject } from "@/lib/import/commit-import";
 import { isLocalRequest } from "@/lib/local-guard";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 import { getBrainConfig, isErrorResponse } from "../_shared";
 
