@@ -12,7 +12,6 @@
  * client-visible stream closure matches orchestrator completion.
  */
 
-import { runBootstrap } from "@/lib/setup/bootstrap-orchestrator";
 import type { BootstrapInput } from "@/lib/setup/install-tasks/types";
 import { isLocalRequest } from "@/lib/local-guard";
 import { isTelegramBotTokenShape } from "@/lib/telegram/bot-token";
@@ -121,6 +120,9 @@ export async function POST(request: Request): Promise<Response> {
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        const { runBootstrap } = await import(
+          "@/lib/setup/bootstrap-orchestrator"
+        );
         for await (const event of runBootstrap(input)) {
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
