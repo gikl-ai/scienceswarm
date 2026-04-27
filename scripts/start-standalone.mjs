@@ -2,7 +2,7 @@
 
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export function resolveStandaloneServerPath(cwd = process.cwd()) {
   return path.join(cwd, ".next", "standalone", "server.js");
@@ -19,6 +19,17 @@ export function resolveStandaloneServerEnv(env = process.env) {
   };
 }
 
+export function isStandaloneEntrypoint(
+  cliPath = process.argv[1],
+  moduleUrl = import.meta.url,
+) {
+  if (!cliPath) {
+    return false;
+  }
+
+  return path.resolve(cliPath) === path.resolve(fileURLToPath(moduleUrl));
+}
+
 /**
  * @param {{ cwd?: string, env?: Record<string, string | undefined> }} [options]
  */
@@ -30,11 +41,11 @@ export async function startStandaloneServer(options = {}) {
     );
   }
 
-  process.env = resolveStandaloneServerEnv(options.env);
+  Object.assign(process.env, resolveStandaloneServerEnv(options.env));
   await import(pathToFileURL(serverPath).href);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
+if (isStandaloneEntrypoint()) {
   startStandaloneServer().catch((error) => {
     console.error(
       error instanceof Error ? error.message : "Failed to start standalone server.",
