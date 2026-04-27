@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   installerModuleLoaded: vi.fn(),
-  isLocalRequest: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
-  defaultInstallerEnvironment: vi.fn(async () => ({ marker: "env" })),
-  runInstaller: vi.fn(async function* () {
+  isLocalRequest: vi.fn<(request: Request) => Promise<boolean>>().mockResolvedValue(true),
+  defaultInstallerEnvironment: vi.fn<() => Promise<{ marker: string }>>(
+    async () => ({ marker: "env" }),
+  ),
+  runInstaller: vi.fn<(
+    options: Record<string, unknown>,
+    env: { marker: string },
+  ) => AsyncGenerator<{ type: "summary"; status: "ok" }>>(async function* () {
     yield { type: "summary", status: "ok" } as const;
   }),
 }));
@@ -16,9 +21,11 @@ vi.mock("@/lib/local-guard", () => ({
 vi.mock("@/lib/setup/gbrain-installer", async () => {
   mocks.installerModuleLoaded();
   return {
-    defaultInstallerEnvironment: (...args: unknown[]) =>
-      mocks.defaultInstallerEnvironment(...args),
-    runInstaller: (...args: unknown[]) => mocks.runInstaller(...args),
+    defaultInstallerEnvironment: () => mocks.defaultInstallerEnvironment(),
+    runInstaller: (
+      options: Record<string, unknown>,
+      env: { marker: string },
+    ) => mocks.runInstaller(options, env),
   };
 });
 
