@@ -4,6 +4,15 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
+export function resolveDesktopStartPath(env = process.env) {
+  const configuredPath = env.SCIENCESWARM_DESKTOP_START_PATH?.trim();
+  if (!configuredPath) {
+    return "/setup";
+  }
+
+  return configuredPath.startsWith("/") ? configuredPath : `/${configuredPath}`;
+}
+
 export function resolveDesktopStartUrl(env = process.env) {
   const explicitUrl = env.SCIENCESWARM_DESKTOP_URL?.trim();
   if (explicitUrl) {
@@ -15,7 +24,9 @@ export function resolveDesktopStartUrl(env = process.env) {
     || "127.0.0.1";
   const port = env.FRONTEND_PORT?.trim() || "3001";
   const protocol = env.FRONTEND_USE_HTTPS === "false" ? "http" : "https";
-  return `${protocol}://${host}:${port}`;
+  const url = new URL(`${protocol}://${host}:${port}`);
+  url.pathname = resolveDesktopStartPath(env);
+  return url.toString();
 }
 
 export function resolveStandaloneEntry(root = projectRoot) {
