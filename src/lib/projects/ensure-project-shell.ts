@@ -81,7 +81,7 @@ function inferProjectDescription(
 
   const sourceFilename = trimOrNull(options.sourceFilename);
   if (sourceFilename) {
-    return `Project created from a saved ScienceSwarm critique for ${sourceFilename}.`;
+    return `Study created from a saved ScienceSwarm critique for ${sourceFilename}.`;
   }
 
   const relatedCritique = relatedPages.find((page) => {
@@ -98,13 +98,13 @@ function inferProjectDescription(
         : null,
     );
     if (critiqueSource) {
-      return `Project created from saved critique artifacts for ${critiqueSource}.`;
+      return `Study created from saved critique artifacts for ${critiqueSource}.`;
     }
-    return "Project created from saved ScienceSwarm critique artifacts.";
+    return "Study created from saved ScienceSwarm critique artifacts.";
   }
 
   if (relatedPages.length > 0) {
-    return `Project created from saved ScienceSwarm artifacts for ${humanizeProjectSlug(projectSlug)}.`;
+    return `Study created from saved ScienceSwarm artifacts for ${humanizeProjectSlug(projectSlug)}.`;
   }
 
   return null;

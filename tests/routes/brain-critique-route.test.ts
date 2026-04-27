@@ -98,7 +98,7 @@ describe("/api/brain/critique", () => {
     expect(mocks.putPage).not.toHaveBeenCalled();
   });
 
-  it("requires an explicit destination project", async () => {
+  it("requires an explicit destination study", async () => {
     const response = await POST(
       new Request("http://localhost/api/brain/critique", {
         method: "POST",
@@ -108,7 +108,7 @@ describe("/api/brain/critique", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
-      error: "Choose at least one project before saving a critique",
+      error: "Choose at least one study before saving a critique",
     });
     expect(mocks.putPage).not.toHaveBeenCalled();
     expect(mocks.ensureProjectShellForProjectSlug).not.toHaveBeenCalled();
@@ -130,7 +130,7 @@ describe("/api/brain/critique", () => {
     const response = await POST(
       new Request("http://localhost/api/brain/critique", {
         method: "POST",
-        body: JSON.stringify({ job: completedJob(), projectSlug: "project-alpha" }),
+        body: JSON.stringify({ job: completedJob(), studySlug: "project-alpha" }),
       }),
     );
 
@@ -138,9 +138,12 @@ describe("/api/brain/critique", () => {
     await expect(response.json()).resolves.toMatchObject({
       brain_slug: "hubble-1929-critique",
       parent_slug: "hubble-1929",
+      study_slug: "project-alpha",
+      study_slugs: ["project-alpha"],
       project_slug: "project-alpha",
       project_slugs: ["project-alpha"],
-      project_url: "/dashboard/project?name=project-alpha&brain_slug=hubble-1929-critique",
+      study_url: "/dashboard/study?name=project-alpha&brain_slug=hubble-1929-critique",
+      project_url: "/dashboard/study?name=project-alpha&brain_slug=hubble-1929-critique",
       linked_parent: true,
       finding_count: 1,
     });
@@ -152,7 +155,8 @@ describe("/api/brain/critique", () => {
     ];
     expect(slug).toBe("hubble-1929-critique");
     expect(markdown).toContain("type: critique");
-    expect(markdown).toContain("project: project-alpha");
+    expect(markdown).toContain("study: project-alpha");
+    expect(markdown).toContain("study_slug: project-alpha");
     expect(markdown).toContain("parent: hubble-1929");
     expect(markdown).toContain("descartes_job_id: job-123");
     expect(markdown).toContain("## Raw Descartes response");
@@ -173,7 +177,7 @@ describe("/api/brain/critique", () => {
         method: "POST",
         body: JSON.stringify({
           job: completedJob(),
-          projectSlugs: ["project-alpha", "project-beta"],
+          studySlugs: ["project-alpha", "project-beta"],
         }),
       }),
     );
@@ -181,16 +185,23 @@ describe("/api/brain/critique", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       brain_slug: "hubble-1929-critique",
+      study_slug: "project-alpha",
+      study_slugs: ["project-alpha", "project-beta"],
       project_slug: "project-alpha",
       project_slugs: ["project-alpha", "project-beta"],
+      study_urls: {
+        "project-alpha": "/dashboard/study?name=project-alpha&brain_slug=hubble-1929-critique",
+        "project-beta": "/dashboard/study?name=project-beta&brain_slug=hubble-1929-critique",
+      },
       project_urls: {
-        "project-alpha": "/dashboard/project?name=project-alpha&brain_slug=hubble-1929-critique",
-        "project-beta": "/dashboard/project?name=project-beta&brain_slug=hubble-1929-critique",
+        "project-alpha": "/dashboard/study?name=project-alpha&brain_slug=hubble-1929-critique",
+        "project-beta": "/dashboard/study?name=project-beta&brain_slug=hubble-1929-critique",
       },
     });
     const [, markdown] = mocks.putPage.mock.calls[0] as unknown as [string, string];
-    expect(markdown).toContain("project: project-alpha");
-    expect(markdown).toContain("projects:");
+    expect(markdown).toContain("study: project-alpha");
+    expect(markdown).toContain("study_slug: project-alpha");
+    expect(markdown).toContain("studies:");
     expect(markdown).toContain("- project-alpha");
     expect(markdown).toContain("- project-beta");
     expect(mocks.ensureProjectShellForProjectSlug).toHaveBeenCalledWith({
@@ -366,6 +377,8 @@ describe("/api/brain/critique", () => {
         {
           brain_slug: "hubble-1929-critique-2",
           parent_slug: "hubble-1929",
+          study_slug: "hubble-1929",
+          study_slugs: ["hubble-1929"],
           project_slug: "hubble-1929",
           project_slugs: ["hubble-1929"],
           title: "Hubble critique 2",
@@ -374,11 +387,17 @@ describe("/api/brain/critique", () => {
           descartes_job_id: "job-new",
           finding_count: 4,
           url: "/dashboard/reasoning?brain_slug=hubble-1929-critique-2",
+          study_url:
+            "/dashboard/study?name=hubble-1929&brain_slug=hubble-1929-critique-2",
+          study_urls: {
+            "hubble-1929":
+              "/dashboard/study?name=hubble-1929&brain_slug=hubble-1929-critique-2",
+          },
           project_url:
-            "/dashboard/project?name=hubble-1929&brain_slug=hubble-1929-critique-2",
+            "/dashboard/study?name=hubble-1929&brain_slug=hubble-1929-critique-2",
           project_urls: {
             "hubble-1929":
-              "/dashboard/project?name=hubble-1929&brain_slug=hubble-1929-critique-2",
+              "/dashboard/study?name=hubble-1929&brain_slug=hubble-1929-critique-2",
           },
         },
       ],

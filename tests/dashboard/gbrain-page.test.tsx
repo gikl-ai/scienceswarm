@@ -692,7 +692,7 @@ description: Run the radar
     expect(await screen.findByText("ScienceSwarm skills")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "db-pubmed" })).toBeInTheDocument();
     expect(replaceMock).toHaveBeenCalledWith("/dashboard/gbrain?view=skills&skills_catalog=workspace&skill=db-pubmed");
-    expect(screen.queryByText("No project selected")).not.toBeInTheDocument();
+    expect(screen.queryByText("No study selected")).not.toBeInTheDocument();
   });
 
   it("renders private market installs in the installed skills catalog", async () => {

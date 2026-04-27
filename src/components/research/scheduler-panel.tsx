@@ -601,7 +601,7 @@ export function SchedulerPanel({
                     className="w-full bg-surface border-2 border-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-accent transition-colors"
                   />
                   <p className="mt-1 text-[10px] text-muted">
-                    This appears in job details so reruns stay tied to a visible project artifact.
+                    This appears in job details so reruns stay tied to a visible study artifact.
                   </p>
                 </div>
               </div>
@@ -726,7 +726,7 @@ export function SchedulerPanel({
                   <dl className="mt-3 grid gap-3 text-xs">
                     {jobProjectId ? (
                       <div>
-                        <dt className="text-muted">Project</dt>
+                        <dt className="text-muted">Study</dt>
                         <dd className="mt-1 font-mono text-foreground">{jobProjectId}</dd>
                       </div>
                     ) : null}

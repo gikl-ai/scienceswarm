@@ -1163,7 +1163,7 @@ export function PaperLibraryCommandCenter({
     setScanError(null);
     try {
       const payload = await paperLibraryFetchJson<{ ok: true; scan: PaperLibraryScan }>(
-        `/api/brain/paper-library/scan?project=${encodeURIComponent(projectSlug)}&id=${encodeURIComponent(scanId)}`,
+        `/api/brain/paper-library/scan?study=${encodeURIComponent(projectSlug)}&id=${encodeURIComponent(scanId)}`,
       );
       setScan(payload.scan);
       if (payload.scan.rootPath && !session.rootPath) {
@@ -1197,7 +1197,7 @@ export function PaperLibraryCommandCenter({
     setScanError(null);
     try {
       const payload = await paperLibraryFetchJson<{ ok?: true; scan?: PaperLibraryScan }>(
-        `/api/brain/paper-library/scan?project=${encodeURIComponent(projectSlug)}&latest=1`,
+        `/api/brain/paper-library/scan?study=${encodeURIComponent(projectSlug)}&latest=1`,
       );
       const restoredScan = payload?.scan;
       if (!restoredScan) {
@@ -1243,7 +1243,7 @@ export function PaperLibraryCommandCenter({
     setReviewError(null);
     try {
       const params = new URLSearchParams({
-        project: projectSlug,
+        study: projectSlug,
         scanId: session.scanId,
         limit: "25",
         filter: reviewFilter,
@@ -1280,7 +1280,7 @@ export function PaperLibraryCommandCenter({
     setApplyPlanError(null);
     try {
       const params = new URLSearchParams({
-        project: projectSlug,
+        study: projectSlug,
         id: applyPlanId,
         limit: "25",
       });
@@ -1327,7 +1327,7 @@ export function PaperLibraryCommandCenter({
     setManifestError(null);
     try {
       const params = new URLSearchParams({
-        project: projectSlug,
+        study: projectSlug,
         id: manifestId,
         limit: "25",
       });
@@ -1361,7 +1361,7 @@ export function PaperLibraryCommandCenter({
     setGraphError(null);
     try {
       const params = new URLSearchParams({
-        project: projectSlug,
+        study: projectSlug,
         scanId: session.scanId,
         limit: "30",
       });
@@ -1409,7 +1409,7 @@ export function PaperLibraryCommandCenter({
     setGraphError(null);
     try {
       const params = new URLSearchParams({
-        project: projectSlug,
+        study: projectSlug,
         scanId,
         all: "1",
       });
@@ -1442,7 +1442,7 @@ export function PaperLibraryCommandCenter({
     setClustersError(null);
     try {
       const params = new URLSearchParams({
-        project: projectSlug,
+        study: projectSlug,
         scanId: session.scanId,
         limit: "12",
       });
@@ -1479,7 +1479,7 @@ export function PaperLibraryCommandCenter({
     setGapsError(null);
     try {
       const params = new URLSearchParams({
-        project: projectSlug,
+        study: projectSlug,
         scanId: session.scanId,
         limit: "12",
       });
@@ -1621,7 +1621,7 @@ export function PaperLibraryCommandCenter({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "start",
-            project: projectSlug,
+            study: projectSlug,
             rootPath,
             mode: "dry-run",
             idempotencyKey: makeIdempotencyKey("paper-library-scan"),
@@ -1699,7 +1699,7 @@ export function PaperLibraryCommandCenter({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "cancel",
-            project: projectSlug,
+            study: projectSlug,
             scanId: session.scanId,
           }),
         },
@@ -1730,7 +1730,7 @@ export function PaperLibraryCommandCenter({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            project: projectSlug,
+            study: projectSlug,
             scanId: session.scanId,
             itemId: item.id,
             action: resolvedAction,
@@ -1777,7 +1777,7 @@ export function PaperLibraryCommandCenter({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            project: projectSlug,
+            study: projectSlug,
             scanId: session.scanId,
             rootPath: session.rootPath || undefined,
             templateFormat: session.templateFormat,
@@ -1814,7 +1814,7 @@ export function PaperLibraryCommandCenter({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          project: projectSlug,
+          study: projectSlug,
           applyPlanId,
           userConfirmation: true,
         }),
@@ -1844,7 +1844,7 @@ export function PaperLibraryCommandCenter({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            project: projectSlug,
+            study: projectSlug,
             applyPlanId: session.applyPlanId,
             approvalToken: freshToken,
             idempotencyKey: makeIdempotencyKey("paper-library-apply"),
@@ -1895,7 +1895,7 @@ export function PaperLibraryCommandCenter({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            project: projectSlug,
+            study: projectSlug,
             manifestId: session.manifestId,
           }),
         },
@@ -1923,7 +1923,7 @@ export function PaperLibraryCommandCenter({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            project: projectSlug,
+            study: projectSlug,
             manifestId: session.manifestId,
           }),
         },
@@ -1956,7 +1956,7 @@ export function PaperLibraryCommandCenter({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            project: projectSlug,
+            study: projectSlug,
             scanId: session.scanId,
             suggestionId,
             action,

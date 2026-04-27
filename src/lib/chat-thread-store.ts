@@ -13,7 +13,7 @@ import {
 import { RUNTIME_HOST_IDS, type RuntimeHostId } from "@/lib/runtime-hosts/contracts";
 
 /**
- * Canonical persisted backend identifier. Project chat can be owned by
+ * Canonical persisted backend identifier. Study chat can be owned by
  * OpenClaw, a direct runtime host such as Claude Code, or a compare fan-out.
  *
  * Legacy stored values (`"agent"`, `"direct"`) are still recognised by the

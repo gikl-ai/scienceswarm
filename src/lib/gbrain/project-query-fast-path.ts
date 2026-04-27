@@ -76,10 +76,48 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
 
 function projectMatchSql(alias: string): string {
   return `(
+    ${alias}.frontmatter->>'study' = $1
+    OR ${alias}.frontmatter->>'study_slug' = $1
+    OR ${alias}.frontmatter->>'legacy_project_slug' = $1
+    OR ${alias}.frontmatter->>'study_id' = 'study_' || $1
+    OR
     ${alias}.frontmatter->>'project' = $1
-    OR EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements_text(
+	    OR EXISTS (
+	      SELECT 1
+	      FROM jsonb_array_elements_text(
+	        CASE
+	          WHEN jsonb_typeof(${alias}.frontmatter->'studies') = 'array'
+            THEN ${alias}.frontmatter->'studies'
+          ELSE '[]'::jsonb
+        END
+	      ) AS study_slug(value)
+	      WHERE study_slug.value = $1
+	    )
+	    OR EXISTS (
+	      SELECT 1
+	      FROM jsonb_array_elements_text(
+	        CASE
+	          WHEN jsonb_typeof(${alias}.frontmatter->'study_slugs') = 'array'
+	            THEN ${alias}.frontmatter->'study_slugs'
+	          ELSE '[]'::jsonb
+	        END
+	      ) AS study_slug(value)
+	      WHERE study_slug.value = $1
+	    )
+	    OR EXISTS (
+	      SELECT 1
+	      FROM jsonb_array_elements_text(
+	        CASE
+	          WHEN jsonb_typeof(${alias}.frontmatter->'legacy_project_slugs') = 'array'
+	            THEN ${alias}.frontmatter->'legacy_project_slugs'
+	          ELSE '[]'::jsonb
+	        END
+	      ) AS project_slug(value)
+	      WHERE project_slug.value = $1
+	    )
+	    OR EXISTS (
+	      SELECT 1
+	      FROM jsonb_array_elements_text(
         CASE
           WHEN jsonb_typeof(${alias}.frontmatter->'projects') = 'array'
             THEN ${alias}.frontmatter->'projects'

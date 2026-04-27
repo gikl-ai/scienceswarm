@@ -157,6 +157,7 @@ export function createGbrainFileStore(
           sizeBytes,
           mime: input.mime || "application/octet-stream",
           originalFilename: input.relativePath ?? input.filename,
+          study: input.project,
           project: input.project,
           uploadedAt: now().toISOString(),
           uploadedBy: input.uploadedBy,

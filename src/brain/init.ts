@@ -150,7 +150,7 @@ export function initBrain(options: InitOptions): InitResult {
     .replace("{researcher name}", options.name ?? "{your name}")
     .replace("{e.g., Computational Biology}", options.field ?? "{your field}")
     .replace("{e.g., MIT CSAIL}", options.institution ?? "{your institution}")
-    .replace("{comma-separated list}", "{your active projects}");
+    .replace("{comma-separated list}", "{your active studys}");
   writeFileSync(resolvePathWithinRoot(root, "BRAIN.md"), brainContent);
 
   const homeTemplate = readFileSync(

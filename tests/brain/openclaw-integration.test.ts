@@ -522,7 +522,8 @@ describe("handleBriefingAction", () => {
     expect(content).toContain('title: "Run validation assay"');
     expect(content).toContain("type: task");
     expect(content).toContain("status: open");
-    expect(content).toContain('project: "primer-design"');
+    expect(content).toContain('study: "primer-design"');
+    expect(content).toContain('study_slug: "primer-design"');
     expect(content).toContain("from-briefing");
   });
 

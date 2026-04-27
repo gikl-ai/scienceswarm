@@ -144,7 +144,7 @@ export function summarizeWatchConfig(
   config: ProjectWatchConfig,
   projectLabel?: string,
 ): string {
-  const label = projectLabel || "this project";
+  const label = projectLabel || "this study";
   const sourceCount = config.sources.filter((source) => source.enabled !== false).length;
   const keywordPreview = config.keywords.slice(0, 3).join(", ");
 

@@ -31,7 +31,7 @@ balanced panel that fits will run on.
 
 When the `scienceswarm` MCP tools are available, save the manifest with
 `gbrain_capture` before answering. Use a clear title, the asset kind above,
-the active project, and links or references to the upstream SCM Study Brief.
+the active study, and links or references to the upstream SCM Study Brief.
 If saving fails, report the exact save failure and do not present the manifest
 as durable.
 

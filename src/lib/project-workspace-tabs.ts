@@ -273,7 +273,7 @@ function inferExperimentDescription(file: WorkspaceFileEntry): string {
   const baseName = basenameWithoutExtension(file.name).toLowerCase();
 
   if (baseName.includes("benchmark")) {
-    return "Runs the main benchmark or comparison pipeline for this project.";
+    return "Runs the main benchmark or comparison pipeline for this study.";
   }
   if (baseName.includes("eval")) {
     return "Evaluates existing checkpoints or generated outputs against project metrics.";
@@ -282,7 +282,7 @@ function inferExperimentDescription(file: WorkspaceFileEntry): string {
     return "Launches the main training or fine-tuning run for this workspace.";
   }
   if (baseName.includes("reproduce")) {
-    return "Reproduces the primary experiment flow described in the project materials.";
+    return "Reproduces the primary experiment flow described in the study materials.";
   }
   if (file.extension === "sh") {
     return lower.includes("/pipelines/") || lower.includes("/experiments/")

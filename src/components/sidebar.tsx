@@ -91,13 +91,13 @@ const ReasoningIcon: Icon = (({ size = 24, color, weight: _weight, ...rest }: Ic
   );
 }) as unknown as Icon;
 import {
-  buildGbrainHrefForSlug,
-  buildRoutinesHrefForSlug,
-  buildWorkspaceHrefForSlug,
-  readLastProjectSlug,
-  safeProjectSlugOrNull,
-  subscribeToLastProjectSlug,
-} from "@/lib/project-navigation";
+  buildGbrainHrefForStudySlug,
+  buildRoutinesHrefForStudySlug,
+  buildStudyWorkspaceHrefForSlug,
+  readLastStudySlug,
+  safeStudySlugOrNull,
+  subscribeToLastStudySlug,
+} from "@/lib/study-navigation";
 
 type NavItem = {
   label: string;
@@ -112,20 +112,20 @@ export function Sidebar() {
   const searchParams = useSearchParams();
   const asideRef = useRef<HTMLElement>(null);
   const [showLabels, setShowLabels] = useState(false);
-  const scopedProjectSlug = safeProjectSlugOrNull(searchParams.get("name"));
-  const rememberedProjectSlug = useSyncExternalStore(
-    subscribeToLastProjectSlug,
-    readLastProjectSlug,
+  const scopedStudySlug = safeStudySlugOrNull(searchParams.get("name"));
+  const rememberedStudySlug = useSyncExternalStore(
+    subscribeToLastStudySlug,
+    readLastStudySlug,
     () => null,
   );
-  const projectSlug = scopedProjectSlug ?? rememberedProjectSlug;
+  const studySlug = scopedStudySlug ?? rememberedStudySlug;
   const nav: NavItem[] = [
-    // Workspace is the single project surface: sidebar lists projects,
+    // Workspace is the single study surface: sidebar lists studies,
     // clicking one opens its directory + chat. /dashboard is now only
-    // the "create a new project" form, reached via the + Add menu.
-    { label: "Workspace", href: buildWorkspaceHrefForSlug(projectSlug), Icon: Chats },
-    { label: "Routines", href: buildRoutinesHrefForSlug(projectSlug), Icon: CalendarCheck },
-    { label: "gbrain", href: buildGbrainHrefForSlug(projectSlug), Icon: Brain },
+    // the "create a new study" form, reached via the + Add menu.
+    { label: "Workspace", href: buildStudyWorkspaceHrefForSlug(studySlug), Icon: Chats },
+    { label: "Routines", href: buildRoutinesHrefForStudySlug(studySlug), Icon: CalendarCheck },
+    { label: "gbrain", href: buildGbrainHrefForStudySlug(studySlug), Icon: Brain },
     { label: "Reasoning", href: "/dashboard/reasoning", Icon: ReasoningIcon },
   ];
 
@@ -172,8 +172,12 @@ export function Sidebar() {
           const routinesActive = pathname?.startsWith("/dashboard/routines");
           const active =
             pathname === href ||
-            (href.startsWith("/dashboard/project") &&
-              (pathname?.startsWith("/dashboard/project") || pathname === "/dashboard")) ||
+            (href.startsWith("/dashboard/study") &&
+              (
+                pathname?.startsWith("/dashboard/study")
+                || pathname?.startsWith("/dashboard/project")
+                || pathname === "/dashboard"
+              )) ||
             (href.startsWith("/dashboard/routines") && routinesActive) ||
             (href.startsWith("/dashboard/gbrain") && gbrainActive) ||
             (href === "/dashboard/reasoning" && reasoningActive);

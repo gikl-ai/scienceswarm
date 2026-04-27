@@ -515,7 +515,7 @@ describe("Test 2: Import approved preview", () => {
     // Verify project page content
     const compBioContent = readFileSync(compBioPage, "utf-8");
     expect(compBioContent).toContain("Computational Biology");
-    expect(compBioContent).toContain("type: project");
+    expect(compBioContent).toContain("type: study");
 
     // Verify wiki pages were created (at least project pages + some imported pages)
     expect(result.pagesCreated).toBeGreaterThanOrEqual(3);
@@ -637,7 +637,7 @@ describe("Test 3: First briefing generation", () => {
         "---",
         'title: "Computational Biology"',
         "date: 2026-04-09",
-        "type: project",
+        "type: study",
         "para: projects",
         "tags: [comp-bio]",
         "---",

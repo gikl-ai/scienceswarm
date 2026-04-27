@@ -242,7 +242,7 @@ export function buildFallbackWatchPlan(input: CompileWatchPlanInput): CompiledWa
       objective,
       keywords,
       searchQueries,
-      projectLabel: input.projectTitle?.trim() || "this project",
+      projectLabel: input.projectTitle?.trim() || "this study",
     }),
   };
 }
@@ -291,7 +291,7 @@ function parseCompiledPlan(
         objective: normalizedPlan.objective,
         keywords: normalizedPlan.keywords,
         searchQueries: normalizedPlan.searchQueries,
-        projectLabel: input.projectTitle?.trim() || "this project",
+        projectLabel: input.projectTitle?.trim() || "this study",
       }),
     };
   } catch {
@@ -323,7 +323,7 @@ export async function compileWatchPlan(input: CompileWatchPlanInput): Promise<Co
         "Turn this user's natural-language news/research watch request into a specific recurring web-search briefing prompt.",
         "The output should look like a high-quality Manus-style task prompt: specific categories, concrete query ideas, source-link requirements, and a clear final Markdown deliverable.",
         "Preserve any user-requested output structure or section headings exactly. Only use 'Top Stories' when the user explicitly asks for that format.",
-        `Project: ${input.projectTitle || "unspecified"}`,
+        `Study: ${input.projectTitle || "unspecified"}`,
         `Date: ${(input.now ?? new Date()).toISOString().slice(0, 10)}`,
         `Timezone: ${input.timezone || "local"}`,
         `User request: ${input.objective}`,

@@ -189,9 +189,9 @@
       "summary": "Fetch structures from RCSB PDB by PDB ID or search PDB entries"
     },
     {
-      "slug": "project-organizer",
-      "name": "Project Organizer",
-      "description": "Use when the user asks to organize a project, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm.",
+      "slug": "study-organizer",
+      "name": "Study Organizer",
+      "description": "Use when the user asks to organize a study, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm.",
       "tags": [
         "scienceswarm",
         "product",
@@ -202,7 +202,7 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "Use when the user asks to organize a project, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm."
+      "summary": "Use when the user asks to organize a study, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm."
     },
     {
       "slug": "db-pubmed",
@@ -256,7 +256,7 @@
     {
       "slug": "scienceswarm-dashboard",
       "name": "ScienceSwarm — Dashboard",
-      "description": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the project workspace, settings, communications panel, or how to configure features in the web interface.",
+      "description": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the study workspace, settings, communications panel, or how to configure features in the web interface.",
       "tags": [
         "scienceswarm",
         "product"
@@ -266,12 +266,12 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the project workspace, settings, communications panel, or how to configure features in the web interface."
+      "summary": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the study workspace, settings, communications panel, or how to configure features in the web interface."
     },
     {
       "slug": "scienceswarm-getting-started",
       "name": "ScienceSwarm — Getting Started",
-      "description": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up the project, run the dev server, connect services, or troubleshoot first-run issues.",
+      "description": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up ScienceSwarm, run the dev server, connect services, or troubleshoot first-run issues.",
       "tags": [
         "scienceswarm",
         "product"
@@ -281,7 +281,7 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up the project, run the dev server, connect services, or troubleshoot first-run issues."
+      "summary": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up ScienceSwarm, run the dev server, connect services, or troubleshoot first-run issues."
     },
     {
       "slug": "scienceswarm-research-radar",
@@ -336,7 +336,7 @@
     {
       "slug": "scienceswarm-md-evidence-grounding",
       "name": "ScienceSwarm MD Evidence Grounding",
-      "description": "Search the project paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.",
+      "description": "Search the study paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.",
       "tags": [
         "science",
         "molecular-dynamics",
@@ -349,7 +349,7 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "Ground MD planning in project literature before external search and preserve evidence classes for downstream parameter decisions."
+      "summary": "Ground MD planning in study literature before external search and preserve evidence classes for downstream parameter decisions."
     },
     {
       "slug": "scienceswarm-md-execution-handoff",
@@ -498,7 +498,7 @@
     {
       "slug": "scienceswarm-research-reasoning",
       "name": "ScienceSwarm Research Reasoning",
-      "description": "Use optional reasoning prompt patterns for research questions without committing the project to a fixed UI workflow.",
+      "description": "Use optional reasoning prompt patterns for research questions without committing the study to a fixed UI workflow.",
       "tags": [
         "science",
         "reasoning",

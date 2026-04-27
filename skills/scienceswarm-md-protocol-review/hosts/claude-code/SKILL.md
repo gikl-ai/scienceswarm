@@ -21,7 +21,7 @@ Use this skill as the pre-run quality gate for an MD setup.
 
 When the `scienceswarm` MCP tools are available, save the review note with
 `gbrain_capture` before answering. Use a clear title, the asset kind above,
-the active project, and links or references to the reviewed planning assets.
+the active study, and links or references to the reviewed planning assets.
 If saving fails, report the exact save failure and do not present the review as
 durable.
 

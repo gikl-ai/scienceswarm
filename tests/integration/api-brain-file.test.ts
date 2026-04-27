@@ -116,7 +116,7 @@ describe("GET /api/brain/file", () => {
     expect(res.status).toBe(404);
   });
 
-  it("rejects pages without a project", async () => {
+  it("rejects pages without a study", async () => {
     setPage("hubble-1929", {
       type: "paper",
       source_filename: "hubble-1929.pdf",
@@ -124,7 +124,7 @@ describe("GET /api/brain/file", () => {
     const res = await GET(makeRequest({ slug: "hubble-1929" }));
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error).toContain("project");
+    expect(body.error).toContain("study");
   });
 
   it("rejects pages without a file object reference", async () => {

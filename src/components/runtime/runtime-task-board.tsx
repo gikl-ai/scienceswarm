@@ -38,7 +38,7 @@ export function RuntimeTaskBoard({
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-foreground">AI sessions</h2>
-          <p className="text-xs text-muted">Chat, task, and compare runs for this project.</p>
+          <p className="text-xs text-muted">Chat, task, and compare runs for this study.</p>
         </div>
         <button
           type="button"

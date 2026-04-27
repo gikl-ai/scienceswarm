@@ -70,7 +70,7 @@ Produce a `Parameter Decision Ledger`:
 **Why this recommendation:**
 
 **Evidence class:**
-`project-literature | external-literature | common-heuristic | tool-default | speculative`
+`study-literature | external-literature | common-heuristic | tool-default | speculative`
 
 **Confidence:**
 `low | medium | high`

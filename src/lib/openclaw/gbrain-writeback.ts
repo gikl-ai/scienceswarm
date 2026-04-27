@@ -139,7 +139,9 @@ async function storeOpenClawGeneratedFile(input: {
       matter.stringify(pageBody, {
         type: "artifact",
         title: path.basename(input.relativePath),
-        project: input.project,
+        study: input.project,
+        study_slug: input.project,
+        legacy_project_slug: input.project,
         source_filename: path.basename(input.relativePath),
         relative_path: input.relativePath,
         openclaw_session_id: input.sessionId,

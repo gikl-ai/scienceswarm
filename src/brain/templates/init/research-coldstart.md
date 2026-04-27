@@ -19,7 +19,7 @@ Analyze the list of imported pages and generate a structured JSON briefing. The 
 
 3. **Central Papers** — Which papers are most important?
    - Papers referenced by multiple notes or experiments
-   - Papers in active project directories
+   - Papers in active study directories
    - Papers with many cross-references in their content
    - Foundational/seminal papers (cited by multiple other papers)
 

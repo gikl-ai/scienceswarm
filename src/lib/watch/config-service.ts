@@ -270,7 +270,7 @@ export function validateWatchConfigSources(config: ProjectWatchConfig): void {
 export async function ensureWatchProject(project: string, stateRoot: string): Promise<void> {
   const manifest = await ensureProjectManifest(project, stateRoot);
   if (!manifest) {
-    throw new WatchConfigError(`Project ${project} was not found in brain state.`, 404);
+    throw new WatchConfigError(`Study ${project} was not found in brain state.`, 404);
   }
 }
 

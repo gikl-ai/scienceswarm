@@ -5,7 +5,7 @@
  * research store into a useful brain by importing the user's corpus.
  *
  * Phase C Lane 4 of the ScienceSwarm → gbrain pivot. Mounted below
- * the project dashboard when the local store exists but the project
+ * the study dashboard when the local store exists but the study
  * has no imported data. This is where a scientist actually watches a
  * real warm-start import happen, so it doubles as the demo site for
  * the reusable `BrainProgress` component.
@@ -58,7 +58,7 @@ export interface WarmStartSectionProps {
    * still loading and we don't yet know whether a brain exists.
    */
   disabled?: boolean;
-  /** When present, import directly into the active project slug. */
+  /** When present, import directly into the active study slug. */
   projectSlug?: string | null;
 }
 

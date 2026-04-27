@@ -442,18 +442,35 @@ export function approvalStateFromBody(
 
 export function requireSafeProjectId(value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") {
-    throw runtimeInvalidRequest("Project-scoped runtime requests require projectId.");
+    throw runtimeInvalidRequest("Study-scoped runtime requests require studyId.");
   }
   try {
     return assertSafeProjectSlug(value.trim());
   } catch {
-    throw runtimeInvalidRequest("Invalid projectId.", { projectId: value });
+    throw runtimeInvalidRequest("Invalid studyId.", { studyId: value });
   }
 }
 
 export function optionalSafeProjectId(value: unknown): string | null {
   if (value === undefined || value === null || value === "") return null;
   return requireSafeProjectId(value);
+}
+
+export function studyScopedIdFromBody(body: Record<string, unknown>): unknown {
+  for (const value of [body.studyId, body.studySlug, body.study, body.projectId]) {
+    if (typeof value === "string" && value.trim().length > 0) return value;
+    if (value !== undefined && value !== null && typeof value !== "string") return value;
+  }
+  return undefined;
+}
+
+export function optionalStudyScopedIdFromSearchParams(
+  searchParams: URLSearchParams,
+): unknown {
+  return searchParams.get("studyId")
+    || searchParams.get("studySlug")
+    || searchParams.get("study")
+    || searchParams.get("projectId");
 }
 
 function dataIncludedFromRaw(value: unknown): RuntimeDataIncluded[] | null {

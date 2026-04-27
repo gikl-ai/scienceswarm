@@ -1,18 +1,18 @@
 ---
 name: scienceswarm-md-evidence-grounding
-description: Search the project paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.
+description: Search the study paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.
 ---
 
 # ScienceSwarm MD Evidence Grounding
 
 Use this skill when MD planning depends on papers, protocols, structures, or
-database records. The source order is project library first, external sources
+database records. The source order is study library first, external sources
 second.
 
 ## Workflow
 
 1. Identify evidence needed by the MD Study Brief.
-2. Gather project-library sources before external sources.
+2. Gather study-library sources before external sources.
 3. Extract protocol details and comparable system choices.
 4. Judge transferability, validation basis, and limits for each source before
    reusing a protocol.

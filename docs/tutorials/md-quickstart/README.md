@@ -43,7 +43,7 @@ asking ScienceSwarm to use CUDA when OpenMM can see it.
 ## Requirements
 
 - macOS, Linux, or Windows (WSL2)
-- ScienceSwarm with project chat and Claude Code enabled as an assistant
+- ScienceSwarm with study chat and Claude Code enabled as an assistant
 - A local execution runtime with the scientific Python stack available, or
   permission for ScienceSwarm to create a managed conda/mamba environment
 - ~1 GB free disk for outputs
@@ -59,17 +59,17 @@ Do this from the ScienceSwarm UI. The Python or conda environment is an
 implementation detail for the execution assistant; users should not have to
 create it by hand or paste shell commands.
 
-1. Start ScienceSwarm and open a project workspace.
+1. Start ScienceSwarm and open a study workspace.
 2. Import this checkout, or just the `docs/tutorials/md-quickstart/`
-   folder, into the project so the agent can see `environment.yml` and
+   folder, into the study so the agent can see `environment.yml` and
    `scripts/`.
-3. In the project chat composer, set the assistant to `Claude Code`.
-4. Return to the project chat and send this request:
+3. In the study chat composer, set the assistant to `Claude Code`.
+4. Return to the study chat and send this request:
 
 ```text
 Prepare the MD quickstart for execution. If the full ScienceSwarm checkout is
 imported, use docs/tutorials/md-quickstart/. If only this tutorial folder is
-imported, use the current project folder.
+imported, use the current study folder.
 Use the bundled environment.yml as the dependency contract. First check
 whether python3 can already import OpenMM, MDTraj, pdbfixer, NumPy, and
 Matplotlib. If that works, reuse that environment and report the versions.
@@ -84,7 +84,7 @@ OpenMM and MDTraj versions it verified. If it needs to create conda/mamba
 state, the platform convention is to keep the package-manager install under
 `$SCIENCESWARM_DIR/runtimes/` (default `~/.scienceswarm/runtimes/`) and named
 environments under `$SCIENCESWARM_DIR/runtimes/conda/envs/`, not inside the
-app checkout or imported project folder. If the runtime reports missing
+app checkout or imported study folder. If the runtime reports missing
 infrastructure, treat that as a ScienceSwarm execution-setup issue and fix the
 destination before rerunning; the tutorial itself should not send you to a
 terminal to recover.
@@ -93,7 +93,7 @@ terminal to recover.
 
 ## Run the pipeline
 
-Continue in the same ScienceSwarm project chat and send:
+Continue in the same ScienceSwarm study chat and send:
 
 ```text
 Run the lysozyme MD quickstart end to end. Fetch PDB 1AKI, run stages
@@ -119,7 +119,7 @@ The execution agent should perform these implementation steps:
 Each script prints clear diagnostics, fails fast on a bad input, and
 writes its output before exiting. The scripts remain in the repository
 so ScienceSwarm has a deterministic execution contract; the user-facing
-workflow is the project chat request above.
+workflow is the study chat request above.
 
 ---
 

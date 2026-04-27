@@ -547,7 +547,7 @@ describe("SetupPage integration", () => {
       expect(screen.getByTestId("bootstrap-done")).toBeInTheDocument();
     });
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith("/dashboard/project?onboarding=continue");
+      expect(pushMock).toHaveBeenCalledWith("/dashboard/study?onboarding=continue");
     }, { timeout: 2_000 });
   });
 
@@ -642,7 +642,7 @@ describe("SetupPage integration", () => {
     });
 
     fireEvent.click(screen.getByTestId("bootstrap-continue"));
-    expect(pushMock).toHaveBeenCalledWith("/dashboard/project");
+    expect(pushMock).toHaveBeenCalledWith("/dashboard/study");
   });
 
   it("forwards the API error body to the failed-state card on non-OK responses", async () => {

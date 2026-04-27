@@ -60,7 +60,7 @@ function brainNotInitializedResponse(): Response {
     code: "brain_not_initialized",
     cause: brainNotInitializedCause(rootExists, brainMdExists),
     nextAction:
-      "Open /setup to connect OpenClaw and initialize the local store, then import your first corpus from /dashboard/project.",
+      "Open /setup to connect OpenClaw and initialize the local store, then import your first corpus from /dashboard/study.",
     docUrl: "/setup",
     details: {
       rootExists,

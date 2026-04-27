@@ -1,5 +1,5 @@
 /**
- * Project-scoped gbrain search helper.
+ * Study-scoped gbrain search helper.
  *
  * Bucket D's FileTree pulls its audit-revise section by querying gbrain
  * with a `project:<slug>` filter. The BrainStore interface takes a

@@ -238,7 +238,7 @@ export async function handleWatchConversation(
   if (!parsed.project) {
     const choices = projects.length > 0
       ? projects.map((project) => `- ${project.slug} (${project.title})`).join("\n")
-      : "- No active projects found. Import or create a project first.";
+      : "- No active studys found. Import or create a study first.";
     return {
       handled: true,
       response: [

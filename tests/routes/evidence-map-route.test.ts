@@ -152,12 +152,13 @@ describe("evidence map route", () => {
   it("generates a source-backed evidence-map artifact through the real route boundary", async () => {
     const { POST } = await import("@/app/api/brain/evidence-map/route");
     const response = await POST(request({
-      projectId: "project-alpha",
+      studyId: "project-alpha",
       question: "Where does EGFR resistance evidence disagree?",
     }));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
+      study_url: expect.stringContaining("/dashboard/study?name=project-alpha"),
       summary: {
         question: "Where does EGFR resistance evidence disagree?",
         claimCount: 1,
@@ -179,5 +180,16 @@ describe("evidence map route", () => {
     expect(markdown).toContain("wiki/projects/project-alpha/results/resistance-note");
     expect(markdown).toContain("organoid-table.csv");
     expect(markdown).not.toContain("A hallucinated source should not become evidence.");
+  });
+
+  it("keeps projectId as a compatibility alias for evidence-map generation", async () => {
+    const { POST } = await import("@/app/api/brain/evidence-map/route");
+    const response = await POST(request({
+      projectId: "project-alpha",
+      question: "Where does EGFR resistance evidence disagree?",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.filterProjectPages).toHaveBeenCalledWith(sourcePages, "project-alpha");
   });
 });

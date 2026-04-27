@@ -422,7 +422,7 @@ function loadPage(
     return { ...fromGbrain, path: pagePath };
   }
 
-  // Disk fallback — legacy writers, scaffolded project pages, and
+  // Disk fallback — legacy writers, scaffolded study pages, and
   // filesystem-seeded tests land here.
   const absPath = project
     ? join(getProjectBrainRootForBrainRoot(project, config.root), pagePath)
@@ -578,7 +578,7 @@ function buildTopMatters(input: {
 
   if (input.projectPage) {
     pushMatter(
-      input.projectPage.summary || `${input.manifest.title} project page`,
+      input.projectPage.summary || `${input.manifest.title} study page`,
       [input.projectPage.path],
     );
   }
@@ -591,7 +591,7 @@ function buildTopMatters(input: {
 
   if (matters.length === 0) {
     pushMatter(
-      `Project ${input.manifest.title} is initialized and awaiting linked pages.`,
+      `Study ${input.manifest.title} is initialized and awaiting linked pages.`,
       [input.manifest.projectPagePath],
     );
   }
@@ -651,7 +651,7 @@ function buildUnresolvedRisks(input: {
 
   if (risks.length === 0 && input.recentProjectPages[0]) {
     risks.push({
-      risk: "Recent project evidence has not yet been turned into an explicit task or decision.",
+      risk: "Recent study evidence has not yet been turned into an explicit task or decision.",
       evidence: [input.recentProjectPages[0].path],
     });
   }
@@ -696,19 +696,19 @@ function buildNextMove(input: {
     : summaryMove
       ? summaryMove
       : nextMatter?.summary && !genericMatter
-        ? `Review ${input.manifest.title}: ${nextMatter.summary}. Tighten the project direction.`
-        : `Import a local archive or add a clear project description for ${input.manifest.title} so the brief can become specific.`;
+        ? `Review ${input.manifest.title}: ${nextMatter.summary}. Tighten the study direction.`
+        : `Import a local archive or add a clear study description for ${input.manifest.title} so the brief can become specific.`;
 
   return {
     recommendation,
     assumptions: [
-      `Project ${input.manifest.title} remains the active focus.`,
+      `Study ${input.manifest.title} remains the active focus.`,
       "Linked pages and manifest state are current enough for this brief.",
       ...(input.importSummary ? ["A local import summary exists and can seed the next step."] : []),
     ],
     missingEvidence: input.evidence.length > 0
       ? ["A fresh capture or updated task status would improve confidence."]
-      : ["Project-linked evidence is still sparse."],
+      : ["Study-linked evidence is still sparse."],
   };
 }
 
@@ -717,7 +717,7 @@ function isGenericProjectMatter(summary: string, projectTitle: string): boolean 
   const normalizedSummary = normalize(summary);
   const normalizedTitle = normalize(projectTitle);
   let withoutTitlePrefix = normalizedSummary;
-  const prefixes = [`${normalizedTitle} `, `project ${normalizedTitle} `];
+  const prefixes = [`${normalizedTitle} `, `study ${normalizedTitle} `, `project ${normalizedTitle} `];
 
   let stripped = true;
   while (stripped) {
@@ -731,7 +731,7 @@ function isGenericProjectMatter(summary: string, projectTitle: string): boolean 
   }
 
   if (!normalizedSummary) return true;
-  if (withoutTitlePrefix === "new project") return true;
+  if (withoutTitlePrefix === "new study" || withoutTitlePrefix === "new project") return true;
   if (withoutTitlePrefix === "is initialized and awaiting linked pages") return true;
   return false;
 }
@@ -761,7 +761,7 @@ function buildFallbackProjectBrief(input: {
     });
   } else {
     unresolvedRisks.push({
-      risk: `Project ${input.manifest.title} still needs linked pages or a local import summary.`,
+      risk: `Study ${input.manifest.title} still needs linked pages or a local import summary.`,
       evidence: [input.manifest.projectPagePath],
     });
   }
@@ -774,14 +774,14 @@ function buildFallbackProjectBrief(input: {
     nextMove: {
       recommendation: input.importSummary
         ? `Review the latest import summary for ${input.manifest.title} and create the first linked task or decision.`
-        : `Import or link project pages for ${input.manifest.title} so the brief can become more specific.`,
+        : `Import or link study pages for ${input.manifest.title} so the brief can become more specific.`,
       assumptions: [
-        `Project ${input.manifest.title} remains the active focus.`,
+        `Study ${input.manifest.title} remains the active focus.`,
         "Only local state was available for this brief.",
       ],
       missingEvidence: input.importSummary
-        ? ["A linked task or decision page would turn the summary into structured project memory."]
-        : ["A local import summary or linked project pages would improve confidence."],
+        ? ["A linked task or decision page would turn the summary into structured study memory."]
+        : ["A local import summary or linked study pages would improve confidence."],
     },
     dueTasks: [],
     frontier: [],
@@ -1057,7 +1057,7 @@ function buildAlerts(events: BrainEvent[], suggestions: SearchResult[]): GuideBr
   return alerts;
 }
 
-// ── Enhanced Project Brief ────────────────────────────
+// ── Enhanced Study Brief ────────────────────────────
 
 import type { LLMClient } from "./llm";
 import type { ContradictionReport } from "./types";
@@ -1094,7 +1094,7 @@ export async function buildEnhancedProjectBrief(
   if (baseBrief.unresolvedRisks.length > 0 || baseBrief.dueTasks.length > 0) {
     try {
       const context = [
-        `Project: ${baseBrief.project}`,
+        `Study: ${baseBrief.project}`,
         `Top matters: ${baseBrief.topMatters.map((m) => m.summary).join("; ")}`,
         `Unresolved risks: ${baseBrief.unresolvedRisks.map((r) => r.risk).join("; ")}`,
         `Open tasks: ${baseBrief.dueTasks.filter((t) => t.status === "open").map((t) => t.title).join("; ")}`,

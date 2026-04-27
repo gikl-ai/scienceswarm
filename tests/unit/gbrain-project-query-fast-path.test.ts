@@ -38,4 +38,20 @@ describe("listProjectWorkspaceFileEntriesFast", () => {
 
     expect(query).toHaveBeenCalledTimes(1);
   });
+
+  it("matches canonical Study array aliases in the SQL fast path", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    getBrainStore.mockReturnValue({ engine: { db: { query } } });
+
+    const { listProjectWorkspaceFileEntriesFast, listProjectPageSummariesFast } = await import(
+      "@/lib/gbrain/project-query-fast-path"
+    );
+
+    await listProjectPageSummariesFast("alpha-project");
+    await listProjectWorkspaceFileEntriesFast("alpha-project");
+
+    const sql = query.mock.calls.map(([statement]) => String(statement)).join("\n");
+    expect(sql).toContain("study_slugs");
+    expect(sql).toContain("legacy_project_slugs");
+  });
 });

@@ -1,9 +1,9 @@
 /**
  * GET /api/brain/file
  *
- * Project-scoped binary read. gbrain page metadata identifies a managed
+ * Study-scoped binary read. gbrain page metadata identifies a managed
  * file object, and GbrainFileStore streams bytes from the content-addressed
- * object store. Project folders are materialized cache only and are never
+ * object store. Study folders are materialized cache only and are never
  * used as the authoritative binary source for new uploads. Pages created
  * before file objects existed can still be served from the materialized cache
  * when they only carry legacy source_filename frontmatter. Test overrides
@@ -27,6 +27,7 @@ import {
   InvalidSlugError,
 } from "@/lib/state/project-manifests";
 import { getScienceSwarmProjectsRoot } from "@/lib/scienceswarm-paths";
+import { readStudySlugFromFrontmatter } from "@/lib/studies/frontmatter";
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   ".pdf": "application/pdf",
@@ -71,13 +72,10 @@ export async function GET(request: Request): Promise<Response> {
       );
     }
     const fm = (page.frontmatter ?? {}) as Record<string, unknown>;
-    const projectRaw =
-      typeof fm.project === "string" && fm.project.length > 0
-        ? fm.project
-        : null;
+    const projectRaw = readStudySlugFromFrontmatter(fm);
     if (!projectRaw) {
       return Response.json(
-        { error: `Page '${slug}' has no project frontmatter` },
+        { error: `Page '${slug}' has no study frontmatter` },
         { status: 400 },
       );
     }
@@ -87,7 +85,7 @@ export async function GET(request: Request): Promise<Response> {
     } catch (error) {
       if (error instanceof InvalidSlugError) {
         return Response.json(
-          { error: `Invalid project slug: ${error.message}` },
+          { error: `Invalid study slug: ${error.message}` },
           { status: 400 },
         );
       }
@@ -177,7 +175,7 @@ async function serveLegacyDiskFile(input: {
   } catch {
     return Response.json(
       {
-        error: `File not on disk for slug '${input.slug}' (project=${input.project}, source_filename=${input.sourceFilename})`,
+        error: `File not on disk for slug '${input.slug}' (study=${input.project}, source_filename=${input.sourceFilename})`,
       },
       { status: 404 },
     );
@@ -195,6 +193,7 @@ async function serveLegacyDiskFile(input: {
   if (input.metadataOnly) {
     return Response.json({
       slug: input.slug,
+      study: input.project,
       project: input.project,
       source_filename: input.sourceFilename,
       size: stats.size,

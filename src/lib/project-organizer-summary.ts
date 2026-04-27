@@ -153,9 +153,9 @@ export function buildProjectOrganizerSuggestedPrompts(
   if (readout.nextMove?.recommendation) {
     prompts.push("Turn the next move into concrete tasks.");
   } else if (readout.frontier.length > 0) {
-    prompts.push(`Summarize why ${readout.frontier[0].title} matters for this project.`);
+    prompts.push(`Summarize why ${readout.frontier[0].title} matters for this study.`);
   } else {
-    prompts.push("Suggest the next pages or tasks to create for this project.");
+    prompts.push("Suggest the next pages or tasks to create for this study.");
   }
 
   return prompts.slice(0, 3);
@@ -196,7 +196,7 @@ export function formatProjectOrganizerChatSummary(readout: ProjectOrganizerReado
       `- Possible duplicate papers: ${readout.duplicatePapers.slice(0, 3).map(formatDuplicate).join("; ")}`,
     );
   } else {
-    lines.push("- Possible duplicate papers: none surfaced from the current gbrain project pages.");
+    lines.push("- Possible duplicate papers: none surfaced from the current gbrain study pages.");
   }
 
   if (readout.importDuplicateGroups.length > 0) {

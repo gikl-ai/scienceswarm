@@ -104,7 +104,7 @@ describe("telegram capture handlers", () => {
     });
 
     expect(firstReply).toHaveBeenCalledWith(
-      expect.stringContaining("Which project should this capture belong to?"),
+      expect.stringContaining("Which study should this capture belong to?"),
       expect.any(Object),
     );
 
@@ -148,7 +148,7 @@ describe("telegram capture handlers", () => {
 
     expect(parseFile).toHaveBeenCalled();
     expect(reply).toHaveBeenCalledWith(
-      expect.stringContaining("Which project should this capture belong to?"),
+      expect.stringContaining("Which study should this capture belong to?"),
       expect.any(Object),
     );
   });

@@ -45,6 +45,9 @@ describe("POST /api/analyze-folder", () => {
     expect(data.duplicateGroups).toEqual([]);
     expect(data.warnings).toEqual([]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as unknown as [unknown, RequestInit];
+    expect(String(init.body)).toContain("Analyze this research study folder");
+    expect(String(init.body)).not.toContain("Analyze this research project folder");
   });
 
   it("preserves local fallback analysis/backend fields while adding preview data", async () => {
@@ -70,7 +73,7 @@ describe("POST /api/analyze-folder", () => {
 
     const data = await response.json();
     expect(data.backend).toBe("local");
-    expect(data.analysis).toContain("Project Analysis");
+    expect(data.analysis).toContain("Study Analysis");
     expect(data.analysis).toContain("Folder: Beta Folder (2 files)");
     expect(data.preview.analysis).toBe(data.analysis);
     expect(data.preview.backend).toBe("local");

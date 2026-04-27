@@ -18,6 +18,7 @@ import {
   requireStringField,
   runtimeAdapterForApi,
   runtimeErrorResponse,
+  studyScopedIdFromBody,
 } from "../_shared";
 
 type CompareChildResult = {
@@ -55,7 +56,7 @@ export async function POST(request: Request): Promise<Response> {
     const appOrigin = await assertRuntimeApiLocalRequest(request);
     const body = await parseJsonObject(request);
     const services = getRuntimeApiServices();
-    const projectId = requireSafeProjectId(body.projectId);
+    const projectId = requireSafeProjectId(studyScopedIdFromBody(body));
     const projectPolicy = projectPolicyFromBody(body);
     const rawPrompt = requireStringField(body, "prompt");
     const approvalState = approvalStateFromBody(body);

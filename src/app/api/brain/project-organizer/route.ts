@@ -11,25 +11,25 @@ export async function GET(request: Request): Promise<Response> {
   const config = configOrError;
 
   const url = new URL(request.url);
-  const project = url.searchParams.get("project");
-  if (!project) {
-    return Response.json({ error: "Missing project parameter" }, { status: 400 });
+  const study = url.searchParams.get("study") || url.searchParams.get("project");
+  if (!study) {
+    return Response.json({ error: "Missing study parameter" }, { status: 400 });
   }
 
   try {
-    assertSafeProjectSlug(project);
+    assertSafeProjectSlug(study);
   } catch (error) {
     if (!(error instanceof InvalidSlugError)) {
       throw error;
     }
-    return Response.json({ error: "project must be a safe bare slug" }, { status: 400 });
+    return Response.json({ error: "study must be a safe bare slug" }, { status: 400 });
   }
 
   try {
-    const readout = await buildProjectOrganizerReadout({ config, project });
+    const readout = await buildProjectOrganizerReadout({ config, project: study });
     return Response.json(readout);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Project organizer failed";
+    const message = error instanceof Error ? error.message : "Study organizer failed";
     return Response.json({ error: message }, { status: 500 });
   }
 }

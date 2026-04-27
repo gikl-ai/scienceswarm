@@ -603,7 +603,7 @@ export function ResultsViewer({
                     <p className="mt-1 text-xs text-foreground">{formatCreatedAt(entry.createdAt)}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Project path</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Study path</p>
                     <p className="mt-1 text-xs font-mono text-foreground break-all">{entry.projectPath}</p>
                   </div>
                   <div className="md:col-span-2">

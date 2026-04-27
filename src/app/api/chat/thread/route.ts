@@ -17,6 +17,7 @@ import {
 function emptyThread(project: string) {
   return {
     version: 1 as const,
+    study: project,
     project,
     conversationId: null,
     conversationBackend: null,
@@ -144,9 +145,12 @@ export async function GET(request: Request) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const project = normalizeProject(new URL(request.url).searchParams.get("project"));
+  const url = new URL(request.url);
+  const project =
+    normalizeProject(url.searchParams.get("study"))
+    ?? normalizeProject(url.searchParams.get("project"));
   if (!project) {
-    return Response.json({ error: "Missing project" }, { status: 400 });
+    return Response.json({ error: "Missing study" }, { status: 400 });
   }
 
   const stored = await readChatThread(project);
@@ -156,6 +160,7 @@ export async function GET(request: Request) {
 
   return Response.json({
     ...stored,
+    study: stored.project,
     messages: stored.messages.map((message) => ({
       ...message,
       content:
@@ -184,6 +189,7 @@ export async function POST(request: Request) {
   }
 
   const candidate = body as {
+    study?: unknown;
     project?: unknown;
     conversationId?: unknown;
     conversationBackend?: unknown;
@@ -191,9 +197,11 @@ export async function POST(request: Request) {
     artifactProvenance?: unknown;
   };
 
-  const project = normalizeProject(candidate.project);
+  const project =
+    normalizeProject(candidate.study)
+    ?? normalizeProject(candidate.project);
   if (!project) {
-    return Response.json({ error: "Missing project" }, { status: 400 });
+    return Response.json({ error: "Missing study" }, { status: 400 });
   }
 
   const messages = normalizeMessages(candidate.messages);

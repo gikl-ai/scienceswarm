@@ -12,7 +12,9 @@ import {
 } from "@/lib/paper-library/gaps";
 import {
   paperLibraryBadRequest,
+  normalizeStudyBody,
   readJsonBody,
+  readStudyOrProjectParam,
   requirePaperLibraryRequest,
 } from "../_shared";
 
@@ -39,7 +41,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const parsed = GapsLookupRequestSchema.safeParse({
-    project: url.searchParams.get("project"),
+    project: readStudyOrProjectParam(url),
     scanId: url.searchParams.get("scanId"),
     state: url.searchParams.get("state") ?? undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
   if (!guard.ok) return guard.response;
 
   try {
-    const parsed = PaperLibraryGapActionRequestSchema.parse(await readJsonBody(request));
+    const parsed = PaperLibraryGapActionRequestSchema.parse(normalizeStudyBody(await readJsonBody(request)));
     const suggestion = await updatePaperLibraryGapSuggestion({
       project: parsed.project,
       scanId: parsed.scanId,

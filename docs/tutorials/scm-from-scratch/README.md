@@ -14,10 +14,10 @@ sensitivity checks for inference, and a final report with comparable figures,
 tables, and interpretation. The difference is that this path starts with an
 empty analysis folder. The user and assistant design the workflow, generate R
 code stage by stage, approve each action, and keep every artifact visible inside
-the ScienceSwarm project.
+the ScienceSwarm study.
 
 No terminal is required for the human user. All planning, code authoring,
-execution, and artifact review happens through the ScienceSwarm project UI and
+execution, and artifact review happens through the ScienceSwarm study UI and
 the selected assistant runtime.
 
 ## Expected final state
@@ -32,20 +32,20 @@ the selected assistant runtime.
   report whose shape and diagnostic quality are comparable to the SCM-IR
   quickstart report.
 
-## 0. Create the project
+## 0. Create the study
 
 1. Start ScienceSwarm and complete setup if the app asks.
-2. Open the dashboard and create a project named something like
+2. Open the dashboard and create a study named something like
    `SCM from scratch`.
-3. Open the project chat composer.
-4. Choose a runtime that can author and execute project files, such as
+3. Open the study chat composer.
+4. Choose a runtime that can author and execute study files, such as
    `Claude Code`.
 5. For each stage below, paste the prompt, wait for the assistant to save the
    named asset, review the proposed next actions, and approve only the step you
    want it to generate next.
 
 Do not import the existing `docs/tutorials/scm-ir-quickstart/scripts/` folder
-for this path. The whole point is to build the analysis from an empty project
+for this path. The whole point is to build the analysis from an empty study
 analysis folder.
 
 Generated R should check for required packages and stop with a clear missing
@@ -65,7 +65,7 @@ automatically; any package installation remains a separate user-approved step.
 
 ## 1. Plan the question before code exists
 
-Paste this into project chat:
+Paste this into study chat:
 
 ```text
 /scm-scratch-question Create the from-scratch SCM Study Brief.
@@ -79,13 +79,13 @@ Use classic Abadie synthetic control as the primary estimator, then plan modern
 SCM robustness checks, in-space and in-time placebo checks, leave-one-out donor
 sensitivity, and a final report comparable to the SCM-IR quickstart.
 
-Start from an empty project analysis folder. Do not assume any prewritten R
+Start from an empty study analysis folder. Do not assume any prewritten R
 files. Define the estimand, donor-pool rules, outcome, predictors, pre/post
 windows, assumptions, stop criteria, artifact paths, and approval-gated next
 actions. Keep the main donor pools comparable to the SCM-IR quickstart; for the
 Basque case, exclude the Spain national aggregate in the main specification and
 leave Madrid, Catalonia, and Navarre for sensitivity checks unless explicitly
-approved as main exclusions. Save a project-scoped asset with asset_kind
+approved as main exclusions. Save a study-scoped asset with asset_kind
 scm_scratch_study_brief before answering.
 ```
 
@@ -100,7 +100,7 @@ Paste:
 /scm-scratch-data Use the latest scm_scratch_study_brief and author the first
 from-scratch data step.
 
-Plan the data code before writing it. The target project paths are:
+Plan the data code before writing it. The target study paths are:
 analysis/scm-from-scratch/code/01_acquire_data.R
 analysis/scm-from-scratch/code/02_build_panels.R
 analysis/scm-from-scratch/data/raw/
@@ -116,7 +116,7 @@ the data audit. Do not copy or require existing quickstart scripts. Ask for
 approval before generating each R file, then execute only the approved file
 through the selected ScienceSwarm runtime. Save asset_kind
 scm_scratch_data_plan with source notes, exclusions, balance checks, and
-generated project paths before answering.
+generated study paths before answering.
 ```
 
 Expected data-stage outputs:
@@ -225,12 +225,12 @@ sensitivity summaries, a paper-ready methods paragraph, and interpretation with
 caveats. Also write a run log at
 analysis/scm-from-scratch/output/run-log.md.
 
-Surface final project artifact paths in the response. Do not ask the user to
+Surface final study artifact paths in the response. Do not ask the user to
 open files outside ScienceSwarm. Save asset_kind scm_scratch_results_report
 before answering.
 ```
 
-The report is complete only when the project shows:
+The report is complete only when the study shows:
 
 - generated R files for all approved stages,
 - prepared panels and data-audit table,
@@ -251,7 +251,7 @@ research shape:
 - donor-weight and trajectory outputs,
 - placebo and sensitivity summaries,
 - method robustness checks,
-- a single project-visible report with interpretation and limitations.
+- a single study-visible report with interpretation and limitations.
 
 If the newly generated analysis cannot support one of the quickstart-style
 claims, the correct final output is a high-quality failed or caveated SCM report

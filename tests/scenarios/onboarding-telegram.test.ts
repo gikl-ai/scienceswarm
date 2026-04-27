@@ -179,7 +179,7 @@ describe("Telegram onboarding: setup -> capture -> frontier watch", () => {
     });
 
     expect(firstReply).toHaveBeenCalledWith(
-      expect.stringContaining("Which project should this capture belong to?"),
+      expect.stringContaining("Which study should this capture belong to?"),
       expect.any(Object),
     );
 

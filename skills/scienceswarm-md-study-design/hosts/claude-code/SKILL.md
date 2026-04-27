@@ -11,7 +11,7 @@ into an MD study question before any files or parameters are generated.
 ## Workflow
 
 1. Identify the research goal, molecular system, cancer or therapeutic context,
-   desired conclusion, and available project evidence.
+   desired conclusion, and available study evidence.
 2. Map the desired claim to MD observables, needed controls/comparisons,
    decision thresholds, and inconclusive outcomes.
 3. Compare MD with adjacent methods that may answer the claim better.
@@ -24,7 +24,7 @@ into an MD study question before any files or parameters are generated.
 
 When the `scienceswarm` MCP tools are available, save the brief with
 `gbrain_capture` before answering. Use a clear title, the asset kind above, and
-the active project. If saving fails, report the exact save failure and do not
+the active study. If saving fails, report the exact save failure and do not
 present the brief as durable.
 
 Do not start parameter planning until the simulation question and method

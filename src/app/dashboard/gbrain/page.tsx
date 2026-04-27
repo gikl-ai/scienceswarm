@@ -324,7 +324,7 @@ function GbrainPageContent() {
     return () => controller.abort();
   }, [activeView, brainBootstrapState.status, loadBrainArtifact, requestedBrainPageSlug]);
 
-  const selectedProjectLabel = useMemo(() => activeProjectSlug ?? "No project selected", [activeProjectSlug]);
+  const selectedProjectLabel = useMemo(() => activeProjectSlug ?? "No study selected", [activeProjectSlug]);
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-surface/30">
@@ -338,14 +338,14 @@ function GbrainPageContent() {
             <h1 className="mt-1 text-xl font-semibold text-foreground">Research brain</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted">
               {activeView === "pages"
-                ? "Search and page inspection for your current project's gbrain."
+                ? "Search and page inspection for your current study's gbrain."
                 : activeView === "paper-library"
                   ? "Turn a local PDF archive into a reviewed, reversible, graph-aware research library."
                   : activeSkillsCatalog === "workspace"
                   ? "Curate host-neutral skills in this repo, keep some private, and sync them into OpenClaw, Claude Code, Codex, and other adapters."
                   : activeSkillsCatalog === "openclaw"
                     ? "Inspect the generated OpenClaw adapter output that ScienceSwarm materializes from the canonical workspace skill source."
-                    : "Inspect, install, and manage private third-party market plugin bundles that ScienceSwarm pins locally and projects into OpenClaw, Codex, and Claude Code without promoting them into the public catalog."}
+                    : "Inspect, install, and manage private third-party market plugin bundles that ScienceSwarm pins locally and syncs into OpenClaw, Codex, and Claude Code without promoting them into the public catalog."}
             </p>
             <div className="mt-4 inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1">
               <button
@@ -419,12 +419,12 @@ function GbrainPageContent() {
       {activeView === "pages" && !activeProjectSlug && !requestedBrainPageSlug && (
         <section className="m-4 rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">
           <div className="flex flex-col items-center text-center">
-            <h2 className="text-lg font-semibold">No project selected</h2>
+            <h2 className="text-lg font-semibold">No study selected</h2>
             <p className="mt-2 max-w-md text-sm text-muted">
-              Open a project workspace first so gbrain can scope Dream Cycle and search to that project.
+              Open a study workspace first so gbrain can scope Dream Cycle and search to that study.
             </p>
             <Link
-              href="/dashboard/project"
+              href="/dashboard/study"
               className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
             >
               Open workspace
@@ -436,12 +436,12 @@ function GbrainPageContent() {
       {activeView === "paper-library" && !activeProjectSlug && (
         <section className="m-4 rounded-[28px] border-2 border-border bg-white p-8 shadow-sm">
           <div className="flex flex-col items-center text-center">
-            <h2 className="text-lg font-semibold">No project selected</h2>
+            <h2 className="text-lg font-semibold">No study selected</h2>
             <p className="mt-2 max-w-md text-sm text-muted">
-              Open a project workspace first so Paper Library can scope scans, apply plans, and graph state to one local research archive.
+              Open a study workspace first so Paper Library can scope scans, apply plans, and graph state to one local research archive.
             </p>
             <Link
-              href="/dashboard/project"
+              href="/dashboard/study"
               className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
             >
               Open workspace
@@ -771,7 +771,7 @@ function StructuralRetrievalStatusPanel({
           </p>
           <p className={`mt-1 text-xs leading-5 ${summary.ready ? "text-muted" : "text-warn"}`}>
             {summary.ready
-              ? "Runtime agents can use gbrain code-definition and reference navigation for this project."
+              ? "Runtime agents can use gbrain code-definition and reference navigation for this study."
               : "Runtime agents will fall back to search and read-only gbrain context until these blockers are cleared."}
           </p>
           {detailItems.length > 0 && (

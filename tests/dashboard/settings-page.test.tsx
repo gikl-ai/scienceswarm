@@ -548,9 +548,9 @@ function buildFetchStub(options?: {
       });
     }
 
-    if (url === "/api/projects") {
+    if (url === "/api/studies") {
       return Response.json({
-        projects: [
+        studies: [
           { slug: "alpha-project", name: "Alpha Project" },
           { slug: "beta-project", name: "Beta Project" },
         ],
@@ -1236,7 +1236,7 @@ describe("SettingsPage runtime settings", () => {
     );
 
     expect(await screen.findByTestId("project-runtime-project-select")).toHaveValue("alpha-project");
-    expect(screen.getByText(/Use the project chat composer switcher/)).toBeInTheDocument();
+    expect(screen.getByText(/Use the study chat composer switcher/)).toBeInTheDocument();
     const hostSelect = await screen.findByTestId("runtime-host-select");
     const codexOption = within(hostSelect).getByRole("option", {
       name: "Codex - Requires cloud-ok",
@@ -1255,7 +1255,7 @@ describe("SettingsPage runtime settings", () => {
     );
 
     expect(await screen.findByTestId("runtime-host-matrix")).toBeInTheDocument();
-    expect(screen.queryByText("What should ScienceSwarm watch for this project?")).not.toBeInTheDocument();
+    expect(screen.queryByText("What should ScienceSwarm watch for this study?")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Generate Specific Search Prompt" })).not.toBeInTheDocument();
   });
 });

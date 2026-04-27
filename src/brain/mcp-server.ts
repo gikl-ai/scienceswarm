@@ -414,7 +414,7 @@ function validateProjectSlug(
   const trimmed = rawProject?.trim();
   if (!trimmed) {
     return {
-      content: [{ type: "text", text: "Error: project is required and cannot be empty." }],
+      content: [{ type: "text", text: "Error: study is required and cannot be empty." }],
       isError: true,
     };
   }
@@ -424,7 +424,7 @@ function validateProjectSlug(
   } catch (error) {
     if (error instanceof InvalidSlugError) {
       return {
-        content: [{ type: "text", text: "Error: project must be a safe bare slug." }],
+        content: [{ type: "text", text: "Error: study must be a safe bare slug." }],
         isError: true,
       };
     }
@@ -622,24 +622,46 @@ export function createBrainMcpServer(): McpServer {
     async () => handleBrainMaintenance(getConfig()),
   );
 
-  // ── 6. brain_project_organize ─────────────────────────
+  // ── 6. brain_study_organize ───────────────────────────
+
+  server.tool(
+    "brain_study_organize",
+    "Read-only organizer summary for one study: candidate threads, duplicate papers, and next steps",
+    {
+      study: z.string().describe("Study slug"),
+    },
+    async (params) => handleBrainProjectOrganize(getConfig(), { project: params.study }),
+  );
+
+  // ── 6b. brain_project_organize legacy alias ───────────
 
   server.tool(
     "brain_project_organize",
-    "Read-only organizer summary for one project: candidate threads, duplicate papers, and next steps",
+    "Legacy alias for brain_study_organize",
     {
-      project: z.string().describe("Project slug"),
+      project: z.string().describe("Study slug (legacy field name)"),
     },
     async (params) => handleBrainProjectOrganize(getConfig(), params),
   );
 
-  // ── 7. brain_import_registry ──────────────────────────
+  // ── 7. brain_study_import_registry ────────────────────
+
+  server.tool(
+    "brain_study_import_registry",
+    "Read-only authoritative import registry for one study",
+    {
+      study: z.string().describe("Study slug"),
+    },
+    async (params) => handleBrainImportRegistry(getConfig(), { project: params.study }),
+  );
+
+  // ── 7b. brain_import_registry legacy alias ────────────
 
   server.tool(
     "brain_import_registry",
-    "Read-only authoritative import registry for one project",
+    "Legacy alias for brain_study_import_registry",
     {
-      project: z.string().describe("Project slug"),
+      project: z.string().describe("Study slug (legacy field name)"),
     },
     async (params) => handleBrainImportRegistry(getConfig(), params),
   );
@@ -708,7 +730,7 @@ export function createBrainMcpServer(): McpServer {
         .string()
         .optional()
         .describe("Optional explicit title (falls back to first non-empty line of content)"),
-      project: z.string().optional().describe("Project slug to file under"),
+      project: z.string().optional().describe("Study slug to file under (legacy field name)"),
       tags: z.array(z.string()).optional().describe("Tags to attach"),
       channel: z
         .string()
@@ -736,7 +758,7 @@ export function createBrainMcpServer(): McpServer {
     {
       id: z.string().describe("PMID or DOI"),
       scheme: z.enum(["pmid", "doi"]).optional().describe("Identifier scheme"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -755,7 +777,7 @@ export function createBrainMcpServer(): McpServer {
       page: z.number().optional().describe("1-based result page"),
       page_size: z.number().optional().describe("Results per page, max 200"),
       sort: z.enum(["relevance", "date_desc", "date_asc"]).optional(),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -771,7 +793,7 @@ export function createBrainMcpServer(): McpServer {
     "Fetch one arXiv paper by arXiv ID and persist it as a gbrain entity page",
     {
       id: z.string().describe("arXiv ID, e.g. 1706.03762 or arXiv:1706.03762"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -790,7 +812,7 @@ export function createBrainMcpServer(): McpServer {
       page: z.number().optional().describe("1-based result page"),
       page_size: z.number().optional().describe("Results per page, max 200"),
       sort: z.enum(["relevance", "date_desc", "date_asc"]).optional(),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -807,7 +829,7 @@ export function createBrainMcpServer(): McpServer {
     {
       id: z.string().describe("bioRxiv or medRxiv DOI"),
       server: z.enum(["biorxiv", "medrxiv"]).optional().describe("Preprint server"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -827,7 +849,7 @@ export function createBrainMcpServer(): McpServer {
       page: z.number().optional().describe("1-based result page"),
       page_size: z.number().optional().describe("Results per page, max 200"),
       cursor: z.string().optional().describe("bioRxiv API cursor returned by a prior search"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -843,7 +865,7 @@ export function createBrainMcpServer(): McpServer {
     "Fetch one Crossref work by DOI and persist it as a gbrain entity page",
     {
       id: z.string().describe("DOI"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -862,7 +884,7 @@ export function createBrainMcpServer(): McpServer {
       page: z.number().optional().describe("1-based result page"),
       page_size: z.number().optional().describe("Results per page, max 200"),
       sort: z.enum(["relevance", "date_desc", "date_asc"]).optional(),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -879,7 +901,7 @@ export function createBrainMcpServer(): McpServer {
     {
       id: z.string().describe("OpenAlex ID or URL"),
       entity_type: z.enum(["paper", "person"]).optional().describe("Entity type"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -898,7 +920,7 @@ export function createBrainMcpServer(): McpServer {
       entity_type: z.enum(["paper", "person"]).optional().describe("Entity type"),
       page: z.number().optional().describe("1-based result page"),
       page_size: z.number().optional().describe("Results per page, max 200"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -914,7 +936,7 @@ export function createBrainMcpServer(): McpServer {
     "Fetch one Semantic Scholar paper by paper ID, DOI, arXiv ID, or PMID and persist it",
     {
       id: z.string().describe("Semantic Scholar paper ID or supported external identifier"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -932,7 +954,7 @@ export function createBrainMcpServer(): McpServer {
       query: z.string().describe("Free-text Semantic Scholar query"),
       page: z.number().optional().describe("1-based result page"),
       page_size: z.number().optional().describe("Results per page, max 200"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -948,7 +970,7 @@ export function createBrainMcpServer(): McpServer {
     "Fetch one Materials Project material by mp-id and persist it as a gbrain entity page",
     {
       id: z.string().describe("Materials Project mp-id, e.g. mp-149"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -966,7 +988,7 @@ export function createBrainMcpServer(): McpServer {
       query: z.string().describe("Formula or mp-id"),
       page: z.number().optional().describe("1-based result page"),
       page_size: z.number().optional().describe("Results per page, max 200"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -982,7 +1004,7 @@ export function createBrainMcpServer(): McpServer {
     "Fetch one RCSB PDB structure by PDB ID and persist it as a gbrain entity page",
     {
       id: z.string().describe("Four-character PDB ID"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -1000,7 +1022,7 @@ export function createBrainMcpServer(): McpServer {
       query: z.string().describe("Free-text PDB query"),
       page: z.number().optional().describe("1-based result page"),
       page_size: z.number().optional().describe("Results per page, max 200"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -1016,7 +1038,7 @@ export function createBrainMcpServer(): McpServer {
     "Fetch one ChEMBL molecule by ChEMBL ID and persist it as a compound entity page",
     {
       id: z.string().describe("ChEMBL molecule ID, e.g. CHEMBL25"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -1034,7 +1056,7 @@ export function createBrainMcpServer(): McpServer {
       query: z.string().describe("Free-text molecule query"),
       page: z.number().optional().describe("1-based result page"),
       page_size: z.number().optional().describe("Results per page, max 200"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -1050,7 +1072,7 @@ export function createBrainMcpServer(): McpServer {
     "Fetch one UniProtKB protein by accession and persist it as a protein entity page",
     {
       id: z.string().describe("UniProt accession, e.g. P04637"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -1068,7 +1090,7 @@ export function createBrainMcpServer(): McpServer {
       query: z.string().describe("Free-text UniProt query"),
       page_size: z.number().optional().describe("Results per page, max 200"),
       page_token: z.string().optional().describe("UniProt cursor token returned from a previous search"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -1084,7 +1106,7 @@ export function createBrainMcpServer(): McpServer {
     "Fetch one ClinicalTrials.gov study by NCT ID and persist it as a trial entity page",
     {
       id: z.string().describe("NCT identifier, e.g. NCT04280705"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -1102,7 +1124,7 @@ export function createBrainMcpServer(): McpServer {
       query: z.string().describe("Free-text trial query"),
       page_size: z.number().optional().describe("Results per page, max 200"),
       page_token: z.string().optional().describe("ClinicalTrials.gov nextPageToken"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -1118,7 +1140,7 @@ export function createBrainMcpServer(): McpServer {
     "Fetch one ORCID public record and persist it as a person entity page",
     {
       id: z.string().describe("ORCID iD"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -1136,7 +1158,7 @@ export function createBrainMcpServer(): McpServer {
       query: z.string().describe("Free-text ORCID query"),
       page: z.number().optional().describe("1-based result page"),
       page_size: z.number().optional().describe("Results per page, max 200"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
     },
     async (params) => {
       try {
@@ -1153,7 +1175,7 @@ export function createBrainMcpServer(): McpServer {
     {
       query: z.string().describe("Landscape query or exact paper title query"),
       exact_title: z.string().optional().describe("Optional exact paper title to resolve deterministically"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
       sources: z.array(z.enum(["pubmed", "arxiv", "openalex", "crossref"])).optional()
         .describe("Optional source allowlist"),
       per_source_limit: z.number().optional().describe("Candidates fetched per source, max 50"),
@@ -1171,7 +1193,7 @@ export function createBrainMcpServer(): McpServer {
     {
       query: z.string().describe("Landscape query or exact paper title query"),
       exact_title: z.string().optional().describe("Optional exact paper title to resolve deterministically"),
-      project: z.string().optional().describe("Optional project slug to link"),
+      project: z.string().optional().describe("Optional study slug to link"),
       sources: z.array(z.enum(["pubmed", "arxiv", "openalex", "crossref"])).optional()
         .describe("Optional source allowlist"),
       per_source_limit: z.number().optional().describe("Candidates fetched per source, max 50"),
@@ -1197,9 +1219,10 @@ export function createBrainMcpServer(): McpServer {
 
   server.tool(
     "resolve_artifact",
-    "Find an audit-revise artifact in the active project; returns a slug or a disambiguation list",
+    "Find an audit-revise artifact in the active study; returns a slug or a disambiguation list",
     {
-      project: z.string().describe("Active project slug"),
+      study: z.string().describe("Active study slug"),
+      project: z.string().optional().describe("Legacy active study slug field"),
       hint: z
         .string()
         .optional()
@@ -1441,7 +1464,11 @@ export function createBrainMcpServer(): McpServer {
       project: z
         .string()
         .optional()
-        .describe("Active project slug (optional)."),
+        .describe("Legacy active study slug field (optional)."),
+      study: z
+        .string()
+        .optional()
+        .describe("Active study slug (optional)."),
     },
     async (params) => {
       try {
@@ -1478,7 +1505,7 @@ export function createBrainMcpServer(): McpServer {
         }
         const result = await runJob(getJobDeps(), {
           kind: params.kind,
-          project: params.project,
+          project: params.study ?? params.project,
           input_refs: params.input_refs,
           expected_artifacts: params.expected_artifacts,
         });

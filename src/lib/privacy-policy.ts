@@ -21,14 +21,14 @@ export async function enforceCloudPrivacy(projectId?: string | null): Promise<Re
   const privacy = await readProjectPrivacy(projectId);
   if (!privacy) {
     return Response.json(
-      { error: `Project ${projectId} has no privacy manifest; remote chat is blocked.` },
+      { error: `Study ${projectId} has no privacy manifest; remote chat is blocked.` },
       { status: 403 },
     );
   }
 
   if (privacy === "local-only") {
     return Response.json(
-      { error: `Project ${projectId} is local-only; remote chat is blocked for this project.` },
+      { error: `Study ${projectId} is local-only; remote chat is blocked for this study.` },
       { status: 403 },
     );
   }
@@ -39,7 +39,7 @@ export async function enforceCloudPrivacy(projectId?: string | null): Promise<Re
 export async function enforceExecutionPrivacy(projectId?: string | null): Promise<Response | null> {
   if (!projectId) {
     return Response.json(
-      { error: "projectId is required before OpenHands execution is allowed." },
+      { error: "studyId is required before OpenHands execution is allowed." },
       { status: 400 },
     );
   }
@@ -47,14 +47,14 @@ export async function enforceExecutionPrivacy(projectId?: string | null): Promis
   const privacy = await readProjectPrivacy(projectId);
   if (!privacy) {
     return Response.json(
-      { error: `Project ${projectId} has no privacy manifest; execution is blocked.` },
+      { error: `Study ${projectId} has no privacy manifest; execution is blocked.` },
       { status: 403 },
     );
   }
 
   if (privacy !== "execution-ok") {
     return Response.json(
-      { error: `Project ${projectId} requires execution-ok privacy before OpenHands execution is allowed.` },
+      { error: `Study ${projectId} requires execution-ok privacy before OpenHands execution is allowed.` },
       { status: 403 },
     );
   }

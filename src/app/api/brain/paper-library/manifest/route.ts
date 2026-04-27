@@ -8,7 +8,7 @@ import {
   readManifestOperations,
   windowManifestOperations,
 } from "@/lib/paper-library/apply";
-import { paperLibraryBadRequest, requirePaperLibraryRequest } from "../_shared";
+import { paperLibraryBadRequest, readStudyOrProjectParam, requirePaperLibraryRequest } from "../_shared";
 
 const ManifestLookupRequestSchema = z.object({
   project: ProjectSlugSchema,
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const parsed = ManifestLookupRequestSchema.safeParse({
-    project: url.searchParams.get("project"),
+    project: readStudyOrProjectParam(url),
     id: url.searchParams.get("id"),
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,

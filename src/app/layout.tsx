@@ -22,7 +22,7 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "ScienceSwarm — AI-Powered Research Workspace",
   description:
-    "Literature review to publication. One workspace for your entire research project.",
+    "Literature review to publication. One workspace for your entire research study.",
 };
 
 /**

@@ -330,7 +330,8 @@ describe("paper-library acquisition route", () => {
     expect(downloadedPage?.content).toContain("Source URL: https://arxiv.org/pdf/2401.01234.pdf");
     expect(downloadedPage?.content).toContain("### Imported PDF Text");
     expect(downloadedPage?.frontmatter.paper_library_enrichment).toMatchObject({
-      project: "project-alpha",
+      study: "project-alpha",
+      study_slug: "project-alpha",
       status: "downloaded",
       tool: "arxiv",
     });
@@ -338,7 +339,8 @@ describe("paper-library acquisition route", () => {
     const metadataOnlyPage = await store.getPage("wiki/entities/papers/doi-10-3000-metadata");
     expect(metadataOnlyPage?.content).toContain("Download status: no legal open PDF was persisted");
     expect(metadataOnlyPage?.frontmatter.paper_library_enrichment).toMatchObject({
-      project: "project-alpha",
+      study: "project-alpha",
+      study_slug: "project-alpha",
       status: "metadata_persisted",
       source_url: "https://doi.org/10.3000/metadata",
     });

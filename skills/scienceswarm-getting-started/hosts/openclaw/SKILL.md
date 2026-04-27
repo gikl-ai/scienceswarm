@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-getting-started
-description: 'Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up the project, run the dev server, connect services, or troubleshoot first-run issues.'
+description: 'Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up ScienceSwarm, run the dev server, connect services, or troubleshoot first-run issues.'
 metadata:
   openclaw:
     emoji: "🔬"
@@ -11,7 +11,7 @@ metadata:
 ## What is ScienceSwarm?
 
 ScienceSwarm is an open-source research workbench that combines:
-- A **project dashboard** for managing research projects
+- A **study dashboard** for managing research studies
 - A **Second Brain** (wiki + RAG + memory) for capturing and retrieving knowledge
 - A **Research Radar** for daily personalized briefings from arXiv, bioRxiv, etc.
 - An **agent layer** (OpenHands / OpenClaw) for automated research tasks

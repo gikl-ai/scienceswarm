@@ -27,7 +27,7 @@ to inform.
 1. Treat MD as a method with limits, not as a default answer.
 2. Separate biological goal, simulation question, and claim the user hopes to
    make.
-3. Label guidance as `project-literature`, `external-literature`,
+3. Label guidance as `study-literature`, `external-literature`,
    `common-heuristic`, `tool-default`, or `speculative`.
 4. Be explicit about uncertainty and missing inputs.
 5. Map the desired claim to concrete MD observables before recommending a run.

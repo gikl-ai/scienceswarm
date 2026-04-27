@@ -89,7 +89,7 @@ export async function GET(request: Request) {
         code: "brain_backend_unavailable",
         cause: err instanceof Error ? err.message : undefined,
         nextAction:
-          "Run `npm run doctor`, then reopen /dashboard/project to retry the local brain connection.",
+          "Run `npm run doctor`, then reopen /dashboard/study to retry the local brain connection.",
         docUrl: "/dashboard/settings",
       });
     }

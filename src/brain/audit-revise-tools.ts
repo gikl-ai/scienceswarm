@@ -3,7 +3,7 @@
  *
  * Audit-and-revise adds four capability tools to the ScienceSwarm MCP surface:
  *
- *   - resolve_artifact(project, hint?) → slug | { multiple: [slug] }
+ *   - resolve_artifact(study, hint?) → slug | { multiple: [slug] }
  *   - read_artifact(slug)              → { type, title, body, links }
  *   - link_artifact(from, to, relation)→ { ok }
  *   - critique_artifact(slug, style?)  → { critique_slug, brief, severity_counts }
@@ -45,6 +45,7 @@ import {
   assertSafeProjectSlug,
   InvalidSlugError,
 } from "@/lib/state/project-manifests";
+import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 
 /**
  * Wall-clock deadline the MCP `critique_artifact` handler waits for
@@ -243,8 +244,12 @@ function readTerminalJobError(payload: Record<string, unknown>): string {
 // ---------------------------------------------------------------------------
 
 export const ResolveArtifactSchema = z.object({
-  project: z.string().min(1),
+  study: z.string().min(1).optional(),
+  project: z.string().min(1).optional(),
   hint: z.string().optional(),
+}).refine((value) => value.study || value.project, {
+  message: "study is required",
+  path: ["study"],
 });
 export const ReadArtifactSchema = z.object({
   slug: z.string().min(1),
@@ -308,16 +313,17 @@ export async function resolveArtifact(
   deps: ToolDeps,
   params: ResolveArtifactParams,
 ): Promise<ResolveArtifactResult> {
-  const { project, hint } = ResolveArtifactSchema.parse(params);
+  const { study, project, hint } = ResolveArtifactSchema.parse(params);
+  const activeStudy = study ?? project ?? "";
   const pages = await deps.brain.listPages({ limit: 5000 });
-  const projectPages = pages.filter((page) => page.frontmatter?.project === project);
+  const projectPages = pages.filter((page) => frontmatterMatchesStudy(page.frontmatter, activeStudy));
   const candidates = projectPages
     .filter((page) => artifactMatchesHint(page, hint))
     .sort((left, right) => left.path.localeCompare(right.path));
 
   if (candidates.length === 0) {
     return {
-      message: `No artifacts matched project '${project}'${hint ? ` with hint '${hint}'` : ""}.`,
+      message: `No artifacts matched study '${activeStudy}'${hint ? ` with hint '${hint}'` : ""}.`,
     };
   }
 
@@ -470,9 +476,9 @@ export async function critiqueArtifact(
       ? fm.source_filename
       : `${slug}.pdf`;
 
-  // The upload route dual-writes original bytes under
-  // SCIENCESWARM_DIR/projects/<project>/<source_filename>. For tests, the
-  // caller can inject `loadPaperBytes` to avoid hitting the filesystem.
+  // The upload route dual-writes original bytes under the compatibility
+  // projects/<study>/<source_filename> shell. For tests, the caller can inject
+  // `loadPaperBytes` to avoid hitting the filesystem.
   const bytes = await loadPaperBytes(deps, slug, page);
 
   const submitStart = Date.now();
@@ -502,14 +508,35 @@ export async function critiqueArtifact(
     .toISOString()
     .replace(/\.\d+/, "");
   const userHandle = getCurrentUserHandle();
-  const project =
-    typeof fm.project === "string" && fm.project.length > 0
-      ? fm.project
-      : slug;
+  const study =
+    typeof fm.study_slug === "string" && fm.study_slug.length > 0
+      ? fm.study_slug
+      : typeof fm.study === "string" && fm.study.length > 0
+        ? fm.study
+        : typeof fm.legacy_project_slug === "string" && fm.legacy_project_slug.length > 0
+          ? fm.legacy_project_slug
+          : typeof fm.project === "string" && fm.project.length > 0
+            ? fm.project
+            : slug;
+
+  const studySlugs = Array.from(
+    new Set([
+      study,
+      ...(Array.isArray(fm.studies)
+        ? fm.studies.filter(
+            (value): value is string =>
+              typeof value === "string" && value.length > 0,
+          )
+        : []),
+    ]),
+  );
 
   const frontmatter: CritiqueFrontmatter = CritiqueFrontmatterSchema.parse({
     type: "critique",
-    project,
+    study,
+    study_slug: study,
+    legacy_project_slug: study,
+    studies: studySlugs,
     parent: slug,
     source_filename: typeof fm.source_filename === "string"
       ? fm.source_filename
@@ -559,9 +586,15 @@ async function loadPaperBytes(
   }
   const fm = (page.frontmatter ?? {}) as Record<string, unknown>;
   const rawProject =
-    typeof fm.project === "string" && fm.project.length > 0
-      ? fm.project
-      : slug;
+    typeof fm.study_slug === "string" && fm.study_slug.length > 0
+      ? fm.study_slug
+      : typeof fm.study === "string" && fm.study.length > 0
+        ? fm.study
+        : typeof fm.legacy_project_slug === "string" && fm.legacy_project_slug.length > 0
+          ? fm.legacy_project_slug
+          : typeof fm.project === "string" && fm.project.length > 0
+            ? fm.project
+            : slug;
   const rawSourceFilename =
     typeof fm.source_filename === "string" && fm.source_filename.length > 0
       ? fm.source_filename
@@ -569,7 +602,7 @@ async function loadPaperBytes(
 
   // Every read path must sanitize frontmatter-derived values before
   // touching the filesystem. Greptile P1 on PR #283: a crafted
-  // `project` or `source_filename` could otherwise escape the projects
+  // `study`/legacy `project` or `source_filename` could otherwise escape the projects
   // directory via path.join. We run the same slug validator the
   // workspace upload route uses and forbid any path separator in the
   // filename. If either check fails we throw with a typed error instead
@@ -580,7 +613,7 @@ async function loadPaperBytes(
   } catch (error) {
     if (error instanceof InvalidSlugError) {
       throw new Error(
-        `critique_artifact: page '${slug}' has an invalid project slug '${rawProject}': ${error.message}`,
+        `critique_artifact: page '${slug}' has an invalid study slug '${rawProject}': ${error.message}`,
       );
     }
     throw error;

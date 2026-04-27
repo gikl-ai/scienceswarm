@@ -30,7 +30,7 @@ ATT is robust to modeling choices.
 
 When the `scienceswarm` MCP tools are available, save the comparison note with
 `gbrain_capture` before answering. Use a clear title, the asset kind above,
-the active project, and links or references to the upstream fit note. If
+the active study, and links or references to the upstream fit note. If
 saving fails, report the exact save failure and do not present the note as
 durable.
 

@@ -96,7 +96,7 @@ describe("audit-revise SKILL.md (dry-run)", () => {
 
   it("references the dashboard surfaces that render audit-revise output", () => {
     const body = parsed.content;
-    expect(body).toContain("/dashboard/project");
+    expect(body).toContain("/dashboard/study");
     expect(body).toContain("/dashboard/reasoning?brain_slug=");
   });
 

@@ -144,9 +144,9 @@ function stubSettingsFetch() {
       return Response.json({ session: null });
     }
 
-    if (url === "/api/projects") {
+    if (url === "/api/studies") {
       return Response.json({
-        projects: [{ slug: "alpha-project", name: "Alpha Project" }],
+        studies: [{ slug: "alpha-project", name: "Alpha Project" }],
       });
     }
 

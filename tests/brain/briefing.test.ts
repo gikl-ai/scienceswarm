@@ -69,7 +69,7 @@ describe("briefing core", () => {
     writeFileSync(
       projectWikiPath("alpha", "wiki/projects/alpha.md"),
       "---\n" +
-        "type: project\n" +
+        "type: study\n" +
         "title: Alpha Project\n" +
         "status: active\n" +
         "---\n" +
@@ -134,7 +134,7 @@ describe("briefing core", () => {
     writeFileSync(
       projectWikiPath("alpha", "wiki/projects/alpha.md"),
       "---\n" +
-        "type: project\n" +
+        "type: study\n" +
         "title: Alpha Project\n" +
         "status: active\n" +
         "---\n" +
@@ -180,7 +180,7 @@ describe("briefing core", () => {
     writeFileSync(
       projectWikiPath("alpha", "wiki/projects/alpha.md"),
       "---\n" +
-        "type: project\n" +
+        "type: study\n" +
         "title: Alpha Project\n" +
         "status: active\n" +
         "---\n" +
@@ -225,7 +225,7 @@ describe("briefing core", () => {
     writeFileSync(
       projectWikiPath("alpha", "wiki/projects/alpha.md"),
       "---\n" +
-        "type: project\n" +
+        "type: study\n" +
         "title: Alpha Project\n" +
         "status: active\n" +
         "---\n" +
@@ -259,7 +259,7 @@ describe("briefing core", () => {
     });
 
     expect(brief.nextMove.recommendation).toBe(
-      "Import a local archive or add a clear project description for Alpha Project so the brief can become specific.",
+      "Import a local archive or add a clear study description for Alpha Project so the brief can become specific.",
     );
   });
 
@@ -268,7 +268,7 @@ describe("briefing core", () => {
     writeFileSync(
       projectWikiPath("alpha", "wiki/projects/alpha.md"),
       "---\n" +
-        "type: project\n" +
+        "type: study\n" +
         "title: Alpha Project\n" +
         "status: active\n" +
         "---\n" +
@@ -302,7 +302,7 @@ describe("briefing core", () => {
     });
 
     expect(brief.nextMove.recommendation).toBe(
-      "Import a local archive or add a clear project description for Alpha Project so the brief can become specific.",
+      "Import a local archive or add a clear study description for Alpha Project so the brief can become specific.",
     );
   });
 
@@ -312,7 +312,7 @@ describe("briefing core", () => {
     writeFileSync(
       projectWikiPath("alpha", "wiki/projects/alpha.md"),
       "---\n" +
-        "type: project\n" +
+        "type: study\n" +
         "title: Alpha Project\n" +
         "status: active\n" +
         "project: alpha\n" +
@@ -406,7 +406,7 @@ describe("briefing core", () => {
     writeFileSync(
       projectWikiPath("alpha", "wiki/projects/alpha.md"),
       "---\n" +
-        "type: project\n" +
+        "type: study\n" +
         "title: Alpha Project\n" +
         "---\n" +
         "# Alpha Project\n" +
@@ -482,7 +482,7 @@ describe("briefing core", () => {
     writeFileSync(
       projectWikiPath("alpha", "wiki/projects/alpha.md"),
       "---\n" +
-        "type: project\n" +
+        "type: study\n" +
         "title: Alpha Project\n" +
         "---\n" +
         "# Alpha Project\n" +
@@ -568,7 +568,7 @@ describe("briefing core", () => {
     writeFileSync(
       projectWikiPath("alpha", "wiki/projects/alpha.md"),
       "---\n" +
-        "type: project\n" +
+        "type: study\n" +
         "title: Alpha Project\n" +
         "---\n" +
         "# Alpha Project\n" +

@@ -47,8 +47,8 @@ function normalizeProjectRelativePath(value: string): string {
     throw new RuntimeHostError({
       code: "RUNTIME_INVALID_REQUEST",
       status: 400,
-      message: "Path escapes the project workspace.",
-      userMessage: "Artifact path must stay inside the project workspace.",
+      message: "Path escapes the study workspace.",
+      userMessage: "Artifact path must stay inside the study workspace.",
       recoverable: true,
       context: { path: value },
     });
@@ -81,13 +81,13 @@ function ensureWithinRoot(input: {
 
   const userMessage = input.namespace === "local-absolute"
     ? "Local artifact path must stay inside an allowed project or runtime root."
-    : "Artifact path must stay inside the project workspace.";
+    : "Artifact path must stay inside the study workspace.";
   throw new RuntimeHostError({
     code: "RUNTIME_INVALID_REQUEST",
     status: 400,
     message: input.namespace === "local-absolute"
       ? "Path is outside the local workspace root."
-      : "Path escapes the project workspace.",
+      : "Path escapes the study workspace.",
     userMessage,
     recoverable: true,
     context: {

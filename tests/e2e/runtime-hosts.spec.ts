@@ -784,13 +784,13 @@ async function installRuntimeRoutes(page: Page): Promise<RuntimeRouteState> {
       return;
     }
 
-    if (url.pathname === "/api/projects") {
+    if (url.pathname === "/api/studies") {
       await fulfillJson(route, {
-        projects: [
+        studies: [
           {
             id: PROJECT_ID,
             slug: PROJECT_ID,
-            name: "Project Alpha",
+            name: "Study Alpha",
             status: "active",
           },
         ],

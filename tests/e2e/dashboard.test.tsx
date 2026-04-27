@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams("name=test-project"),
-  usePathname: () => "/dashboard/project",
+  usePathname: () => "/dashboard/study",
   useRouter: () => ({
     replace: vi.fn(),
   }),
@@ -24,7 +24,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import ProjectPage from "@/app/dashboard/project/page";
+import ProjectPage from "@/app/dashboard/study/page";
 
 describe("Dashboard e2e flow", () => {
   beforeAll(() => {
@@ -104,7 +104,7 @@ describe("Dashboard e2e flow", () => {
     await screen.findByText(/Research workspace ready for/i);
 
     expect(
-      screen.getByLabelText("Chat with your project"),
+      screen.getByLabelText("Chat with your study"),
     ).toBeInTheDocument();
   });
 });

@@ -125,7 +125,7 @@ describe("formatProjectOrganizerChatSummary", () => {
 
     expect(summary).toContain("Organizer summary for **alpha**.");
     expect(summary).toContain("not enough repeated tags or titles");
-    expect(summary).toContain("none surfaced from the current gbrain project pages");
+    expect(summary).toContain("none surfaced from the current gbrain study pages");
     expect(summary).toContain("Import duplicate groups: none recorded in the current import state.");
     expect(summary).toContain("none with tracked gbrain source snapshots yet");
   });
@@ -159,7 +159,7 @@ describe("formatProjectOrganizerChatSummary", () => {
 
     const summary = formatProjectOrganizerChatSummary(readout);
 
-    expect(summary).toContain("Summarize why Open benchmark thread matters for this project.");
+    expect(summary).toContain("Summarize why Open benchmark thread matters for this study.");
   });
 
   it("does not relabel import duplicate groups as duplicate papers when no paper duplicates are verified", () => {
@@ -199,7 +199,7 @@ describe("formatProjectOrganizerChatSummary", () => {
 
     const summary = formatProjectOrganizerChatSummary(readout);
 
-    expect(summary).toContain("Possible duplicate papers: none surfaced from the current gbrain project pages.");
+    expect(summary).toContain("Possible duplicate papers: none surfaced from the current gbrain study pages.");
     expect(summary).toContain("Import duplicate groups: notebook: notes/a.ipynb, notes/b.ipynb, hash abc123def456");
     expect(summary).not.toContain("Possible duplicate papers: 1 duplicate group");
   });

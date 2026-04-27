@@ -330,7 +330,9 @@ function buildPacketFrontmatter(
     retained_count: retained.length,
     duplicates_dropped: duplicatesDropped,
     failure_count: failures.length,
-    project: input.project,
+    study: input.project,
+    study_slug: input.project,
+    legacy_project_slug: input.project,
     created_by: userHandle,
   };
 }
@@ -360,7 +362,9 @@ function buildJournalFrontmatter(
       candidates: run.candidatesAfterYearFilter,
     })),
     failure_count: failures.length,
-    project: input.project,
+    study: input.project,
+    study_slug: input.project,
+    legacy_project_slug: input.project,
     created_by: userHandle,
   };
 }
@@ -381,7 +385,7 @@ function renderPacketBody(
     `- Query: ${input.query}`,
   ];
   if (input.exactTitle) lines.push(`- Exact title: ${input.exactTitle}`);
-  if (input.project) lines.push(`- Project: ${input.project}`);
+  if (input.project) lines.push(`- Study: ${input.project}`);
   lines.push(`- Sources: ${input.sources.join(", ")}`);
   if (input.startYear != null || input.endYear != null) {
     lines.push(`- Year window: ${input.startYear ?? "any"}-${input.endYear ?? "any"}`);
@@ -482,7 +486,7 @@ function renderJournalBody(
     `- Packet: [[${packetSlug}|Research packet]]`,
   ];
   if (input.exactTitle) lines.push(`- Exact title: ${input.exactTitle}`);
-  if (input.project) lines.push(`- Project: ${input.project}`);
+  if (input.project) lines.push(`- Study: ${input.project}`);
   lines.push(`- Sources: ${input.sources.join(", ")}`, "");
 
   lines.push("## Source Runs");

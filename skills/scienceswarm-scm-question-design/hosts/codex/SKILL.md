@@ -32,7 +32,7 @@ fit.
 
 When the `scienceswarm` MCP tools are available, save the brief with
 `gbrain_capture` before answering. Use a clear title, the asset kind above,
-and the active project. If saving fails, report the exact save failure and do
+and the active study. If saving fails, report the exact save failure and do
 not present the brief as durable.
 
 Do not start data acquisition until the treated unit, treatment date,

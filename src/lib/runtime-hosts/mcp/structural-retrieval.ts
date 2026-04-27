@@ -11,6 +11,7 @@ import {
   type BrainStore,
 } from "@/brain/store";
 import type { SearchResult } from "@/brain/types";
+import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 
 type QueryResultRow = Record<string, unknown>;
 
@@ -184,19 +185,30 @@ function assertScope(input: RuntimeStructuralRetrievalInput): void {
 
 function projectMatchSql(alias: string): string {
   return `(
-    ${alias}.frontmatter->>'project' = $1
-    OR EXISTS (
+    ${alias}.frontmatter->>'study_slug' = $1
+    OR ${alias}.frontmatter->>'study' = $1
+    OR ${alias}.frontmatter->>'legacy_project_slug' = $1
+    OR ${alias}.frontmatter->>'project' = $1
+    OR ${alias}.frontmatter->>'study_id' = ('study_' || $1)
+    OR ${arrayFieldContainsSql(alias, "studies")}
+    OR ${arrayFieldContainsSql(alias, "study_slugs")}
+    OR ${arrayFieldContainsSql(alias, "legacy_project_slugs")}
+    OR ${arrayFieldContainsSql(alias, "projects")}
+  )`;
+}
+
+function arrayFieldContainsSql(alias: string, field: string): string {
+  return `EXISTS (
       SELECT 1
       FROM jsonb_array_elements_text(
         CASE
-          WHEN jsonb_typeof(${alias}.frontmatter->'projects') = 'array'
-            THEN ${alias}.frontmatter->'projects'
+          WHEN jsonb_typeof(${alias}.frontmatter->'${field}') = 'array'
+            THEN ${alias}.frontmatter->'${field}'
           ELSE '[]'::jsonb
         END
-      ) AS project_slug(value)
-      WHERE project_slug.value = $1
-    )
-  )`;
+      ) AS study_slug(value)
+      WHERE study_slug.value = $1
+    )`;
 }
 
 function getQueryableDb(store: BrainStore): QueryableDb | null {
@@ -291,13 +303,7 @@ function recordFromSearchResult(
 }
 
 function pageMatchesProject(page: BrainPage | null, projectId: string): boolean {
-  if (!page) return false;
-  const project = page.frontmatter.project;
-  if (typeof project === "string" && project === projectId) return true;
-
-  const projects = page.frontmatter.projects;
-  return Array.isArray(projects)
-    && projects.some((value) => typeof value === "string" && value === projectId);
+  return Boolean(page && frontmatterMatchesStudy(page.frontmatter, projectId));
 }
 
 async function filterSearchResultsByRuntimeScope(input: {

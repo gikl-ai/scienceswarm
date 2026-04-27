@@ -57,7 +57,7 @@ export function validateArtifactCreateRequest(input: unknown): ArtifactValidatio
   const hasPrivacyField = Object.prototype.hasOwnProperty.call(body, "privacy");
 
   if (!project || !projectSlug) {
-    return { ok: false, status: 400, error: "project is required" };
+    return { ok: false, status: 400, error: "study is required" };
   }
 
   if (!artifactType || !ARTIFACT_TYPES.includes(artifactType)) {

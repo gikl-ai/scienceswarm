@@ -1,5 +1,6 @@
 export type Sha256Hex = string;
-export type ProjectSlug = string;
+export type StudySlug = string;
+export type ProjectSlug = StudySlug;
 export type GbrainSlug = string;
 export type GbrainFileObjectId = `sha256:${Sha256Hex}`;
 
@@ -9,6 +10,7 @@ export interface GbrainFileObject {
   sizeBytes: number;
   mime: string;
   originalFilename: string;
+  study?: StudySlug;
   project: ProjectSlug;
   uploadedAt: string;
   uploadedBy: string;
@@ -42,6 +44,17 @@ export interface GbrainPageFileRef {
   filename: string;
   mime: string;
   sizeBytes: number;
+}
+
+export interface StudyRecord {
+  slug: StudySlug;
+  name: string;
+  description: string;
+  createdAt: string;
+  lastActive: string;
+  status: "active" | "idle" | "paused" | "archived";
+  studyPageSlug: GbrainSlug;
+  legacyProjectSlug?: ProjectSlug;
 }
 
 export interface ProjectRecord {

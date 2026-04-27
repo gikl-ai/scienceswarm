@@ -161,7 +161,7 @@ describe("createProjectPage", () => {
     expect(existsSync(join(brainRoot, "wiki/projects/alpha.md"))).toBe(true);
     const body = readFileSync(join(brainRoot, "wiki/projects/alpha.md"), "utf-8");
     expect(body).toContain("# Alpha");
-    expect(body).toContain("type: project");
+    expect(body).toContain("type: study");
   });
 
   it("is idempotent (returns null on second call, file untouched)", () => {
@@ -248,9 +248,10 @@ describe("createWikiPageFromText", () => {
 
     expect(pagePath).toBeTruthy();
     const pageContent = readFileSync(join(brainRoot, pagePath!), "utf-8");
-    expect(pageContent).toContain("project: project-alpha");
+    expect(pageContent).toContain("study: project-alpha");
+    expect(pageContent).toContain("study_slug: project-alpha");
     expect(pageContent).toContain("- project-alpha");
-    expect(gbrainCalls[0]?.content).toContain("project: project-alpha");
+    expect(gbrainCalls[0]?.content).toContain("study: project-alpha");
     expect(attached[0]?.project).toBe("project-alpha");
     expect(attached[0]?.filename).toBe("docs/project-memory.md");
   });

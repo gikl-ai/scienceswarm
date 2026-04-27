@@ -89,7 +89,7 @@ export interface OpenClawSectionProps {
    * running. Manual Start/Configure/Install buttons are hidden while
    * auto-start is in progress and only shown if auto-start fails.
    * Used on Settings to keep the UI clean when auto-remediation is
-   * active from the project page. Defaults to false to preserve
+   * active from the study page. Defaults to false to preserve
    * behaviour for /setup.
    */
   autoStart?: boolean;

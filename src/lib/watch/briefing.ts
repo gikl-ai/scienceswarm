@@ -1,6 +1,6 @@
 const DEFAULT_BRIEFING_SECTIONS = [
   "Today's Top Stories",
-  "Why This Matters For The Project",
+  "Why This Matters For The Study",
   "Sources",
   "Suggested Next Actions",
 ];
@@ -62,7 +62,7 @@ function canonicalSectionName(value: string): string | null {
   if (!normalized) return null;
   if (/\btop stories\b/.test(normalized)) return "Today's Top Stories";
   if (/\bwhy (this|it) matters\b/.test(normalized) || /\bproject implications\b/.test(normalized)) {
-    return "Why This Matters For The Project";
+    return "Why This Matters For The Study";
   }
   if (/\bsources?\b/.test(normalized) || /\bsource links?\b/.test(normalized)) return "Sources";
   if (/\bnext actions?\b/.test(normalized) || /\brecommended actions?\b/.test(normalized)) {
@@ -197,7 +197,7 @@ export function buildWatchCompiledPrompt(input: {
   searchQueries: string[];
   projectLabel?: string;
 }): string {
-  const projectLabel = input.projectLabel || "this project";
+  const projectLabel = input.projectLabel || "this study";
   const structure = inferWatchBriefingStructure(input.objective);
   const queryLines = input.searchQueries.map((query) => `- ${query}`).join("\n");
 
@@ -212,7 +212,7 @@ export function buildWatchCompiledPrompt(input: {
         "2. New papers, models, releases, benchmarks, datasets, and capability jumps.",
         "3. Startup, funding, lab, policy, leadership, and product announcements.",
         "4. Community discussion or social buzz that could change priorities.",
-        "5. Direct implications for this project and recommended next actions.",
+        "5. Direct implications for this study and recommended next actions.",
       ];
 
   return [
@@ -223,7 +223,7 @@ export function buildWatchCompiledPrompt(input: {
     ...coverageLines,
     "",
     "Use current web search, include source links, prefer primary sources when available, and ignore duplicate low-signal coverage.",
-    "For every substantive item, explain why it matters for the project.",
+    "For every substantive item, explain why it matters for the study.",
     ...buildWatchOutputSectionLines(input.objective),
     input.keywords.length > 0 ? `Keywords to prioritize: ${input.keywords.join(", ")}.` : "",
     queryLines ? `Search using queries like:\n${queryLines}` : "",

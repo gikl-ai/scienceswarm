@@ -32,6 +32,7 @@ describe("chat thread route", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       version: 1,
+      study: "alpha-project",
       project: "alpha-project",
       conversationId: null,
       conversationBackend: null,
@@ -111,6 +112,7 @@ describe("chat thread route", () => {
     expect(readResponse.status).toBe(200);
     await expect(readResponse.json()).resolves.toEqual({
       version: 1,
+      study: "alpha-project",
       project: "alpha-project",
       conversationId: "conv-alpha",
       conversationBackend: "openclaw",
@@ -151,6 +153,29 @@ describe("chat thread route", () => {
           createdAt: "2026-04-11T10:00:02.000Z",
         },
       ],
+    });
+  });
+
+  it("falls back to legacy project when canonical study is blank", async () => {
+    const { GET, POST } = await import("@/app/api/chat/thread/route");
+
+    const writeResponse = await POST(new Request("http://localhost/api/chat/thread", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        study: "",
+        project: "alpha-project",
+        messages: [],
+        artifactProvenance: [],
+      }),
+    }));
+    expect(writeResponse.status).toBe(200);
+
+    const readResponse = await GET(new Request("http://localhost/api/chat/thread?study=&project=alpha-project"));
+    expect(readResponse.status).toBe(200);
+    await expect(readResponse.json()).resolves.toMatchObject({
+      study: "alpha-project",
+      project: "alpha-project",
     });
   });
 

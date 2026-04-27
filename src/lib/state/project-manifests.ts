@@ -166,7 +166,7 @@ function buildProjectPageContent(input: {
   createdAt?: string;
   updatedAt: string;
 }): string {
-  const summary = input.description?.trim() || "Project created in the ScienceSwarm workspace.";
+  const summary = input.description?.trim() || "Study created in the ScienceSwarm workspace.";
   const details = [`- Slug: \`${input.slug}\``];
   if (input.createdAt?.trim()) {
     details.push(`- Created: ${input.createdAt.trim()}`);
@@ -176,9 +176,11 @@ function buildProjectPageContent(input: {
     "---",
     `date: ${input.updatedAt.slice(0, 10)}`,
     `title: ${JSON.stringify(input.title)}`,
-    "type: project",
+    "type: study",
     "para: projects",
-    `project: ${JSON.stringify(input.slug)}`,
+    `study: ${JSON.stringify(input.slug)}`,
+    `study_slug: ${JSON.stringify(input.slug)}`,
+    `legacy_project_slug: ${JSON.stringify(input.slug)}`,
     `status: ${input.status}`,
     "privacy: cloud-ok",
     "---",
@@ -188,7 +190,7 @@ function buildProjectPageContent(input: {
     "## Summary",
     summary,
     "",
-    "## Project Details",
+    "## Study Details",
     ...details,
     "",
   ].join("\n");

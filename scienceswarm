@@ -256,8 +256,8 @@ frontend_browser_host() {
 
 normalize_frontend_path() {
   case "${1:-dashboard}" in
-    ""|dashboard|project|dashboard/project|/dashboard|/dashboard/project)
-      printf '%s\n' "/dashboard/project"
+    ""|dashboard|study|project|dashboard/study|dashboard/project|/dashboard|/dashboard/study|/dashboard/project)
+      printf '%s\n' "/dashboard/study"
       ;;
     setup|/setup)
       printf '%s\n' "/setup"
@@ -567,7 +567,7 @@ print_restart_usage() {
 print_open_usage() {
   note "Usage: scienceswarm open [browser] [dashboard|setup|/path]"
   note "       scienceswarm open [dashboard|setup|/path] --browser <browser>"
-  note "Examples: scienceswarm open, scienceswarm open safari setup, scienceswarm open --browser firefox /dashboard/project"
+  note "Examples: scienceswarm open, scienceswarm open safari setup, scienceswarm open --browser firefox /dashboard/study"
 }
 
 cmd_open() {

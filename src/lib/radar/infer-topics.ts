@@ -30,7 +30,7 @@ export async function inferTopicsFromBrain(
   userPrompt?: string
 ): Promise<RadarTopic[]> {
   const projectResults = await store.search({
-    query: "active project research focus",
+    query: "active study research focus",
     mode: "index",
     limit: 20,
   })

@@ -148,7 +148,7 @@ ${content.slice(0, 2000)}${content.length > 2000 ? "\n... (truncated)" : ""}
 *(Updated when AI analyzes this file)*
 
 ## References
-*(Links to related files in this project)*
+*(Links to related files in this study)*
 
 ## Change Log
 - ${now.split("T")[0]}: Imported

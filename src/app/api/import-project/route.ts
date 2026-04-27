@@ -393,7 +393,7 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Import error";
-    console.error("Project import error:", message);
+    console.error("Study import error:", message);
     return Response.json({ error: message }, { status: 500 });
   }
 }

@@ -79,10 +79,10 @@ function getProjectScopedSourceFilename(
   return `${getTargetFolder(baseName)}/${baseName}`;
 }
 
-// ── Project page ──────────────────────────────────────
+// ── Study page ────────────────────────────────────────
 
 /**
- * Create a project landing page. Returns the page path or null if the page
+ * Create a study landing page. Returns the page path or null if the page
  * already exists (idempotent).
  */
 export function createProjectPage(
@@ -102,8 +102,11 @@ export function createProjectPage(
     "---",
     `title: "${project.title}"`,
     `date: ${date}`,
-    "type: project",
+    "type: study",
     "para: projects",
+    `study: ${project.slug}`,
+    `study_slug: ${project.slug}`,
+    `legacy_project_slug: ${project.slug}`,
     `confidence: ${project.confidence}`,
     `tags: [coldstart]`,
     "---",
@@ -124,7 +127,7 @@ export function createProjectPage(
     "",
     "## Next Steps",
     "- [ ] Review imported files for accuracy",
-    "- [ ] Add project description",
+    "- [ ] Add study description",
     "- [ ] Link related experiments and hypotheses",
   ].filter(Boolean).join("\n");
 
@@ -273,19 +276,22 @@ function withSourceFileRef(
   projectSlug?: string,
 ): string {
   const parsed = matter(content);
-  const existingProjects = Array.isArray(parsed.data.projects)
-    ? parsed.data.projects.filter(
+  const existingProjects = [
+    ...(Array.isArray(parsed.data.studies) ? parsed.data.studies : []),
+    ...(Array.isArray(parsed.data.projects) ? parsed.data.projects : []),
+  ].filter(
         (value): value is string =>
           typeof value === "string" && value.trim().length > 0,
-      )
-    : [];
+      );
   const data: Record<string, unknown> = {
     ...parsed.data,
   };
 
   if (projectSlug) {
-    data.project = projectSlug;
-    data.projects = Array.from(new Set([...existingProjects, projectSlug]));
+    data.study = projectSlug;
+    data.study_slug = projectSlug;
+    data.legacy_project_slug = projectSlug;
+    data.studies = Array.from(new Set([...existingProjects, projectSlug]));
   }
 
   if (sourceFileRef) {

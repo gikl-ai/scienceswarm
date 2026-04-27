@@ -27,7 +27,7 @@ This is a plan-first stage. Do not write R code, fetch data, or run analysis in 
 2. Map the same SCM methodology used by the quickstart: classic Abadie synthetic control as the primary estimator, method comparison as robustness, permutation-style placebo checks, and a final report with tables and plots comparable to the existing demo.
 3. Specify donor inclusion and exclusion criteria before data acquisition. Exclude co-shocked units, direct spillover units, and units lacking sufficient pre-treatment coverage. For the SCM-IR from-scratch tutorial, keep main donor pools comparable to the SCM-IR quickstart: OECD-style country donors for Brexit, upper-middle-income country donors for Russia, and Basque regional donors that exclude only the Spain national aggregate in the main specification. Madrid, Catalonia, or Navarre belong in sensitivity checks unless the user explicitly makes them main-analysis exclusions.
 4. List assumptions and diagnostics that must be checked: no anticipation, stable donor outcomes, strong pre-treatment fit, donor-weight interpretability, placebo rank, and sensitivity to donors or treatment year.
-5. Define the artifact lifecycle under the active ScienceSwarm project:
+5. Define the artifact lifecycle under the active ScienceSwarm study:
    - analysis/scm-from-scratch/plan/scm-study-brief.md
    - analysis/scm-from-scratch/plan/stage-plan.json
    - analysis/scm-from-scratch/code/ for generated R files after approval
@@ -41,7 +41,7 @@ End with a short approval gate. Offer exactly the next 2 or 3 actions, such as a
 
 ## Artifact Capture
 
-When the scienceswarm MCP tools are available, save the brief with gbrain_capture before answering. Use a clear title, the asset kind above, and the active project. If saving fails, report the exact save failure and do not present the brief as durable.
+When the scienceswarm MCP tools are available, save the brief with gbrain_capture before answering. Use a clear title, the asset kind above, and the active study. If saving fails, report the exact save failure and do not present the brief as durable.
 
 ## Confidence Boundary
 

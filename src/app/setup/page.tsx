@@ -291,7 +291,7 @@ export default function SetupPage() {
         const data = (await res.json()) as SetupStatusResponse;
         if (cancelled) return;
         if (data.ready || data.persistedSetup?.complete === true) {
-          router.replace("/dashboard/project");
+          router.replace("/dashboard/study");
           return;
         }
       } catch {
@@ -378,7 +378,7 @@ export default function SetupPage() {
       : AUTO_CONTINUE_DELAY_MS;
     const timer = window.setTimeout(() => {
       clearPersistedBootstrapState();
-      router.push("/dashboard/project?onboarding=continue");
+      router.push("/dashboard/study?onboarding=continue");
     }, delayMs);
     return () => window.clearTimeout(timer);
   }, [hydrated, router, summary]);
@@ -465,7 +465,7 @@ export default function SetupPage() {
 
   const autoContinuing = shouldAutoContinue(summary);
   const deferredOpenHands = hasDeferredOpenHands(summary);
-  const continueRoute = "/dashboard/project?onboarding=continue";
+  const continueRoute = "/dashboard/study?onboarding=continue";
   const showWindowsNote = hydrated && isLikelyWindowsBrowser();
 
   return (
@@ -582,7 +582,7 @@ export default function SetupPage() {
           </p>
           <button
             type="button"
-            onClick={() => router.push("/dashboard/project")}
+            onClick={() => router.push("/dashboard/study")}
             className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
             data-testid="bootstrap-continue"
           >

@@ -59,11 +59,11 @@ function buildSearchPrompt(
   return [
     prompt,
     "",
-    `Project: ${manifest.title} (${manifest.slug})`,
+    `Study: ${manifest.title} (${manifest.slug})`,
     "Search queries to try:",
-    queries || "- current project-relevant research news",
+    queries || "- current study-relevant research news",
     "",
-    "Return only high-signal items that should enter the user's project frontier brief. Prefer primary sources, credible reporting, and source pages with stable URLs.",
+    "Return only high-signal items that should enter the user's study frontier brief. Prefer primary sources, credible reporting, and source pages with stable URLs.",
   ].join("\n");
 }
 

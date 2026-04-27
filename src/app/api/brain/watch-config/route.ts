@@ -15,12 +15,17 @@ import {
 import type { ProjectWatchConfig } from "@/lib/watch/types";
 
 interface WatchConfigBody {
+  study?: string;
   project?: string;
   config?: ProjectWatchConfig;
 }
 
-function normalizeProject(project: string): string {
-  return assertSafeProjectSlug(project.trim());
+function normalizeStudy(study: string): string {
+  return assertSafeProjectSlug(study.trim());
+}
+
+function readStudyOrProjectValue(study: string | undefined, project: string | undefined): string | undefined {
+  return study?.trim() || project;
 }
 
 function watchErrorResponse(error: unknown): Response {
@@ -39,28 +44,32 @@ export async function GET(request: Request): Promise<Response> {
   if (isErrorResponse(configOrError)) return configOrError;
 
   const url = new URL(request.url);
-  const projectParam = url.searchParams.get("project");
-  if (!projectParam) {
-    return Response.json({ error: "Missing project parameter" }, { status: 400 });
+  const studyParam = readStudyOrProjectValue(
+    url.searchParams.get("study") ?? undefined,
+    url.searchParams.get("project") ?? undefined,
+  );
+  if (!studyParam) {
+    return Response.json({ error: "Missing study parameter" }, { status: 400 });
   }
 
-  let project: string;
+  let study: string;
   try {
-    project = normalizeProject(projectParam);
+    study = normalizeStudy(studyParam);
   } catch {
-    return Response.json({ error: "project must be a safe bare slug" }, { status: 400 });
+    return Response.json({ error: "study must be a safe bare slug" }, { status: 400 });
   }
 
-  const stateRoot = getProjectStateRootForBrainRoot(project, configOrError.root);
+  const stateRoot = getProjectStateRootForBrainRoot(study, configOrError.root);
   try {
-    await ensureWatchProject(project, stateRoot);
+    await ensureWatchProject(study, stateRoot);
   } catch (error) {
     return watchErrorResponse(error);
   }
 
-  const watchConfig = await readProjectWatchConfig(project, stateRoot);
+  const watchConfig = await readProjectWatchConfig(study, stateRoot);
   return Response.json({
-    project,
+    study,
+    project: study,
     config: watchConfig ?? createDefaultProjectWatchConfig(),
     saved: Boolean(watchConfig),
   });
@@ -85,15 +94,16 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  if (typeof body.project !== "string" || !body.project.trim()) {
-    return Response.json({ error: "Missing project field" }, { status: 400 });
+  const requestedStudy = readStudyOrProjectValue(body.study, body.project);
+  if (typeof requestedStudy !== "string" || !requestedStudy.trim()) {
+    return Response.json({ error: "Missing study field" }, { status: 400 });
   }
 
-  let project: string;
+  let study: string;
   try {
-    project = normalizeProject(body.project);
+    study = normalizeStudy(requestedStudy);
   } catch {
-    return Response.json({ error: "project must be a safe bare slug" }, { status: 400 });
+    return Response.json({ error: "study must be a safe bare slug" }, { status: 400 });
   }
 
   if (!isWatchConfig(body.config)) {
@@ -102,12 +112,13 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const savedConfig = await saveProjectWatchConfig({
-      project,
+      project: study,
       config: body.config,
-      stateRoot: getProjectStateRootForBrainRoot(project, configOrError.root),
+      stateRoot: getProjectStateRootForBrainRoot(study, configOrError.root),
     });
     return Response.json({
-      project,
+      study,
+      project: study,
       config: savedConfig,
       saved: true,
     });

@@ -14,6 +14,7 @@ export async function POST(request: Request): Promise<Response> {
   const llm = getLLMClient(config);
 
   let body: {
+    study?: string;
     project?: string;
     prompt?: string;
     previousPlanSlug?: string | null;
@@ -30,27 +31,27 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const project = body.project?.trim();
+  const study = body.study?.trim() || body.project?.trim();
   const prompt = body.prompt?.trim();
 
-  if (!project) {
-    return Response.json({ error: "project is required" }, { status: 400 });
+  if (!study) {
+    return Response.json({ error: "study is required" }, { status: 400 });
   }
   if (!prompt) {
     return Response.json({ error: "prompt is required" }, { status: 400 });
   }
 
   try {
-    assertSafeProjectSlug(project);
+    assertSafeProjectSlug(study);
   } catch {
-    return Response.json({ error: "project must be a safe bare slug" }, { status: 400 });
+    return Response.json({ error: "study must be a safe bare slug" }, { status: 400 });
   }
 
   try {
     const result = await buildAndPersistNextExperimentPlan({
       config,
       llm,
-      project,
+      project: study,
       prompt,
       previousPlanSlug: body.previousPlanSlug ?? null,
       focusBrainSlug: body.focusBrainSlug ?? null,

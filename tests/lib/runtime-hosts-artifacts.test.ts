@@ -70,7 +70,7 @@ describe("runtime host path mapping and artifact import", () => {
     });
 
     expect(() => mapper.fromProjectRelative("../secrets.txt")).toThrow(
-      "Path escapes the project workspace",
+      "Path escapes the study workspace",
     );
     expect(() => mapper.fromHostNative("/workspace/other/secrets.txt")).toThrow(
       "Path is outside the host workspace root",

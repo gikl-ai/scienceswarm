@@ -6,7 +6,7 @@ import {
   paperLibraryError,
 } from "@/lib/paper-library/contracts";
 import { listPaperReviewItems, updatePaperReviewItem } from "@/lib/paper-library/review";
-import { paperLibraryBadRequest, readJsonBody, requirePaperLibraryRequest } from "../_shared";
+import { normalizeStudyBody, paperLibraryBadRequest, readJsonBody, readStudyOrProjectParam, requirePaperLibraryRequest } from "../_shared";
 
 const ReviewListRequestSchema = z.object({
   project: ProjectSlugSchema,
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const parsed = ReviewListRequestSchema.safeParse({
-    project: url.searchParams.get("project"),
+    project: readStudyOrProjectParam(url),
     scanId: url.searchParams.get("scanId"),
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     return paperLibraryBadRequest(error);
   }
 
-  const parsed = PaperReviewUpdateRequestSchema.safeParse(body);
+  const parsed = PaperReviewUpdateRequestSchema.safeParse(normalizeStudyBody(body));
   if (!parsed.success) return paperLibraryBadRequest(parsed.error);
 
   try {

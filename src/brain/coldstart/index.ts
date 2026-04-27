@@ -302,7 +302,7 @@ export async function approveAndImport(
     } catch (err) {
       errors.push({
         path: `project:${project.slug}`,
-        error: err instanceof Error ? err.message : "Project creation failed",
+        error: err instanceof Error ? err.message : "Study creation failed",
       });
     }
   }
@@ -441,7 +441,7 @@ export async function approveAndImportWithProgress(
         projectsCreated.push(project.slug);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Project creation failed";
+      const msg = err instanceof Error ? err.message : "Study creation failed";
       errors.push({ path: `project:${project.slug}`, error: msg });
       callbacks.onError?.({ path: `project:${project.slug}`, error: msg });
     }
@@ -623,7 +623,7 @@ export async function generateFirstBriefing(
         paperPages.push({ title, path: relPath, content: content.slice(0, 2000) });
       } else if (type === "note") stats.notes++;
       else if (type === "experiment") stats.experiments++;
-      else if (type === "project") stats.projects++;
+      else if (type === "study" || type === "project") stats.projects++;
 
       allPages.push({ title, path: relPath, type, content: content.slice(0, 500), mtime });
     });

@@ -26,6 +26,7 @@ import {
 } from "@/lib/state/project-manifests";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 import { getBrainFileUploadRouteFileStore } from "@/lib/testing/brain-file-upload-route-overrides";
+import { readStudySlugFromFrontmatter } from "@/lib/studies/frontmatter";
 
 export const runtime = "nodejs";
 
@@ -117,10 +118,10 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const fm = (page.frontmatter ?? {}) as Record<string, unknown>;
-    const projectRaw = typeof fm.project === "string" ? fm.project : null;
+    const projectRaw = readStudySlugFromFrontmatter(fm);
     if (!projectRaw) {
       return Response.json(
-        { error: `Page '${slug}' has no project frontmatter` },
+        { error: `Page '${slug}' has no study frontmatter` },
         { status: 400 },
       );
     }
@@ -130,7 +131,7 @@ export async function POST(request: Request): Promise<Response> {
     } catch (error) {
       if (error instanceof InvalidSlugError) {
         return Response.json(
-          { error: `Invalid project slug: ${error.message}` },
+          { error: `Invalid study slug: ${error.message}` },
           { status: 400 },
         );
       }

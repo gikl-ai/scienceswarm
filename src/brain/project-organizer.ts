@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 import type { BrainConfig } from "./types";
+import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 import type { BrainPage, BrainStore } from "./store";
 import { ensureBrainStoreReady, getBrainStore } from "./store";
 import { buildProjectBrief } from "./briefing";
@@ -98,11 +99,7 @@ function projectKeywords(project: string): Set<string> {
 }
 
 export function filterProjectPages(pages: BrainPage[], project: string): BrainPage[] {
-  return pages.filter((page) => {
-    const frontmatter = page.frontmatter ?? {};
-    return frontmatter.project === project
-      || (Array.isArray(frontmatter.projects) && frontmatter.projects.includes(project));
-  });
+  return pages.filter((page) => frontmatterMatchesStudy(page.frontmatter, project));
 }
 
 function pageKeywords(page: BrainPage, project: string): string[] {
