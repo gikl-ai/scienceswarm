@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -178,5 +180,16 @@ describe("ensureProjectShellForProjectSlug", () => {
       }),
     ).rejects.toThrow("SCIENCESWARM_USER_HANDLE is required");
     expect(repo.create).not.toHaveBeenCalled();
+  });
+
+  it("lazy-loads the brain store instead of importing it at module scope", async () => {
+    const source = await readFile(
+      new URL("../../../src/lib/projects/ensure-project-shell.ts", import.meta.url),
+      "utf-8",
+    );
+
+    expect(source).toContain('await import("@/brain/store")');
+    expect(source).toContain("async function loadReadyBrainStore()");
+    expect(source).not.toContain('import { ensureBrainStoreReady, getBrainStore } from "@/brain/store";');
   });
 });
