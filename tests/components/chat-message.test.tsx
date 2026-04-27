@@ -525,6 +525,8 @@ describe("ChatMessage", () => {
     expect(progressLog).toHaveTextContent("Running");
     expect(progressLog).toHaveTextContent("Wait");
     expect(progressLog).toHaveTextContent("Waiting for OpenClaw to respond");
+    expect(screen.getByText("Server")).toHaveClass("text-body");
+    expect(screen.getByText("Running")).toHaveClass("text-amber-800");
   });
 
   it("falls back to the structured progress source for run-state detail labels", () => {
