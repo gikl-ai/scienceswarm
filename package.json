@@ -19,6 +19,9 @@
     "dev": "FRONTEND_HOST=${FRONTEND_HOST:-127.0.0.1} next dev --webpack -H ${FRONTEND_HOST:-127.0.0.1} -p $(npx tsx scripts/print-port.ts frontend)",
     "build": "next build",
     "build:standalone": "SCIENCESWARM_STANDALONE_BUILD=1 next build --webpack",
+    "desktop:dev": "electron desktop/main.mjs",
+    "desktop:dist": "electron-builder --dir",
+    "desktop:pack": "electron-builder",
     "start": "./start.sh",
     "start:standalone": "node scripts/start-standalone.mjs",
     "lint": "eslint",
@@ -103,6 +106,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.3",
     "glob": "^13.0.6",
@@ -111,5 +116,37 @@
     "tsx": "^4.20.6",
     "typescript": "^6",
     "vitest": "^4.1.4"
+  },
+  "build": {
+    "appId": "ai.scienceswarm.desktop",
+    "productName": "ScienceSwarm",
+    "files": [
+      ".next/standalone/**/*",
+      ".next/static/**/*",
+      "public/**/*",
+      "desktop/**/*",
+      "scripts/start-standalone.mjs",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "desktop/build"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office"
+    }
   }
 }
