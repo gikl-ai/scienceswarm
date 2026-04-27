@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
+const DESKTOP_DIAGNOSTICS_CHANNEL = "scienceswarm:desktop-diagnostics";
 
 export function resolveDesktopStartPath(env = process.env) {
   const configuredPath = env.SCIENCESWARM_DESKTOP_START_PATH?.trim();
@@ -33,8 +34,18 @@ export function resolveStandaloneEntry(root = projectRoot) {
   return path.join(root, "scripts", "start-standalone.mjs");
 }
 
+export function resolveDesktopDiagnostics(app, env = process.env) {
+  return {
+    shell: "electron",
+    platform: process.platform,
+    startUrl: resolveDesktopStartUrl(env),
+    userDataPath: app.getPath("userData"),
+    logsPath: app.getPath("logs"),
+  };
+}
+
 export async function launchDesktopShell(options = {}) {
-  const [{ app, BrowserWindow }, { startStandaloneServer }] = await Promise.all([
+  const [{ app, BrowserWindow, ipcMain }, { startStandaloneServer }] = await Promise.all([
     import("electron"),
     import(pathToFileURL(resolveStandaloneEntry(options.projectRoot)).href),
   ]);
@@ -46,6 +57,9 @@ export async function launchDesktopShell(options = {}) {
     cwd: options.projectRoot,
     env: options.env,
   });
+  ipcMain.handle(DESKTOP_DIAGNOSTICS_CHANNEL, () =>
+    resolveDesktopDiagnostics(app, options.env)
+  );
 
   const window = new BrowserWindow({
     width: 1440,
