@@ -128,26 +128,25 @@ export function AssistantProgressTranscript({
   renderMarkdownBlock: (value: string) => ReactNode;
 }) {
   const [expandedExploredBlocks, setExpandedExploredBlocks] = useState<Record<string, boolean>>({});
-  let lastSection: "thinking" | "activity" | null = null;
 
   return (
     <>
       {blocks.map((block, index) => {
         const sectionElements: ReactNode[] = [];
-        const nextSection = block.section;
-        if (nextSection !== lastSection) {
-          const sectionMeta = PROGRESS_SECTION_META[nextSection];
+        const previousSection = index > 0 ? blocks[index - 1]?.section ?? null : null;
+        if (block.section !== previousSection) {
+          const sectionMeta = PROGRESS_SECTION_META[block.section];
           sectionElements.push(
             compact ? (
               <div
-                key={`section-${nextSection}-${index}`}
+                key={`section-${block.section}-${index}`}
                 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-dim"
               >
                 {sectionMeta.compactTitle}
               </div>
             ) : (
               <div
-                key={`section-${nextSection}-${index}`}
+                key={`section-${block.section}-${index}`}
                 className={`mb-2 inline-flex w-fit items-center gap-2 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.1em] ${sectionMeta.className}`}
               >
                 <span aria-hidden="true">{sectionMeta.icon}</span>
@@ -155,7 +154,6 @@ export function AssistantProgressTranscript({
               </div>
             ),
           );
-          lastSection = nextSection;
         }
 
         if (block.type === "explored") {
