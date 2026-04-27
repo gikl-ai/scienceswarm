@@ -121,7 +121,7 @@ import {
   materializeGbrainCheckout,
 } from "@/lib/openhands/gbrain-checkout";
 import { ensureProjectShellForProjectSlug } from "@/lib/projects/ensure-project-shell";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 import {
   getCurrentExplicitLlmRuntimeConfig,
   getCurrentLlmRuntimeEnv,
