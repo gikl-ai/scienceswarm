@@ -2769,8 +2769,8 @@ describe("POST /api/chat/unified", () => {
     const response = await POST(request);
     const events = await readSseEvents(response);
 
-    const findProgressTextIndex = (text: string) =>
-      events.findIndex((event) => {
+    const findProgressEvent = (text: string) =>
+      events.find((event) => {
         const progress =
           event.progress && typeof event.progress === "object" && !Array.isArray(event.progress)
             ? event.progress as Record<string, unknown>
@@ -2781,6 +2781,8 @@ describe("POST /api/chat/unified", () => {
             : null;
         return payload?.text === text;
       });
+    const findProgressTextIndex = (text: string) =>
+      events.findIndex((event) => findProgressEvent(text) === event);
     const firstGatewayEventIndex = events.findIndex((event) => {
       const progress =
         event.progress && typeof event.progress === "object" && !Array.isArray(event.progress)
@@ -2797,6 +2799,32 @@ describe("POST /api/chat/unified", () => {
     expect(findProgressTextIndex("Sending request to OpenClaw")).toBeLessThan(
       findProgressTextIndex("Waiting for OpenClaw to respond"),
     );
+
+    const sendProgress =
+      findProgressEvent("Sending request to OpenClaw")?.progress as
+        | { payload?: Record<string, unknown> }
+        | undefined;
+    const waitProgress =
+      findProgressEvent("Waiting for OpenClaw to respond")?.progress as
+        | { payload?: Record<string, unknown> }
+        | undefined;
+
+    expect(sendProgress?.payload).toMatchObject({
+      text: "Sending request to OpenClaw",
+      source: "server",
+      phase: "send",
+      status: "started",
+      label: "Send",
+    });
+    expect(waitProgress?.payload).toMatchObject({
+      text: "Waiting for OpenClaw to respond",
+      source: "server",
+      phase: "waiting",
+      status: "running",
+      label: "Wait",
+    });
+    expect(sendProgress?.payload?.timestampMs).toEqual(expect.any(Number));
+    expect(waitProgress?.payload?.timestampMs).toEqual(expect.any(Number));
   });
 
   it("streams opt-in timing meta without a first gateway event when OpenClaw is quiet", async () => {

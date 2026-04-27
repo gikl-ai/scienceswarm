@@ -350,6 +350,17 @@ type ChatTimingMetaName =
   | "first_gateway_event"
   | "final_assistant_text";
 
+type ServerProgressStatus = "started" | "running" | "complete" | "failed";
+
+type ServerProgressPayload = {
+  text: string;
+  source: "server";
+  timestampMs: number;
+  phase?: string;
+  status?: ServerProgressStatus;
+  label?: string;
+};
+
 function finishChatTimingResponse(
   timing: ChatTimingTelemetry,
   response: Response,
@@ -7714,11 +7725,28 @@ function streamOpenClawResponse(params: {
             },
           });
         };
-        const sendServerProgress = (text: string): boolean =>
+        const sendServerProgress = (
+          text: string,
+          meta: Omit<Partial<ServerProgressPayload>, "source" | "text"> = {},
+        ): boolean =>
           sendEvent({
             progress: {
               type: "server_progress",
-              payload: { text },
+              payload: {
+                text,
+                source: "server",
+                timestampMs:
+                  typeof meta.timestampMs === "number" && Number.isFinite(meta.timestampMs)
+                    ? Math.floor(meta.timestampMs)
+                    : Date.now(),
+                ...(typeof meta.phase === "string" && meta.phase.trim().length > 0
+                  ? { phase: meta.phase.trim() }
+                  : {}),
+                ...(meta.status ? { status: meta.status } : {}),
+                ...(typeof meta.label === "string" && meta.label.trim().length > 0
+                  ? { label: meta.label.trim() }
+                  : {}),
+              } satisfies ServerProgressPayload,
             },
           });
         const closeStream = () => {
@@ -7928,8 +7956,16 @@ function streamOpenClawResponse(params: {
                 // Keep both messages ahead of the first gateway event so the
                 // transcript shows immediate human-readable progress even when
                 // OpenClaw's first streamed callback arrives synchronously.
-                sendServerProgress("Sending request to OpenClaw");
-                sendServerProgress("Waiting for OpenClaw to respond");
+                sendServerProgress("Sending request to OpenClaw", {
+                  phase: "send",
+                  status: "started",
+                  label: "Send",
+                });
+                sendServerProgress("Waiting for OpenClaw to respond", {
+                  phase: "waiting",
+                  status: "running",
+                  label: "Wait",
+                });
               },
               sendToOpenClaw: sendToOpenClawWithProgress,
               message:
