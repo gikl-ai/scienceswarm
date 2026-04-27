@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  resolveDesktopStartPath,
   resolveDesktopStartUrl,
   resolveStandaloneEntry,
 } from "../../desktop/main.mjs";
@@ -14,12 +15,22 @@ describe("desktop main", () => {
     })).toBe("https://desktop.local/app");
   });
 
+  it("defaults the desktop shell to the setup route", () => {
+    expect(resolveDesktopStartPath({})).toBe("/setup");
+  });
+
+  it("normalizes a custom desktop start path override", () => {
+    expect(resolveDesktopStartPath({
+      SCIENCESWARM_DESKTOP_START_PATH: "runtime/compare",
+    })).toBe("/runtime/compare");
+  });
+
   it("builds the desktop start url from frontend host, port, and https settings", () => {
     expect(resolveDesktopStartUrl({
       FRONTEND_HOST: "0.0.0.0",
       FRONTEND_PORT: "4100",
       FRONTEND_USE_HTTPS: "false",
-    })).toBe("http://0.0.0.0:4100");
+    })).toBe("http://0.0.0.0:4100/setup");
   });
 
   it("resolves the standalone launcher path from the project root", () => {
