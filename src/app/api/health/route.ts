@@ -18,7 +18,7 @@ import {
 } from "@/lib/structured-critique-client";
 import { getStructuredCritiqueConfigStatus } from "@/lib/structured-critique-config";
 import { getCurrentLlmRuntimeEnv } from "@/lib/runtime-saved-env";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 
 interface UserHandleStatus {
   configured: boolean;
