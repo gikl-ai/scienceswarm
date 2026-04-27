@@ -5,7 +5,7 @@ import {
   DuplicateProjectError,
 } from "@/lib/projects/project-repository";
 import { materializeProjectFolder } from "@/lib/projects/materialize-project";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
 export interface EnsureProjectShellOptions {

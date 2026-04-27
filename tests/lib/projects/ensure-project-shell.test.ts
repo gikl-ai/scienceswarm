@@ -41,7 +41,7 @@ vi.mock("@/lib/projects/materialize-project", () => ({
   materializeProjectFolder,
 }));
 
-vi.mock("@/lib/setup/gbrain-installer", () => ({
+vi.mock("@/lib/setup/current-user-handle", () => ({
   getCurrentUserHandle,
 }));
 
@@ -191,5 +191,7 @@ describe("ensureProjectShellForProjectSlug", () => {
     expect(source).toContain('await import("@/brain/store")');
     expect(source).toContain("async function loadReadyBrainStore()");
     expect(source).not.toContain('import { ensureBrainStoreReady, getBrainStore } from "@/brain/store";');
+    expect(source).toContain('from "@/lib/setup/current-user-handle"');
+    expect(source).not.toContain('from "@/lib/setup/gbrain-installer"');
   });
 });
