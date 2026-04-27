@@ -1,0 +1,25 @@
+{
+  "slug": "scienceswarm-methods-review",
+  "name": "ScienceSwarm Methods Review",
+  "description": "Review whether a proposed research method can support the claim, with assumptions, validity threats, alternatives, diagnostics, robustness checks, and stop conditions.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "methods",
+    "review",
+    "validity"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "A focused methods and validity review for empirical, theoretical, computational, social-science, mathematical, and engineering research plans. Produces a saved Methods Review Report with assumptions, alternatives, diagnostics, robustness checks, and a verdict.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-27T00:00:00.000Z",
+  "updatedAt": "2026-04-27T00:00:00.000Z"
+}

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-27T06:22:09.765Z",
+  "generatedAt": "2026-04-27T15:37:21.672Z",
   "skills": [
     {
       "slug": "db-arxiv",
@@ -337,6 +337,25 @@
       "summary": "Use the local citation graph to suggest missing papers for a research question, request per-session consent before legal downloads, and write downloaded or metadata-only papers to gbrain."
     },
     {
+      "slug": "scienceswarm-literature-landscape",
+      "name": "ScienceSwarm Literature Landscape",
+      "description": "Map the literature around a research idea using supplied and searched sources, identifying canonical anchors, closest prior art, frontier work, disagreements, gaps, and publishable positioning.",
+      "tags": [
+        "science",
+        "literature",
+        "research-design",
+        "evidence"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A literature-positioning skill for scientists, mathematicians, social scientists, and engineers. Produces a saved Literature Landscape Map with search strategy, source corpus, prior-art map, disagreements, novelty risks, positioning options, and read-next priorities."
+    },
+    {
       "slug": "scienceswarm-md-evidence-grounding",
       "name": "ScienceSwarm MD Evidence Grounding",
       "description": "Search the study paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.",
@@ -481,6 +500,25 @@
       "summary": "Turns an MD study goal and evidence packet into a precise molecular system definition before parameter planning."
     },
     {
+      "slug": "scienceswarm-methods-review",
+      "name": "ScienceSwarm Methods Review",
+      "description": "Review whether a proposed research method can support the claim, with assumptions, validity threats, alternatives, diagnostics, robustness checks, and stop conditions.",
+      "tags": [
+        "science",
+        "methods",
+        "review",
+        "validity"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A focused methods and validity review for empirical, theoretical, computational, social-science, mathematical, and engineering research plans. Produces a saved Methods Review Report with assumptions, alternatives, diagnostics, robustness checks, and a verdict."
+    },
+    {
       "slug": "scienceswarm-paper-to-plan",
       "name": "ScienceSwarm Paper To Plan",
       "description": "Turn a paper, method, or technical writeup into a concrete reproduction or implementation plan with validation checkpoints.",
@@ -497,6 +535,25 @@
       "owner": "scienceswarm",
       "status": "ready",
       "summary": "A cross-host planning skill for moving from a source artifact to an executable reproduction or implementation plan."
+    },
+    {
+      "slug": "scienceswarm-research-autoplan",
+      "name": "ScienceSwarm Research Autoplan",
+      "description": "Run the full pre-execution research review sequence and consolidate an idea, brief, protocol, or study plan into a saved decision-audited research execution plan.",
+      "tags": [
+        "science",
+        "research-design",
+        "planning",
+        "review"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A full research planning gauntlet for scientists, mathematicians, social scientists, and engineers. It combines idea stress testing, literature landscape, design review, methods review, reproducibility planning, publication fit, and decision logging into one execution-ready research autoplan."
     },
     {
       "slug": "scienceswarm-research-design-review",
