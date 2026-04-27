@@ -21,6 +21,7 @@ import {
   normalizeArtifactProvenanceEntries,
   type ArtifactProvenanceEntry,
 } from "@/lib/artifact-provenance";
+import { inferProgressEntryLabel } from "@/lib/chat-progress-label";
 import { shouldForceOpenClawToolExecution } from "@/lib/openclaw/execution-intent";
 import { sanitizeOpenClawUserVisibleResponse } from "@/lib/openclaw/response-sanitizer";
 import { looksLikeSlashCommandInput } from "@/lib/openclaw/slash-commands";
@@ -1220,34 +1221,6 @@ function buildOpenClawSendPhaseEntries(
   );
 }
 
-function inferProgressEntryLabel(text: string): string | undefined {
-  const normalized = normalizeProgressEntryText(text);
-  if (!normalized) {
-    return undefined;
-  }
-
-  const directMatch = normalized.match(/^(Read|Search|Write|Edit|Run|List|Plan)\b/i);
-  if (directMatch?.[1]) {
-    return directMatch[1][0].toUpperCase() + directMatch[1].slice(1).toLowerCase();
-  }
-  if (/^Sending request to OpenClaw$/i.test(normalized)) {
-    return "Send";
-  }
-  if (/^Waiting for OpenClaw to respond$/i.test(normalized)) {
-    return "Wait";
-  }
-  if (/^Generate image\b/i.test(normalized)) {
-    return "Generate image";
-  }
-  if (/^Chat failed\b/i.test(normalized)) {
-    return "Failed";
-  }
-  if (/^Chat aborted\b/i.test(normalized)) {
-    return "Aborted";
-  }
-  return undefined;
-}
-
 function normalizeProgressEntryMeta(
   meta: Partial<Omit<MessageProgressEntry, "kind" | "text">>,
   text: string,
@@ -1273,7 +1246,7 @@ function normalizeProgressEntryMeta(
   const label =
     typeof meta.label === "string" && meta.label.trim().length > 0
       ? meta.label.trim()
-      : inferProgressEntryLabel(text);
+      : inferProgressEntryLabel(normalizeProgressEntryText(text));
 
   return {
     source,
