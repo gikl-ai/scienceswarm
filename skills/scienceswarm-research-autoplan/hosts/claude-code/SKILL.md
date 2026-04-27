@@ -51,8 +51,8 @@ Default save path in ScienceSwarm/OpenClaw:
 
 If `gbrain_capture` is unavailable but the host can write files, write a
 Markdown file only in a user-approved project or study artifact location. If no
-durable write path is available, return `BLOCKED_ON_SAVE`, include the complete
-Markdown dossier, and ask where to save it.
+durable write path is available, return `BLOCKED` with save blocker reason,
+include the complete Markdown dossier, and ask where to save it.
 
 ## Review Posture
 

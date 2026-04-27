@@ -361,6 +361,7 @@ Use one of: `KILL`, `PARK`, `NARROW`, `EXPLORE`, `PURSUE`.
 | Likely venue type | |
 | Minimum evidence package | |
 | Reviewer most likely to object | |
+| Reviewer objection most likely to block acceptance | |
 | Strongest prebuttal | |
 | Figure / table spine | |
 | Reproducibility expectation | |
@@ -433,8 +434,8 @@ Review dimensions:
 6. Publication pathway: does the roadmap cover the plausible path to a strong
    paper without pretending every step is mandatory?
 7. Save readiness: does the brief contain enough context to be useful later?
-8. Verdict discipline: does the brief make a real pursue/narrow/park/kill
-   decision?
+8. Verdict discipline: does the brief make a real pursue/narrow/park/explore/
+   kill decision?
 
 If the review finds fixable issues, revise the brief before saving. If issues
 remain, add:

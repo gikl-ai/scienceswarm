@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-27T17:57:28.045Z",
+  "generatedAt": "2026-04-27T18:56:41.934Z",
   "skills": [
     {
       "slug": "db-arxiv",
@@ -299,7 +299,7 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "A rigorous brown-bag partner for scientists, mathematicians, social scientists, and engineers: turn a rough research idea into a saved and reviewed Research Brown Bag Brief with landscape/novelty synthesis, evidence grades, hard objections, alternative framings, a pursue/narrow/park/kill verdict, publication fit, publication pathway, and the smallest decisive next test."
+      "summary": "A rigorous brown-bag partner for scientists, mathematicians, social scientists, and engineers: turn a rough research idea into a saved and reviewed Research Brown Bag Brief with landscape/novelty synthesis, evidence grades, hard objections, alternative framings, a pursue/narrow/park/explore/kill verdict, publication fit, publication pathway, and the smallest decisive next test."
     },
     {
       "slug": "scienceswarm-evidence-triangulation",

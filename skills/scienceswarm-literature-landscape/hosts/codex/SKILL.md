@@ -11,7 +11,7 @@ aliases:
 outputs:
   - Literature Landscape Map brain asset with asset_kind literature_landscape_map
   - source corpus table
-  - search sufficiency verdict
+  - source sufficiency verdict
   - prior-art and novelty map
   - read-next plan
 ---
