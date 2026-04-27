@@ -56,9 +56,13 @@ export function resolveStandaloneEntry(root = projectRoot) {
 }
 
 export function markDesktopFirstLaunchComplete(app) {
-  const markerPath = resolveDesktopLaunchMarkerPath(app);
-  mkdirSync(path.dirname(markerPath), { recursive: true });
-  writeFileSync(markerPath, JSON.stringify({ completedAt: new Date().toISOString() }));
+  try {
+    const markerPath = resolveDesktopLaunchMarkerPath(app);
+    mkdirSync(path.dirname(markerPath), { recursive: true });
+    writeFileSync(markerPath, JSON.stringify({ completedAt: new Date().toISOString() }));
+  } catch {
+    // Non-fatal: if persistence fails, the next launch can return to /setup.
+  }
 }
 
 /**
