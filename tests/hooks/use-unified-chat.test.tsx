@@ -5281,6 +5281,92 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
+  it("prefers typed progress entries over inferred legacy narration", async () => {
+    const deferredStream = createDeferredSseResponse();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return deferredStream.response;
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    act(() => {
+      deferredStream.send({
+        progress: {
+          method: "session.message",
+          payload: {
+            text: "Read docs/results_table.csv",
+            progressEntries: [
+              {
+                kind: "activity",
+                text: "Read docs/results_table.csv",
+                source: "agent",
+                phase: "tool",
+                status: "started",
+                label: "Read",
+                timestampMs: 1713523200789,
+              },
+            ],
+          },
+        },
+      });
+      deferredStream.send({ text: "Done" });
+      deferredStream.close();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+
+    const progressLog = screen.getByTestId("progress-log").textContent ?? "";
+    expect(progressLog.match(/activity:Read docs\/results_table\.csv/g)).toHaveLength(1);
+    expect(screen.getByTestId("progress-log-meta").textContent).toContain(
+      "agent/tool/started/Read/1713523200789",
+    );
+    expect(screen.getByTestId("activity-log").textContent).not.toContain(
+      "Read docs/results_table.csv",
+    );
+  });
+
   it("does not emit the waiting narration when a non-streaming chat response fails", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
