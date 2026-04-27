@@ -25,7 +25,7 @@ import { createIngestService } from "@/brain/ingest/service";
 import type { ImportPreview } from "@/brain/types";
 import { isLocalRequest } from "@/lib/local-guard";
 import { safeProjectSlugOrNull } from "@/lib/project-navigation";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 import { getBrainConfig, getLLMClient, isErrorResponse } from "../_shared";
 
 export async function POST(request: Request) {
