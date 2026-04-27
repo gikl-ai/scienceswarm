@@ -2233,6 +2233,17 @@ function buildQueuedHistory(messages: Message[], assistantId: string): Message[]
   return assistantIndex >= 0 ? messages.slice(0, assistantIndex) : messages;
 }
 
+function persistedActivityLogForMessage(message: Message): string[] | undefined {
+  if (
+    message.role === "assistant"
+    && Array.isArray(message.progressLog)
+    && message.progressLog.length > 0
+  ) {
+    return undefined;
+  }
+  return message.activityLog;
+}
+
 function restoreMessage(value: unknown, conversationBackend: Backend | null): Message | null {
   if (!value || typeof value !== "object") return null;
 
@@ -2502,7 +2513,7 @@ function persistChat(
         role: message.role,
         content: message.content,
         thinking: message.thinking,
-        activityLog: message.activityLog,
+        activityLog: persistedActivityLogForMessage(message),
         progressLog: message.progressLog,
         timestamp: message.timestamp.toISOString(),
         chatMode: message.chatMode,
