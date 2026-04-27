@@ -5665,6 +5665,93 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
+  it("streams typed transcript events into the assistant bubble before final text replaces them", async () => {
+    const deferredStream = createDeferredSseResponse();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?study=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return deferredStream.response;
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url, init]) =>
+        url === "/api/chat/unified" && (init?.method ?? "GET") === "POST",
+      )).toBe(true);
+    });
+
+    await act(async () => {
+      deferredStream.send({
+        transcript: {
+          type: "assistant_transcript",
+          mode: "append",
+          text: "Draft answer",
+        },
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain(
+        "assistant:Draft answer",
+      );
+    });
+
+    await act(async () => {
+      deferredStream.send({ text: "Canonical final answer." });
+      deferredStream.close();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain(
+        "assistant:Canonical final answer.",
+      );
+    });
+    expect(screen.getByTestId("message-log").textContent).not.toContain(
+      "assistant:Draft answerCanonical final answer.",
+    );
+  });
+
   it("renders gateway chat error and aborted events as progress status rows", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
