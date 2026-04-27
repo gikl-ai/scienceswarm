@@ -991,6 +991,20 @@ function summarizeCompactProgressMetadata(entries: MessageProgressEntry[]): stri
   return [];
 }
 
+function hasFailedRunState(params: {
+  progressEntries: MessageProgressEntry[];
+  taskPhases: ChatTaskPhase[];
+  steps: Step[];
+}): boolean {
+  if (params.taskPhases.some((phase) => phase.status === "failed")) {
+    return true;
+  }
+  if (params.steps.some((step) => step.status === "error")) {
+    return true;
+  }
+  return params.progressEntries.some((entry) => entry.status === "failed");
+}
+
 type RunStateDetail = {
   label: string;
   text: string;
@@ -1051,20 +1065,28 @@ function ActiveRunStateSurface({
   workingElapsed,
   summaries,
   detail,
+  failed,
 }: {
   workingElapsed: string | null;
   summaries: string[];
   detail: RunStateDetail | null;
+  failed: boolean;
 }) {
+  const headingText = failed
+    ? (workingElapsed ? `Failed (${workingElapsed})` : "Failed")
+    : (workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…");
+
   return (
     <div
       data-testid="assistant-run-state"
       className="mb-3 rounded-xl border border-rule bg-sunk/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
     >
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-dim">
-        <span className="inline-flex items-center gap-1.5 font-medium text-body">
-          <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
-          <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
+        <span className={`inline-flex items-center gap-1.5 font-medium ${failed ? "text-danger" : "text-body"}`}>
+          {failed
+            ? <WarningCircle size={14} weight="fill" aria-hidden="true" />
+            : <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />}
+          <span>{headingText}</span>
         </span>
         {summaries.map((summary, index) => (
           <span
@@ -1846,6 +1868,12 @@ export function ChatMessage({
   const liveRunStateDetail = isLiveAssistantTurn
     ? summarizeLatestRunStateDetail(progressTranscript)
     : null;
+  const hasFailedLiveRunState = isLiveAssistantTurn
+    && hasFailedRunState({
+      progressEntries: visibleProgressLog,
+      taskPhases: visibleTaskPhases,
+      steps: visibleSteps,
+    });
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
@@ -2013,6 +2041,7 @@ export function ChatMessage({
           workingElapsed={workingElapsed}
           summaries={compactLiveRunSummary}
           detail={null}
+          failed={hasFailedLiveRunState}
         />
       )}
 
@@ -2026,6 +2055,7 @@ export function ChatMessage({
             workingElapsed={workingElapsed}
             summaries={compactLiveRunSummary}
             detail={liveRunStateDetail}
+            failed={hasFailedLiveRunState}
           />
 
           {progressTranscript.length > 0 && (

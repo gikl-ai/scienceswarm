@@ -546,6 +546,31 @@ describe("ChatMessage", () => {
     expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
   });
 
+  it("renders a failed run-state surface when structured progress metadata reports failure", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text: "OpenClaw transport failed",
+            source: "server",
+            status: "failed",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent("Failed (5s)");
+    expect(screen.queryByTestId("chat-streaming-spinner")).not.toBeInTheDocument();
+  });
+
   it("renders assistant progress as a single inline transcript", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
