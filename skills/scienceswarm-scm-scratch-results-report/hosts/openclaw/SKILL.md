@@ -47,7 +47,7 @@ Do not write `install.packages(...)`, `remotes::install_*`, `pak::pkg_install(..
 
 ## Execution Gate
 
-Before generating 06_render_report.R, list the included artifacts, validation markers, output paths, and any limitations. Ask for approval for the reporting step. After completion, surface the final project artifact paths instead of asking the user to open files outside ScienceSwarm.
+Before generating 06_render_report.R, list the included artifacts, validation markers, output paths, and any limitations. Ask for approval for the reporting step. After completion, surface the final study artifact paths instead of asking the user to open files outside ScienceSwarm.
 
 ## Artifact Capture
 

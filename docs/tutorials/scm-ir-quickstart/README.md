@@ -143,7 +143,7 @@ path, and whether `synthdid` is available.
 Paste:
 
 ```text
-Run the SCM-IR quickstart end to end using this ScienceSwarm project
+Run the SCM-IR quickstart end to end using this ScienceSwarm study
 workspace.
 
 Use the tutorial root prepared in the previous step. Run the stages in order:
@@ -184,7 +184,7 @@ package is importable); paths to the tutorial outputs are passed
 explicitly. Replace `<tutorial-output-dir>` with the absolute or
 repo-relative path to your tutorial's `output/` folder (e.g.
 `docs/tutorials/scm-ir-quickstart/output` for an in-repo run, or the
-ScienceSwarm project artifact path for a UI-driven run):
+ScienceSwarm study artifact path for a UI-driven run):
 
 ```bash
 # from the repository root, with the tutorial's output/ already populated
