@@ -527,6 +527,37 @@ describe("ChatMessage", () => {
     expect(progressLog).toHaveTextContent("Waiting for OpenClaw to respond");
   });
 
+  it("renders structured progress metadata chips alongside transcript rows", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text: "Waiting for OpenClaw to respond",
+            source: "server",
+            status: "running",
+          },
+          {
+            kind: "activity",
+            text: "Summarized findings for the chart review",
+            source: "agent",
+            status: "complete",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:30.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent("Server");
+    expect(progressLog).toHaveTextContent("Running");
+    expect(progressLog).toHaveTextContent("Agent");
+    expect(progressLog).toHaveTextContent("Complete");
+  });
+
   it("renders a dedicated run-state surface before transcript progress arrives", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
