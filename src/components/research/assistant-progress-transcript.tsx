@@ -43,6 +43,32 @@ export const PROGRESS_SECTION_META: Record<
 
 const EXPLORED_INLINE_LINE_LIMIT = 3;
 
+function buildProgressRowMetadataChips(entry: MessageProgressEntry): string[] {
+  const chips: string[] = [];
+
+  if (entry.source === "gateway") {
+    chips.push("OpenClaw");
+  } else if (entry.source === "agent") {
+    chips.push("Agent");
+  } else if (entry.source === "server") {
+    chips.push("Server");
+  } else if (entry.source === "client") {
+    chips.push("Client");
+  }
+
+  if (entry.status === "started") {
+    chips.push("Started");
+  } else if (entry.status === "running") {
+    chips.push("Running");
+  } else if (entry.status === "complete") {
+    chips.push("Complete");
+  } else if (entry.status === "failed") {
+    chips.push("Failed");
+  }
+
+  return chips;
+}
+
 function ExploredTranscriptBlock({
   blockIndex,
   stableKey,
@@ -180,6 +206,7 @@ export function AssistantProgressTranscript({
 
         const rowClassName = PROGRESS_SECTION_META[block.section].rowClassName;
         const isMarkdownBlock = shouldRenderMarkdownBlock(block.entry.text);
+        const metadataChips = buildProgressRowMetadataChips(block.entry);
         sectionElements.push(
           <div
             key={`${index}-${block.entry.kind}-${block.entry.text}`}
@@ -191,13 +218,27 @@ export function AssistantProgressTranscript({
             >
               {isMarkdownBlock ? "↳ " : "• "}
             </span>
-            {isMarkdownBlock
-              ? renderMarkdownBlock(block.entry.text)
-              : (
-                <span className="min-w-0 flex-1">
-                  {renderInlineContent(block.entry.text, `progress-${index}`)}
-                </span>
+            <div className="min-w-0 flex-1 space-y-1">
+              {metadataChips.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1">
+                  {metadataChips.map((chip) => (
+                    <span
+                      key={`${index}-${chip}`}
+                      className="inline-flex items-center rounded-full border border-rule/70 bg-raised px-2 py-0.5 text-[10px] font-medium text-dim"
+                    >
+                      {chip}
+                    </span>
+                  ))}
+                </div>
               )}
+              {isMarkdownBlock
+                ? renderMarkdownBlock(block.entry.text)
+                : (
+                  <span className="block min-w-0 flex-1">
+                    {renderInlineContent(block.entry.text, `progress-${index}`)}
+                  </span>
+                )}
+            </div>
           </div>,
         );
 
