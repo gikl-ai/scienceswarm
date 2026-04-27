@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-brown-bag
-description: Stress-test an early research idea into a sharper research question, decisive test, hard-objection map, and next research assignment.
+description: Stress-test an early research idea into a durable written brief with a sharper research question, decisive test, hard-objection map, publication roadmap, and next research assignment.
 ---
 
 # ScienceSwarm Brown Bag
@@ -14,13 +14,31 @@ This is a research brown-bag partner for scholarly and technical work.
 ## Hard Boundary
 
 Do not implement code, scaffold a project, run experiments, download datasets,
-or start a domain pipeline. The output is a research design artifact and a next
-assignment. Downstream execution can happen after the research question survives
-the brown-bag pass.
+or start a domain pipeline. The output is a durable written research design
+artifact and a next assignment. Downstream execution can happen after the
+research question survives the brown-bag pass.
 
 Do not include business, investor, commercialization, grant-writing, or
 promotional framing unless the user's research topic itself studies those
 phenomena.
+
+## Artifact Requirement
+
+The brown-bag session is incomplete until the `Research Brown Bag Brief` exists
+as a written artifact or the agent reports the exact save blocker.
+
+Default save path in ScienceSwarm/OpenClaw:
+
+1. Draft the complete brief in Markdown.
+2. Save it with `gbrain_capture` using `asset_kind:
+   research_brown_bag_brief`.
+3. Report the saved title and artifact/location in the final answer.
+
+If `gbrain_capture` is unavailable but the host can write files, write a
+Markdown file only in a user-approved project or study artifact location. If no
+durable write path is available, return `BLOCKED_ON_SAVE`, include the full
+Markdown brief in the answer, and ask where to save it. Do not silently leave
+the result as chat-only.
 
 ## Core Posture
 
@@ -229,6 +247,11 @@ Produce a `Research Brown Bag Brief`:
 
 ## Next Research Assignment
 
+## Publication Pathway
+
+| Stage | Soft Recommendation | Why It Matters | Strength |
+|---|---|---|---|
+
 ## Confidence Boundary
 
 What this brief supports:
@@ -246,10 +269,31 @@ as "read these 3 papers and extract competing assumptions", "test this theorem
 on the smallest nontrivial case", "run this negative-control ablation", "draft
 the identification diagram", or "ask two domain experts this exact objection."
 
+The `Publication Pathway` is also mandatory. It should be a soft roadmap, not a
+pretend project plan. Tailor it to the discipline and include the steps the
+researcher should consider to carry the idea through to a strong publication:
+
+- literature and novelty audit
+- data, corpus, model-system, or theorem-boundary assembly
+- study design, identification, proof strategy, or benchmark specification
+- pilot / smallest decisive test
+- full analysis, proof, experiment, simulation, or buildout
+- negative controls, robustness checks, ablations, counterexamples, or
+  sensitivity analyses
+- mechanism, interpretation, and external-validity checks
+- reproducibility package: code, data, materials, proof appendix, or protocol
+- venue and audience fit
+- figure/table/story architecture
+- reviewer-objection prebuttal
+- release, replication, or follow-on research assets
+
+Use strength labels such as `must`, `should`, and `consider`. Do not imply every
+project needs every step.
+
 ## Saving
 
-When ScienceSwarm MCP tools are available and the user wants a durable artifact,
-save the brief with `gbrain_capture` before answering. Use frontmatter:
+When ScienceSwarm MCP tools are available, save the brief with `gbrain_capture`
+before answering. Use frontmatter:
 
 ```yaml
 type: planning
@@ -270,5 +314,8 @@ Before finalizing, verify:
 - The recommended wedge can actually change the user's belief.
 - Success, failure, and inconclusive outcomes are distinct.
 - The brief names what would be learned, not just what would be done.
+- The publication pathway covers the plausible route to a strong publication,
+  not only the next task.
+- The brief has been saved, or the save blocker is explicit.
 - Any current literature or factual claim that could be stale is cited or
   clearly labeled as an assumption.

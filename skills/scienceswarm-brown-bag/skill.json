@@ -1,7 +1,7 @@
 {
   "slug": "scienceswarm-brown-bag",
   "name": "ScienceSwarm Brown Bag",
-  "description": "Stress-test an early research idea into a sharper research question, decisive test, hard-objection map, and next research assignment.",
+  "description": "Stress-test an early research idea into a durable written brief with a sharper research question, decisive test, hard-objection map, publication roadmap, and next research assignment.",
   "visibility": "public",
   "status": "ready",
   "tags": [
@@ -16,7 +16,7 @@
     "codex"
   ],
   "owner": "scienceswarm",
-  "summary": "A rigorous brown-bag partner for scientists, mathematicians, social scientists, and engineers: turn a rough research idea into a Research Brown Bag Brief with premises, objections, alternative framings, and the smallest decisive next test.",
+  "summary": "A rigorous brown-bag partner for scientists, mathematicians, social scientists, and engineers: turn a rough research idea into a saved Research Brown Bag Brief with premises, objections, alternative framings, a publication pathway, and the smallest decisive next test.",
   "source": {
     "kind": "local"
   },
