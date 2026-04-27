@@ -5,7 +5,7 @@
 // agrees with /api/chat/unified?action=health on every probe.
 
 import { getOpenHandsUrl } from "@/lib/config/ports";
-import { probeGbrainEngineHealth } from "@/lib/brain/readiness";
+import { probeGbrainEngineHealth } from "@/lib/brain/engine-readiness";
 import {
   buildOpenHandsLocalEvidenceSnapshot,
   buildRuntimeCapabilityContract,
