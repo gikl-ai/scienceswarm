@@ -132,7 +132,7 @@ async function loadCreateEngine() {
     "engine-factory.ts",
   );
   const fallbackEngineFactoryModule = await import(
-    /* @vite-ignore */ fallbackEngineFactorySpecifier
+    /* webpackIgnore: true */ /* @vite-ignore */ fallbackEngineFactorySpecifier
   );
   if (typeof fallbackEngineFactoryModule.createEngine !== "function") {
     throw new Error(
@@ -147,7 +147,7 @@ async function loadExtractModule() {
     // gbrain 0.20 exports this command subpath; use it before falling back
     // to the installed source path used by older pins.
     const extractSpecifier = ["gbrain", "extract"].join("/");
-    return await import(/* @vite-ignore */ extractSpecifier);
+    return await import(/* webpackIgnore: true */ /* @vite-ignore */ extractSpecifier);
   } catch (error) {
     if (!isRecoverableGbrainSubpathImportError(error, "extract")) {
       throw error;
@@ -155,7 +155,7 @@ async function loadExtractModule() {
   }
 
   return import(
-    /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/extract.ts")
+    /* webpackIgnore: true */ /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/extract.ts")
   );
 }
 
@@ -261,14 +261,14 @@ async function runRuntimeExtractFallback(engine, extractModule, mode, dir, dryRu
 
 export async function runRuntimeEmbed(engine, args) {
   const { runEmbed } = await import(
-    /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/embed.ts")
+    /* webpackIgnore: true */ /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/embed.ts")
   );
   return runEmbed(engine, args);
 }
 
 export async function performRuntimeSync(engine, opts) {
   const { performSync } = await import(
-    /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/sync.ts")
+    /* webpackIgnore: true */ /* @vite-ignore */ resolveGbrainSourceSpecifier("../commands/sync.ts")
   );
   return performSync(engine, opts);
 }

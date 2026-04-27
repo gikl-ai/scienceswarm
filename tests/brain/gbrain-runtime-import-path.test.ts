@@ -42,6 +42,7 @@ describe("gbrain runtime bridge import paths", () => {
 
     expect(source).not.toContain('require.resolve("gbrain")');
     expect(source).toContain("require.resolve(GBRAIN_PACKAGE_NAME)");
+    expect(source.match(/webpackIgnore: true/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
   });
 
   it("falls back to the installed gbrain extract source when the package subpath is absent", async () => {
