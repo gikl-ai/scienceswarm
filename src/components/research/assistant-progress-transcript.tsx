@@ -206,7 +206,9 @@ export function AssistantProgressTranscript({
 
         const rowClassName = PROGRESS_SECTION_META[block.section].rowClassName;
         const isMarkdownBlock = shouldRenderMarkdownBlock(block.entry.text);
-        const metadataChips = buildProgressRowMetadataChips(block.entry);
+        const metadataChips = block.section === "activity"
+          ? buildProgressRowMetadataChips(block.entry)
+          : [];
         sectionElements.push(
           <div
             key={`${index}-${block.entry.kind}-${block.entry.text}`}
@@ -234,7 +236,7 @@ export function AssistantProgressTranscript({
               {isMarkdownBlock
                 ? renderMarkdownBlock(block.entry.text)
                 : (
-                  <span className="block min-w-0 flex-1">
+                  <span className="block min-w-0">
                     {renderInlineContent(block.entry.text, `progress-${index}`)}
                   </span>
                 )}
