@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-brown-bag
-description: Stress-test an early research idea into a durable written brief with a sharper research question, decisive test, hard-objection map, publication roadmap, and next research assignment.
+description: Stress-test an early research idea into a durable written brief with a sharper research question, landscape/novelty pass, decisive test, hard-objection map, publication fit, publication roadmap, review loop, and next research assignment.
 ---
 
 # ScienceSwarm Brown Bag
@@ -166,6 +166,41 @@ ask only the two most important missing questions:
 Then proceed to the premise challenge and brief. If the user refuses even those,
 produce a best-effort brief and label assumptions explicitly.
 
+## Landscape And Novelty Pass
+
+Run this before the premise challenge unless the user explicitly asks to keep
+the session private or offline.
+
+Privacy gate:
+
+> I should check the landscape before judging novelty. I will search generalized
+> category terms, not private project names or unpublished specifics. OK?
+
+If the user says no, skip external search and mark the landscape section as
+`not searched by user preference`.
+
+If the user says yes:
+
+1. Convert the idea into generalized search terms. Do not leak private names,
+   unpublished datasets, stealth methods, or confidential collaborators.
+2. Use the best available source route for the discipline: literature/database
+   skills, web search, project papers, or study files.
+3. Read 3 to 5 high-signal sources: canonical work, recent review or benchmark,
+   closest competing method/case, and one skeptical or negative source if
+   available.
+4. Synthesize:
+   - conventional wisdom
+   - closest prior art
+   - what the proposed work adds
+   - novelty risk
+   - evidence gap
+   - source citations or explicit `source needed` markers
+5. Feed this synthesis into the premise challenge, alternatives, publication
+   fit, and hard-objection map.
+
+If web or database search is unavailable, continue with project-supplied
+sources and label the landscape as incomplete.
+
 ## Premise Challenge
 
 Before recommending a path, state 3 to 5 premises the user must accept. Include
@@ -247,6 +282,18 @@ Produce a `Research Brown Bag Brief`:
 
 ## Next Research Assignment
 
+## Publication Fit
+
+| Dimension | Recommendation |
+|---|---|
+| Primary audience | |
+| Likely venue type | |
+| Minimum evidence package | |
+| Reviewer most likely to object | |
+| Strongest prebuttal | |
+| Figure / table spine | |
+| Reproducibility expectation | |
+
 ## Publication Pathway
 
 | Stage | Soft Recommendation | Why It Matters | Strength |
@@ -290,6 +337,42 @@ researcher should consider to carry the idea through to a strong publication:
 Use strength labels such as `must`, `should`, and `consider`. Do not imply every
 project needs every step.
 
+The `Publication Fit` section is mandatory. It should name the primary scholarly
+audience, plausible venue type, minimum evidence package, likely reviewer, the
+reviewer objection that would hurt most, the prebuttal, the figure/table spine,
+and reproducibility expectations. Keep it practical: what a researcher must
+show for the paper to be taken seriously.
+
+## Brown Bag Review Loop
+
+Before saving the brief, review it once. If the host supports an independent
+reviewer or helper agent, use one with only the drafted brief as context. If not,
+perform a strict self-review. Do not skip the review unless the runtime makes it
+impossible; if skipped, record the reason in the brief.
+
+Review dimensions:
+
+1. Claim specificity: can a skeptical expert criticize the claim?
+2. Landscape and novelty: does the brief name closest prior art and novelty
+   risk?
+3. Decisive test: would the proposed next test change the researcher's belief?
+4. Objections: is the strongest objection real rather than a strawman?
+5. Publication fit: are audience, venue type, evidence bar, and reviewer
+   objection explicit?
+6. Publication pathway: does the roadmap cover the plausible path to a strong
+   paper without pretending every step is mandatory?
+7. Save readiness: does the brief contain enough context to be useful later?
+
+If the review finds fixable issues, revise the brief before saving. If issues
+remain, add:
+
+```markdown
+## Review Notes
+
+| Issue | Fix Attempted | Remaining Risk |
+|---|---|---|
+```
+
 ## Saving
 
 When ScienceSwarm MCP tools are available, save the brief with `gbrain_capture`
@@ -311,11 +394,15 @@ Before finalizing, verify:
 
 - The main claim is specific enough to criticize.
 - The strongest objection is not a strawman.
+- The landscape/novelty pass is complete or explicitly skipped.
 - The recommended wedge can actually change the user's belief.
 - Success, failure, and inconclusive outcomes are distinct.
 - The brief names what would be learned, not just what would be done.
+- The publication fit section names audience, venue type, evidence package,
+  reviewer objection, prebuttal, figure/table spine, and reproducibility bar.
 - The publication pathway covers the plausible route to a strong publication,
   not only the next task.
+- The brief was reviewed, revised if needed, or includes review notes.
 - The brief has been saved, or the save blocker is explicit.
 - Any current literature or factual claim that could be stale is cited or
   clearly labeled as an assumption.
