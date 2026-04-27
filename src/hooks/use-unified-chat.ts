@@ -1901,6 +1901,16 @@ function extractServerProgressUpdate(
     return createOpenClawProgressUpdate();
   }
 
+  const typedEntries = restoreProgressLog(
+    Array.isArray(payload.progressEntries) ? payload.progressEntries : undefined,
+  );
+  if (typedEntries && typedEntries.length > 0) {
+    return {
+      ...createOpenClawProgressUpdate(),
+      progressEntries: typedEntries,
+    };
+  }
+
   const text = firstNonEmptyTextContent(
     payload.text,
     payload.content,

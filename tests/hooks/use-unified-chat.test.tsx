@@ -5281,6 +5281,95 @@ describe("useUnifiedChat persistence", () => {
     );
   });
 
+  it("prefers typed server progress entries over the inferred payload text", async () => {
+    const deferredStream = createDeferredSseResponse();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/chat/unified?action=health") {
+        return Response.json({
+          agent: { type: "openclaw", status: "connected" },
+          openclaw: "connected",
+          nanoclaw: "disconnected",
+          openhands: "connected",
+        });
+      }
+
+      if (url === "/api/chat/thread?project=alpha-project") {
+        return Response.json({
+          version: 1,
+          project: "alpha-project",
+          conversationId: null,
+          messages: [],
+        });
+      }
+
+      if (url === "/api/chat/thread" && method === "POST") {
+        return Response.json({ ok: true });
+      }
+
+      if (url === "/api/workspace?action=tree&projectId=alpha-project") {
+        return Response.json({ tree: [] });
+      }
+
+      if (url === "/api/chat/unified" && method === "POST") {
+        return deferredStream.response;
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatHarness projectName="alpha-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend").textContent).toBe("openclaw");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    act(() => {
+      deferredStream.send({
+        progress: {
+          type: "server_progress",
+          payload: {
+            text: "Legacy server narration",
+            source: "server",
+            phase: "legacy",
+            status: "started",
+            label: "Legacy",
+            timestampMs: 1713523200400,
+            progressEntries: [
+              {
+                kind: "activity",
+                text: "Preparing workspace context",
+                source: "server",
+                phase: "workspace",
+                status: "running",
+                label: "Workspace",
+                timestampMs: 1713523200456,
+              },
+            ],
+          },
+        },
+      });
+      deferredStream.send({ text: "Done" });
+      deferredStream.close();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-log").textContent).toContain("assistant:Done");
+    });
+
+    const progressLog = screen.getByTestId("progress-log").textContent ?? "";
+    expect(progressLog).toContain("activity:Preparing workspace context");
+    expect(progressLog).not.toContain("activity:Legacy server narration");
+    expect(screen.getByTestId("progress-log-meta").textContent).toContain(
+      "server/workspace/running/Workspace/1713523200456",
+    );
+  });
+
   it("prefers typed progress entries over inferred legacy narration", async () => {
     const deferredStream = createDeferredSseResponse();
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
