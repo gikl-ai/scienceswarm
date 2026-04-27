@@ -49,7 +49,6 @@
  */
 
 import * as path from "node:path";
-import { readFileSync } from "node:fs";
 
 import { loadBrainPreset } from "@/brain/presets";
 import {
@@ -57,6 +56,7 @@ import {
   type BrainPresetId,
   normalizeBrainPreset,
 } from "@/brain/presets/types";
+export { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 import {
   mergeEnvValues,
   parseEnvFile,
@@ -393,74 +393,6 @@ export async function runInstallerToCompletion(
   const last = events[events.length - 1];
   const ok = last?.type === "summary" && last.status === "ok";
   return { events, ok };
-}
-
-/**
- * Resolve the "current ScienceSwarm user handle" for write attribution.
- *
- * Spec decision 3A: never default to "User". Read
- * `SCIENCESWARM_USER_HANDLE` from the environment and throw loudly if
- * unset. The installer itself doesn't attribute writes — the brain
- * directory is empty after install — but every downstream code path
- * that *does* write attributed pages should call this helper, and we
- * keep it co-located with the installer so Lane 1 ships one
- * canonical resolver.
- */
-export function getCurrentUserHandle(
-  envSource: Record<string, string | undefined> = process.env,
-  options: {
-    cwd?: string;
-    includeSavedEnvFallback?: boolean;
-  } = {},
-): string {
-  const handle = resolveCurrentUserHandle(envSource, options);
-  if (handle) {
-    return handle;
-  }
-  throw new Error(
-    "SCIENCESWARM_USER_HANDLE is not set. " +
-      "Every brain write needs a real author handle — set SCIENCESWARM_USER_HANDLE in your .env " +
-      "(e.g. SCIENCESWARM_USER_HANDLE=@yourname) before running this operation.",
-  );
-}
-
-function resolveCurrentUserHandle(
-  envSource: Record<string, string | undefined>,
-  options: {
-    cwd?: string;
-    includeSavedEnvFallback?: boolean;
-  },
-): string | null {
-  const configuredHandle = envSource.SCIENCESWARM_USER_HANDLE?.trim();
-  if (configuredHandle) {
-    return configuredHandle;
-  }
-
-  const shouldCheckSavedEnv =
-    options.includeSavedEnvFallback ?? envSource === process.env;
-  if (!shouldCheckSavedEnv) {
-    return null;
-  }
-
-  const savedHandle = readSavedUserHandle(options.cwd);
-  return savedHandle?.trim() || null;
-}
-
-function readSavedUserHandle(cwd = process.cwd()): string | null {
-  try {
-    const envPath = path.join(cwd, ".env");
-    const contents = readFileSync(envPath, "utf8");
-    const doc = parseEnvFile(contents);
-    for (const line of doc.lines) {
-      if (line.type === "entry" && line.key === "SCIENCESWARM_USER_HANDLE") {
-        const value = line.value.trim();
-        return value || null;
-      }
-    }
-  } catch {
-    return null;
-  }
-  return null;
 }
 
 // -----------------------------------------------------------------
