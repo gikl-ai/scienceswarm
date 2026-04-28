@@ -170,7 +170,10 @@ export const phase0CorpusFixtureDescriptors: CorpusFixtureDescriptor[] = [
         title: "Good PDF reference",
         authors: ["A. Example"],
         year: 2024,
+        status: "current",
         localStatus: "metadata_only",
+        createdAt: now,
+        updatedAt: now,
         seenIn: [
           {
             paperSlug: "wiki/entities/papers/good-pdf-2024",

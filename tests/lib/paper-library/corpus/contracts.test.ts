@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BibliographyEntryArtifactSchema,
   GbrainCorpusCapabilitiesSchema,
   GbrainChunkHandleSchema,
   PaperIngestManifestSchema,
@@ -77,6 +78,12 @@ describe("paper-library corpus contracts", () => {
     expect(bibliography[0]?.bibliographySlug).toBe(
       "wiki/bibliography/doi-10-1000-example-good-pdf",
     );
+    expect(bibliography[0]).toMatchObject({
+      status: "current",
+      localStatus: "metadata_only",
+      createdAt: now,
+      updatedAt: now,
+    });
   });
 
   it("records visible warnings for duplicate, low-text, and unavailable-parser fixture paths", () => {
@@ -100,6 +107,13 @@ describe("paper-library corpus contracts", () => {
   });
 
   it("parses a manifest that carries concurrency gates and compact provenance", () => {
+    const fixture = phase0CorpusFixtureDescriptors.find(
+      (descriptor) => descriptor.kind === "good_text_layer_pdf",
+    );
+    if (!fixture?.expectedCandidate) {
+      throw new Error("expected good text-layer PDF candidate");
+    }
+
     const manifest = PaperIngestManifestSchema.parse({
       version: 1,
       id: "corpus-manifest-1",
@@ -118,8 +132,7 @@ describe("paper-library corpus contracts", () => {
           title: "Good PDF fixture",
           status: "current",
           sourceCandidates: [
-            phase0CorpusFixtureDescriptors.find((descriptor) => descriptor.kind === "good_text_layer_pdf")
-              ?.expectedCandidate,
+            fixture.expectedCandidate,
           ],
           selectedSourceCandidateId: "candidate-good-pdf",
           provenance: [
@@ -257,7 +270,7 @@ describe("paper-library corpus contracts", () => {
     })).not.toThrow();
   });
 
-  it("requires stale reasons on stale summaries and provenance records", () => {
+  it("requires stale reasons on stale summaries, bibliography artifacts, and provenance records", () => {
     const fixture = phase0CorpusFixtureDescriptors.find(
       (descriptor) => descriptor.kind === "good_text_layer_pdf",
     );
@@ -273,6 +286,21 @@ describe("paper-library corpus contracts", () => {
       ...fixture.expectedRelevanceSummary,
       status: "stale",
       staleReason: "Source hash changed.",
+    })).not.toThrow();
+
+    const bibliographyFixture = fixture.expectedBibliography?.[0];
+    if (!bibliographyFixture) {
+      throw new Error("expected good text-layer PDF bibliography fixture");
+    }
+
+    expect(() => BibliographyEntryArtifactSchema.parse({
+      ...bibliographyFixture,
+      status: "stale",
+    })).toThrow(/staleReason/);
+    expect(() => BibliographyEntryArtifactSchema.parse({
+      ...bibliographyFixture,
+      status: "stale",
+      staleReason: "Source references changed.",
     })).not.toThrow();
 
     const staleProvenance = {

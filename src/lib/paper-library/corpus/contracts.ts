@@ -268,6 +268,13 @@ export const BibliographyLocalStatusSchema = z.enum([
 ]);
 export type BibliographyLocalStatus = z.infer<typeof BibliographyLocalStatusSchema>;
 
+export const BibliographyEntryArtifactStatusSchema = z.enum([
+  "current",
+  "stale",
+  "blocked",
+]);
+export type BibliographyEntryArtifactStatus = z.infer<typeof BibliographyEntryArtifactStatusSchema>;
+
 export const BibliographySeenInSchema = z.object({
   paperSlug: NonEmptyStringSchema,
   bibKey: NonEmptyStringSchema.optional(),
@@ -284,9 +291,21 @@ export const BibliographyEntryArtifactSchema = z.object({
   year: z.number().int().min(1000).max(3000).optional(),
   venue: NonEmptyStringSchema.optional(),
   canonicalPaperSlug: NonEmptyStringSchema.optional(),
+  status: BibliographyEntryArtifactStatusSchema,
   localStatus: BibliographyLocalStatusSchema,
+  createdAt: IsoDateStringSchema,
+  updatedAt: IsoDateStringSchema,
+  staleReason: NonEmptyStringSchema.optional(),
   seenIn: z.array(BibliographySeenInSchema).default([]),
   warnings: z.array(PaperCorpusWarningSchema).default([]),
+}).superRefine((value, ctx) => {
+  if (value.status === "stale" && value.staleReason === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["staleReason"],
+      message: "stale bibliography artifacts must include staleReason.",
+    });
+  }
 });
 export type BibliographyEntryArtifact = z.infer<typeof BibliographyEntryArtifactSchema>;
 
