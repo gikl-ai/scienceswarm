@@ -8,6 +8,10 @@ import {
   resolveDesktopSigningTarget,
 } from "../../scripts/check-desktop-signing-env.mjs";
 
+function env(values: Record<string, string>): NodeJS.ProcessEnv {
+  return values as NodeJS.ProcessEnv;
+}
+
 describe("check-desktop-signing-env", () => {
   it("normalizes runner and platform names", () => {
     expect(normalizeDesktopSigningTarget("Darwin")).toBe("macos");
@@ -16,11 +20,11 @@ describe("check-desktop-signing-env", () => {
     expect(normalizeDesktopSigningTarget("windows-latest")).toBe("windows");
     expect(normalizeDesktopSigningTarget("linux")).toBe("linux");
     expect(normalizeDesktopSigningTarget("ubuntu-latest")).toBe("linux");
-    expect(resolveDesktopSigningTarget({ RUNNER_OS: "macOS" }, "linux")).toBe("macos");
-    expect(resolveDesktopSigningTarget({
+    expect(resolveDesktopSigningTarget(env({ RUNNER_OS: "macOS" }), "linux")).toBe("macos");
+    expect(resolveDesktopSigningTarget(env({
       SCIENCESWARM_DESKTOP_SIGNING_TARGET: "windows",
       RUNNER_OS: "macOS",
-    }, "linux")).toBe("windows");
+    }), "linux")).toBe("windows");
   });
 
   it("allows unsigned builds unless signing is explicitly required", () => {
@@ -60,14 +64,14 @@ describe("check-desktop-signing-env", () => {
   });
 
   it("accepts either Windows-specific or shared certificate variables", () => {
-    expect(getMissingDesktopSigningRequirements("windows", {
+    expect(getMissingDesktopSigningRequirements("windows", env({
       WIN_CSC_LINK: "base64-cert",
       WIN_CSC_KEY_PASSWORD: "cert-password",
-    })).toEqual([]);
-    expect(getMissingDesktopSigningRequirements("windows", {
+    }))).toEqual([]);
+    expect(getMissingDesktopSigningRequirements("windows", env({
       CSC_LINK: "base64-cert",
       CSC_KEY_PASSWORD: "cert-password",
-    })).toEqual([]);
+    }))).toEqual([]);
   });
 
   it("does not require Linux signing secrets", () => {
