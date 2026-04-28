@@ -276,8 +276,8 @@ export const PaperSummaryArtifactSchema = z
     summarySlug: NonEmptyStringSchema,
     tier: PaperSummaryTierSchema,
     status: PaperSummaryStatusSchema,
-    sourceHash: NonEmptyStringSchema,
-    sectionMapHash: NonEmptyStringSchema,
+    sourceHash: NonEmptyStringSchema.optional(),
+    sectionMapHash: NonEmptyStringSchema.optional(),
     promptVersion: NonEmptyStringSchema,
     modelId: NonEmptyStringSchema.optional(),
     generationSettings: z.record(z.string(), z.unknown()).default({}),
@@ -290,6 +290,20 @@ export const PaperSummaryArtifactSchema = z
     warnings: z.array(PaperCorpusWarningSchema).default([]),
   })
   .superRefine((value, ctx) => {
+    if ((value.status === "current" || value.status === "stale") && value.sourceHash === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sourceHash"],
+        message: "current and stale summaries must include sourceHash.",
+      });
+    }
+    if ((value.status === "current" || value.status === "stale") && value.sectionMapHash === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sectionMapHash"],
+        message: "current and stale summaries must include sectionMapHash.",
+      });
+    }
     if (value.status === "stale" && value.staleReason === undefined) {
       ctx.addIssue({
         code: "custom",

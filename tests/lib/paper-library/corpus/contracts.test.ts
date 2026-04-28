@@ -413,6 +413,27 @@ describe("paper-library corpus contracts", () => {
     })).not.toThrow();
   });
 
+  it("allows missing summary artifacts without output hashes", () => {
+    const fixture = phase0CorpusFixtureDescriptors.find(
+      (descriptor) => descriptor.kind === "good_text_layer_pdf",
+    );
+    if (!fixture?.expectedRelevanceSummary) {
+      throw new Error("expected good text-layer PDF summary artifact");
+    }
+
+    expect(() => PaperSummaryArtifactSchema.parse({
+      ...fixture.expectedRelevanceSummary,
+      sourceHash: undefined,
+      sectionMapHash: undefined,
+    })).toThrow(/sourceHash/);
+    expect(() => PaperSummaryArtifactSchema.parse({
+      ...fixture.expectedRelevanceSummary,
+      status: "missing",
+      sourceHash: undefined,
+      sectionMapHash: undefined,
+    })).not.toThrow();
+  });
+
   it("builds canonical corpus slugs from existing paper-library page slugs", () => {
     expect(paperCorpusSourceSlugForPaperSlug("wiki/entities/papers/arxiv-2401-01234")).toBe(
       "wiki/sources/papers/arxiv-2401-01234/source",
