@@ -167,6 +167,27 @@ describe("desktop main", () => {
     })).resolves.toBeUndefined();
   });
 
+  it("bounds each desktop server readiness request with an abort signal", async () => {
+    let receivedSignalIsAbortSignal = false;
+    let receivedSignalAborted: boolean | null = null;
+
+    await waitForDesktopServer("http://127.0.0.1:3001/setup", {
+      intervalMs: 1,
+      requestTimeoutMs: 1,
+      timeoutMs: 1,
+      sleep: async () => {},
+      fetch: async (...args: Parameters<typeof fetch>) => {
+        const signal = args[1]?.signal;
+        receivedSignalIsAbortSignal = signal instanceof AbortSignal;
+        receivedSignalAborted = signal instanceof AbortSignal ? signal.aborted : null;
+        return new Response("ok");
+      },
+    });
+
+    expect(receivedSignalIsAbortSignal).toBe(true);
+    expect(receivedSignalAborted).toBe(false);
+  });
+
   it("fails when the desktop server never accepts requests", async () => {
     await expect(waitForDesktopServer("http://127.0.0.1:3001/setup", {
       intervalMs: 1,

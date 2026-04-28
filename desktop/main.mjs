@@ -7,6 +7,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const DESKTOP_DIAGNOSTICS_CHANNEL = "scienceswarm:desktop-diagnostics";
 const DEFAULT_SERVER_READY_TIMEOUT_MS = 30_000;
 const DEFAULT_SERVER_READY_INTERVAL_MS = 250;
+const DEFAULT_SERVER_READY_REQUEST_TIMEOUT_MS = 1_000;
 
 /**
  * @typedef {Record<string, string | undefined>} DesktopEnv
@@ -139,7 +140,13 @@ export function isTrustedDesktopIpcSender(event, env = process.env, options = {}
 
 /**
  * @param {string} url
- * @param {{ fetch?: typeof globalThis.fetch, sleep?: (ms: number) => Promise<void>, timeoutMs?: number, intervalMs?: number }} options
+ * @param {{
+ *   fetch?: typeof globalThis.fetch,
+ *   sleep?: (ms: number) => Promise<void>,
+ *   timeoutMs?: number,
+ *   intervalMs?: number,
+ *   requestTimeoutMs?: number,
+ * }} options
  */
 export async function waitForDesktopServer(url, options = {}) {
   const fetchImpl = options.fetch ?? globalThis.fetch;
@@ -149,14 +156,32 @@ export async function waitForDesktopServer(url, options = {}) {
 
   const intervalMs = options.intervalMs ?? DEFAULT_SERVER_READY_INTERVAL_MS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_SERVER_READY_TIMEOUT_MS;
+  const requestTimeoutMs = Math.max(
+    1,
+    options.requestTimeoutMs ?? DEFAULT_SERVER_READY_REQUEST_TIMEOUT_MS,
+  );
   const attempts = Math.max(1, Math.ceil(timeoutMs / Math.max(1, intervalMs)));
   const sleep = options.sleep ?? ((durationMs) =>
     new Promise((resolve) => setTimeout(resolve, durationMs)));
+  const startedAt = Date.now();
   let lastError;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const remainingTimeoutMs = timeoutMs - (Date.now() - startedAt);
+    if (attempt > 0 && remainingTimeoutMs <= 0) {
+      break;
+    }
+
+    const controller = new AbortController();
+    const requestTimeout = setTimeout(() => {
+      controller.abort();
+    }, Math.min(requestTimeoutMs, Math.max(1, remainingTimeoutMs || requestTimeoutMs)));
+
     try {
-      const response = await fetchImpl(url, { method: "GET" });
+      const response = await fetchImpl(url, {
+        method: "GET",
+        signal: controller.signal,
+      });
       if (response.ok || response.status < 500) {
         return;
       }
@@ -164,10 +189,13 @@ export async function waitForDesktopServer(url, options = {}) {
       throw new Error(`Server responded with ${response.status}`);
     } catch (error) {
       lastError = error;
+    } finally {
+      clearTimeout(requestTimeout);
     }
 
-    if (attempt < attempts - 1) {
-      await sleep(intervalMs);
+    const nextRemainingTimeoutMs = timeoutMs - (Date.now() - startedAt);
+    if (attempt < attempts - 1 && nextRemainingTimeoutMs > 0) {
+      await sleep(Math.min(intervalMs, nextRemainingTimeoutMs));
     }
   }
 
@@ -201,6 +229,7 @@ export async function launchDesktopShell(options = {}) {
     await waitForDesktopServer(startUrl, {
       fetch: options.fetch,
       intervalMs: options.serverReadyIntervalMs,
+      requestTimeoutMs: options.serverReadyRequestTimeoutMs,
       timeoutMs: options.serverReadyTimeoutMs,
     });
   }
