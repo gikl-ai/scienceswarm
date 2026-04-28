@@ -5,35 +5,35 @@ This walkthrough shows a new ScienceSwarm user how to drive the
 the UI. You should not need to open a terminal or type shell commands. The
 expected final state is:
 
-- a project-scoped SYK Study Brief saved in gbrain,
+- a Study-scoped SYK Study Brief saved in gbrain,
 - Claude Code execution run logs for the fast preview and default tutorial run,
 - generated `scripts/spectra.npz`, `scripts/sff_data.json`,
   `scripts/metrics.json`, and `scripts/report.html`,
 - a results interpretation note and a refinement decision,
-- all generated files stored inside the ScienceSwarm project workspace.
+- all generated files stored inside the ScienceSwarm Study workspace.
 
 The example is a tutorial scaffold for quantum-chaos numerics, not a new
 physics result.
 
 ---
 
-## 0. Create the project and choose Claude Code
+## 0. Create the Study and choose Claude Code
 
 1. Start ScienceSwarm and complete setup if the app asks.
-2. Open the dashboard and create a project. A name like
+2. Open the dashboard and create a Study. A name like
    `SYK spectral form factor tutorial` is fine.
-3. Open the project. You should see the project chat composer at the bottom of
+3. Open the Study. You should see the study chat composer at the bottom of
    the page.
 4. Click `+ Add`, choose `Import Local Folder`, and import
    `docs/tutorials/syk-spectral-form-factor/`.
 5. If the import says `README.md` or `environment.yml` were saved without typed
-   conversion, continue. They are still available to the assistant as project
+   conversion, continue. They are still available to the assistant as Study
    files.
-6. In the project chat composer, open the assistant selector and choose
+6. In the study chat composer, open the assistant selector and choose
    `Claude Code`.
 7. If ScienceSwarm shows a send-review sheet for Claude Code, confirm the
-   destination is `Claude Code`, the project is your SYK project, and the
-   included data is the prompt plus project context. Then click the send button
+   destination is `Claude Code`, the Study is your SYK Study, and the
+   included data is the prompt plus Study context. Then click the send button
    in that sheet.
 
 Use Claude Code for every step below. Do not switch assistants mid-walkthrough.
@@ -44,7 +44,7 @@ Use Claude Code for every step below. Do not switch assistants mid-walkthrough.
 
 For each step:
 
-1. Stay on the project page.
+1. Stay on the Study page.
 2. Confirm the assistant selector says `Claude Code`.
 3. Click the message box.
 4. Paste the text block for the step.
@@ -52,17 +52,17 @@ For each step:
 6. Wait until the `Stop` button disappears and the assistant reports a saved
    gbrain slug before starting the next step.
 
-If you update this tutorial checkout while a project is already imported, use
+If you update this tutorial checkout while a Study is already imported, use
 `+ Add` then `Check for Changes` before asking Claude Code to rerun anything.
 
 ---
 
 ## 1. Create the SYK Study Brief
 
-Paste this into the project chat:
+Paste this into the study chat:
 
 ```text
-Create a SYK Tutorial Study Brief for this project. Use the imported README.md
+Create a SYK Tutorial Study Brief for this Study. Use the imported README.md
 and scripts as context.
 
 Goal: reproduce the SYK_4 spectral form factor dip-ramp-plateau tutorial from
@@ -70,7 +70,7 @@ the ScienceSwarm UI, not from terminal instructions typed by the user.
 
 Record the model, run modes (fast preview and full tutorial), validation
 gates, expected outputs, artifact locations, and confidence boundary. Do not
-run the scripts yet. Save a durable project-scoped Study Brief with
+run the scripts yet. Save a durable Study-scoped Study Brief with
 gbrain_capture before answering.
 ```
 
@@ -87,10 +87,10 @@ Paste:
 
 ```text
 Create a SYK Execution Handoff and run the fast preview end to end from this
-ScienceSwarm project workspace.
+ScienceSwarm Study workspace.
 
 Use the imported tutorial files. The scripts live in scripts/ and the
-environment file is environment.yml. Work inside the project workspace, not the
+environment file is environment.yml. Work inside the Study workspace, not the
 ScienceSwarm app checkout and not the original tutorial checkout.
 
 First check whether python3 can import NumPy and SciPy. If that works, reuse
@@ -101,11 +101,11 @@ $SCIENCESWARM_DIR/runtimes/conda/envs/scienceswarm-syk-sff.
 
 Run the fast preview: 01_diagonalize.py with N=20 and samples=60, then
 02_spectral_form_factor.py, then 03_render_report.py. Keep generated files
-inside the project scripts folder. Stop if any validation gate fails.
+inside the Study scripts folder. Stop if any validation gate fails.
 
 When finished, summarize metrics.json, explicitly mention whether the GSE
 Kramers-pair handling was used, list spectra.npz, sff_data.json, metrics.json,
-and report.html with sizes, and save a durable project-scoped SYK Execution
+and report.html with sizes, and save a durable Study-scoped SYK Execution
 Run Log with gbrain_capture before answering.
 ```
 
@@ -120,7 +120,7 @@ The expected successful fast-preview metrics are:
 | `ramp_present` | `true` |
 | `plateau_within_tolerance` | `true` |
 
-If stage 2 fails with `<r>` close to zero, the project is probably using an
+If stage 2 fails with `<r>` close to zero, the Study is probably using an
 old copy of `02_spectral_form_factor.py`. Click `+ Add`, click
 `Check for Changes`, and rerun this step.
 
@@ -130,13 +130,13 @@ old copy of `02_spectral_form_factor.py`. Click `+ Add`, click
 
 After Claude Code reports success:
 
-1. Expand the project tree.
+1. Expand the Study file tree.
 2. Expand `scripts/`.
 3. Open `metrics.json` and verify the validation gates passed.
 4. Open `report.html` from the tree. The report is a standalone HTML artifact;
    if your current ScienceSwarm build shows it as source text rather than a
    rendered page, ask Claude Code to summarize the report and open the file
-   from the project workspace until HTML artifact preview is available.
+   from the Study workspace until HTML artifact preview is available.
 
 Expected files:
 
@@ -156,11 +156,11 @@ Paste:
 ```text
 Interpret the completed SYK fast-preview run.
 
-Use scripts/metrics.json and scripts/report.html from this project workspace.
+Use scripts/metrics.json and scripts/report.html from this Study workspace.
 Classify each candidate claim as supported, suggestive, weak, or unsupported.
 Separate "the tutorial pipeline completed" from any scientific claim. Explain
 what the dip-ramp-plateau, gap-ratio check, and plateau gate support, and name
-the limits of the N=20 fast preview. Save a durable project-scoped SYK Results
+the limits of the N=20 fast preview. Save a durable Study-scoped SYK Results
 Interpretation Note with gbrain_capture before answering.
 ```
 
@@ -177,13 +177,13 @@ Paste:
 
 ```text
 Create a SYK Refinement Decision Update using the Study Brief, Execution Run
-Log, generated artifacts, and Results Interpretation Note from this project.
+Log, generated artifacts, and Results Interpretation Note from this Study.
 
 Choose one of: stop, rerun-same-protocol, run-default-tutorial,
 increase-samples, increase-N, adjust-time-grid, inspect-code, or
 seek-expert-review. For this tutorial, explain whether the right next step is
 to stop after the fast preview, run the default N=22 tutorial, or run the
-larger N=24 case for a sharper ramp. Save a durable project-scoped SYK
+larger N=24 case for a sharper ramp. Save a durable Study-scoped SYK
 Refinement Decision Update with gbrain_capture before answering.
 ```
 
@@ -199,11 +199,11 @@ learning path after the default `N=22` run.
 If the refinement decision is `run-default-tutorial`, paste:
 
 ```text
-Run the default SYK tutorial now from this ScienceSwarm project workspace.
+Run the default SYK tutorial now from this ScienceSwarm Study workspace.
 
 Use the imported tutorial files under scripts/. Run 01_diagonalize.py with its
 defaults (N=22, samples=80, seed=2026), then 02_spectral_form_factor.py with
-its defaults, then 03_render_report.py. Work only inside this project
+its defaults, then 03_render_report.py. Work only inside this Study
 workspace. It is okay that the default run overwrites the fast-preview
 spectra.npz, sff_data.json, metrics.json, and report.html; the fast-preview
 record is already preserved in gbrain.
@@ -211,7 +211,7 @@ record is already preserved in gbrain.
 Stop immediately if any validation gate fails. When finished, summarize
 metrics.json, list spectra.npz, sff_data.json, metrics.json, and report.html
 with sizes, say whether the expected class is GUE and whether Kramers-pair
-collapse was not needed, and save a durable project-scoped SYK Default Tutorial
+collapse was not needed, and save a durable Study-scoped SYK Default Tutorial
 Run Log with gbrain_capture before answering.
 ```
 
@@ -238,7 +238,7 @@ You are done when gbrain contains:
 - SYK Refinement Decision Update
 - SYK Default Tutorial Run Log
 
-And the project workspace contains:
+And the Study workspace contains:
 
 - `scripts/spectra.npz`
 - `scripts/sff_data.json`
