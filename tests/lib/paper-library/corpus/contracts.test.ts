@@ -67,6 +67,8 @@ describe("paper-library corpus contracts", () => {
       tier: "relevance",
       status: "current",
       promptVersion: "paper-relevance-v1",
+      createdAt: now,
+      updatedAt: now,
     });
     const bibliography = fixture.expectedBibliography ?? [];
     expect(bibliography).toHaveLength(1);
@@ -205,6 +207,13 @@ describe("paper-library corpus contracts", () => {
         },
       ],
       caveats: ["Embeddings unavailable; packet uses lexical chunks and audited links."],
+      warnings: [
+        {
+          code: "capability_unavailable",
+          message: "Embeddings unavailable; packet uses lexical chunks and audited links.",
+          severity: "warning",
+        },
+      ],
     });
 
     expect(packet.papers[0]?.sourceChunks[0]).toMatchObject({
@@ -217,6 +226,11 @@ describe("paper-library corpus contracts", () => {
         status: "unavailable",
       }),
     );
+    expect(packet.warnings).toEqual([
+      expect.objectContaining({
+        code: "capability_unavailable",
+      }),
+    ]);
   });
 
   it("rejects empty summary evidence records", () => {
@@ -251,5 +265,7 @@ describe("paper-library corpus contracts", () => {
     const longSlug = paperCorpusBibliographySlug({ doi: longDoi }, "");
     expect(longSlug).toMatch(/^wiki\/bibliography\/doi-10-1000-a+-[a-z0-9]+$/);
     expect(longSlug.length).toBeLessThanOrEqual("wiki/bibliography/doi-".length + 120);
+    const formattedLongSlug = paperCorpusBibliographySlug({ doi: longDoi.toUpperCase() }, "");
+    expect(formattedLongSlug).toBe(longSlug);
   });
 });

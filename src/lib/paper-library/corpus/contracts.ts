@@ -221,6 +221,8 @@ export const PaperSummaryArtifactSchema = z.object({
   promptVersion: NonEmptyStringSchema,
   modelId: NonEmptyStringSchema.optional(),
   generationSettings: z.record(z.string(), z.unknown()).default({}),
+  createdAt: IsoDateStringSchema,
+  updatedAt: IsoDateStringSchema,
   generatedAt: IsoDateStringSchema.optional(),
   generatedBy: NonEmptyStringSchema.optional(),
   evidence: z.array(SummaryEvidenceSchema).default([]),
@@ -423,6 +425,7 @@ export const ResearchContextPacketSchema = z.object({
   tensions: z.array(ResearchContextTensionSchema).default([]),
   missingPapers: z.array(ResearchContextMissingPaperSchema).default([]),
   caveats: z.array(NonEmptyStringSchema).default([]),
+  warnings: z.array(PaperCorpusWarningSchema).default([]),
 });
 export type ResearchContextPacket = z.infer<typeof ResearchContextPacketSchema>;
 
@@ -474,7 +477,7 @@ function slugSegment(value: string): string {
     .replace(/^-+|-+$/g, "")
     || "paper";
   if (slug.length <= 120) return slug;
-  const hash = stableSlugHash(value);
+  const hash = stableSlugHash(slug);
   return `${slug.slice(0, 119 - hash.length)}-${hash}`;
 }
 

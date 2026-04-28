@@ -143,6 +143,8 @@ export const phase0CorpusFixtureDescriptors: CorpusFixtureDescriptor[] = [
       promptVersion: "paper-relevance-v1",
       modelId: "local-fixture-model",
       generationSettings: { temperature: 0 },
+      createdAt: now,
+      updatedAt: now,
       generatedAt: now,
       evidence: [
         {
