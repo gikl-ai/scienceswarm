@@ -2,11 +2,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   isDesktopFirstLaunchComplete,
   isTrustedDesktopIpcSender,
+  logDesktopWindowLoadFailure,
   resolveDesktopDiagnostics,
   resolveDesktopLaunchMarkerPath,
   resolveDesktopStartPath,
@@ -139,6 +140,33 @@ describe("desktop main", () => {
     expect(attempts).toBe(2);
   });
 
+  it("retries server error responses while waiting for the desktop server", async () => {
+    let attempts = 0;
+    await waitForDesktopServer("http://127.0.0.1:3001/setup", {
+      intervalMs: 1,
+      timeoutMs: 3,
+      sleep: async () => {},
+      fetch: async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          return new Response("starting", { status: 503 });
+        }
+        return new Response("ok");
+      },
+    });
+
+    expect(attempts).toBe(2);
+  });
+
+  it("accepts client error responses as server-ready responses", async () => {
+    await expect(waitForDesktopServer("http://127.0.0.1:3001/setup", {
+      intervalMs: 1,
+      timeoutMs: 1,
+      sleep: async () => {},
+      fetch: async () => new Response("missing", { status: 404 }),
+    })).resolves.toBeUndefined();
+  });
+
   it("fails when the desktop server never accepts requests", async () => {
     await expect(waitForDesktopServer("http://127.0.0.1:3001/setup", {
       intervalMs: 1,
@@ -148,6 +176,16 @@ describe("desktop main", () => {
         throw new Error("connection refused");
       },
     })).rejects.toThrow("Timed out waiting for desktop server");
+  });
+
+  it("logs desktop window load failures without throwing", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(() => logDesktopWindowLoadFailure("reactivated desktop window", new Error("boom")))
+        .not.toThrow();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("resolves the desktop first-launch marker path under userData", () => {

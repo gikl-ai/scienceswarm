@@ -156,8 +156,12 @@ export async function waitForDesktopServer(url, options = {}) {
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      await fetchImpl(url, { method: "GET" });
-      return;
+      const response = await fetchImpl(url, { method: "GET" });
+      if (response.ok || response.status < 500) {
+        return;
+      }
+
+      throw new Error(`Server responded with ${response.status}`);
     } catch (error) {
       lastError = error;
     }
@@ -169,6 +173,13 @@ export async function waitForDesktopServer(url, options = {}) {
 
   const suffix = lastError instanceof Error ? `: ${lastError.message}` : "";
   throw new Error(`Timed out waiting for desktop server at ${url}${suffix}`);
+}
+
+export function logDesktopWindowLoadFailure(context, error) {
+  console.error(
+    `Failed to load ${context}:`,
+    error instanceof Error ? error.message : error,
+  );
 }
 
 export async function launchDesktopShell(options = {}) {
@@ -211,14 +222,16 @@ export async function launchDesktopShell(options = {}) {
     markDesktopFirstLaunchComplete(app);
   }
 
-  app.on("activate", async () => {
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const nextWindow = new BrowserWindow(resolveDesktopWindowOptions());
-      await nextWindow.loadURL(
+      void nextWindow.loadURL(
         resolveDesktopStartUrl(options.env, {
           firstLaunchComplete: isDesktopFirstLaunchComplete(app),
         }),
-      );
+      ).catch((error) => {
+        logDesktopWindowLoadFailure("reactivated desktop window", error);
+      });
     }
   });
 
