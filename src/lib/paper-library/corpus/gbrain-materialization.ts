@@ -595,16 +595,24 @@ async function existingLedger(
   const parsed = await readPaperProvenanceLedger(project, paper.paperSlug, stateRoot);
   if (parsed.ok) return parsed.data;
   if (parsed.repairable.code === "missing") return paper.provenance;
-  return paper.provenance;
+  throw new Error(
+    [
+      `Paper corpus provenance ledger for ${paper.paperSlug} is ${parsed.repairable.code}.`,
+      "Refusing to overwrite repairable ledger state during gbrain materialization.",
+      parsed.repairable.path ? `Path: ${parsed.repairable.path}.` : undefined,
+      parsed.repairable.message,
+    ].filter(Boolean).join(" "),
+  );
 }
 
 async function writePaperCorpusLedger(input: {
   project: string;
   paper: PaperIngestPaper;
+  ledger: PaperProvenanceLedger;
   records: readonly PaperProvenanceLedgerRecord[];
   stateRoot?: string;
 }): Promise<PaperProvenanceLedger> {
-  let ledger = await existingLedger(input.project, input.paper, input.stateRoot);
+  let ledger = input.ledger;
   for (const record of input.records) {
     ledger = upsertPaperProvenanceRecord(ledger, record);
   }
@@ -819,6 +827,7 @@ export async function materializePaperCorpusManifestToGbrain(
   const warnings: PaperCorpusWarning[] = [...input.manifest.warnings];
 
   for (const paper of input.manifest.papers) {
+    const ledger = await existingLedger(input.project, paper, input.stateRoot);
     const result = await materializePaper({
       client,
       store,
@@ -834,6 +843,7 @@ export async function materializePaperCorpusManifestToGbrain(
     await writePaperCorpusLedger({
       project: input.project,
       paper,
+      ledger,
       records: result.records,
       stateRoot: input.stateRoot,
     });

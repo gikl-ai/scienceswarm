@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -10,6 +10,7 @@ import {
   detectGbrainCorpusCapabilities,
   materializePaperCorpusManifestToGbrain,
   PaperIngestManifestSchema,
+  getPaperCorpusPaperProvenancePath,
   readPaperProvenanceLedger,
   type PaperIngestManifest,
 } from "@/lib/paper-library/corpus";
@@ -239,5 +240,26 @@ describe("paper corpus gbrain materialization", () => {
         status: "available",
       }),
     ]));
+  });
+
+  it("refuses to overwrite a repairable malformed provenance ledger", async () => {
+    const manifest = goodPdfManifest();
+    const paper = manifest.papers[0];
+    const sourceSlug = paper?.sourceArtifact?.sourceSlug;
+    if (!paper || !sourceSlug) throw new Error("expected complete fixture paper");
+
+    const ledgerPath = getPaperCorpusPaperProvenancePath("project-alpha", paper.paperSlug);
+    await mkdir(path.dirname(ledgerPath), { recursive: true });
+    await writeFile(ledgerPath, JSON.stringify({ version: 1, invalid: true }), "utf-8");
+
+    await expect(materializePaperCorpusManifestToGbrain({
+      project: "project-alpha",
+      brainRoot,
+      manifest,
+      occurredAt: now,
+    })).rejects.toThrow(/Refusing to overwrite repairable ledger state/);
+
+    const store = getBrainStore({ root: projectBrainRoot() });
+    await expect(store.getPage(sourceSlug)).resolves.toBeNull();
   });
 });
