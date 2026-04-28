@@ -33,6 +33,11 @@ const PROJECTS_REPOSITORY_LIST_DEADLINE_MS = 1500;
 const REPOSITORY_UNAVAILABLE_CAUSE_DEPTH_LIMIT = 10;
 const DISK_FALLBACK_SAVE_ERROR =
   "Project could not be saved to disk while gbrain was unavailable.";
+const DISK_FALLBACK_ARCHIVE_ERROR =
+  "Project could not be archived on disk while gbrain was unavailable.";
+const DISK_FALLBACK_ARCHIVE_RECOVERY_WARNING =
+  "gbrain was unavailable, so only the local project compatibility manifest was archived; "
+  + "reconcile this slug after gbrain recovers if the gbrain record is still active.";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -80,6 +85,27 @@ async function createDiskFallbackProject(input: {
     status: "active",
     projectPageSlug: input.slug,
   };
+}
+
+async function archiveDiskFallbackProject(slug: string): Promise<{
+  ok: true;
+  existed: boolean;
+}> {
+  const activeRecords = (await listProjectRecordsFromDisk()).filter(
+    (record) => record.slug === slug && record.status !== "archived",
+  );
+  if (activeRecords.length === 0) return { ok: true, existed: false };
+
+  const archivedAt = new Date().toISOString();
+  for (const record of activeRecords) {
+    await materializeProjectFolder({
+      ...record,
+      status: "archived",
+      lastActive: archivedAt,
+    });
+  }
+
+  return { ok: true, existed: true };
 }
 
 function toLegacyProjectMeta(record: {
@@ -273,8 +299,36 @@ export async function POST(request: Request) {
         );
       }
       const safeProjectId = assertSafeProjectSlug(String(projectId));
-      const result = await getProjectsRouteRepository().delete(safeProjectId);
-      return Response.json({ ok: true, existed: result.existed });
+      try {
+        const result = await getProjectsRouteRepository().delete(safeProjectId);
+        return Response.json({ ok: true, existed: result.existed });
+      } catch (error) {
+        if (!isRepositoryUnavailableError(error)) {
+          throw error;
+        }
+        console.warn("[projects] repository archive failed; falling back to disk:", error);
+        try {
+          const result = await archiveDiskFallbackProject(safeProjectId);
+          return Response.json({
+            ok: true,
+            existed: result.existed,
+            persistence: "disk-fallback",
+            persistenceWarning: errorMessage(error),
+            persistenceRecoveryWarning: DISK_FALLBACK_ARCHIVE_RECOVERY_WARNING,
+          });
+        } catch (fallbackError) {
+          return Response.json(
+            {
+              error: DISK_FALLBACK_ARCHIVE_ERROR,
+              materializationError: errorMessage(fallbackError),
+              persistence: "disk-fallback",
+              persistenceWarning: errorMessage(error),
+              persistenceRecoveryWarning: DISK_FALLBACK_ARCHIVE_RECOVERY_WARNING,
+            },
+            { status: 500 },
+          );
+        }
+      }
     }
 
     return Response.json({ error: "Unknown action" }, { status: 400 });

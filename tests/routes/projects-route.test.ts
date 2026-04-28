@@ -376,6 +376,81 @@ describe("POST /api/projects", () => {
       );
     },
   );
+
+  it("archives the disk compatibility manifest when gbrain is unavailable", async () => {
+    const { POST } = await import("@/app/api/projects/route");
+    const unavailable = new Error("Brain backend unavailable");
+    unavailable.name = "BrainBackendUnavailableError";
+    const fakeRepository: ProjectRepository = {
+      async list() {
+        return [];
+      },
+      async get() {
+        return null;
+      },
+      async create() {
+        throw new Error("not implemented");
+      },
+      async delete() {
+        throw unavailable;
+      },
+      async touch() {},
+    };
+    __setProjectRepositoryOverride(fakeRepository);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const projectDir = path.join(dataRoot, "projects", "disk-project");
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(
+      path.join(projectDir, "project.json"),
+      JSON.stringify(
+        {
+          slug: "disk-project",
+          name: "Disk Project",
+          description: "Disk-backed project",
+          createdAt: "2026-04-16T00:00:00.000Z",
+          lastActive: "2026-04-17T00:00:00.000Z",
+          status: "active",
+        },
+        null,
+        2,
+      ),
+    );
+    await writeFile(path.join(projectDir, "paper.pdf"), "keep this local copy");
+
+    try {
+      const response = await POST(buildCreateRequest({
+        action: "archive",
+        projectId: "disk-project",
+      }));
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual(
+        expect.objectContaining({
+          ok: true,
+          existed: true,
+          persistence: "disk-fallback",
+          persistenceWarning: "Brain backend unavailable",
+        }),
+      );
+      expect(data.persistenceRecoveryWarning).toContain(
+        "local project compatibility manifest was archived",
+      );
+      const diskMeta = JSON.parse(
+        await readFile(path.join(projectDir, "project.json"), "utf-8"),
+      );
+      expect(diskMeta.status).toBe("archived");
+      await expect(readFile(path.join(projectDir, "paper.pdf"), "utf-8")).resolves.toBe(
+        "keep this local copy",
+      );
+      expect(warn).toHaveBeenCalledWith(
+        "[projects] repository archive failed; falling back to disk:",
+        unavailable,
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe("GET /api/projects", () => {
