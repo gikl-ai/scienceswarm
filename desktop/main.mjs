@@ -79,6 +79,24 @@ export function resolveDesktopDiagnostics(app, env = process.env, options = {}) 
   };
 }
 
+/**
+ * @param {{ senderFrame?: { url?: string }, sender?: { getURL?: () => string } } | undefined} event
+ * @param {DesktopEnv} env
+ * @param {DesktopStartOptions} options
+ */
+export function isTrustedDesktopIpcSender(event, env = process.env, options = {}) {
+  const senderUrl = event?.senderFrame?.url || event?.sender?.getURL?.() || "";
+  if (!senderUrl) {
+    return false;
+  }
+
+  try {
+    return new URL(senderUrl).origin === new URL(resolveDesktopStartUrl(env, options)).origin;
+  } catch {
+    return false;
+  }
+}
+
 export async function launchDesktopShell(options = {}) {
   const [{ app, BrowserWindow, ipcMain }, { startStandaloneServer }] = await Promise.all([
     import("electron"),
@@ -92,11 +110,16 @@ export async function launchDesktopShell(options = {}) {
     cwd: options.projectRoot,
     env: options.env,
   });
-  ipcMain.handle(DESKTOP_DIAGNOSTICS_CHANNEL, () =>
-    resolveDesktopDiagnostics(app, options.env, {
+  ipcMain.handle(DESKTOP_DIAGNOSTICS_CHANNEL, (event) => {
+    const diagnosticsOptions = {
       firstLaunchComplete: existsSync(resolveDesktopLaunchMarkerPath(app)),
-    })
-  );
+    };
+    if (!isTrustedDesktopIpcSender(event, options.env, diagnosticsOptions)) {
+      throw new Error("Blocked desktop diagnostics request from an untrusted renderer.");
+    }
+
+    return resolveDesktopDiagnostics(app, options.env, diagnosticsOptions);
+  });
 
   const window = new BrowserWindow({
     width: 1440,
