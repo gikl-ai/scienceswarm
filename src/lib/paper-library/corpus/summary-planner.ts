@@ -445,7 +445,7 @@ export function planPaperSummaryJobs(
           warning,
         }));
         provenanceRecords.push(summaryRecord({
-          id: `summary:${tier}:${paper.paperSlug}:blocked`,
+          id: `summary:${tier}:${paper.paperSlug}:blocked:${inputHash.slice(0, 16)}`,
           paperSlug: paper.paperSlug,
           occurredAt: generatedAt,
           actor,
@@ -475,7 +475,7 @@ export function planPaperSummaryJobs(
       }));
       if (existing && staleReason) {
         provenanceRecords.push(summaryRecord({
-          id: `summary:${tier}:${paper.paperSlug}:stale`,
+          id: `summary:${tier}:${paper.paperSlug}:stale:${inputHash.slice(0, 16)}`,
           paperSlug: paper.paperSlug,
           occurredAt: generatedAt,
           actor,

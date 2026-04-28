@@ -145,6 +145,7 @@ describe("paper corpus summary planner", () => {
     });
     expect(result.provenanceRecords).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        id: expect.stringMatching(/:stale:[a-f0-9]{16}$/),
         status: "stale",
         staleReason: "Selected source hash changed.",
       }),
@@ -175,6 +176,7 @@ describe("paper corpus summary planner", () => {
     });
     expect(result.provenanceRecords).toEqual([
       expect.objectContaining({
+        id: expect.stringMatching(/:blocked:[a-f0-9]{16}$/),
         status: "blocked",
         warnings: [
           expect.objectContaining({
