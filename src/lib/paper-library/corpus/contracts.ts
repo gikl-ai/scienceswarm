@@ -134,23 +134,34 @@ export const PaperSourceCandidateSchema = z.object({
 });
 export type PaperSourceCandidate = z.infer<typeof PaperSourceCandidateSchema>;
 
-export const PaperSourceArtifactSchema = z.object({
-  paperId: NonEmptyStringSchema,
-  paperSlug: NonEmptyStringSchema,
-  sourceSlug: NonEmptyStringSchema,
-  selectedCandidateId: NonEmptyStringSchema,
-  sourceType: PaperSourceTypeSchema,
-  origin: PaperSourceOriginSchema,
-  status: CorpusArtifactStatusSchema,
-  extractor: CorpusExtractorSchema,
-  sourceHash: NonEmptyStringSchema,
-  sectionMapHash: NonEmptyStringSchema,
-  normalizedMarkdown: z.string().default(""),
-  quality: SourceQualitySchema,
-  createdAt: IsoDateStringSchema,
-  updatedAt: IsoDateStringSchema,
-  warnings: z.array(PaperCorpusWarningSchema).default([]),
-});
+export const PaperSourceArtifactSchema = z
+  .object({
+    paperId: NonEmptyStringSchema,
+    paperSlug: NonEmptyStringSchema,
+    sourceSlug: NonEmptyStringSchema,
+    selectedCandidateId: NonEmptyStringSchema,
+    sourceType: PaperSourceTypeSchema,
+    origin: PaperSourceOriginSchema,
+    status: CorpusArtifactStatusSchema,
+    extractor: CorpusExtractorSchema,
+    sourceHash: NonEmptyStringSchema,
+    sectionMapHash: NonEmptyStringSchema,
+    normalizedMarkdown: z.string().default(""),
+    quality: SourceQualitySchema,
+    createdAt: IsoDateStringSchema,
+    updatedAt: IsoDateStringSchema,
+    staleReason: NonEmptyStringSchema.optional(),
+    warnings: z.array(PaperCorpusWarningSchema).default([]),
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === "stale" && value.staleReason === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["staleReason"],
+        message: "stale source artifacts must include staleReason.",
+      });
+    }
+  });
 export type PaperSourceArtifact = z.infer<typeof PaperSourceArtifactSchema>;
 
 export const PaperSectionAnchorSchema = z.object({
@@ -176,6 +187,7 @@ export const PaperSectionMapSchema = z
     sections: z.array(PaperSectionAnchorSchema).default([]),
     createdAt: IsoDateStringSchema,
     updatedAt: IsoDateStringSchema,
+    staleReason: NonEmptyStringSchema.optional(),
     warnings: z.array(PaperCorpusWarningSchema).default([]),
   })
   .superRefine((value, ctx) => {
@@ -184,6 +196,13 @@ export const PaperSectionMapSchema = z
         code: "custom",
         path: ["sections"],
         message: "current and stale section maps must include at least one section.",
+      });
+    }
+    if (value.status === "stale" && value.staleReason === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["staleReason"],
+        message: "stale section maps must include staleReason.",
       });
     }
   });
@@ -487,36 +506,58 @@ export const ResearchContextPacketSchema = z.object({
 });
 export type ResearchContextPacket = z.infer<typeof ResearchContextPacketSchema>;
 
-export const PaperIngestPaperSchema = z.object({
-  paperId: NonEmptyStringSchema,
-  paperSlug: NonEmptyStringSchema,
-  identifiers: PaperIdentifierSchema.default({}),
-  title: NonEmptyStringSchema.optional(),
-  status: CorpusArtifactStatusSchema,
-  sourceCandidates: z.array(PaperSourceCandidateSchema).default([]),
-  selectedSourceCandidateId: NonEmptyStringSchema.optional(),
-  sourceArtifact: PaperSourceArtifactSchema.optional(),
-  sectionMap: PaperSectionMapSchema.optional(),
-  summaries: z.array(PaperSummaryArtifactSchema).default([]),
-  bibliography: z.array(BibliographyEntryArtifactSchema).default([]),
-  provenance: z.array(PaperProvenanceLedgerRecordSchema).default([]),
-  warnings: z.array(PaperCorpusWarningSchema).default([]),
-});
+export const PaperIngestPaperSchema = z
+  .object({
+    paperId: NonEmptyStringSchema,
+    paperSlug: NonEmptyStringSchema,
+    identifiers: PaperIdentifierSchema.default({}),
+    title: NonEmptyStringSchema.optional(),
+    status: CorpusArtifactStatusSchema,
+    sourceCandidates: z.array(PaperSourceCandidateSchema).default([]),
+    selectedSourceCandidateId: NonEmptyStringSchema.optional(),
+    sourceArtifact: PaperSourceArtifactSchema.optional(),
+    sectionMap: PaperSectionMapSchema.optional(),
+    summaries: z.array(PaperSummaryArtifactSchema).default([]),
+    bibliography: z.array(BibliographyEntryArtifactSchema).default([]),
+    provenance: z.array(PaperProvenanceLedgerRecordSchema).default([]),
+    staleReason: NonEmptyStringSchema.optional(),
+    warnings: z.array(PaperCorpusWarningSchema).default([]),
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === "stale" && value.staleReason === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["staleReason"],
+        message: "stale ingest paper records must include staleReason.",
+      });
+    }
+  });
 export type PaperIngestPaper = z.infer<typeof PaperIngestPaperSchema>;
 
-export const PaperIngestManifestSchema = z.object({
-  version: z.literal(PAPER_CORPUS_STATE_VERSION),
-  id: NonEmptyStringSchema,
-  project: ProjectSlugSchema,
-  scanId: NonEmptyStringSchema.optional(),
-  status: CorpusArtifactStatusSchema,
-  createdAt: IsoDateStringSchema,
-  updatedAt: IsoDateStringSchema,
-  parserConcurrencyLimit: z.number().int().positive(),
-  summaryConcurrencyLimit: z.number().int().positive(),
-  papers: z.array(PaperIngestPaperSchema).default([]),
-  warnings: z.array(PaperCorpusWarningSchema).default([]),
-});
+export const PaperIngestManifestSchema = z
+  .object({
+    version: z.literal(PAPER_CORPUS_STATE_VERSION),
+    id: NonEmptyStringSchema,
+    project: ProjectSlugSchema,
+    scanId: NonEmptyStringSchema.optional(),
+    status: CorpusArtifactStatusSchema,
+    createdAt: IsoDateStringSchema,
+    updatedAt: IsoDateStringSchema,
+    parserConcurrencyLimit: z.number().int().positive(),
+    summaryConcurrencyLimit: z.number().int().positive(),
+    papers: z.array(PaperIngestPaperSchema).default([]),
+    staleReason: NonEmptyStringSchema.optional(),
+    warnings: z.array(PaperCorpusWarningSchema).default([]),
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === "stale" && value.staleReason === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["staleReason"],
+        message: "stale ingest manifests must include staleReason.",
+      });
+    }
+  });
 export type PaperIngestManifest = z.infer<typeof PaperIngestManifestSchema>;
 
 function stableSlugHash(value: string): string {

@@ -4,6 +4,7 @@ import {
   BibliographyEntryArtifactSchema,
   GbrainCorpusCapabilitiesSchema,
   GbrainChunkHandleSchema,
+  PaperIngestPaperSchema,
   PaperIngestManifestSchema,
   PaperProvenanceLedgerRecordSchema,
   PaperSectionMapSchema,
@@ -270,13 +271,33 @@ describe("paper-library corpus contracts", () => {
     })).not.toThrow();
   });
 
-  it("requires stale reasons on stale summaries, bibliography artifacts, and provenance records", () => {
+  it("requires stale reasons on stale artifacts and ingest envelopes", () => {
     const fixture = phase0CorpusFixtureDescriptors.find(
       (descriptor) => descriptor.kind === "good_text_layer_pdf",
     );
-    if (!fixture?.expectedRelevanceSummary) {
-      throw new Error("expected good text-layer PDF relevance summary");
+    if (!fixture?.expectedSourceArtifact || !fixture.expectedSectionMap || !fixture.expectedRelevanceSummary) {
+      throw new Error("expected good text-layer PDF artifacts");
     }
+
+    expect(() => PaperSourceArtifactSchema.parse({
+      ...fixture.expectedSourceArtifact,
+      status: "stale",
+    })).toThrow(/staleReason/);
+    expect(() => PaperSourceArtifactSchema.parse({
+      ...fixture.expectedSourceArtifact,
+      status: "stale",
+      staleReason: "Selected source changed.",
+    })).not.toThrow();
+
+    expect(() => PaperSectionMapSchema.parse({
+      ...fixture.expectedSectionMap,
+      status: "stale",
+    })).toThrow(/staleReason/);
+    expect(() => PaperSectionMapSchema.parse({
+      ...fixture.expectedSectionMap,
+      status: "stale",
+      staleReason: "Source hash changed.",
+    })).not.toThrow();
 
     expect(() => PaperSummaryArtifactSchema.parse({
       ...fixture.expectedRelevanceSummary,
@@ -301,6 +322,35 @@ describe("paper-library corpus contracts", () => {
       ...bibliographyFixture,
       status: "stale",
       staleReason: "Source references changed.",
+    })).not.toThrow();
+
+    const staleIngestPaper = {
+      paperId: "paper-good-pdf-2024",
+      paperSlug: "wiki/entities/papers/good-pdf-2024",
+      status: "stale",
+    };
+
+    expect(() => PaperIngestPaperSchema.parse(staleIngestPaper)).toThrow(/staleReason/);
+    expect(() => PaperIngestPaperSchema.parse({
+      ...staleIngestPaper,
+      staleReason: "Source artifact changed.",
+    })).not.toThrow();
+
+    const staleManifest = {
+      version: 1,
+      id: "corpus-manifest-stale",
+      project: "project-alpha",
+      status: "stale",
+      createdAt: now,
+      updatedAt: now,
+      parserConcurrencyLimit: 2,
+      summaryConcurrencyLimit: 1,
+    };
+
+    expect(() => PaperIngestManifestSchema.parse(staleManifest)).toThrow(/staleReason/);
+    expect(() => PaperIngestManifestSchema.parse({
+      ...staleManifest,
+      staleReason: "Paper source changed.",
     })).not.toThrow();
 
     const staleProvenance = {
