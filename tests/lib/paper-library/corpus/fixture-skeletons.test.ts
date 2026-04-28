@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   requiredPhase0CorpusFixtureKinds,
   validateCorpusFixtureDescriptors,
-} from "@/lib/paper-library/corpus";
+} from "./fixture-helpers";
 import { phase0CorpusFixtureDescriptors } from "../../../fixtures/paper-library/corpus/phase0-fixtures";
 
 describe("paper-library corpus fixture skeletons", () => {

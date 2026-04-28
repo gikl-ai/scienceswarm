@@ -1,9 +1,9 @@
-import type { CorpusFixtureDescriptor } from "@/lib/paper-library/corpus";
 import {
   paperCorpusBibliographySlug,
   paperCorpusSourceSlugForPaperSlug,
   paperCorpusSummarySlugForPaperSlug,
 } from "@/lib/paper-library/corpus";
+import type { CorpusFixtureDescriptor } from "../../../lib/paper-library/corpus/fixture-helpers";
 
 const now = "2026-04-28T12:00:00.000Z";
 

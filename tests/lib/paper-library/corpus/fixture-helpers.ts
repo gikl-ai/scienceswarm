@@ -7,7 +7,7 @@ import {
   PaperSourceArtifactSchema,
   PaperSourceCandidateSchema,
   PaperSummaryArtifactSchema,
-} from "./contracts";
+} from "@/lib/paper-library/corpus";
 
 export const CorpusFixtureKindSchema = z.enum([
   "arxiv_latex_source",

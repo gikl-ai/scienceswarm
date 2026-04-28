@@ -17,15 +17,25 @@ import { phase0CorpusFixtureDescriptors } from "../../../fixtures/paper-library/
 const now = "2026-04-28T12:00:00.000Z";
 
 describe("paper-library corpus contracts", () => {
-  it("accepts source candidate precedence across LaTeX, HTML, PDF, and parser-unavailable fixtures", () => {
+  it("accepts source candidate precedence with shared PDF fallback rank for PDF variants", () => {
     for (const descriptor of phase0CorpusFixtureDescriptors) {
       expect(() => PaperSourceCandidateSchema.parse(descriptor.expectedCandidate)).not.toThrow();
     }
 
-    const ranks = phase0CorpusFixtureDescriptors.map(
-      (descriptor) => descriptor.expectedCandidate.preferenceRank,
+    const rankByKind = Object.fromEntries(
+      phase0CorpusFixtureDescriptors.map((descriptor) => [
+        descriptor.kind,
+        descriptor.expectedCandidate.preferenceRank,
+      ]),
     );
-    expect(new Set(ranks)).toEqual(new Set([1, 2, 3, 4]));
+    expect(rankByKind).toMatchObject({
+      arxiv_latex_source: 1,
+      local_latex_or_html_sidecar: 2,
+      good_text_layer_pdf: 3,
+      advanced_pdf_parser_unavailable: 3,
+      scanned_or_low_text_pdf: 3,
+      duplicate_identity: 4,
+    });
   });
 
   it("parses gbrain materialization artifacts for source, section map, summary, and bibliography outputs", () => {
