@@ -92,7 +92,7 @@ async function createDiskFallbackProject(input: {
     createdAt,
     lastActive: createdAt,
     status: "active",
-    projectPageSlug: input.slug,
+    projectPageSlug: slug,
   };
 }
 

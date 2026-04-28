@@ -43,6 +43,11 @@ interface ResolvedStudyCreateIdentity {
   slug: string;
 }
 
+interface StudySlugUse {
+  onlyArchivedStudyRecords: boolean;
+  used: boolean;
+}
+
 const studyCreateTails = new Map<string, Promise<void>>();
 
 async function withStudyCreateLock<T>(
@@ -206,7 +211,8 @@ async function resolveStudyCreateIdentity({
     return { name: requestedName, slug: requestedSlug };
   }
 
-  const requestedUse = await getStudySlugUse(brain, requestedSlug);
+  const records = pagesToStudyRecords(await listStudyAndLegacyProjectPages(brain));
+  const requestedUse = await getStudySlugUse(brain, requestedSlug, records);
   if (!requestedUse.used) {
     return { name: requestedName, slug: requestedSlug };
   }
@@ -214,7 +220,7 @@ async function resolveStudyCreateIdentity({
     throw new DuplicateStudyError(requestedSlug);
   }
 
-  const versioned = await resolveArchivedStudyVersionedSlug(brain, requestedSlug);
+  const versioned = await resolveArchivedStudyVersionedSlug(brain, requestedSlug, records);
   return {
     name: `${requestedName}-${versioned.version}`,
     slug: versioned.slug,
@@ -224,10 +230,11 @@ async function resolveStudyCreateIdentity({
 async function resolveArchivedStudyVersionedSlug(
   brain: BrainStore,
   baseSlug: string,
+  records: readonly StudyRecord[],
 ): Promise<{ slug: string; version: number }> {
   for (let version = 2; version < Number.MAX_SAFE_INTEGER; version += 1) {
     const slug = assertSafeProjectSlug(`${baseSlug}-${version}`);
-    const use = await getStudySlugUse(brain, slug);
+    const use = await getStudySlugUse(brain, slug, records);
     if (!use.used) {
       return { slug, version };
     }
@@ -239,7 +246,8 @@ async function resolveArchivedStudyVersionedSlug(
 async function getStudySlugUse(
   brain: BrainStore,
   slug: string,
-): Promise<{ onlyArchivedStudyRecords: boolean; used: boolean }> {
+  records?: readonly StudyRecord[],
+): Promise<StudySlugUse> {
   const exactPage = await brain.getPage(slug);
   const exactRecord = pageToStudyRecord(exactPage);
   if (exactPage && !exactRecord) {
@@ -249,7 +257,9 @@ async function getStudySlugUse(
     return { onlyArchivedStudyRecords: false, used: true };
   }
 
-  const matchingRecords = await findStudyRecordsBySlug(brain, slug);
+  const matchingRecords = records
+    ? findStudyRecordsBySlugInList(records, slug)
+    : await findStudyRecordsBySlug(brain, slug);
   if (matchingRecords.some((record) => record.status !== "archived")) {
     return { onlyArchivedStudyRecords: false, used: true };
   }
@@ -279,9 +289,20 @@ async function findStudyRecordsBySlug(
   slug: string,
 ): Promise<StudyRecord[]> {
   const pages = await listStudyAndLegacyProjectPages(store);
+  return findStudyRecordsBySlugInList(pagesToStudyRecords(pages), slug);
+}
+
+function pagesToStudyRecords(pages: BrainPage[]): StudyRecord[] {
   return pages
     .map(pageToStudyRecord)
-    .filter((record): record is StudyRecord => Boolean(record))
+    .filter((record): record is StudyRecord => Boolean(record));
+}
+
+function findStudyRecordsBySlugInList(
+  records: readonly StudyRecord[],
+  slug: string,
+): StudyRecord[] {
+  return records
     .filter((record) => record.slug === slug)
     .sort(compareStudyRecordsByRecency);
 }
