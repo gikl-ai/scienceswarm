@@ -34,12 +34,16 @@ export interface BuildPaperCorpusManifestInput {
   scanId?: string;
   items: readonly PaperReviewItem[];
   sidecarRelativePaths?: readonly string[];
+  sidecarRelativePathsByPaperId?: Readonly<Record<string, readonly string[]>>;
   parserConcurrencyLimit?: number;
   summaryConcurrencyLimit?: number;
 }
 
 function selectedIdentityCandidate(item: PaperReviewItem): PaperIdentityCandidate | undefined {
-  return item.candidates.find((candidate) => candidate.id === item.selectedCandidateId) ?? item.candidates[0];
+  if (item.selectedCandidateId) {
+    return item.candidates.find((candidate) => candidate.id === item.selectedCandidateId);
+  }
+  return item.candidates[0];
 }
 
 function correctionString(item: PaperReviewItem, ...keys: string[]): string | undefined {
@@ -166,7 +170,7 @@ export function buildPaperCorpusSourceCandidates(
   const sourceStem = input.item.source ? stemKey(input.item.source.relativePath) : null;
   const sidecars = (input.sidecarRelativePaths ?? [])
     .map(normalizeRelativePath)
-    .filter((relativePath) => sourceStem && stemKey(relativePath) === sourceStem)
+    .filter((relativePath) => !sourceStem || stemKey(relativePath) === sourceStem)
     .sort((left, right) => left.localeCompare(right));
 
   for (const relativePath of sidecars) {
@@ -265,11 +269,15 @@ export function buildPaperCorpusManifest(input: BuildPaperCorpusManifestInput): 
     updatedAt: input.updatedAt ?? input.createdAt,
     parserConcurrencyLimit: input.parserConcurrencyLimit ?? 2,
     summaryConcurrencyLimit: input.summaryConcurrencyLimit ?? 1,
-    papers: input.items.map((item) => buildPaperCorpusIngestPaper({
-      item,
-      detectedAt: input.createdAt,
-      sidecarRelativePaths: input.sidecarRelativePaths,
-      includeSourceChoiceProvenance: true,
-    })),
+    papers: input.items.map((item) => {
+      const sidecarRelativePaths = input.sidecarRelativePathsByPaperId?.[item.paperId]
+        ?? (item.source ? input.sidecarRelativePaths : undefined);
+      return buildPaperCorpusIngestPaper({
+        item,
+        detectedAt: input.createdAt,
+        sidecarRelativePaths,
+        includeSourceChoiceProvenance: true,
+      });
+    }),
   });
 }

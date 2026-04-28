@@ -617,6 +617,16 @@ export const PaperIngestPaperSchema = z
     }
     if (
       value.sourceArtifact
+      && !value.sourceCandidates.some((candidate) => candidate.id === value.sourceArtifact?.selectedCandidateId)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sourceArtifact", "selectedCandidateId"],
+        message: "source artifact selectedCandidateId must be present in sourceCandidates.",
+      });
+    }
+    if (
+      value.sourceArtifact
       && value.selectedSourceCandidateId
       && value.sourceArtifact.selectedCandidateId !== value.selectedSourceCandidateId
     ) {

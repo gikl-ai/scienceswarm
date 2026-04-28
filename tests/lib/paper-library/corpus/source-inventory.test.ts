@@ -121,6 +121,59 @@ describe("paper corpus source inventory", () => {
     ]);
   });
 
+  it("does not attach metadata from an unresolved selected identity candidate", () => {
+    const candidates = buildPaperCorpusSourceCandidates({
+      item: reviewItem({
+        selectedCandidateId: "missing-identity",
+      }),
+      detectedAt: now,
+    });
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      origin: "local_pdf",
+      status: "preferred",
+      identifiers: {},
+      title: "local-paper-1",
+    });
+  });
+
+  it("accepts explicit sidecar-only source paths when no local PDF snapshot exists", () => {
+    const ingestPaper = buildPaperCorpusIngestPaper({
+      item: reviewItem({
+        source: undefined,
+        candidates: [
+          {
+            id: "identity-1",
+            identifiers: { doi: "10.1000/example" },
+            title: "Sidecar Only Paper",
+            authors: [],
+            source: "crossref",
+            confidence: 0.82,
+            evidence: ["doi"],
+            conflicts: [],
+          },
+        ],
+      }),
+      detectedAt: now,
+      sidecarRelativePaths: ["sources/sidecar-only-paper.tex"],
+    });
+
+    expect(ingestPaper).toMatchObject({
+      status: "planned",
+      selectedSourceCandidateId: "paper-1:source:sidecar-latex-sources-sidecar-only-paper-tex",
+      sourceCandidates: [
+        {
+          origin: "local_sidecar",
+          sourceType: "latex",
+          status: "preferred",
+          relativePath: "sources/sidecar-only-paper.tex",
+        },
+      ],
+      warnings: [],
+    });
+  });
+
   it("builds blocked ingest papers when no source candidate exists", () => {
     const ingestPaper = buildPaperCorpusIngestPaper({
       item: reviewItem({
@@ -174,6 +227,9 @@ describe("paper corpus source inventory", () => {
           ],
         }),
       ],
+      sidecarRelativePathsByPaperId: {
+        "paper-1": ["papers/local-paper-1.html"],
+      },
     });
 
     expect(manifest).toMatchObject({
@@ -186,7 +242,7 @@ describe("paper corpus source inventory", () => {
       papers: [
         {
           paperSlug: "wiki/entities/papers/doi-10-1000-example",
-          selectedSourceCandidateId: "paper-1:source:local-pdf",
+          selectedSourceCandidateId: "paper-1:source:sidecar-html-papers-local-paper-1-html",
           provenance: [
             {
               eventType: "source_choice",
