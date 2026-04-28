@@ -21,6 +21,10 @@ export function normalizeChecksumPath(filePath) {
   return filePath.split(path.sep).join("/");
 }
 
+export function resolveChecksumCliDistDir(rawDistDir = "dist", cwd = process.cwd()) {
+  return path.resolve(cwd, rawDistDir);
+}
+
 export function isInstallerArtifactPath(filePath) {
   const basename = path.basename(filePath);
   return DEFAULT_INSTALLER_ARTIFACT_SUFFIXES.some((suffix) => basename.endsWith(suffix));
@@ -94,8 +98,10 @@ export async function writeArtifactChecksums(options = {}) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const distDir = process.argv[2] || process.env.SCIENCESWARM_DESKTOP_DIST_DIR || "dist";
-  const result = await writeArtifactChecksums({ distDir });
+  const rawDistDir = process.argv[2] || process.env.SCIENCESWARM_DESKTOP_DIST_DIR || "dist";
+  const result = await writeArtifactChecksums({
+    distDir: resolveChecksumCliDistDir(rawDistDir),
+  });
   console.log(
     `Wrote ${result.artifactCount} desktop installer checksums to ${result.outputFile}`,
   );
