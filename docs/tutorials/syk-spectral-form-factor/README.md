@@ -7,12 +7,12 @@ Sachdev–Ye–Kitaev (SYK) model. Wall time is roughly **3–5 min on a
 laptop CPU** at the default `N = 22`, no GPU required.
 
 You should not need to open a terminal or type Linux commands. Create a
-ScienceSwarm project, import this tutorial folder, choose `Claude Code` in the
-project chat, and follow the
+ScienceSwarm Study, import this tutorial folder, choose `Claude Code` in the
+study chat, and follow the
 [ScienceSwarm SYK walkthrough](../syk-spectral-form-factor-walkthrough.md).
-Claude Code checks the Python runtime, runs the scripts inside the project
+Claude Code checks the Python runtime, runs the scripts inside the Study
 workspace, saves run logs to gbrain, and keeps generated artifacts in the
-project tree.
+Study file tree.
 
 The final result is a single self-contained interactive HTML report with
 Plotly-backed spectral-density, gap-ratio, and spectral-form-factor plots plus
@@ -40,12 +40,12 @@ visual presentation of the result.
 
 | Stage | What Claude Code does from ScienceSwarm | Output |
 |---|---|---|
-| 1. Study brief | Reads `README.md` and `scripts/`, records the model, run modes, validation gates, and confidence boundary | project-scoped gbrain Study Brief |
+| 1. Study brief | Reads `README.md` and `scripts/`, records the model, run modes, validation gates, and confidence boundary | Study-scoped gbrain Study Brief |
 | 2. Runtime check | Reuses a working Python with NumPy/SciPy or proposes a managed environment under `$SCIENCESWARM_DIR/runtimes/` | runtime decision in the run log |
-| 3. Diagonalize SYK ensemble | Runs `01_diagonalize.py` in the project `scripts/` folder | `scripts/spectra.npz` |
+| 3. Diagonalize SYK ensemble | Runs `01_diagonalize.py` in the Study `scripts/` folder | `scripts/spectra.npz` |
 | 4. Compute SFF + gates | Runs `02_spectral_form_factor.py` and stops if a gate fails | `scripts/sff_data.json`, `scripts/metrics.json` |
 | 5. Render report | Runs `03_render_report.py` only after gates pass | `scripts/report.html` |
-| 6. Interpret/refine | Reads the metrics and report, separates tutorial support from research claims | project-scoped gbrain notes |
+| 6. Interpret/refine | Reads the metrics and report, separates tutorial support from research claims | Study-scoped gbrain notes |
 
 A faster preview (`--N 20 --samples 60`) finishes in well under a
 minute and uses the GSE random-matrix class. The stage-2 script collapses the
@@ -64,13 +64,13 @@ Use the full UI walkthrough:
 - [ScienceSwarm SYK pipeline walkthrough](../syk-spectral-form-factor-walkthrough.md)
 
 The walkthrough assumes you are new to ScienceSwarm. It shows how to create a
-project, import this folder, choose Claude Code, approve the Claude Code send
-review sheet, run the fast preview, open the output artifacts from the project
-tree, and save interpretation/refinement notes to gbrain.
+Study, import this folder, choose Claude Code, approve the Claude Code send
+review sheet, run the fast preview, open the output artifacts from the Study
+file tree, and save interpretation/refinement notes to gbrain.
 
 If ScienceSwarm needs persistent scientific tooling, the assistant should keep
 package managers and named environments under `$SCIENCESWARM_DIR/runtimes/`;
-project outputs stay in the imported project workspace, usually `scripts/`.
+Study outputs stay in the imported Study workspace, usually `scripts/`.
 
 ---
 
@@ -127,7 +127,7 @@ grid was too short to reach the plateau.
 
 ## Knobs
 
-These are parameters for the assistant to use in the ScienceSwarm project
+These are parameters for the assistant to use in the ScienceSwarm Study
 workspace; you do not need to type them into a terminal.
 
 `01_diagonalize.py`:
@@ -150,7 +150,7 @@ workspace; you do not need to type them into a terminal.
 
 ScienceSwarm should keep tutorial state in three places:
 
-- Project workspace files: imported tutorial files and generated outputs such
+- Study workspace files: imported tutorial files and generated outputs such
   as `scripts/spectra.npz`, `scripts/sff_data.json`, `scripts/metrics.json`,
   and `scripts/report.html`.
 - gbrain: durable Study Briefs, execution run logs, interpretation notes, and
