@@ -9,6 +9,7 @@ import {
   createChecksumManifest,
   isInstallerArtifactPath,
   normalizeChecksumPath,
+  resolveChecksumCliDistDir,
   sha256File,
   writeArtifactChecksums,
 } from "../../scripts/write-artifact-checksums.mjs";
@@ -90,6 +91,15 @@ describe("write-artifact-checksums", () => {
   it("formats checksum paths with forward slashes", () => {
     expect(normalizeChecksumPath(["nested", "ScienceSwarm.dmg"].join(path.sep))).toBe(
       "nested/ScienceSwarm.dmg",
+    );
+  });
+
+  it("resolves direct CLI dist paths relative to the caller cwd", () => {
+    expect(resolveChecksumCliDistDir("../other-dist", "/tmp/scienceswarm")).toBe(
+      path.resolve("/tmp/scienceswarm", "../other-dist"),
+    );
+    expect(resolveChecksumCliDistDir("/tmp/absolute-dist", "/tmp/scienceswarm")).toBe(
+      "/tmp/absolute-dist",
     );
   });
 
