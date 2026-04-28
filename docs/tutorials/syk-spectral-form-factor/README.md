@@ -14,9 +14,9 @@ Claude Code checks the Python runtime, runs the scripts inside the Study
 workspace, saves run logs to gbrain, and keeps generated artifacts in the
 Study file tree.
 
-The final result is a single self-contained interactive HTML report with
-Plotly-backed spectral-density, gap-ratio, and spectral-form-factor plots plus
-a Dyson-Coulomb-gas hero animation.
+The final result is an interactive HTML report with CDN-loaded Plotly assets for
+spectral-density, gap-ratio, and spectral-form-factor plots plus a
+Dyson-Coulomb-gas hero animation.
 
 This tutorial exists to:
 
