@@ -308,6 +308,7 @@ describe("POST /api/projects", () => {
         expect.objectContaining({
           slug: "test-2",
           name: "test-2",
+          projectPageSlug: "test-2",
         }),
       );
       expect(data.path).toBe(path.join(dataRoot, "projects", "test-2"));
