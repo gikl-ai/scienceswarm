@@ -32,9 +32,6 @@ export function buildLocalOpenClawAllowedModels(
     for (const id of modelIds) {
       allowedModels.add(`ollama/${id}`);
     }
-    if (modelId.endsWith(":latest")) {
-      allowedModels.add(`ollama/${modelId.slice(0, -":latest".length)}`);
-    }
   }
   return Object.fromEntries(
     Array.from(allowedModels).map((modelRef) => [modelRef, {}]),

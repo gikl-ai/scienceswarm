@@ -78,7 +78,7 @@ npm run quality
   `src/lib/openhands.ts` and the Next.js proxy routes before touching the
   submodule.
 - Stay on MIT-licensed OpenHands core surfaces only.
-- Preserve the local-first path and the documented `gemma4:latest` default
+- Preserve the local-first path and the documented `gemma4:e4b` default
   unless the product intentionally changes.
 
 ## Scope
