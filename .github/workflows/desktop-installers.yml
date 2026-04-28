@@ -76,6 +76,9 @@ jobs:
       - name: Generate installer checksums
         run: npm run desktop:checksums
 
+      - name: Verify installer artifacts
+        run: npm run desktop:verify-artifacts
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
