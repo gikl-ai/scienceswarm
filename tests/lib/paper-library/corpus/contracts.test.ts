@@ -382,8 +382,13 @@ describe("paper-library corpus contracts", () => {
     })).toThrow(/at least one section/);
     expect(() => PaperSectionMapSchema.parse({
       ...fixture.expectedSectionMap,
+      sectionMapHash: undefined,
+    })).toThrow(/sectionMapHash/);
+    expect(() => PaperSectionMapSchema.parse({
+      ...fixture.expectedSectionMap,
       status: "queued",
       sections: [],
+      sectionMapHash: undefined,
     })).not.toThrow();
   });
 

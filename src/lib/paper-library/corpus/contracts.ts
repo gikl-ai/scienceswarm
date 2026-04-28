@@ -196,7 +196,7 @@ export const PaperSectionMapSchema = z
     paperSlug: NonEmptyStringSchema,
     sourceSlug: NonEmptyStringSchema,
     sourceHash: NonEmptyStringSchema,
-    sectionMapHash: NonEmptyStringSchema,
+    sectionMapHash: NonEmptyStringSchema.optional(),
     status: CorpusArtifactStatusSchema,
     sections: z.array(PaperSectionAnchorSchema).default([]),
     createdAt: IsoDateStringSchema,
@@ -210,6 +210,13 @@ export const PaperSectionMapSchema = z
         code: "custom",
         path: ["sections"],
         message: "current and stale section maps must include at least one section.",
+      });
+    }
+    if ((value.status === "current" || value.status === "stale") && value.sectionMapHash === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sectionMapHash"],
+        message: "current and stale section maps must include sectionMapHash.",
       });
     }
     if (value.status === "stale" && value.staleReason === undefined) {
