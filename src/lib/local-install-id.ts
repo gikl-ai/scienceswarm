@@ -46,11 +46,13 @@ export async function getOrCreateLocalInstallId(): Promise<string> {
     });
     return id;
   } catch (error) {
-    if (isFileExistsError(error)) {
-      const raced = await readLocalInstallId(path);
-      if (raced) {
-        return raced;
-      }
+    if (!isFileExistsError(error)) {
+      throw error;
+    }
+
+    const raced = await readLocalInstallId(path);
+    if (raced) {
+      return raced;
     }
   }
 
