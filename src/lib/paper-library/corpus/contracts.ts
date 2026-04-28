@@ -144,8 +144,8 @@ export const PaperSourceArtifactSchema = z
     origin: PaperSourceOriginSchema,
     status: CorpusArtifactStatusSchema,
     extractor: CorpusExtractorSchema,
-    sourceHash: NonEmptyStringSchema,
-    sectionMapHash: NonEmptyStringSchema,
+    sourceHash: NonEmptyStringSchema.optional(),
+    sectionMapHash: NonEmptyStringSchema.optional(),
     normalizedMarkdown: z.string().default(""),
     quality: SourceQualitySchema,
     createdAt: IsoDateStringSchema,
@@ -159,6 +159,20 @@ export const PaperSourceArtifactSchema = z
         code: "custom",
         path: ["staleReason"],
         message: "stale source artifacts must include staleReason.",
+      });
+    }
+    if ((value.status === "current" || value.status === "stale") && value.sourceHash === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sourceHash"],
+        message: "current and stale source artifacts must include sourceHash.",
+      });
+    }
+    if ((value.status === "current" || value.status === "stale") && value.sectionMapHash === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sectionMapHash"],
+        message: "current and stale source artifacts must include sectionMapHash.",
       });
     }
   });
@@ -593,7 +607,8 @@ function normalizeCorpusArxivId(value: string): string {
   return value
     .trim()
     .replace(/^arxiv\s*:\s*/i, "")
-    .replace(/[)\].,;:\s]+$/g, "");
+    .replace(/[)\].,;:\s]+$/g, "")
+    .replace(/v\d+$/i, "");
 }
 
 function normalizeCorpusOpenAlexId(value: string): string {
@@ -612,7 +627,9 @@ export function paperCorpusPaperSegment(paperSlug: string): string {
   if (paperIndex >= 0 && parts[paperIndex + 1]) {
     return slugSegment(parts[paperIndex + 1]);
   }
-  return slugSegment(parts[parts.length - 1] ?? normalized);
+  const fallback = parts[parts.length - 1];
+  if (!fallback || fallback === "papers") return "paper";
+  return slugSegment(fallback);
 }
 
 export function paperCorpusSourceSlugForPaperSlug(paperSlug: string): string {

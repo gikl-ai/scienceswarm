@@ -387,6 +387,27 @@ describe("paper-library corpus contracts", () => {
     })).not.toThrow();
   });
 
+  it("allows failed source artifacts without output hashes", () => {
+    const fixture = phase0CorpusFixtureDescriptors.find(
+      (descriptor) => descriptor.kind === "good_text_layer_pdf",
+    );
+    if (!fixture?.expectedSourceArtifact) {
+      throw new Error("expected good text-layer PDF source artifact");
+    }
+
+    expect(() => PaperSourceArtifactSchema.parse({
+      ...fixture.expectedSourceArtifact,
+      sourceHash: undefined,
+      sectionMapHash: undefined,
+    })).toThrow(/sourceHash/);
+    expect(() => PaperSourceArtifactSchema.parse({
+      ...fixture.expectedSourceArtifact,
+      status: "failed",
+      sourceHash: undefined,
+      sectionMapHash: undefined,
+    })).not.toThrow();
+  });
+
   it("builds canonical corpus slugs from existing paper-library page slugs", () => {
     expect(paperCorpusSourceSlugForPaperSlug("wiki/entities/papers/arxiv-2401-01234")).toBe(
       "wiki/sources/papers/arxiv-2401-01234/source",
@@ -395,7 +416,10 @@ describe("paper-library corpus contracts", () => {
       "wiki/summaries/papers/doi-10-1000-example/detailed",
     );
     expect(paperCorpusBibliographySlug({ arxivId: "2401.01234v2" }, "Fallback Title")).toBe(
-      "wiki/bibliography/arxiv-2401-01234v2",
+      "wiki/bibliography/arxiv-2401-01234",
+    );
+    expect(paperCorpusBibliographySlug({ arxivId: "arXiv:2401.01234" }, "Fallback Title")).toBe(
+      "wiki/bibliography/arxiv-2401-01234",
     );
     expect(paperCorpusBibliographySlug({ doi: "https://doi.org/10.1000/Example-Good-PDF." }, "")).toBe(
       "wiki/bibliography/doi-10-1000-example-good-pdf",
@@ -407,6 +431,9 @@ describe("paper-library corpus contracts", () => {
       "wiki/bibliography/title-fallback-title",
     );
     expect(() => paperCorpusBibliographySlug({}, "")).toThrow(/non-empty fallback/);
+    expect(paperCorpusSourceSlugForPaperSlug("papers/")).toBe(
+      "wiki/sources/papers/paper/source",
+    );
     const longDoi = `10.1000/${"a".repeat(150)}`;
     const longSlug = paperCorpusBibliographySlug({ doi: longDoi }, "");
     expect(longSlug).toMatch(/^wiki\/bibliography\/doi-10-1000-a+-[a-z0-9]+$/);
