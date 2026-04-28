@@ -1,8 +1,11 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import {
+  isDesktopFirstLaunchComplete,
   isTrustedDesktopIpcSender,
   resolveDesktopDiagnostics,
   resolveDesktopLaunchMarkerPath,
@@ -10,6 +13,8 @@ import {
   resolveDesktopStartUrl,
   resolveDesktopWindowOptions,
   resolveStandaloneEntry,
+  shouldStartStandaloneServer,
+  shouldWaitForDesktopServer,
   waitForDesktopServer,
 } from "../../desktop/main.mjs";
 
@@ -51,6 +56,19 @@ describe("desktop main", () => {
       HOSTNAME: "localhost",
       PORT: "4101",
     })).toBe("http://localhost:4101/setup");
+  });
+
+  it("skips the local standalone server for explicit desktop urls", () => {
+    expect(shouldStartStandaloneServer({
+      SCIENCESWARM_DESKTOP_URL: "https://desktop.local/app",
+    })).toBe(false);
+    expect(shouldStartStandaloneServer({})).toBe(true);
+  });
+
+  it("only waits for http desktop urls", () => {
+    expect(shouldWaitForDesktopServer("http://127.0.0.1:3001/setup")).toBe(true);
+    expect(shouldWaitForDesktopServer("https://desktop.local/app")).toBe(true);
+    expect(shouldWaitForDesktopServer("file:///tmp/index.html")).toBe(false);
   });
 
   it("resolves desktop diagnostics from the electron app paths", () => {
@@ -133,11 +151,31 @@ describe("desktop main", () => {
   });
 
   it("resolves the desktop first-launch marker path under userData", () => {
-    expect(resolveDesktopLaunchMarkerPath({
+    const app = {
       getPath() {
         return "/tmp/user-data";
       },
-    })).toBe(path.join("/tmp/user-data", "desktop-first-launch.json"));
+    };
+    expect(resolveDesktopLaunchMarkerPath(app)).toBe(
+      path.join("/tmp/user-data", "desktop-first-launch.json"),
+    );
+  });
+
+  it("detects the first-launch marker from disk", () => {
+    const userDataPath = mkdtempSync(path.join(tmpdir(), "scienceswarm-user-data-"));
+    try {
+      const app = {
+        getPath() {
+          return userDataPath;
+        },
+      };
+      expect(isDesktopFirstLaunchComplete(app)).toBe(false);
+
+      writeFileSync(resolveDesktopLaunchMarkerPath(app), "{}");
+      expect(isDesktopFirstLaunchComplete(app)).toBe(true);
+    } finally {
+      rmSync(userDataPath, { force: true, recursive: true });
+    }
   });
 
   it("resolves the standalone launcher path from the project root", () => {
