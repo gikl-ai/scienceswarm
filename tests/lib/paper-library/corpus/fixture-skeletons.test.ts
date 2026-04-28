@@ -23,4 +23,16 @@ describe("paper-library corpus fixture skeletons", () => {
       /advanced_pdf_parser_unavailable/,
     );
   });
+
+  it("rejects fixture warning codes outside the corpus warning contract", () => {
+    const descriptorsWithInvalidWarning = phase0CorpusFixtureDescriptors.map((descriptor) =>
+      descriptor.kind === "advanced_pdf_parser_unavailable"
+        ? { ...descriptor, expectedWarnings: ["parser_unavaialble"] }
+        : descriptor,
+    );
+
+    expect(() => validateCorpusFixtureDescriptors(descriptorsWithInvalidWarning)).toThrow(
+      /Invalid enum value/,
+    );
+  });
 });

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   BibliographyEntryArtifactSchema,
+  PaperCorpusWarningCodeSchema,
   PaperIngestManifestSchema,
   PaperSectionMapSchema,
   PaperSourceArtifactSchema,
@@ -30,7 +31,7 @@ export const CorpusFixtureDescriptorSchema = z.object({
   expectedRelevanceSummary: PaperSummaryArtifactSchema.optional(),
   expectedBibliography: z.array(BibliographyEntryArtifactSchema).default([]),
   expectedManifest: PaperIngestManifestSchema.optional(),
-  expectedWarnings: z.array(z.string().min(1)).default([]),
+  expectedWarnings: z.array(PaperCorpusWarningCodeSchema).default([]),
 });
 export type CorpusFixtureDescriptor = z.input<typeof CorpusFixtureDescriptorSchema>;
 export type ParsedCorpusFixtureDescriptor = z.infer<typeof CorpusFixtureDescriptorSchema>;
