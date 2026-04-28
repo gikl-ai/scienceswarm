@@ -67,12 +67,13 @@ export function markDesktopFirstLaunchComplete(app) {
 /**
  * @param {{ getPath(name: string): string }} app
  * @param {DesktopEnv} env
+ * @param {DesktopStartOptions} options
 */
-export function resolveDesktopDiagnostics(app, env = process.env) {
+export function resolveDesktopDiagnostics(app, env = process.env, options = {}) {
   return {
     shell: "electron",
     platform: process.platform,
-    startUrl: resolveDesktopStartUrl(env),
+    startUrl: resolveDesktopStartUrl(env, options),
     userDataPath: app.getPath("userData"),
     logsPath: app.getPath("logs"),
   };
@@ -92,7 +93,9 @@ export async function launchDesktopShell(options = {}) {
     env: options.env,
   });
   ipcMain.handle(DESKTOP_DIAGNOSTICS_CHANNEL, () =>
-    resolveDesktopDiagnostics(app, options.env)
+    resolveDesktopDiagnostics(app, options.env, {
+      firstLaunchComplete: existsSync(resolveDesktopLaunchMarkerPath(app)),
+    })
   );
 
   const window = new BrowserWindow({
