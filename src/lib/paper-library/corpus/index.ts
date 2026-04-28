@@ -4,3 +4,4 @@ export * from "./gbrain-materialization";
 export * from "./provenance";
 export * from "./source-inventory";
 export * from "./state";
+export * from "./summary-planner";
