@@ -5,7 +5,11 @@
  * install and verifies/pulls the model.
  */
 
-import { resolveConfiguredLocalModel } from "@/lib/runtime/model-catalog";
+import { OLLAMA_LOCAL_MODEL_OPTIONS } from "@/lib/ollama-constants";
+import {
+  ollamaModelMatches,
+  resolveConfiguredLocalModel,
+} from "@/lib/runtime/model-catalog";
 
 import type { InstallTask } from "./types";
 import {
@@ -95,13 +99,13 @@ async function listModels(
 }
 
 function modelMatches(installed: string, target: string): boolean {
-  return installed === target || installed.startsWith(`${target}:`);
+  return ollamaModelMatches(target, installed);
 }
 
 function modelDownloadSize(model: string): string | null {
-  if (model === "gemma4:e2b") return "7.2GB";
-  if (model === "gemma4:e4b") return "9.6GB";
-  return null;
+  return OLLAMA_LOCAL_MODEL_OPTIONS.find((option) =>
+    ollamaModelMatches(option.value, model)
+  )?.downloadSizeLabel ?? null;
 }
 
 function modelPullDetail(model: string): string {

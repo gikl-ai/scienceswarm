@@ -1,4 +1,4 @@
-import { OLLAMA_RECOMMENDED_MODEL_ALIASES } from "@/lib/ollama-constants";
+import { OLLAMA_READY_MODEL_ALIASES } from "@/lib/ollama-constants";
 
 function stripProviderPrefix(model: string): string {
   return model.trim().replace(/^(openai|ollama)\//, "");
@@ -62,7 +62,7 @@ export function normalizeInstalledOllamaModels(models: string[]): string[] {
 
 export function hasRecommendedOllamaModel(models: string[]): boolean {
   return models.some((model) =>
-    OLLAMA_RECOMMENDED_MODEL_ALIASES.some((recommendedModel) =>
+    OLLAMA_READY_MODEL_ALIASES.some((recommendedModel) =>
       ollamaModelsMatch(recommendedModel, model),
     ),
   );

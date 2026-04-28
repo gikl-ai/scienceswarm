@@ -15,11 +15,16 @@ export const OLLAMA_RECOMMENDED_MODEL_ALIASES = [
   "gemma4",
   "gemma4:latest",
 ];
+export const OLLAMA_READY_MODEL_ALIASES = [
+  ...OLLAMA_RECOMMENDED_MODEL_ALIASES,
+  OLLAMA_LOW_MEMORY_MODEL,
+];
 
 export interface OllamaLocalModelOption {
   value: string;
   label: string;
   description: string;
+  downloadSizeLabel: string;
 }
 
 /** First-class local model choices exposed in Settings. */
@@ -28,15 +33,18 @@ export const OLLAMA_LOCAL_MODEL_OPTIONS: OllamaLocalModelOption[] = [
     value: OLLAMA_RECOMMENDED_MODEL,
     label: "gemma4:e4b (recommended)",
     description: "Default Gemma 4 edge model for local chat and execution.",
+    downloadSizeLabel: "9.6GB",
   },
   {
     value: OLLAMA_LOW_MEMORY_MODEL,
     label: "gemma4:e2b",
     description: "Smaller Gemma 4 edge model for low-memory machines.",
+    downloadSizeLabel: "7.2GB",
   },
   {
     value: "gemma4:26b",
     label: "gemma4:26b",
     description: "Larger local Gemma option for high-memory laptops.",
+    downloadSizeLabel: "18GB",
   },
 ];

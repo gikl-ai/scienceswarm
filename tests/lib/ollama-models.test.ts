@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { OLLAMA_LOCAL_MODEL_OPTIONS } from "@/lib/ollama-constants";
 import {
   hasRecommendedOllamaModel,
   normalizeInstalledOllamaModels,
@@ -34,7 +35,21 @@ describe("ollama model helpers", () => {
 
   it("does not treat gemma4:26b as the recommended default model", () => {
     expect(hasRecommendedOllamaModel(["gemma4:e4b"])).toBe(true);
+    expect(hasRecommendedOllamaModel(["gemma4:e2b"])).toBe(true);
     expect(hasRecommendedOllamaModel(["gemma4:latest"])).toBe(true);
     expect(hasRecommendedOllamaModel(["gemma4:26b"])).toBe(false);
+  });
+
+  it("keeps download size guidance on selectable local models", () => {
+    expect(
+      OLLAMA_LOCAL_MODEL_OPTIONS.map(({ value, downloadSizeLabel }) => [
+        value,
+        downloadSizeLabel,
+      ]),
+    ).toEqual([
+      ["gemma4:e4b", "9.6GB"],
+      ["gemma4:e2b", "7.2GB"],
+      ["gemma4:26b", "18GB"],
+    ]);
   });
 });
