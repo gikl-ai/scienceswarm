@@ -10,6 +10,7 @@ import {
   isInstallerArtifactPath,
   normalizeChecksumPath,
   resolveChecksumCliDistDir,
+  resolveProjectChecksumDistDir,
   sha256File,
   writeArtifactChecksums,
 } from "../../scripts/write-artifact-checksums.mjs";
@@ -96,10 +97,19 @@ describe("write-artifact-checksums", () => {
 
   it("resolves direct CLI dist paths relative to the caller cwd", () => {
     expect(resolveChecksumCliDistDir("../other-dist", "/tmp/scienceswarm")).toBe(
-      path.resolve("/tmp/scienceswarm", "../other-dist"),
+      "/tmp/other-dist",
     );
     expect(resolveChecksumCliDistDir("/tmp/absolute-dist", "/tmp/scienceswarm")).toBe(
       "/tmp/absolute-dist",
+    );
+  });
+
+  it("keeps env and default dist paths project-root relative", () => {
+    expect(resolveProjectChecksumDistDir("dist-from-env", "/tmp/scienceswarm")).toBe(
+      "/tmp/scienceswarm/dist-from-env",
+    );
+    expect(resolveProjectChecksumDistDir(undefined, "/tmp/scienceswarm")).toBe(
+      "/tmp/scienceswarm/dist",
     );
   });
 
