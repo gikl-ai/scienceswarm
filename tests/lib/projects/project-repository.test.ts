@@ -274,7 +274,7 @@ describe("ProjectRepository", () => {
     expect(await repo.list()).toEqual([]);
   });
 
-  it("allows recreating a slug after the prior project is archived", async () => {
+  it("versions recreated project names after the prior project is archived", async () => {
     const store = new FakeStore();
     const repo = createProjectRepository({
       store,
@@ -286,9 +286,11 @@ describe("ProjectRepository", () => {
     await expect(
       repo.create({ name: "Project Alpha", createdBy: "@tester" }),
     ).resolves.toMatchObject({
-      slug: "project-alpha",
+      slug: "project-alpha-2",
+      name: "Project Alpha-2",
       status: "active",
     });
-    expect(await repo.get("project-alpha")).toMatchObject({ status: "active" });
+    expect(await repo.get("project-alpha")).toMatchObject({ status: "archived" });
+    expect(await repo.get("project-alpha-2")).toMatchObject({ status: "active" });
   });
 });

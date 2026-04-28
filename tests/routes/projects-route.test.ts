@@ -260,6 +260,68 @@ describe("POST /api/projects", () => {
     }
   });
 
+  it("versions disk-fallback creates when an archived project folder already uses the name", async () => {
+    const { POST } = await import("@/app/api/projects/route");
+    const unavailable = new Error("Brain backend unavailable");
+    unavailable.name = "BrainBackendUnavailableError";
+    const fakeRepository: ProjectRepository = {
+      async list() {
+        throw unavailable;
+      },
+      async get() {
+        return null;
+      },
+      async create() {
+        throw unavailable;
+      },
+      async delete() {
+        return { ok: true, existed: true };
+      },
+      async touch() {},
+    };
+    __setProjectRepositoryOverride(fakeRepository);
+    const archivedDir = path.join(dataRoot, "projects", "test");
+    await mkdir(archivedDir, { recursive: true });
+    await writeFile(
+      path.join(archivedDir, "project.json"),
+      JSON.stringify({
+        slug: "test",
+        name: "test",
+        description: "Archived study",
+        createdAt: "2026-04-16T00:00:00.000Z",
+        lastActive: "2026-04-17T00:00:00.000Z",
+        status: "archived",
+      }),
+    );
+    await writeFile(path.join(archivedDir, "paper.pdf"), "archived local file");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const response = await POST(buildCreateRequest({
+        action: "create",
+        name: "test",
+      }));
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.project).toEqual(
+        expect.objectContaining({
+          slug: "test-2",
+          name: "test-2",
+        }),
+      );
+      expect(data.path).toBe(path.join(dataRoot, "projects", "test-2"));
+      await expect(readFile(path.join(archivedDir, "paper.pdf"), "utf-8"))
+        .resolves.toBe("archived local file");
+      await expect(readFile(
+        path.join(dataRoot, "projects", "test-2", "project.json"),
+        "utf-8",
+      )).resolves.toContain('"slug": "test-2"');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("fails disk-fallback creation when the project cannot be saved to disk", async () => {
     const { POST } = await import("@/app/api/projects/route");
     const unavailable = new Error("Brain backend unavailable");

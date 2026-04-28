@@ -159,4 +159,49 @@ describe("StudyRepository", () => {
       repo.create({ name: "Study Alpha", createdBy: "@tester" }),
     ).rejects.toBeInstanceOf(DuplicateStudyError);
   });
+
+  it("versions new studies instead of reusing an archived study slug", async () => {
+    const store = new FakeStore();
+    const repo = createStudyRepository({
+      store,
+      client: new FakeClient(store),
+      now: () => new Date("2026-04-16T00:00:00.000Z"),
+    });
+
+    await repo.create({ name: "Test", createdBy: "@tester" });
+    await repo.delete("test");
+
+    const recreated = await repo.create({ name: "Test", createdBy: "@tester" });
+
+    expect(recreated).toMatchObject({
+      slug: "test-2",
+      name: "Test-2",
+      legacyProjectSlug: "test-2",
+      status: "active",
+    });
+    expect(await repo.get("test")).toMatchObject({ status: "archived" });
+    expect(await repo.get("test-2")).toMatchObject({ status: "active" });
+    expect(store.writes.get("test-2")).toContain("study_slug: test-2");
+  });
+
+  it("skips already-used versioned names after archived studies", async () => {
+    const store = new FakeStore();
+    const repo = createStudyRepository({
+      store,
+      client: new FakeClient(store),
+      now: () => new Date("2026-04-16T00:00:00.000Z"),
+    });
+
+    await repo.create({ name: "Test", createdBy: "@tester" });
+    await repo.delete("test");
+    await repo.create({ name: "Test-2", createdBy: "@tester" });
+
+    await expect(
+      repo.create({ name: "Test", createdBy: "@tester" }),
+    ).resolves.toMatchObject({
+      slug: "test-3",
+      name: "Test-3",
+      status: "active",
+    });
+  });
 });
