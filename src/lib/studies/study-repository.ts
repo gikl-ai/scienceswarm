@@ -49,26 +49,28 @@ interface StudySlugUse {
 }
 
 const studyCreateTails = new Map<string, Promise<void>>();
+// Different requested names can resolve to the same versioned slug.
+const STUDY_CREATE_ALLOCATION_LOCK = "__study_create_allocation__";
 
 async function withStudyCreateLock<T>(
-  slug: string,
+  key: string,
   operation: () => Promise<T>,
 ): Promise<T> {
-  const previous = studyCreateTails.get(slug) ?? Promise.resolve();
+  const previous = studyCreateTails.get(key) ?? Promise.resolve();
   let release!: () => void;
   const current = new Promise<void>((resolve) => {
     release = resolve;
   });
   const tail = previous.catch(() => undefined).then(() => current);
-  studyCreateTails.set(slug, tail);
+  studyCreateTails.set(key, tail);
 
   await previous.catch(() => undefined);
   try {
     return await operation();
   } finally {
     release();
-    if (studyCreateTails.get(slug) === tail) {
-      studyCreateTails.delete(slug);
+    if (studyCreateTails.get(key) === tail) {
+      studyCreateTails.delete(key);
     }
   }
 }
@@ -117,7 +119,7 @@ export function createStudyRepository(
       const requestedSlug = input.slug
         ? assertSafeProjectSlug(input.slug)
         : assertSafeProjectSlug(slugifyStudyName(trimmedName));
-      return withStudyCreateLock(requestedSlug, async () => {
+      return withStudyCreateLock(STUDY_CREATE_ALLOCATION_LOCK, async () => {
         const brain = await store();
         const { name, slug } = await resolveStudyCreateIdentity({
           brain,
