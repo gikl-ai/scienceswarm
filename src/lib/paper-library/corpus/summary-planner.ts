@@ -308,7 +308,11 @@ function queuedSummaryArtifact(input: {
   existing?: PaperSummaryArtifact;
   staleReason?: string;
 }): PaperSummaryArtifact {
-  if (input.existing && input.staleReason) {
+  if (
+    input.existing
+    && input.staleReason
+    && (input.existing.status === "current" || input.existing.status === "stale")
+  ) {
     return PaperSummaryArtifactSchema.parse({
       ...input.existing,
       status: "stale",

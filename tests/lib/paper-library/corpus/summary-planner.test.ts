@@ -203,6 +203,39 @@ describe("paper corpus summary planner", () => {
     });
   });
 
+  it("replaces blocked summaries with queued retries instead of reparsing them as stale", () => {
+    const blockedSummary = PaperSummaryArtifactSchema.parse({
+      paperSlug: "wiki/entities/papers/good-pdf-2024",
+      sourceSlug: "wiki/sources/papers/good-pdf-2024/source",
+      summarySlug: "wiki/summaries/papers/good-pdf-2024/relevance",
+      tier: "relevance",
+      status: "blocked",
+      createdAt: now,
+      updatedAt: now,
+      warnings: [
+        {
+          code: "privacy_blocked",
+          message: "Previous hosted summary job was blocked.",
+          severity: "warning",
+        },
+      ],
+    });
+
+    const result = planPaperSummaryJobs({
+      manifest: goodPdfManifest([blockedSummary]),
+      generatedAt: later,
+      projectPolicy: "local-only",
+      destination: "local-ollama",
+    });
+
+    expect(result.jobs).toHaveLength(1);
+    expect(result.manifest.papers[0]?.summaries[0]).toMatchObject({
+      tier: "relevance",
+      status: "queued",
+      sourceHash: "sha256-good-pdf-source",
+    });
+  });
+
   it("completes a summary job as a current artifact with provenance", () => {
     const plan = planPaperSummaryJobs({
       manifest: goodPdfManifest(),

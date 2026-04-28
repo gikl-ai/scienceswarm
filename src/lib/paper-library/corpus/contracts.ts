@@ -344,6 +344,13 @@ export const PaperSummaryArtifactSchema = z
         message: "stale summaries must include staleReason.",
       });
     }
+    if (value.status === "current" && value.summaryMarkdown.trim().length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["summaryMarkdown"],
+        message: "current summaries must include summaryMarkdown.",
+      });
+    }
   });
 export type PaperSummaryArtifact = z.infer<typeof PaperSummaryArtifactSchema>;
 
