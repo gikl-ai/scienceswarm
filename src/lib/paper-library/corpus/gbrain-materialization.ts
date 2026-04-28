@@ -608,11 +608,10 @@ async function existingLedger(
 async function writePaperCorpusLedger(input: {
   project: string;
   paper: PaperIngestPaper;
-  ledger: PaperProvenanceLedger;
   records: readonly PaperProvenanceLedgerRecord[];
   stateRoot?: string;
 }): Promise<PaperProvenanceLedger> {
-  let ledger = input.ledger;
+  let ledger = await existingLedger(input.project, input.paper, input.stateRoot);
   for (const record of input.records) {
     ledger = upsertPaperProvenanceRecord(ledger, record);
   }
@@ -827,7 +826,7 @@ export async function materializePaperCorpusManifestToGbrain(
   const warnings: PaperCorpusWarning[] = [...input.manifest.warnings];
 
   for (const paper of input.manifest.papers) {
-    const ledger = await existingLedger(input.project, paper, input.stateRoot);
+    await existingLedger(input.project, paper, input.stateRoot);
     const result = await materializePaper({
       client,
       store,
@@ -843,7 +842,6 @@ export async function materializePaperCorpusManifestToGbrain(
     await writePaperCorpusLedger({
       project: input.project,
       paper,
-      ledger,
       records: result.records,
       stateRoot: input.stateRoot,
     });
@@ -887,10 +885,10 @@ export async function detectGbrainCorpusCapabilities(
   input: DetectGbrainCorpusCapabilitiesInput = {},
 ): Promise<GbrainCorpusCapabilities> {
   const generatedAt = input.generatedAt ?? new Date().toISOString();
-  const store = input.store ?? getBrainStore();
   let health: BrainStoreHealth;
 
   try {
+    const store = input.store ?? getBrainStore();
     health = await store.health();
   } catch (error) {
     const reason = describeBrainBackendError(error);
