@@ -89,12 +89,21 @@ async function createDiskFallbackProject(input: {
 
 async function archiveDiskFallbackProject(slug: string): Promise<{
   ok: true;
-  existed: boolean;
+  existed: boolean | null;
+  existedOnDisk: boolean;
+  mayExistInGbrain: true;
 }> {
   const activeRecords = (await listProjectRecordsFromDisk()).filter(
     (record) => record.slug === slug && record.status !== "archived",
   );
-  if (activeRecords.length === 0) return { ok: true, existed: false };
+  if (activeRecords.length === 0) {
+    return {
+      ok: true,
+      existed: null,
+      existedOnDisk: false,
+      mayExistInGbrain: true,
+    };
+  }
 
   const archivedAt = new Date().toISOString();
   for (const record of activeRecords) {
@@ -105,7 +114,12 @@ async function archiveDiskFallbackProject(slug: string): Promise<{
     });
   }
 
-  return { ok: true, existed: true };
+  return {
+    ok: true,
+    existed: true,
+    existedOnDisk: true,
+    mayExistInGbrain: true,
+  };
 }
 
 function toLegacyProjectMeta(record: {
@@ -312,6 +326,8 @@ export async function POST(request: Request) {
           return Response.json({
             ok: true,
             existed: result.existed,
+            existedOnDisk: result.existedOnDisk,
+            mayExistInGbrain: result.mayExistInGbrain,
             persistence: "disk-fallback",
             persistenceWarning: errorMessage(error),
             persistenceRecoveryWarning: DISK_FALLBACK_ARCHIVE_RECOVERY_WARNING,
