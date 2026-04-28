@@ -19,6 +19,10 @@ const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
 };
 const startScript = fs.readFileSync("start.sh", "utf-8");
 const installScript = fs.readFileSync("install.sh", "utf-8");
+const runtimePrereqsScript = fs.readFileSync(
+  "scripts/install-runtime-prereqs.sh",
+  "utf-8",
+);
 
 describe("package.json scripts", () => {
   // Regression: `next dev` alone falls back to Next.js's built-in default
@@ -75,5 +79,11 @@ describe("package.json scripts", () => {
         "!desktop/**/manifests/**",
       ]),
     );
+  });
+
+  it("checks env-configured Ollama model names without regex interpolation", () => {
+    expect(runtimePrereqsScript).toContain('MODEL="${MODEL#ollama/}"');
+    expect(runtimePrereqsScript).toContain('awk -v target="$MODEL"');
+    expect(runtimePrereqsScript).not.toContain('grep -Eq "^${MODEL}');
   });
 });

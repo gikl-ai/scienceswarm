@@ -15,6 +15,7 @@ const MUTABLE_RUNTIME_KEYS = [
   "LLM_PROVIDER",
   "LLM_MODEL",
   "OLLAMA_MODEL",
+  "SCIENCESWARM_DEFAULT_OLLAMA_MODEL",
   "AGENT_BACKEND",
   "AGENT_URL",
   "AGENT_API_KEY",
@@ -32,6 +33,7 @@ export interface SavedLlmRuntimeEnv {
   llmProvider: "local" | "openai";
   llmModel: string | null;
   ollamaModel: string | null;
+  defaultOllamaModel: string | null;
   anthropicApiKey: string | null;
   openaiApiKey: string | null;
   googleAiApiKey: string | null;
@@ -110,6 +112,10 @@ export function resolveSavedLlmRuntimeEnv(
     llmProvider: strictLocalOnly || configuredProvider === "local" ? "local" : "openai",
     llmModel: coalesceTrimmed(savedValues.LLM_MODEL, processEnv.LLM_MODEL),
     ollamaModel: coalesceTrimmed(savedValues.OLLAMA_MODEL, processEnv.OLLAMA_MODEL),
+    defaultOllamaModel: coalesceTrimmed(
+      savedValues.SCIENCESWARM_DEFAULT_OLLAMA_MODEL,
+      processEnv.SCIENCESWARM_DEFAULT_OLLAMA_MODEL,
+    ),
     anthropicApiKey: coalesceTrimmed(
       savedValues.ANTHROPIC_API_KEY,
       processEnv.ANTHROPIC_API_KEY,

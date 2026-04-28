@@ -7,6 +7,8 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 MODEL="${OLLAMA_MODEL:-${SCIENCESWARM_DEFAULT_OLLAMA_MODEL:-gemma4:e4b}}"
+MODEL="${MODEL#ollama/}"
+MODEL="${MODEL#openai/}"
 OPENHANDS_IMAGE="${OPENHANDS_IMAGE:-docker.openhands.dev/openhands/openhands@sha256:5c0dc26f467bf8e47a6e76308edb7a30af4084b17e23a3460b5467008b12111b}"
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -237,7 +239,13 @@ ensure_ollama_runtime() {
   fi
 
   start_ollama_if_needed "$ollama_bin" || return 0
-  if "$ollama_bin" list | awk '{print $1}' | grep -Eq "^${MODEL}(:|$)"; then
+  if "$ollama_bin" list | awk -v target="$MODEL" '
+    NR == 1 { next }
+    $1 == target { found = 1 }
+    target == "gemma4:e4b" && ($1 == "gemma4" || $1 == "gemma4:latest") { found = 1 }
+    (target == "gemma4" || target == "gemma4:latest") && ($1 == "gemma4:e4b" || $1 == "gemma4" || $1 == "gemma4:latest") { found = 1 }
+    END { exit found ? 0 : 1 }
+  '; then
     ok "Ollama model ready: $MODEL"
     return 0
   fi

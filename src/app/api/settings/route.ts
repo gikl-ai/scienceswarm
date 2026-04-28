@@ -10,10 +10,10 @@ import { homedir } from "node:os";
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
 import { getOllamaUrl, getOpenHandsUrl } from "@/lib/config/ports";
 import { isLocalRequest } from "@/lib/local-guard";
-import { OLLAMA_RECOMMENDED_MODEL } from "@/lib/ollama-constants";
 import { isSupportedOpenAIModel, resolveOpenAIModel } from "@/lib/openai-models";
 import { getOllamaInstallStatus } from "@/lib/ollama-install";
 import { ollamaModelsMatch } from "@/lib/ollama-models";
+import { resolveConfiguredLocalModel } from "@/lib/runtime/model-catalog";
 import {
   listPendingTelegramPairingRequests,
   selectLatestPendingTelegramPairing,
@@ -567,7 +567,7 @@ export async function GET(): Promise<Response> {
     llmProvider: strictLocalOnly ? "local" : (env.LLM_PROVIDER || "openai"),
     strictLocalOnly,
     ollamaUrl: env.OLLAMA_URL || getOllamaUrl(),
-    ollamaModel: env.OLLAMA_MODEL || OLLAMA_RECOMMENDED_MODEL,
+    ollamaModel: resolveConfiguredLocalModel(env),
     userHandle: env.SCIENCESWARM_USER_HANDLE || "",
     userEmail: env.GIT_USER_EMAIL || "",
     telegramPhone: env.TELEGRAM_PHONE || "",

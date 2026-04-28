@@ -542,6 +542,54 @@ describe("runBootstrap finalize ready flags", () => {
     ]);
   });
 
+  it("normalizes provider-prefixed Ollama model refs before configuring OpenClaw", async () => {
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      "LLM_PROVIDER=local\nOLLAMA_MODEL=ollama/gemma4:e4b\n",
+      "utf8",
+    );
+    const tasks: InstallTask[] = [
+      fakeTask("openclaw", [{ status: "succeeded" }]),
+      fakeTask("ollama-gemma", [{ status: "succeeded" }]),
+    ];
+
+    for await (const _ of runBootstrap({ handle: "h", repoRoot }, { tasks })) {
+      void _;
+    }
+
+    const modelCall = runOpenClawMock.mock.calls.filter(
+      (call) => call[0][0] === "models" && call[0][1] === "set",
+    ).at(-1);
+    expect(modelCall).toEqual([
+      ["models", "set", "ollama/gemma4:e4b"],
+      {
+        timeoutMs: 10_000,
+        extraEnv: { OLLAMA_API_KEY: "ollama-local" },
+      },
+    ]);
+  });
+
+  it("uses the persisted default Ollama model when no explicit model is saved", async () => {
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      "SCIENCESWARM_DEFAULT_OLLAMA_MODEL=gemma4:e2b\n",
+      "utf8",
+    );
+    const tasks: InstallTask[] = [
+      fakeTask("openclaw", [{ status: "succeeded" }]),
+      fakeTask("ollama-gemma", [{ status: "succeeded" }]),
+    ];
+
+    for await (const _ of runBootstrap({ handle: "h", repoRoot }, { tasks })) {
+      void _;
+    }
+
+    const modelCall = runOpenClawMock.mock.calls.filter(
+      (call) => call[0][0] === "models" && call[0][1] === "set",
+    ).at(-1);
+    expect(modelCall?.[0]).toEqual(["models", "set", "ollama/gemma4:e2b"]);
+  });
+
   it("does NOT write AGENT_BACKEND when the openclaw task failed", async () => {
     const tasks: InstallTask[] = [
       fakeTask("openclaw", [{ status: "failed", error: "boom" }]),
