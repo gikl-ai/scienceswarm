@@ -54,8 +54,7 @@ export async function getOrCreateLocalInstallId(): Promise<string> {
     if (raced) {
       return raced;
     }
-  }
 
-  await writeFile(path, `${id}\n`, { encoding: "utf-8", mode: 0o600 });
-  return id;
+    throw new Error("Local install-id already exists but could not be read");
+  }
 }
