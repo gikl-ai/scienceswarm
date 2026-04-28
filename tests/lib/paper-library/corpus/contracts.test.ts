@@ -4,6 +4,7 @@ import {
   GbrainCorpusCapabilitiesSchema,
   GbrainChunkHandleSchema,
   PaperIngestManifestSchema,
+  PaperProvenanceLedgerRecordSchema,
   PaperSectionMapSchema,
   PaperSourceArtifactSchema,
   PaperSourceCandidateSchema,
@@ -256,6 +257,39 @@ describe("paper-library corpus contracts", () => {
     })).not.toThrow();
   });
 
+  it("requires stale reasons on stale summaries and provenance records", () => {
+    const fixture = phase0CorpusFixtureDescriptors.find(
+      (descriptor) => descriptor.kind === "good_text_layer_pdf",
+    );
+    if (!fixture?.expectedRelevanceSummary) {
+      throw new Error("expected good text-layer PDF relevance summary");
+    }
+
+    expect(() => PaperSummaryArtifactSchema.parse({
+      ...fixture.expectedRelevanceSummary,
+      status: "stale",
+    })).toThrow(/staleReason/);
+    expect(() => PaperSummaryArtifactSchema.parse({
+      ...fixture.expectedRelevanceSummary,
+      status: "stale",
+      staleReason: "Source hash changed.",
+    })).not.toThrow();
+
+    const staleProvenance = {
+      id: "provenance-stale-1",
+      paperSlug: "wiki/entities/papers/good-pdf-2024",
+      occurredAt: now,
+      eventType: "staleness",
+      status: "stale",
+    };
+
+    expect(() => PaperProvenanceLedgerRecordSchema.parse(staleProvenance)).toThrow(/staleReason/);
+    expect(() => PaperProvenanceLedgerRecordSchema.parse({
+      ...staleProvenance,
+      staleReason: "Summary source hash changed.",
+    })).not.toThrow();
+  });
+
   it("builds canonical corpus slugs from existing paper-library page slugs", () => {
     expect(paperCorpusSourceSlugForPaperSlug("wiki/entities/papers/arxiv-2401-01234")).toBe(
       "wiki/sources/papers/arxiv-2401-01234/source",
@@ -272,6 +306,10 @@ describe("paper-library corpus contracts", () => {
     expect(paperCorpusBibliographySlug({ openAlexId: "https://openalex.org/W1234567890" }, "")).toBe(
       "wiki/bibliography/openalex-w1234567890",
     );
+    expect(paperCorpusBibliographySlug({}, "Fallback Title")).toBe(
+      "wiki/bibliography/title-fallback-title",
+    );
+    expect(() => paperCorpusBibliographySlug({}, "")).toThrow(/non-empty fallback/);
     const longDoi = `10.1000/${"a".repeat(150)}`;
     const longSlug = paperCorpusBibliographySlug({ doi: longDoi }, "");
     expect(longSlug).toMatch(/^wiki\/bibliography\/doi-10-1000-a+-[a-z0-9]+$/);

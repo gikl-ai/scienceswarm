@@ -219,25 +219,35 @@ export const SummaryEvidenceSchema = z.object({
 });
 export type SummaryEvidence = z.infer<typeof SummaryEvidenceSchema>;
 
-export const PaperSummaryArtifactSchema = z.object({
-  paperSlug: NonEmptyStringSchema,
-  sourceSlug: NonEmptyStringSchema,
-  summarySlug: NonEmptyStringSchema,
-  tier: PaperSummaryTierSchema,
-  status: PaperSummaryStatusSchema,
-  sourceHash: NonEmptyStringSchema,
-  sectionMapHash: NonEmptyStringSchema,
-  promptVersion: NonEmptyStringSchema,
-  modelId: NonEmptyStringSchema.optional(),
-  generationSettings: z.record(z.string(), z.unknown()).default({}),
-  createdAt: IsoDateStringSchema,
-  updatedAt: IsoDateStringSchema,
-  generatedAt: IsoDateStringSchema.optional(),
-  generatedBy: NonEmptyStringSchema.optional(),
-  evidence: z.array(SummaryEvidenceSchema).default([]),
-  staleReason: NonEmptyStringSchema.optional(),
-  warnings: z.array(PaperCorpusWarningSchema).default([]),
-});
+export const PaperSummaryArtifactSchema = z
+  .object({
+    paperSlug: NonEmptyStringSchema,
+    sourceSlug: NonEmptyStringSchema,
+    summarySlug: NonEmptyStringSchema,
+    tier: PaperSummaryTierSchema,
+    status: PaperSummaryStatusSchema,
+    sourceHash: NonEmptyStringSchema,
+    sectionMapHash: NonEmptyStringSchema,
+    promptVersion: NonEmptyStringSchema,
+    modelId: NonEmptyStringSchema.optional(),
+    generationSettings: z.record(z.string(), z.unknown()).default({}),
+    createdAt: IsoDateStringSchema,
+    updatedAt: IsoDateStringSchema,
+    generatedAt: IsoDateStringSchema.optional(),
+    generatedBy: NonEmptyStringSchema.optional(),
+    evidence: z.array(SummaryEvidenceSchema).default([]),
+    staleReason: NonEmptyStringSchema.optional(),
+    warnings: z.array(PaperCorpusWarningSchema).default([]),
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === "stale" && value.staleReason === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["staleReason"],
+        message: "stale summaries must include staleReason.",
+      });
+    }
+  });
 export type PaperSummaryArtifact = z.infer<typeof PaperSummaryArtifactSchema>;
 
 export const BibliographyExtractionSourceSchema = z.enum([
@@ -304,24 +314,34 @@ export const PaperProvenanceEventStatusSchema = z.enum([
 ]);
 export type PaperProvenanceEventStatus = z.infer<typeof PaperProvenanceEventStatusSchema>;
 
-export const PaperProvenanceLedgerRecordSchema = z.object({
-  id: NonEmptyStringSchema,
-  paperSlug: NonEmptyStringSchema,
-  occurredAt: IsoDateStringSchema,
-  eventType: PaperProvenanceEventTypeSchema,
-  status: PaperProvenanceEventStatusSchema,
-  actor: NonEmptyStringSchema.optional(),
-  sourceSlug: NonEmptyStringSchema.optional(),
-  artifactSlug: NonEmptyStringSchema.optional(),
-  sourceType: PaperSourceTypeSchema.optional(),
-  summaryTier: PaperSummaryTierSchema.optional(),
-  inputHash: NonEmptyStringSchema.optional(),
-  outputHash: NonEmptyStringSchema.optional(),
-  staleReason: NonEmptyStringSchema.optional(),
-  message: NonEmptyStringSchema.optional(),
-  warnings: z.array(PaperCorpusWarningSchema).default([]),
-  details: z.record(z.string(), z.unknown()).default({}),
-});
+export const PaperProvenanceLedgerRecordSchema = z
+  .object({
+    id: NonEmptyStringSchema,
+    paperSlug: NonEmptyStringSchema,
+    occurredAt: IsoDateStringSchema,
+    eventType: PaperProvenanceEventTypeSchema,
+    status: PaperProvenanceEventStatusSchema,
+    actor: NonEmptyStringSchema.optional(),
+    sourceSlug: NonEmptyStringSchema.optional(),
+    artifactSlug: NonEmptyStringSchema.optional(),
+    sourceType: PaperSourceTypeSchema.optional(),
+    summaryTier: PaperSummaryTierSchema.optional(),
+    inputHash: NonEmptyStringSchema.optional(),
+    outputHash: NonEmptyStringSchema.optional(),
+    staleReason: NonEmptyStringSchema.optional(),
+    message: NonEmptyStringSchema.optional(),
+    warnings: z.array(PaperCorpusWarningSchema).default([]),
+    details: z.record(z.string(), z.unknown()).default({}),
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === "stale" && value.staleReason === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["staleReason"],
+        message: "stale provenance records must include staleReason.",
+      });
+    }
+  });
 export type PaperProvenanceLedgerRecord = z.infer<typeof PaperProvenanceLedgerRecordSchema>;
 
 export const GbrainCorpusRetrievalModeSchema = z.enum([
@@ -545,6 +565,9 @@ export function paperCorpusBibliographySlug(
   if (identifiers.pmid) return `wiki/bibliography/pmid-${slugSegment(identifiers.pmid.trim())}`;
   if (identifiers.openAlexId) {
     return `wiki/bibliography/openalex-${slugSegment(normalizeCorpusOpenAlexId(identifiers.openAlexId))}`;
+  }
+  if (fallback.trim().length === 0) {
+    throw new Error("paperCorpusBibliographySlug requires a non-empty fallback when no identifier is present.");
   }
   return `wiki/bibliography/title-${slugSegment(fallback)}`;
 }

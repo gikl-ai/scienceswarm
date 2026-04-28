@@ -27,7 +27,7 @@ describe("paper-library corpus fixture skeletons", () => {
   it("rejects fixture warning codes outside the corpus warning contract", () => {
     const descriptorsWithInvalidWarning = phase0CorpusFixtureDescriptors.map((descriptor) =>
       descriptor.kind === "advanced_pdf_parser_unavailable"
-        ? { ...descriptor, expectedWarnings: ["parser_unavaialble"] }
+        ? { ...descriptor, expectedWarnings: ["not_a_real_warning_code"] }
         : descriptor,
     );
 
