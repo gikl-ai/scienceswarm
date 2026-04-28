@@ -116,7 +116,7 @@ The expected successful fast-preview metrics are:
 | `expected_class` | `GSE` for `N=20` |
 | `<r>` | within `0.020` of the GSE Atas reference `0.67617` |
 | `kramers.pairs_collapsed` | `true` |
-| `plateau_ref_kind` | degeneracy-aware Kramers-pair time average |
+| `plateau_ref_kind` | collapsed Kramers-pair time average |
 | `ramp_present` | `true` |
 | `plateau_within_tolerance` | `true` |
 
@@ -145,7 +145,7 @@ Expected files:
 | `scripts/spectra.npz` | disorder-ensemble eigenvalue spectra |
 | `scripts/sff_data.json` | curves and overlays for the report |
 | `scripts/metrics.json` | validation-gate payload |
-| `scripts/report.html` | single-file interactive report |
+| `scripts/report.html` | interactive HTML report with CDN-loaded Plotly assets |
 
 ---
 
