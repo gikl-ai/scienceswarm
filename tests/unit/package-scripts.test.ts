@@ -126,6 +126,9 @@ describe("package.json scripts", () => {
     expect(pkg.scripts["prepare:desktop-package"]).toBe(
       "node scripts/prepare-desktop-package.mjs",
     );
+    expect(pkg.scripts["desktop:check-signing-env"]).toBe(
+      "node scripts/check-desktop-signing-env.mjs",
+    );
     expect(pkg.scripts["desktop:checksums"]).toBe(
       "node scripts/write-artifact-checksums.mjs",
     );
@@ -160,6 +163,8 @@ describe("package.json scripts", () => {
     }
 
     expect(desktopInstallersWorkflow).toContain("npm run build:standalone");
+    expect(desktopInstallersWorkflow).toContain("npm run desktop:check-signing-env");
+    expect(desktopInstallersWorkflow).toContain("SCIENCESWARM_REQUIRE_DESKTOP_SIGNING");
     expect(desktopInstallersWorkflow).toContain("npm run desktop:checksums");
     expect(desktopInstallersWorkflow).toContain("CSC_IDENTITY_AUTO_DISCOVERY");
     expect(desktopInstallersWorkflow).toContain("dist/SHA256SUMS.txt");
