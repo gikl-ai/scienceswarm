@@ -45,10 +45,13 @@ describe("runtime model catalog", () => {
     });
   });
 
-  it("matches untagged configured models against tag-qualified Ollama models only", () => {
-    expect(ollamaModelMatches("gemma4", "gemma4:e4b")).toBe(false);
+  it("matches only the recommended Gemma 4 aliases across saved model names", () => {
+    expect(ollamaModelMatches("gemma4", "gemma4:e4b")).toBe(true);
+    expect(ollamaModelMatches("gemma4:e4b", "gemma4")).toBe(true);
+    expect(ollamaModelMatches("gemma4:latest", "gemma4:e4b")).toBe(true);
     expect(ollamaModelMatches("gemma4", "gemma4")).toBe(true);
     expect(ollamaModelMatches("gemma4", "gemma4:26b")).toBe(false);
+    expect(ollamaModelMatches("gemma4:e2b", "gemma4:e4b")).toBe(false);
     expect(ollamaModelMatches("gemma4", "gemma4o-distilled")).toBe(false);
     expect(ollamaModelMatches("gemma4:e4b", "gemma4:e4b")).toBe(true);
     expect(ollamaModelMatches("gemma4:e4b", "gemma4:26b")).toBe(false);
