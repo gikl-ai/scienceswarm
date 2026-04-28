@@ -40,8 +40,10 @@ describe("package.json scripts", () => {
   });
 
   it("forces gbrain to reuse the hoisted PGLite package", () => {
+    const hoistedPglite = pkg.dependencies?.["@electric-sql/pglite"];
+    expect(hoistedPglite).toBeDefined();
     expect(pkg.overrides?.gbrain?.["@electric-sql/pglite"]).toBe(
-      pkg.dependencies?.["@electric-sql/pglite"],
+      hoistedPglite,
     );
   });
 
