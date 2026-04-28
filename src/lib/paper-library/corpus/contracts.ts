@@ -140,6 +140,7 @@ export const PaperSourceArtifactSchema = z.object({
   quality: SourceQualitySchema,
   createdAt: IsoDateStringSchema,
   updatedAt: IsoDateStringSchema,
+  warnings: z.array(PaperCorpusWarningSchema).default([]),
 });
 export type PaperSourceArtifact = z.infer<typeof PaperSourceArtifactSchema>;
 
@@ -192,6 +193,20 @@ export const SummaryEvidenceSchema = z.object({
   chunkHandles: z.array(GbrainChunkHandleSchema).default([]),
   sectionAnchors: z.array(NonEmptyStringSchema).default([]),
   caveats: z.array(NonEmptyStringSchema).default([]),
+}).superRefine((value, context) => {
+  if (
+    value.claimId
+    || value.statement
+    || value.chunkHandles.length > 0
+    || value.sectionAnchors.length > 0
+  ) {
+    return;
+  }
+
+  context.addIssue({
+    code: "custom",
+    message: "Summary evidence must include a claim, statement, chunk handle, or section anchor.",
+  });
 });
 export type SummaryEvidence = z.infer<typeof SummaryEvidenceSchema>;
 
@@ -443,13 +458,49 @@ export const PaperIngestManifestSchema = z.object({
 });
 export type PaperIngestManifest = z.infer<typeof PaperIngestManifestSchema>;
 
+function stableSlugHash(value: string): string {
+  let hash = 5381;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) + hash + value.charCodeAt(index)) >>> 0;
+  }
+  return hash.toString(36);
+}
+
 function slugSegment(value: string): string {
-  return value
+  const slug = value
     .normalize("NFKD")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 120) || "paper";
+    || "paper";
+  if (slug.length <= 120) return slug;
+  const hash = stableSlugHash(value);
+  return `${slug.slice(0, 119 - hash.length)}-${hash}`;
+}
+
+function normalizeCorpusDoi(value: string): string {
+  return value
+    .trim()
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+    .replace(/^doi:\s*/i, "")
+    .replace(/[)\].,;:\s]+$/g, "")
+    .toLowerCase();
+}
+
+function normalizeCorpusArxivId(value: string): string {
+  return value
+    .trim()
+    .replace(/^arxiv\s*:\s*/i, "")
+    .replace(/[)\].,;:\s]+$/g, "");
+}
+
+function normalizeCorpusOpenAlexId(value: string): string {
+  return value
+    .trim()
+    .replace(/^https?:\/\/openalex\.org\//i, "")
+    .replace(/^openalex:\s*/i, "")
+    .replace(/[)\].,;:\s]+$/g, "")
+    .toLowerCase();
 }
 
 export function paperCorpusPaperSegment(paperSlug: string): string {
@@ -477,9 +528,11 @@ export function paperCorpusBibliographySlug(
   identifiers: z.infer<typeof PaperIdentifierSchema>,
   fallback: string,
 ): string {
-  if (identifiers.doi) return `wiki/bibliography/doi-${slugSegment(identifiers.doi)}`;
-  if (identifiers.arxivId) return `wiki/bibliography/arxiv-${slugSegment(identifiers.arxivId)}`;
-  if (identifiers.pmid) return `wiki/bibliography/pmid-${slugSegment(identifiers.pmid)}`;
-  if (identifiers.openAlexId) return `wiki/bibliography/openalex-${slugSegment(identifiers.openAlexId)}`;
+  if (identifiers.doi) return `wiki/bibliography/doi-${slugSegment(normalizeCorpusDoi(identifiers.doi))}`;
+  if (identifiers.arxivId) return `wiki/bibliography/arxiv-${slugSegment(normalizeCorpusArxivId(identifiers.arxivId))}`;
+  if (identifiers.pmid) return `wiki/bibliography/pmid-${slugSegment(identifiers.pmid.trim())}`;
+  if (identifiers.openAlexId) {
+    return `wiki/bibliography/openalex-${slugSegment(normalizeCorpusOpenAlexId(identifiers.openAlexId))}`;
+  }
   return `wiki/bibliography/title-${slugSegment(fallback)}`;
 }

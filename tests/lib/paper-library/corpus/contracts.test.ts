@@ -6,6 +6,7 @@ import {
   PaperSectionMapSchema,
   PaperSourceArtifactSchema,
   PaperSourceCandidateSchema,
+  SummaryEvidenceSchema,
   PaperSummaryArtifactSchema,
   ResearchContextPacketSchema,
   paperCorpusBibliographySlug,
@@ -51,6 +52,7 @@ describe("paper-library corpus contracts", () => {
       sourceSlug: "wiki/sources/papers/good-pdf-2024/source",
       sourceType: "pdf",
       status: "current",
+      warnings: [],
     });
     expect(PaperSectionMapSchema.parse(fixture.expectedSectionMap).sections[0]).toMatchObject({
       sectionId: "abstract",
@@ -217,6 +219,18 @@ describe("paper-library corpus contracts", () => {
     );
   });
 
+  it("rejects empty summary evidence records", () => {
+    expect(() => SummaryEvidenceSchema.parse({})).toThrow(/claim, statement, chunk handle, or section anchor/);
+    expect(() => SummaryEvidenceSchema.parse({
+      chunkHandles: [
+        {
+          sourceSlug: "wiki/sources/papers/good-pdf-2024/source",
+          chunkId: "chunk-abstract",
+        },
+      ],
+    })).not.toThrow();
+  });
+
   it("builds canonical corpus slugs from existing paper-library page slugs", () => {
     expect(paperCorpusSourceSlugForPaperSlug("wiki/entities/papers/arxiv-2401-01234")).toBe(
       "wiki/sources/papers/arxiv-2401-01234/source",
@@ -227,5 +241,15 @@ describe("paper-library corpus contracts", () => {
     expect(paperCorpusBibliographySlug({ arxivId: "2401.01234v2" }, "Fallback Title")).toBe(
       "wiki/bibliography/arxiv-2401-01234v2",
     );
+    expect(paperCorpusBibliographySlug({ doi: "https://doi.org/10.1000/Example-Good-PDF." }, "")).toBe(
+      "wiki/bibliography/doi-10-1000-example-good-pdf",
+    );
+    expect(paperCorpusBibliographySlug({ openAlexId: "https://openalex.org/W1234567890" }, "")).toBe(
+      "wiki/bibliography/openalex-w1234567890",
+    );
+    const longDoi = `10.1000/${"a".repeat(150)}`;
+    const longSlug = paperCorpusBibliographySlug({ doi: longDoi }, "");
+    expect(longSlug).toMatch(/^wiki\/bibliography\/doi-10-1000-a+-[a-z0-9]+$/);
+    expect(longSlug.length).toBeLessThanOrEqual("wiki/bibliography/doi-".length + 120);
   });
 });
