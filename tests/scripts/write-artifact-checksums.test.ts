@@ -39,7 +39,7 @@ describe("write-artifact-checksums", () => {
     }
   });
 
-  it("writes deterministic SHA-256 checksum manifests", () => {
+  it("writes deterministic SHA-256 checksum manifests", async () => {
     const root = path.join(tmpdir(), `scienceswarm-checksums-${Date.now()}`);
     const dist = path.join(root, "dist");
     try {
@@ -49,13 +49,13 @@ describe("write-artifact-checksums", () => {
       writeFileSync(dmgPath, "alpha");
       writeFileSync(exePath, "beta");
 
-      const result = writeArtifactChecksums({ root });
+      const result = await writeArtifactChecksums({ root });
       const manifest = readFileSync(result.outputFile, "utf-8");
 
       expect(result.artifactCount).toBe(2);
       expect(manifest).toBe([
-        `${sha256File(dmgPath)}  ScienceSwarm.dmg`,
-        `${sha256File(exePath)}  ScienceSwarm.exe`,
+        `${await sha256File(dmgPath)}  ScienceSwarm.dmg`,
+        `${await sha256File(exePath)}  ScienceSwarm.exe`,
         "",
       ].join("\n"));
     } finally {
@@ -63,14 +63,14 @@ describe("write-artifact-checksums", () => {
     }
   });
 
-  it("fails clearly when no installer artifacts exist", () => {
+  it("fails clearly when no installer artifacts exist", async () => {
     const root = path.join(tmpdir(), `scienceswarm-checksums-${Date.now()}`);
     const dist = path.join(root, "dist");
     try {
       mkdirSync(dist, { recursive: true });
       writeFileSync(path.join(dist, "latest-linux.yml"), "metadata");
 
-      expect(() => writeArtifactChecksums({ root })).toThrow(
+      await expect(writeArtifactChecksums({ root })).rejects.toThrow(
         "No desktop installer artifacts found",
       );
     } finally {
@@ -93,15 +93,15 @@ describe("write-artifact-checksums", () => {
     );
   });
 
-  it("builds a manifest from an explicit file list", () => {
+  it("builds a manifest from an explicit file list", async () => {
     const root = path.join(tmpdir(), `scienceswarm-checksums-${Date.now()}`);
     try {
       const artifactPath = path.join(root, "dist", "ScienceSwarm.dmg");
       mkdirSync(path.dirname(artifactPath), { recursive: true });
       writeFileSync(artifactPath, "payload");
 
-      expect(createChecksumManifest([artifactPath], path.join(root, "dist"))).toBe(
-        `${sha256File(artifactPath)}  ScienceSwarm.dmg\n`,
+      await expect(createChecksumManifest([artifactPath], path.join(root, "dist"))).resolves.toBe(
+        `${await sha256File(artifactPath)}  ScienceSwarm.dmg\n`,
       );
     } finally {
       rmSync(root, { force: true, recursive: true });
