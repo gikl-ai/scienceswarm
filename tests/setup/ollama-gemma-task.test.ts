@@ -208,4 +208,35 @@ describe("ollamaGemmaTask", () => {
       expect.anything(),
     );
   });
+
+  it("uses catalog size guidance for the selected high-memory Gemma 4 model", async () => {
+    vi.stubEnv("OLLAMA_MODEL", "gemma4:26b");
+    spawnMock.mockImplementation((command: string, args: string[] = []) => {
+      if (command === "which" && args[0] === "ollama") {
+        return fakeProcess({ stdout: "/opt/homebrew/bin/ollama\n" });
+      }
+      if (command === "/opt/homebrew/bin/ollama" && args[0] === "--version") {
+        return fakeProcess({ stdout: "ollama version is 0.11.6\n" });
+      }
+      if (command === "/opt/homebrew/bin/ollama" && args[0] === "list") {
+        return fakeProcess({ stdout: "NAME ID SIZE MODIFIED\n" });
+      }
+      if (command === "/opt/homebrew/bin/ollama" && args[0] === "pull") {
+        return fakeProcess({ stdout: "success\n" });
+      }
+      return fakeProcess({ code: 1 });
+    });
+
+    const events = await runTask();
+
+    expect(events).toContainEqual({
+      status: "running",
+      detail: "Downloading gemma4:26b (~18GB) with Ollama…",
+    });
+    expect(spawnMock).toHaveBeenCalledWith(
+      "/opt/homebrew/bin/ollama",
+      ["pull", "gemma4:26b"],
+      expect.anything(),
+    );
+  });
 });

@@ -395,6 +395,26 @@ describe("GET /api/setup/status — extended fields (PR B stage B1)", () => {
     expect(body.ollamaStatus.hasRecommendedModel).toBe(false);
   });
 
+  it("treats the low-memory Gemma 4 model as setup-ready", async () => {
+    mocks.execFileImpl = () => ({
+      stdout: [
+        "NAME                  ID      SIZE   MODIFIED",
+        "gemma4:e2b            abc123   7.2GB  10 minutes ago",
+      ].join("\n"),
+      stderr: "",
+    });
+
+    const { GET } = await import("@/app/api/setup/status/route");
+    const res = await GET(new Request("http://localhost/api/setup/status"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ollamaStatus: { running: boolean; hasRecommendedModel: boolean; models?: string[] };
+    };
+    expect(body.ollamaStatus.running).toBe(true);
+    expect(body.ollamaStatus.models).toEqual(["gemma4:e2b"]);
+    expect(body.ollamaStatus.hasRecommendedModel).toBe(true);
+  });
+
   it("returns openclawStatus=undefined when the probe throws", async () => {
     mocks.openclawImpl = async () => {
       throw new Error("openclaw probe crashed");
