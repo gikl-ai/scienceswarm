@@ -17,6 +17,7 @@ function sourceCandidateBase(input: {
   preferenceRank: number;
   confidence: number;
   evidence: string[];
+  unavailableReason?: string;
 }): CorpusFixtureDescriptor["expectedCandidate"] {
   return {
     id: input.id,
@@ -29,6 +30,7 @@ function sourceCandidateBase(input: {
     confidence: input.confidence,
     detectedAt: now,
     evidence: input.evidence,
+    ...(input.unavailableReason ? { unavailableReason: input.unavailableReason } : {}),
   };
 }
 
@@ -201,6 +203,7 @@ export const phase0CorpusFixtureDescriptors: CorpusFixtureDescriptor[] = [
       preferenceRank: 3,
       confidence: 0.4,
       evidence: ["math_heavy_pdf", "advanced_parser_missing"],
+      unavailableReason: "Advanced PDF parser unavailable for math-heavy source.",
     }),
     expectedWarnings: ["parser_unavailable", "equations_degraded"],
   },

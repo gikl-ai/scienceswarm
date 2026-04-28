@@ -107,6 +107,23 @@ describe("paper-library corpus contracts", () => {
     ]);
   });
 
+  it("requires source candidate unavailable reasons", () => {
+    const fixture = phase0CorpusFixtureDescriptors.find(
+      (descriptor) => descriptor.kind === "advanced_pdf_parser_unavailable",
+    );
+    if (!fixture?.expectedCandidate) {
+      throw new Error("expected unavailable parser candidate");
+    }
+
+    expect(PaperSourceCandidateSchema.parse(fixture.expectedCandidate).unavailableReason).toContain(
+      "parser unavailable",
+    );
+    expect(() => PaperSourceCandidateSchema.parse({
+      ...fixture.expectedCandidate,
+      unavailableReason: undefined,
+    })).toThrow(/unavailableReason/);
+  });
+
   it("parses a manifest that carries concurrency gates and compact provenance", () => {
     const fixture = phase0CorpusFixtureDescriptors.find(
       (descriptor) => descriptor.kind === "good_text_layer_pdf",
@@ -262,9 +279,16 @@ describe("paper-library corpus contracts", () => {
   });
 
   it("rejects source-only gbrain chunk handles", () => {
-    expect(() => GbrainChunkHandleSchema.parse({
+    const parsed = GbrainChunkHandleSchema.safeParse({
       sourceSlug: "wiki/sources/papers/good-pdf-2024/source",
-    })).toThrow(/chunk disambiguator/);
+    });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]).toMatchObject({
+        path: ["chunkId"],
+        message: expect.stringContaining("chunk disambiguator"),
+      });
+    }
     expect(() => GbrainChunkHandleSchema.parse({
       sourceSlug: "wiki/sources/papers/good-pdf-2024/source",
       chunkIndex: 0,
@@ -463,6 +487,12 @@ describe("paper-library corpus contracts", () => {
     );
     expect(paperCorpusBibliographySlug({ openAlexId: "https://openalex.org/W1234567890" }, "")).toBe(
       "wiki/bibliography/openalex-w1234567890",
+    );
+    expect(paperCorpusBibliographySlug({ pmid: "PMID:12345." }, "")).toBe(
+      "wiki/bibliography/pmid-12345",
+    );
+    expect(paperCorpusBibliographySlug({ pmid: "12345" }, "")).toBe(
+      "wiki/bibliography/pmid-12345",
     );
     expect(paperCorpusBibliographySlug({}, "Fallback Title")).toBe(
       "wiki/bibliography/title-fallback-title",

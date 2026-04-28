@@ -107,31 +107,42 @@ export const GbrainChunkHandleSchema = z
     if (value.chunkId === undefined && value.chunkIndex === undefined && value.sectionId === undefined) {
       ctx.addIssue({
         code: "custom",
+        path: ["chunkId"],
         message: "GbrainChunkHandle must include at least one chunk disambiguator.",
       });
     }
   });
 export type GbrainChunkHandle = z.infer<typeof GbrainChunkHandleSchema>;
 
-export const PaperSourceCandidateSchema = z.object({
-  id: NonEmptyStringSchema,
-  paperId: NonEmptyStringSchema,
-  paperSlug: NonEmptyStringSchema.optional(),
-  sourceType: PaperSourceTypeSchema,
-  origin: PaperSourceOriginSchema,
-  status: PaperSourceCandidateStatusSchema,
-  preferenceRank: z.number().int().positive(),
-  confidence: z.number().min(0).max(1),
-  identifiers: PaperIdentifierSchema.default({}),
-  title: NonEmptyStringSchema.optional(),
-  relativePath: NonEmptyStringSchema.optional(),
-  localPath: NonEmptyStringSchema.optional(),
-  url: z.string().url().optional(),
-  detectedAt: IsoDateStringSchema,
-  evidence: z.array(NonEmptyStringSchema).default([]),
-  warnings: z.array(PaperCorpusWarningSchema).default([]),
-  unavailableReason: NonEmptyStringSchema.optional(),
-});
+export const PaperSourceCandidateSchema = z
+  .object({
+    id: NonEmptyStringSchema,
+    paperId: NonEmptyStringSchema,
+    paperSlug: NonEmptyStringSchema.optional(),
+    sourceType: PaperSourceTypeSchema,
+    origin: PaperSourceOriginSchema,
+    status: PaperSourceCandidateStatusSchema,
+    preferenceRank: z.number().int().positive(),
+    confidence: z.number().min(0).max(1),
+    identifiers: PaperIdentifierSchema.default({}),
+    title: NonEmptyStringSchema.optional(),
+    relativePath: NonEmptyStringSchema.optional(),
+    localPath: NonEmptyStringSchema.optional(),
+    url: z.string().url().optional(),
+    detectedAt: IsoDateStringSchema,
+    evidence: z.array(NonEmptyStringSchema).default([]),
+    warnings: z.array(PaperCorpusWarningSchema).default([]),
+    unavailableReason: NonEmptyStringSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === "unavailable" && value.unavailableReason === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["unavailableReason"],
+        message: "unavailable source candidates must include unavailableReason.",
+      });
+    }
+  });
 export type PaperSourceCandidate = z.infer<typeof PaperSourceCandidateSchema>;
 
 export const PaperSourceArtifactSchema = z
@@ -655,6 +666,13 @@ function normalizeCorpusOpenAlexId(value: string): string {
     .toLowerCase();
 }
 
+function normalizeCorpusPmid(value: string): string {
+  return value
+    .trim()
+    .replace(/^pmid\s*:\s*/i, "")
+    .replace(/[)\].,;:\s]+$/g, "");
+}
+
 export function paperCorpusPaperSegment(paperSlug: string): string {
   const normalized = paperSlug.trim().replace(/^\/+/, "").replace(/\.md$/i, "");
   const parts = normalized.split("/").filter(Boolean);
@@ -684,7 +702,7 @@ export function paperCorpusBibliographySlug(
 ): string {
   if (identifiers.doi) return `wiki/bibliography/doi-${slugSegment(normalizeCorpusDoi(identifiers.doi))}`;
   if (identifiers.arxivId) return `wiki/bibliography/arxiv-${slugSegment(normalizeCorpusArxivId(identifiers.arxivId))}`;
-  if (identifiers.pmid) return `wiki/bibliography/pmid-${slugSegment(identifiers.pmid.trim())}`;
+  if (identifiers.pmid) return `wiki/bibliography/pmid-${slugSegment(normalizeCorpusPmid(identifiers.pmid))}`;
   if (identifiers.openAlexId) {
     return `wiki/bibliography/openalex-${slugSegment(normalizeCorpusOpenAlexId(identifiers.openAlexId))}`;
   }
