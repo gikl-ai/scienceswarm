@@ -1335,6 +1335,47 @@ describe("GET /api/chat/unified", () => {
     }
   });
 
+  it("treats recommended Gemma aliases as installed for local health readiness", async () => {
+    const originalCwd = process.cwd();
+    const isolatedCwd = mkdtempSync(
+      path.join(tmpdir(), "scienceswarm-chat-health-"),
+    );
+
+    process.chdir(isolatedCwd);
+    writeFileSync(
+      path.join(isolatedCwd, ".env"),
+      "LLM_PROVIDER=local\nOLLAMA_MODEL=gemma4:e4b\nAGENT_BACKEND=none\n",
+      "utf8",
+    );
+
+    try {
+      localHealthCheck.mockResolvedValueOnce({
+        running: true,
+        models: ["gemma4"],
+        url: "http://localhost:11434",
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
+      );
+
+      const request = new Request(
+        "http://localhost/api/chat/unified?action=health",
+      );
+      const response = await GET(request);
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.llmProvider).toBe("local");
+      expect(body.configuredLocalModel).toBe("gemma4:e4b");
+      expect(body.ollamaModels).toEqual(["gemma4"]);
+      expect(body.ready).toBe(true);
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(isolatedCwd, { recursive: true, force: true });
+    }
+  });
+
   it("keeps configuredLocalModel available when strict local-only mode is the only explicit runtime signal", async () => {
     const originalCwd = process.cwd();
     const isolatedCwd = mkdtempSync(

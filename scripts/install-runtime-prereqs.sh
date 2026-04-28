@@ -242,6 +242,8 @@ ensure_ollama_runtime() {
   if "$ollama_bin" list | awk -v target="$MODEL" '
     NR == 1 { next }
     $1 == target { found = 1 }
+    # Keep the Gemma 4 alias rows in sync with OLLAMA_RECOMMENDED_MODEL_ALIASES
+    # in src/lib/ollama-constants.ts.
     target == "gemma4:e4b" && ($1 == "gemma4" || $1 == "gemma4:latest") { found = 1 }
     (target == "gemma4" || target == "gemma4:latest") && ($1 == "gemma4:e4b" || $1 == "gemma4" || $1 == "gemma4:latest") { found = 1 }
     END { exit found ? 0 : 1 }

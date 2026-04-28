@@ -130,7 +130,10 @@ import {
   type ExplicitLlmRuntimeConfig,
   type SavedLlmRuntimeEnv,
 } from "@/lib/runtime-saved-env";
-import { resolveConfiguredLocalModel } from "@/lib/runtime/model-catalog";
+import {
+  ollamaModelMatches,
+  resolveConfiguredLocalModel,
+} from "@/lib/runtime/model-catalog";
 import { validateOpenAiKey } from "@/lib/setup/config-status";
 import {
   getDefaultRuntimeHostRouter,
@@ -440,10 +443,7 @@ function matchesLocalModel(
   availableModel: string,
   targetModel: string,
 ): boolean {
-  return (
-    availableModel === targetModel ||
-    availableModel.startsWith(`${targetModel}:`)
-  );
+  return ollamaModelMatches(targetModel, availableModel);
 }
 
 function configuredLocalModelForSavedRuntime(
