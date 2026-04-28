@@ -495,6 +495,7 @@ describe("useUnifiedChat persistence", () => {
     ) as { localInstallId?: string; conversationId?: string };
     expect(scoped.localInstallId).toBe("new-install");
     expect(scoped.conversationId).toBe("old-conversation");
+    expect(window.localStorage.getItem("scienceswarm.chat.alpha-project")).toBeNull();
   });
 
   it("restores the prior project conversation and conversationId after remount", async () => {

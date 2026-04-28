@@ -15,20 +15,45 @@ function normalizeLocalInstallId(value: string): string | null {
   return LOCAL_INSTALL_ID_PATTERN.test(trimmed) ? trimmed : null;
 }
 
+async function readLocalInstallId(path: string): Promise<string | null> {
+  try {
+    return normalizeLocalInstallId(await readFile(path, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "EEXIST";
+}
+
 export async function getOrCreateLocalInstallId(): Promise<string> {
   const path = getLocalInstallIdPath();
 
-  try {
-    const existing = normalizeLocalInstallId(await readFile(path, "utf-8"));
-    if (existing) {
-      return existing;
-    }
-  } catch {
-    // Missing or unreadable ids are replaced below.
+  const existing = await readLocalInstallId(path);
+  if (existing) {
+    return existing;
   }
 
   const id = randomUUID();
   await mkdir(dirname(path), { recursive: true });
+
+  try {
+    await writeFile(path, `${id}\n`, {
+      encoding: "utf-8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    return id;
+  } catch (error) {
+    if (isFileExistsError(error)) {
+      const raced = await readLocalInstallId(path);
+      if (raced) {
+        return raced;
+      }
+    }
+  }
+
   await writeFile(path, `${id}\n`, { encoding: "utf-8", mode: 0o600 });
   return id;
 }

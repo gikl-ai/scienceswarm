@@ -42,6 +42,21 @@ describe("local install route", () => {
     );
   });
 
+  it("converges concurrent first requests on one local install id", async () => {
+    const { GET } = await import("@/app/api/local-install/route");
+
+    const responses = await Promise.all([GET(), GET(), GET(), GET()]);
+    const payloads = await Promise.all(
+      responses.map((response) => response.json() as Promise<{ localInstallId: string }>),
+    );
+    const ids = payloads.map((payload) => payload.localInstallId);
+
+    expect(new Set(ids).size).toBe(1);
+    await expect(readFile(path.join(dataRoot, "install-id"), "utf-8")).resolves.toBe(
+      `${ids[0]}\n`,
+    );
+  });
+
   it("rejects non-local requests", async () => {
     mockIsLocal.mockResolvedValue(false);
     const { GET } = await import("@/app/api/local-install/route");

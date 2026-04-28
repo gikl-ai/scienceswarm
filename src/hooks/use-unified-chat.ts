@@ -5393,6 +5393,7 @@ export function useUnifiedChat(
       restoredMessages.filter((message) => message.channel && message.channel !== "web"),
     );
     setBrowserChatRecovery(null);
+    removeLegacyBrowserChat(project);
     persistChat(
       project,
       restoredMessages,
