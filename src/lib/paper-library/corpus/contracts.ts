@@ -195,7 +195,7 @@ export const PaperSectionMapSchema = z
   .object({
     paperSlug: NonEmptyStringSchema,
     sourceSlug: NonEmptyStringSchema,
-    sourceHash: NonEmptyStringSchema,
+    sourceHash: NonEmptyStringSchema.optional(),
     sectionMapHash: NonEmptyStringSchema.optional(),
     status: CorpusArtifactStatusSchema,
     sections: z.array(PaperSectionAnchorSchema).default([]),
@@ -205,6 +205,13 @@ export const PaperSectionMapSchema = z
     warnings: z.array(PaperCorpusWarningSchema).default([]),
   })
   .superRefine((value, ctx) => {
+    if ((value.status === "current" || value.status === "stale") && value.sourceHash === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sourceHash"],
+        message: "current and stale section maps must include sourceHash.",
+      });
+    }
     if ((value.status === "current" || value.status === "stale") && value.sections.length === 0) {
       ctx.addIssue({
         code: "custom",
