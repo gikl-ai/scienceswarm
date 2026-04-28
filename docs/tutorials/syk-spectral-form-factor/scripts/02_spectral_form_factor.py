@@ -35,8 +35,9 @@ Outputs:
 
 For non-degenerate spectra the SFF plateau gate compares against the
 finite-sample average of Z(2 beta) / Z(beta)^2.  For GSE spectra, the plateau
-reference is degeneracy-aware for Kramers pairs; using the naive all-eigenvalue
-ratio would underestimate the physical late-time diagonal contribution.
+reference is degeneracy-aware for Kramers pairs; using collapsed distinct
+levels without restoring the full-spectrum two-fold degeneracy would
+overestimate the late-time SFF plateau by roughly a factor of two.
 """
 
 from __future__ import annotations
@@ -101,18 +102,17 @@ def plateau_reference(
     """Return the finite-sample plateau reference for the connected SFF.
 
     For non-degenerate spectra this is the sample mean of
-    Z(2 beta) / Z(beta)^2.  For GSE, collapse Kramers pairs first and compute
-    the normalized diagonal contribution on distinct levels.  The uniform
-    Kramers degeneracy cancels in that normalized expression, but collapsing
-    first avoids the naive all-eigenvalue estimate, which would be too small
-    by roughly a factor of two.
+    Z(2 beta) / Z(beta)^2.  For GSE, collapse Kramers pairs first, then restore
+    the full-spectrum Kramers degeneracy in the normalization.  With
+    Z_full = 2 * Z_collapsed, the late-time SFF plateau is
+    Z_collapsed(2 beta) / (2 * Z_collapsed(beta)^2).
     """
     if cls == "GSE":
         distinct, _, _ = collapse_kramers_pairs(eigvals)
         numerator = np.exp(-2 * beta * distinct).sum(axis=1)
         denominator = np.exp(-beta * distinct).sum(axis=1) ** 2
         return (
-            float(np.mean(numerator / denominator)),
+            float(np.mean(numerator / (2 * denominator))),
             "collapsed Kramers-pair time average",
         )
 
