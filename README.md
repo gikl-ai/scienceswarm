@@ -120,13 +120,15 @@ npm run build:standalone
 npm run desktop:pack:mac
 npm run desktop:pack:win
 npm run desktop:pack:linux
+npm run desktop:checksums
 ```
 
 Desktop installers do not bundle local model weights. Setup downloads the
 selected Ollama model instead, defaulting to `gemma4:e4b` and offering
 `gemma4:e2b` as the lower-memory option. Packaging stages a minimal desktop app
 under `.desktop-package/app` so installer builds do not scan or ship the
-repository's development `node_modules`.
+repository's development `node_modules`. Each uploaded installer artifact also
+includes `SHA256SUMS.txt` for local download verification.
 
 ### Windows via WSL2
 
