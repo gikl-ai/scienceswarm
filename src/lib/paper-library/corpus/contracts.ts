@@ -329,6 +329,13 @@ export const PaperSummaryArtifactSchema = z
         message: "current and stale summaries must include promptVersion.",
       });
     }
+    if ((value.status === "current" || value.status === "stale") && value.generatedAt === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["generatedAt"],
+        message: "current and stale summaries must include generatedAt.",
+      });
+    }
     if (value.status === "stale" && value.staleReason === undefined) {
       ctx.addIssue({
         code: "custom",
@@ -393,6 +400,13 @@ export const BibliographyEntryArtifactSchema = z.object({
       code: "custom",
       path: ["staleReason"],
       message: "stale bibliography artifacts must include staleReason.",
+    });
+  }
+  if ((value.status === "current" || value.status === "stale") && value.seenIn.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["seenIn"],
+      message: "current and stale bibliography artifacts must include at least one seenIn source.",
     });
   }
 });
@@ -589,6 +603,27 @@ export const PaperIngestPaperSchema = z
         code: "custom",
         path: ["staleReason"],
         message: "stale ingest paper records must include staleReason.",
+      });
+    }
+    if (
+      value.selectedSourceCandidateId
+      && !value.sourceCandidates.some((candidate) => candidate.id === value.selectedSourceCandidateId)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["selectedSourceCandidateId"],
+        message: "selected source candidate must be present in sourceCandidates.",
+      });
+    }
+    if (
+      value.sourceArtifact
+      && value.selectedSourceCandidateId
+      && value.sourceArtifact.selectedCandidateId !== value.selectedSourceCandidateId
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sourceArtifact", "selectedCandidateId"],
+        message: "source artifact selectedCandidateId must match selectedSourceCandidateId.",
       });
     }
   });

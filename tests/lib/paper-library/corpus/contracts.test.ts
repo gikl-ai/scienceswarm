@@ -466,7 +466,77 @@ describe("paper-library corpus contracts", () => {
       sourceHash: undefined,
       sectionMapHash: undefined,
       promptVersion: undefined,
+      generatedAt: undefined,
     })).not.toThrow();
+  });
+
+  it("requires generated timestamps for usable summaries", () => {
+    const fixture = phase0CorpusFixtureDescriptors.find(
+      (descriptor) => descriptor.kind === "good_text_layer_pdf",
+    );
+    if (!fixture?.expectedRelevanceSummary) {
+      throw new Error("expected good text-layer PDF summary artifact");
+    }
+
+    expect(() => PaperSummaryArtifactSchema.parse({
+      ...fixture.expectedRelevanceSummary,
+      generatedAt: undefined,
+    })).toThrow(/generatedAt/);
+    expect(() => PaperSummaryArtifactSchema.parse({
+      ...fixture.expectedRelevanceSummary,
+      status: "stale",
+      staleReason: "Source changed.",
+      generatedAt: undefined,
+    })).toThrow(/generatedAt/);
+  });
+
+  it("requires bibliography artifacts to identify where they were seen", () => {
+    const fixture = phase0CorpusFixtureDescriptors.find(
+      (descriptor) => descriptor.kind === "good_text_layer_pdf",
+    );
+    const bibliographyFixture = fixture?.expectedBibliography?.[0];
+    if (!bibliographyFixture) {
+      throw new Error("expected good text-layer PDF bibliography fixture");
+    }
+
+    expect(() => BibliographyEntryArtifactSchema.parse({
+      ...bibliographyFixture,
+      seenIn: [],
+    })).toThrow(/seenIn/);
+    expect(() => BibliographyEntryArtifactSchema.parse({
+      ...bibliographyFixture,
+      status: "blocked",
+      seenIn: [],
+    })).not.toThrow();
+  });
+
+  it("requires ingest paper selected sources to line up with candidates and artifacts", () => {
+    const fixture = phase0CorpusFixtureDescriptors.find(
+      (descriptor) => descriptor.kind === "good_text_layer_pdf",
+    );
+    if (!fixture?.expectedCandidate || !fixture.expectedSourceArtifact) {
+      throw new Error("expected good text-layer PDF source fixture");
+    }
+
+    expect(() => PaperIngestPaperSchema.parse({
+      paperId: "paper-good-pdf-2024",
+      paperSlug: "wiki/entities/papers/good-pdf-2024",
+      status: "current",
+      sourceCandidates: [fixture.expectedCandidate],
+      selectedSourceCandidateId: "missing-candidate",
+    })).toThrow(/selected source candidate/);
+
+    expect(() => PaperIngestPaperSchema.parse({
+      paperId: "paper-good-pdf-2024",
+      paperSlug: "wiki/entities/papers/good-pdf-2024",
+      status: "current",
+      sourceCandidates: [fixture.expectedCandidate],
+      selectedSourceCandidateId: fixture.expectedCandidate.id,
+      sourceArtifact: {
+        ...fixture.expectedSourceArtifact,
+        selectedCandidateId: "other-candidate",
+      },
+    })).toThrow(/selectedCandidateId/);
   });
 
   it("builds canonical corpus slugs from existing paper-library page slugs", () => {
