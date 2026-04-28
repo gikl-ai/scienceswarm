@@ -99,7 +99,7 @@ describe("paper-library corpus extraction adapters", () => {
               <p>HTML carries structured paper text without PDF artifacts.</p>
               <h2>Results</h2>
               <p>The extracted source remains section addressable.</p>
-              <h2>References</h2>
+              <h3>References</h3>
               <ol>
                 <li>[1] Roe, B. (2019). "Semantic sidecars for research." Web Journal, 2019. DOI registered 2020. doi:10.1000/html-sidecar.</li>
               </ol>
@@ -116,6 +116,9 @@ describe("paper-library corpus extraction adapters", () => {
       extractor: { name: "html-sidecar", adapter: "html-to-markdown", installed: true },
     });
     expect(result.sourceArtifact.normalizedMarkdown).toContain("## Abstract");
+    expect(result.sourceArtifact.normalizedMarkdown.startsWith("# HTML Evidence Paper")).toBe(true);
+    expect(result.sourceArtifact.normalizedMarkdown.split("\n").filter((line) => line === "HTML Evidence Paper"))
+      .toHaveLength(0);
     expect(result.sectionMap?.sections.map((section) => section.title)).toContain("Results");
     expect(result.bibliography[0]).toMatchObject({
       bibliographySlug: "wiki/bibliography/doi-10-1000-html-sidecar",

@@ -162,6 +162,8 @@ const PMID_RE = /\b(?:PMID\s*:?\s*)(\d{6,9})\b/gi;
 const YEAR_RE = /\b(19\d{2}|20\d{2})\b/g;
 
 const SKIPPED_HTML_TAGS = new Set([
+  "head",
+  "title",
   "script",
   "style",
   "template",
@@ -799,11 +801,11 @@ function pdfTextToMarkdown(input: { text: string; title?: string }): string {
 
 function extractMarkdownSection(markdown: string, titles: readonly string[]): string | undefined {
   const titlePattern = titles.map((title) => title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-  const pattern = new RegExp(`^##\\s+(?:${titlePattern})\\s*$`, "gim");
+  const pattern = new RegExp(`^#{1,6}\\s+(?:${titlePattern})\\s*$`, "gim");
   const match = pattern.exec(markdown);
   if (!match || match.index === undefined) return undefined;
   const bodyStart = match.index + match[0].length;
-  const next = /^##\s+.+$/gim;
+  const next = /^#{1,6}\s+.+$/gim;
   next.lastIndex = bodyStart;
   const nextMatch = next.exec(markdown);
   return markdown.slice(bodyStart, nextMatch?.index ?? markdown.length).trim();
