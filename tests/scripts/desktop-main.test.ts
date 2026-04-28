@@ -52,6 +52,16 @@ describe("desktop main", () => {
     });
   });
 
+  it("reports the returning-user start url in desktop diagnostics", () => {
+    expect(resolveDesktopDiagnostics({
+      getPath(name: string) {
+        return name === "userData" ? "/tmp/user-data" : "/tmp/logs";
+      },
+    }, {}, { firstLaunchComplete: true })).toMatchObject({
+      startUrl: "https://127.0.0.1:3001/",
+    });
+  });
+
   it("resolves the desktop first-launch marker path under userData", () => {
     expect(resolveDesktopLaunchMarkerPath({
       getPath() {
