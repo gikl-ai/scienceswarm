@@ -18,7 +18,7 @@ export function upsertPaperProvenanceRecord(
   const byId = new Map(records.map((entry) => [entry.id, entry]));
   byId.set(record.id, record);
   return [...byId.values()].sort((left, right) => {
-    const occurredAtOrder = left.occurredAt.localeCompare(right.occurredAt);
+    const occurredAtOrder = Date.parse(left.occurredAt) - Date.parse(right.occurredAt);
     return occurredAtOrder === 0 ? left.id.localeCompare(right.id) : occurredAtOrder;
   });
 }

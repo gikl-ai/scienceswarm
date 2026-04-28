@@ -67,6 +67,31 @@ export async function writePaperCorpusManifest(
   return writePersistedState(filePath, PaperIngestManifestStateSchema, manifest);
 }
 
+export async function readPaperCorpusManifestByScan(
+  project: string,
+  scanId: string,
+  stateRoot?: string,
+): Promise<ParsePersistedStateResult<PaperIngestManifest> | ParsePersistedStateRepairable> {
+  const filePath = getPaperCorpusManifestByScanPath(project, scanId, stateRoot);
+  return readPersistedState(filePath, PaperIngestManifestStateSchema, "paper corpus manifest by scan");
+}
+
+export async function writePaperCorpusManifestByScan(
+  project: string,
+  scanId: string,
+  manifest: PaperIngestManifest,
+  stateRoot?: string,
+): Promise<PaperIngestManifest> {
+  if (manifest.scanId && manifest.scanId !== scanId) {
+    throw new Error("manifest scanId must match the by-scan index key.");
+  }
+  const filePath = getPaperCorpusManifestByScanPath(project, scanId, stateRoot);
+  return writePersistedState(filePath, PaperIngestManifestStateSchema, {
+    ...manifest,
+    scanId,
+  });
+}
+
 export type PaperProvenanceLedger = PaperProvenanceLedgerRecord[];
 const PaperProvenanceLedgerSchema = z.array(PaperProvenanceLedgerRecordSchema) as z.ZodType<PaperProvenanceLedger>;
 

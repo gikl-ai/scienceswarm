@@ -62,6 +62,27 @@ describe("paper corpus provenance", () => {
     ]);
   });
 
+  it("sorts provenance records by timestamp value across UTC offsets", () => {
+    const earlierWithOffset = buildSourceChoiceProvenanceRecord({
+      paperSlug: "wiki/entities/papers/local-paper-1",
+      occurredAt: "2026-04-28T13:00:00.000+02:00",
+      candidate,
+    });
+    const laterUtc = buildSourceChoiceProvenanceRecord({
+      paperSlug: "wiki/entities/papers/local-paper-1",
+      occurredAt: "2026-04-28T12:00:00.000Z",
+      candidate,
+    });
+
+    expect(upsertPaperProvenanceRecord([laterUtc], {
+      ...earlierWithOffset,
+      id: "source-choice:offset",
+    }).map((entry) => entry.id)).toEqual([
+      "source-choice:offset",
+      "source-choice:paper-1:source:local-pdf",
+    ]);
+  });
+
   it("marks stale records with an explicit reason", () => {
     const record = buildSourceChoiceProvenanceRecord({
       paperSlug: "wiki/entities/papers/local-paper-1",

@@ -625,6 +625,13 @@ export const PaperIngestPaperSchema = z
         message: "source artifact selectedCandidateId must be present in sourceCandidates.",
       });
     }
+    if (value.sourceArtifact && value.selectedSourceCandidateId === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["selectedSourceCandidateId"],
+        message: "selectedSourceCandidateId must be set when sourceArtifact is present.",
+      });
+    }
     if (
       value.sourceArtifact
       && value.selectedSourceCandidateId

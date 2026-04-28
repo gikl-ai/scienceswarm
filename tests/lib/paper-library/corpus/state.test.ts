@@ -11,8 +11,10 @@ import {
   getPaperCorpusPaperProvenancePath,
   parsePaperCorpusManifest,
   readPaperCorpusManifest,
+  readPaperCorpusManifestByScan,
   readPaperProvenanceLedger,
   writePaperCorpusManifest,
+  writePaperCorpusManifestByScan,
   writePaperProvenanceLedger,
 } from "@/lib/paper-library/corpus";
 import type { PaperReviewItem } from "@/lib/paper-library/contracts";
@@ -98,6 +100,31 @@ describe("paper corpus state", () => {
         ],
       },
     });
+  });
+
+  it("writes and reads scan-indexed corpus manifests through the persisted-state guard", async () => {
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), "scienceswarm-paper-corpus-by-scan-"));
+    const manifest = buildPaperCorpusManifest({
+      id: "corpus-manifest-1",
+      project: "project-alpha",
+      scanId: "scan-1",
+      createdAt: now,
+      items: [reviewItem()],
+    });
+
+    await writePaperCorpusManifestByScan("project-alpha", "scan-1", manifest, tempRoot);
+
+    const read = await readPaperCorpusManifestByScan("project-alpha", "scan-1", tempRoot);
+    expect(read).toMatchObject({
+      ok: true,
+      data: {
+        id: "corpus-manifest-1",
+        scanId: "scan-1",
+      },
+    });
+    await expect(
+      writePaperCorpusManifestByScan("project-alpha", "scan-2", manifest, tempRoot),
+    ).rejects.toThrow(/scanId/);
   });
 
   it("returns repairable state for malformed corpus manifests", () => {

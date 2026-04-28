@@ -548,6 +548,14 @@ describe("paper-library corpus contracts", () => {
         selectedCandidateId: "other-candidate",
       },
     })).toThrow(/present in sourceCandidates/);
+
+    expect(() => PaperIngestPaperSchema.parse({
+      paperId: "paper-good-pdf-2024",
+      paperSlug: "wiki/entities/papers/good-pdf-2024",
+      status: "current",
+      sourceCandidates: [fixture.expectedCandidate],
+      sourceArtifact: fixture.expectedSourceArtifact,
+    })).toThrow(/must be set when sourceArtifact is present/);
   });
 
   it("builds canonical corpus slugs from existing paper-library page slugs", () => {

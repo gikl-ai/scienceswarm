@@ -138,6 +138,62 @@ describe("paper corpus source inventory", () => {
     });
   });
 
+  it("treats empty trimmed identity titles as missing", () => {
+    const candidates = buildPaperCorpusSourceCandidates({
+      item: reviewItem({
+        candidates: [
+          {
+            id: "identity-1",
+            identifiers: {},
+            title: "   ",
+            authors: [],
+            source: "filename",
+            confidence: 0.5,
+            evidence: ["filename"],
+            conflicts: [],
+          },
+        ],
+      }),
+      detectedAt: now,
+    });
+
+    expect(candidates[0]).toMatchObject({
+      title: "local-paper-1",
+    });
+  });
+
+  it("keeps long sidecar candidate ids unique with a path hash suffix", () => {
+    const sharedPrefix = `${"long-prefix-".repeat(10)}paper`;
+    const candidates = buildPaperCorpusSourceCandidates({
+      item: reviewItem({
+        source: undefined,
+        candidates: [
+          {
+            id: "identity-1",
+            identifiers: {},
+            title: "Sidecar Only Paper",
+            authors: [],
+            source: "filename",
+            confidence: 0.5,
+            evidence: ["filename"],
+            conflicts: [],
+          },
+        ],
+      }),
+      detectedAt: now,
+      sidecarRelativePaths: [
+        `sources/${sharedPrefix}-alpha.tex`,
+        `sources/${sharedPrefix}-beta.tex`,
+      ],
+    });
+
+    expect(new Set(candidates.map((candidate) => candidate.id)).size).toBe(2);
+    expect(candidates.map((candidate) => candidate.id)).toEqual([
+      expect.stringMatching(/^paper-1:source:sidecar-latex-sources-long-prefix-.+-[a-f0-9]{8}$/),
+      expect.stringMatching(/^paper-1:source:sidecar-latex-sources-long-prefix-.+-[a-f0-9]{8}$/),
+    ]);
+  });
+
   it("accepts explicit sidecar-only source paths when no local PDF snapshot exists", () => {
     const ingestPaper = buildPaperCorpusIngestPaper({
       item: reviewItem({

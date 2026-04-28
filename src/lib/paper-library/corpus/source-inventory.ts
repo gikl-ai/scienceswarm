@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 import { paperLibraryPageSlugForMetadata } from "../applied-metadata";
@@ -64,9 +65,14 @@ function identifiersForReviewItem(item: PaperReviewItem, candidate: PaperIdentit
   };
 }
 
+function nonEmptyTrimmed(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 function titleForReviewItem(item: PaperReviewItem, candidate: PaperIdentityCandidate | undefined): string | undefined {
   return correctionString(item, "title")
-    ?? candidate?.title?.trim()
+    ?? nonEmptyTrimmed(candidate?.title)
     ?? (item.source ? path.basename(item.source.relativePath, path.extname(item.source.relativePath)) : undefined);
 }
 
@@ -100,11 +106,15 @@ function candidateId(paperId: string, suffix: string): string {
 }
 
 function stablePathId(relativePath: string): string {
-  return normalizeRelativePath(relativePath)
+  const normalized = normalizeRelativePath(relativePath);
+  const slug = normalized
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "sidecar";
+    || "sidecar";
+  if (slug.length <= 80) return slug;
+  const hash = createHash("sha256").update(normalized).digest("hex").slice(0, 8);
+  return `${slug.slice(0, 71)}-${hash}`;
 }
 
 function duplicateIdentityWarning(item: PaperReviewItem, candidate: PaperIdentityCandidate | undefined): PaperCorpusWarning[] {
