@@ -5,6 +5,7 @@
   "main": "desktop/main.mjs",
   "description": "ScienceSwarm — local-first research workspace. OpenClaw (manager agent) + OpenHands (execution agent) + gbrain (knowledge layer).",
   "license": "MIT",
+  "author": "ScienceSwarm contributors",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gikl-ai/scienceswarm.git"
@@ -21,8 +22,12 @@
     "build": "next build",
     "build:standalone": "SCIENCESWARM_STANDALONE_BUILD=1 next build --webpack && node scripts/prepare-standalone-build.mjs",
     "desktop:dev": "electron desktop/main.mjs",
-    "desktop:dist": "electron-builder --dir",
-    "desktop:pack": "electron-builder",
+    "prepare:desktop-package": "node scripts/prepare-desktop-package.mjs",
+    "desktop:dist": "npm run prepare:desktop-package && electron-builder --projectDir .desktop-package/app --dir",
+    "desktop:pack": "npm run prepare:desktop-package && electron-builder --projectDir .desktop-package/app",
+    "desktop:pack:linux": "npm run prepare:desktop-package && electron-builder --projectDir .desktop-package/app --linux AppImage --publish never",
+    "desktop:pack:mac": "npm run prepare:desktop-package && electron-builder --projectDir .desktop-package/app --mac dmg --publish never",
+    "desktop:pack:win": "npm run prepare:desktop-package && electron-builder --projectDir .desktop-package/app --win nsis --publish never",
     "start": "./start.sh",
     "start:standalone": "node scripts/start-standalone.mjs",
     "lint": "eslint",
@@ -121,20 +126,25 @@
   "build": {
     "appId": "ai.scienceswarm.desktop",
     "productName": "ScienceSwarm",
+    "electronVersion": "41.3.0",
     "extraMetadata": {
       "main": "desktop/main.mjs"
     },
+    "asar": true,
+    "asarUnpack": [
+      ".next/standalone/**"
+    ],
+    "npmRebuild": false,
     "files": [
-      ".next/standalone/**/*",
-      "desktop/**/*",
+      "**/*",
       "!desktop/ollama-models/**",
       "!desktop/**/*.gguf",
       "!desktop/**/blobs/**",
       "!desktop/**/manifests/**",
-      "scripts/start-standalone.mjs",
       "package.json"
     ],
     "directories": {
+      "app": ".desktop-package/app",
       "buildResources": "desktop/build"
     },
     "mac": {

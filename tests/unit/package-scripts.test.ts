@@ -8,6 +8,9 @@ const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
   dependencies?: {
     "@electric-sql/pglite"?: string;
   };
+  devDependencies?: {
+    electron?: string;
+  };
   overrides?: {
     gbrain?: {
       "@electric-sql/pglite"?: string;
@@ -15,9 +18,20 @@ const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
   };
   scripts: Record<string, string>;
   build?: {
+    asar?: boolean;
+    directories?: {
+      app?: string;
+    };
+    electronVersion?: string;
     files?: string[];
+    npmRebuild?: boolean;
+    asarUnpack?: string[];
   };
 };
+const desktopInstallersWorkflow = fs.readFileSync(
+  ".github/workflows/desktop-installers.yml",
+  "utf-8",
+);
 const startScript = fs.readFileSync("start.sh", "utf-8");
 const installScript = fs.readFileSync("install.sh", "utf-8");
 const runtimePrereqsScript = fs.readFileSync(
@@ -74,12 +88,45 @@ describe("package.json scripts", () => {
   it("excludes downloaded local model blobs from desktop installer artifacts", () => {
     expect(pkg.build?.files).toEqual(
       expect.arrayContaining([
+        "**/*",
         "!desktop/ollama-models/**",
         "!desktop/**/*.gguf",
         "!desktop/**/blobs/**",
         "!desktop/**/manifests/**",
       ]),
     );
+  });
+
+  it("keeps desktop installer workflow scripts aligned with package.json", () => {
+    expect(pkg.scripts["prepare:desktop-package"]).toBe(
+      "node scripts/prepare-desktop-package.mjs",
+    );
+    expect(pkg.scripts["desktop:pack"]).toContain("prepare:desktop-package");
+    expect(pkg.scripts["desktop:pack"]).toContain("--projectDir .desktop-package/app");
+    expect(pkg.scripts["desktop:pack:mac"]).toContain("--mac dmg");
+    expect(pkg.scripts["desktop:pack:win"]).toContain("--win nsis");
+    expect(pkg.scripts["desktop:pack:linux"]).toContain("--linux AppImage");
+    expect(pkg.build?.directories?.app).toBe(".desktop-package/app");
+    expect(pkg.build?.electronVersion).toBe(
+      pkg.devDependencies?.electron?.replace(/^[^\d]*/, ""),
+    );
+    expect(pkg.build?.npmRebuild).toBe(false);
+    expect(pkg.build?.asar).toBe(true);
+    expect(pkg.build?.asarUnpack).toContain(".next/standalone/**");
+
+    for (const scriptName of [
+      "desktop:pack:mac",
+      "desktop:pack:win",
+      "desktop:pack:linux",
+    ]) {
+      expect(desktopInstallersWorkflow).toContain(`package-script: ${scriptName}`);
+    }
+
+    expect(desktopInstallersWorkflow).toContain("npm run build:standalone");
+    expect(desktopInstallersWorkflow).toContain("CSC_IDENTITY_AUTO_DISCOVERY");
+    expect(desktopInstallersWorkflow).toContain("dist/*.dmg");
+    expect(desktopInstallersWorkflow).toContain("dist/*.exe");
+    expect(desktopInstallersWorkflow).toContain("dist/*.AppImage");
   });
 
   it("checks env-configured Ollama model names without regex interpolation", () => {

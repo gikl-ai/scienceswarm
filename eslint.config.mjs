@@ -19,6 +19,8 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "dist/**",
+    ".desktop-package/**",
     ".worktrees/**",
     "next-env.d.ts",
     // Tutorial-generated artifacts: scripts emit data/ and output/ folders
