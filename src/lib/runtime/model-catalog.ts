@@ -4,6 +4,7 @@ import {
 } from "@/lib/ollama-models";
 import {
   OLLAMA_LOW_MEMORY_MODEL,
+  OLLAMA_RECOMMENDED_MODEL_ALIASES,
   OLLAMA_RECOMMENDED_MODEL,
 } from "@/lib/ollama-constants";
 import { DEFAULT_OPENAI_MODEL } from "@/lib/openai-models";
@@ -95,7 +96,16 @@ export function ollamaModelMatches(
   configuredModel: string,
   availableModel: string,
 ): boolean {
-  return ollamaModelsMatch(configuredModel, availableModel);
+  if (ollamaModelsMatch(configuredModel, availableModel)) return true;
+
+  const configuredRecommendedAlias = OLLAMA_RECOMMENDED_MODEL_ALIASES.some((alias) =>
+    ollamaModelsMatch(alias, configuredModel)
+  );
+  const availableRecommendedAlias = OLLAMA_RECOMMENDED_MODEL_ALIASES.some((alias) =>
+    ollamaModelsMatch(alias, availableModel)
+  );
+
+  return configuredRecommendedAlias && availableRecommendedAlias;
 }
 
 export function resolveDefaultLocalChatModel(
