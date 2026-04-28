@@ -5409,7 +5409,13 @@ export function useUnifiedChat(
       restored.conversationBackend,
       restored.artifactProvenance,
     );
-  }, [setMessages, setConversationBackend, setConversationId, setArtifactProvenance]);
+  }, [
+    setMessages,
+    setConversationBackend,
+    setConversationId,
+    setArtifactProvenance,
+    setCrossChannelMessages,
+  ]);
 
   const dismissBrowserChatRecovery = useCallback(() => {
     const project = liveProjectNameRef.current;
