@@ -70,6 +70,12 @@ jobs:
       - name: Build standalone app bundle
         run: npm run build:standalone
 
+      - name: Check desktop signing environment
+        run: npm run desktop:check-signing-env
+        env:
+          SCIENCESWARM_DESKTOP_SIGNING_TARGET: ${{ matrix.os }}
+          SCIENCESWARM_REQUIRE_DESKTOP_SIGNING: ${{ vars.SCIENCESWARM_REQUIRE_DESKTOP_SIGNING || '0' }}
+
       - name: Build desktop installer
         run: npm run ${{ matrix.package-script }}
 
