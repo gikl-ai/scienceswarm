@@ -146,8 +146,10 @@ async function readPersistedOllamaModel(repoRoot: string): Promise<string> {
     line.key === "SCIENCESWARM_DEFAULT_OLLAMA_MODEL"
   )?.value?.trim();
   return resolveConfiguredLocalModel({
-    OLLAMA_MODEL: persistedModel,
-    SCIENCESWARM_DEFAULT_OLLAMA_MODEL: persistedDefaultModel,
+    OLLAMA_MODEL: persistedModel || process.env.OLLAMA_MODEL,
+    SCIENCESWARM_DEFAULT_OLLAMA_MODEL:
+      persistedDefaultModel ||
+      process.env.SCIENCESWARM_DEFAULT_OLLAMA_MODEL,
   });
 }
 
@@ -465,8 +467,10 @@ async function finalizeReadyFlags(args: {
 
   const updates: Record<string, string | null> = {};
   const defaultLocalModel = resolveConfiguredLocalModel({
-    OLLAMA_MODEL: currentOllamaModel,
-    SCIENCESWARM_DEFAULT_OLLAMA_MODEL: currentDefaultOllamaModel,
+    OLLAMA_MODEL: currentOllamaModel || process.env.OLLAMA_MODEL,
+    SCIENCESWARM_DEFAULT_OLLAMA_MODEL:
+      currentDefaultOllamaModel ||
+      process.env.SCIENCESWARM_DEFAULT_OLLAMA_MODEL,
   });
   if (args.openclawSucceeded) {
     updates.AGENT_BACKEND = "openclaw";
