@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,6 +55,17 @@ describe("local install route", () => {
     await expect(readFile(path.join(dataRoot, "install-id"), "utf-8")).resolves.toBe(
       `${ids[0]}\n`,
     );
+  });
+
+  it("does not overwrite an existing unreadable install id after an exclusive-create race", async () => {
+    const installIdPath = path.join(dataRoot, "install-id");
+    await writeFile(installIdPath, "not a valid install id\n", "utf-8");
+    const { getOrCreateLocalInstallId } = await import("@/lib/local-install-id");
+
+    await expect(getOrCreateLocalInstallId()).rejects.toThrow(
+      "Local install-id already exists but could not be read",
+    );
+    await expect(readFile(installIdPath, "utf-8")).resolves.toBe("not a valid install id\n");
   });
 
   it("rejects non-local requests", async () => {

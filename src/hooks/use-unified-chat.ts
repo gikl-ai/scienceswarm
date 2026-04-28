@@ -2545,7 +2545,6 @@ function emptyRestoredChatState(localInstallId: string | null = null): RestoredC
 function loadStoredChat(
   projectName: string,
   localInstallId: string | null = null,
-  options: { allowLegacy?: boolean } = {},
 ): RestoredChatState {
   if (!projectName) {
     return emptyRestoredChatState(localInstallId);
@@ -2559,13 +2558,7 @@ function loadStoredChat(
     const activeKey = localInstallId
       ? getInstallScopedChatStorageKey(projectName, localInstallId)
       : getChatStorageKey(projectName);
-    const raw =
-      window.localStorage.getItem(activeKey)
-      ?? (
-        options.allowLegacy && localInstallId
-          ? window.localStorage.getItem(getChatStorageKey(projectName))
-          : null
-      );
+    const raw = window.localStorage.getItem(activeKey);
     if (!raw) {
       return emptyRestoredChatState(localInstallId);
     }
@@ -2579,7 +2572,6 @@ function loadStoredChat(
       localInstallId
       && typeof parsed.localInstallId === "string"
       && parsed.localInstallId !== localInstallId
-      && !options.allowLegacy
     ) {
       return emptyRestoredChatState(localInstallId);
     }
@@ -3366,7 +3358,7 @@ export function useUnifiedChat(
     };
 
     if (!safeSlugOrNull(projectName)) {
-      const restored = loadStoredChat(projectName, null, { allowLegacy: false });
+      const restored = loadStoredChat(projectName, null);
       applyRestoredState(restored, getActiveChatStorageKey(projectName, null), null);
       return () => {
         cancelled = true;
@@ -3383,9 +3375,7 @@ export function useUnifiedChat(
       const installId = await loadLocalInstallId();
       if (cancelled) return;
 
-      const localState = loadStoredChat(projectName, installId, {
-        allowLegacy: installId === null,
-      });
+      const localState = loadStoredChat(projectName, installId);
       const recovery = installId
         ? summarizeBrowserChatRecovery(projectName, installId)
         : null;
@@ -3416,9 +3406,7 @@ export function useUnifiedChat(
         return;
       }
 
-      const currentLocalState = loadStoredChat(projectName, installId, {
-        allowLegacy: installId === null,
-      });
+      const currentLocalState = loadStoredChat(projectName, installId);
       const remoteCandidate = {
         ...remoteState,
         localInstallId: installId,
