@@ -2,6 +2,7 @@
   "name": "scienceswarm",
   "version": "0.1.0",
   "private": true,
+  "main": "desktop/main.mjs",
   "description": "ScienceSwarm — local-first research workspace. OpenClaw (manager agent) + OpenHands (execution agent) + gbrain (knowledge layer).",
   "license": "MIT",
   "repository": {
@@ -18,7 +19,7 @@
   "scripts": {
     "dev": "FRONTEND_HOST=${FRONTEND_HOST:-127.0.0.1} next dev --webpack -H ${FRONTEND_HOST:-127.0.0.1} -p $(npx tsx scripts/print-port.ts frontend)",
     "build": "next build",
-    "build:standalone": "SCIENCESWARM_STANDALONE_BUILD=1 next build --webpack",
+    "build:standalone": "SCIENCESWARM_STANDALONE_BUILD=1 next build --webpack && node scripts/prepare-standalone-build.mjs",
     "desktop:dev": "electron desktop/main.mjs",
     "desktop:dist": "electron-builder --dir",
     "desktop:pack": "electron-builder",
@@ -120,10 +121,11 @@
   "build": {
     "appId": "ai.scienceswarm.desktop",
     "productName": "ScienceSwarm",
+    "extraMetadata": {
+      "main": "desktop/main.mjs"
+    },
     "files": [
       ".next/standalone/**/*",
-      ".next/static/**/*",
-      "public/**/*",
       "desktop/**/*",
       "scripts/start-standalone.mjs",
       "package.json"

@@ -5,6 +5,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const DESKTOP_DIAGNOSTICS_CHANNEL = "scienceswarm:desktop-diagnostics";
+const DEFAULT_SERVER_READY_TIMEOUT_MS = 30_000;
+const DEFAULT_SERVER_READY_INTERVAL_MS = 250;
 
 /**
  * @typedef {Record<string, string | undefined>} DesktopEnv
@@ -43,9 +45,10 @@ export function resolveDesktopStartUrl(env = process.env, options = {}) {
 
   const host = env.FRONTEND_PUBLIC_HOST?.trim()
     || env.FRONTEND_HOST?.trim()
+    || env.HOSTNAME?.trim()
     || "127.0.0.1";
-  const port = env.FRONTEND_PORT?.trim() || "3001";
-  const protocol = env.FRONTEND_USE_HTTPS === "false" ? "http" : "https";
+  const port = env.FRONTEND_PORT?.trim() || env.PORT?.trim() || "3001";
+  const protocol = env.FRONTEND_USE_HTTPS === "true" ? "https" : "http";
   const url = new URL(`${protocol}://${host}:${port}`);
   url.pathname = resolveDesktopStartPath(env, options);
   return url.toString();
@@ -53,6 +56,22 @@ export function resolveDesktopStartUrl(env = process.env, options = {}) {
 
 export function resolveStandaloneEntry(root = projectRoot) {
   return path.join(root, "scripts", "start-standalone.mjs");
+}
+
+export function resolveDesktopWindowOptions() {
+  return {
+    width: 1440,
+    height: 960,
+    minWidth: 1100,
+    minHeight: 720,
+    backgroundColor: "#f4f4ef",
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, "preload.mjs"),
+    },
+  };
 }
 
 export function markDesktopFirstLaunchComplete(app) {
@@ -69,7 +88,7 @@ export function markDesktopFirstLaunchComplete(app) {
  * @param {{ getPath(name: string): string }} app
  * @param {DesktopEnv} env
  * @param {DesktopStartOptions} options
-*/
+ */
 export function resolveDesktopDiagnostics(app, env = process.env, options = {}) {
   return {
     shell: "electron",
@@ -98,6 +117,40 @@ export function isTrustedDesktopIpcSender(event, env = process.env, options = {}
   }
 }
 
+/**
+ * @param {string} url
+ * @param {{ fetch?: typeof globalThis.fetch, sleep?: (ms: number) => Promise<void>, timeoutMs?: number, intervalMs?: number }} options
+ */
+export async function waitForDesktopServer(url, options = {}) {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  if (typeof fetchImpl !== "function") {
+    throw new Error("Fetch API is not available for desktop server readiness checks.");
+  }
+
+  const intervalMs = options.intervalMs ?? DEFAULT_SERVER_READY_INTERVAL_MS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_SERVER_READY_TIMEOUT_MS;
+  const attempts = Math.max(1, Math.ceil(timeoutMs / Math.max(1, intervalMs)));
+  const sleep = options.sleep ?? ((durationMs) =>
+    new Promise((resolve) => setTimeout(resolve, durationMs)));
+  let lastError;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await fetchImpl(url, { method: "GET" });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (attempt < attempts - 1) {
+      await sleep(intervalMs);
+    }
+  }
+
+  const suffix = lastError instanceof Error ? `: ${lastError.message}` : "";
+  throw new Error(`Timed out waiting for desktop server at ${url}${suffix}`);
+}
+
 export async function launchDesktopShell(options = {}) {
   const [{ app, BrowserWindow, ipcMain }, { startStandaloneServer }] = await Promise.all([
     import("electron"),
@@ -111,6 +164,11 @@ export async function launchDesktopShell(options = {}) {
     cwd: options.projectRoot,
     env: options.env,
   });
+  await waitForDesktopServer(startUrl, {
+    fetch: options.fetch,
+    intervalMs: options.serverReadyIntervalMs,
+    timeoutMs: options.serverReadyTimeoutMs,
+  });
   ipcMain.handle(DESKTOP_DIAGNOSTICS_CHANNEL, (event) => {
     const diagnosticsOptions = {
       firstLaunchComplete: existsSync(resolveDesktopLaunchMarkerPath(app)),
@@ -122,19 +180,7 @@ export async function launchDesktopShell(options = {}) {
     return resolveDesktopDiagnostics(app, options.env, diagnosticsOptions);
   });
 
-  const window = new BrowserWindow({
-    width: 1440,
-    height: 960,
-    minWidth: 1100,
-    minHeight: 720,
-    backgroundColor: "#f4f4ef",
-    autoHideMenuBar: true,
-    webPreferences: {
-      contextIsolation: true,
-      sandbox: true,
-      preload: path.join(__dirname, "preload.mjs"),
-    },
-  });
+  const window = new BrowserWindow(resolveDesktopWindowOptions());
 
   await window.loadURL(startUrl);
   if (!firstLaunchComplete) {
@@ -143,19 +189,7 @@ export async function launchDesktopShell(options = {}) {
 
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      const nextWindow = new BrowserWindow({
-        width: 1440,
-        height: 960,
-        minWidth: 1100,
-        minHeight: 720,
-        backgroundColor: "#f4f4ef",
-        autoHideMenuBar: true,
-        webPreferences: {
-          contextIsolation: true,
-          sandbox: true,
-          preload: path.join(__dirname, "preload.mjs"),
-        },
-      });
+      const nextWindow = new BrowserWindow(resolveDesktopWindowOptions());
       await nextWindow.loadURL(
         resolveDesktopStartUrl(options.env, { firstLaunchComplete: true }),
       );
