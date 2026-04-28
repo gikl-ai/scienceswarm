@@ -73,6 +73,7 @@ describe("runtime env live reload", () => {
       llmProvider: "local",
       llmModel: "gpt-5.4",
       ollamaModel: "qwen3:14b",
+      defaultOllamaModel: null,
       anthropicApiKey: null,
       openaiApiKey: "sk-saved",
       googleAiApiKey: null,

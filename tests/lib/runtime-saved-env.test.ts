@@ -28,6 +28,7 @@ describe("resolveSavedLlmRuntimeEnv", () => {
       llmProvider: "openai",
       llmModel: "gpt-5.4",
       ollamaModel: "gemma4:26b",
+      defaultOllamaModel: null,
       anthropicApiKey: null,
       openaiApiKey: "placeholder-openai-saved-key",
       googleAiApiKey: null,
