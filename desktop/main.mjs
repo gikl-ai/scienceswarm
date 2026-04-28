@@ -64,6 +64,7 @@ export function markDesktopFirstLaunchComplete(app) {
     // Non-fatal: if persistence fails, the next launch can return to /setup.
   }
 }
+
 /**
  * @param {{ getPath(name: string): string }} app
  * @param {DesktopEnv} env
