@@ -169,6 +169,23 @@ describe("GET /api/settings", () => {
     expect(body.ollamaModel).toBe("gemma4:26b");
   });
 
+  it("applies the saved default Ollama model fallback when no explicit model is set", async () => {
+    const fs = await import("node:fs/promises");
+    const readFileMock = fs.readFile as unknown as ReturnType<typeof vi.fn>;
+    readFileMock.mockResolvedValueOnce(
+      [
+        "OPENAI_API_KEY=sk-test1234567890abcdef",
+        "SCIENCESWARM_DEFAULT_OLLAMA_MODEL=gemma4:e2b",
+        "AGENT_BACKEND=none",
+      ].join("\n"),
+    );
+
+    const res = await GET();
+    const body = await res.json();
+
+    expect(body.ollamaModel).toBe("gemma4:e2b");
+  });
+
   it("skips pending Telegram pairing lookup when the Telegram user is already paired", async () => {
     const fs = await import("node:fs/promises");
     const readFileMock = fs.readFile as unknown as ReturnType<typeof vi.fn>;

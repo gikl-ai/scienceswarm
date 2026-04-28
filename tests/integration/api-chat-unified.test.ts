@@ -4986,64 +4986,85 @@ describe("POST /api/chat/unified", () => {
   });
 
   it("streams actionable recovery guidance when the local model connection fails", async () => {
-    const projectId = "alpha-project-model-outage";
-    createProjectRoot(projectId);
-
-    resolveAgentConfig.mockReturnValue({
-      type: "openclaw",
-      url: "http://localhost:19002",
-    });
-    openClawHealthCheck.mockResolvedValueOnce({
-      status: "connected",
-      gateway: "ws://127.0.0.1:19002",
-      channels: [],
-      agents: 1,
-      sessions: 2,
-    });
-    sendOpenClawMessage.mockResolvedValueOnce(
-      "LLM request failed: network connection error.",
+    const originalCwd = process.cwd();
+    const isolatedCwd = mkdtempSync(
+      path.join(tmpdir(), "scienceswarm-chat-model-outage-"),
     );
+    writeFileSync(
+      path.join(isolatedCwd, ".env"),
+      "SCIENCESWARM_DEFAULT_OLLAMA_MODEL=gemma4:e2b\n",
+    );
+    process.chdir(isolatedCwd);
+    const projectId = "alpha-project-model-outage";
+    try {
+      createProjectRoot(projectId);
+      resolveAgentConfig.mockReturnValue({
+        type: "openclaw",
+        url: "http://localhost:19002",
+      });
+      openClawHealthCheck.mockResolvedValueOnce({
+        status: "connected",
+        gateway: "ws://127.0.0.1:19002",
+        channels: [],
+        agents: 1,
+        sessions: 2,
+      });
+      sendOpenClawMessage.mockResolvedValueOnce(
+        "LLM request failed: network connection error.",
+      );
 
-    const request = new Request("http://localhost/api/chat/unified", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-real-ip": "openclaw-model-outage",
-      },
-      body: JSON.stringify({
-        message:
-          "Please audit the uploaded Hubble 1929 paper for one new reviewer-facing risk and save docs/hubble-1929-dependency-outage-audit.md with one paragraph. Do not revise the manuscript.",
-        files: [
+      const request = new Request("http://localhost/api/chat/unified", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-real-ip": "openclaw-model-outage",
+        },
+        body: JSON.stringify({
+          message:
+            "Please audit the uploaded Hubble 1929 paper for one new reviewer-facing risk and save docs/hubble-1929-dependency-outage-audit.md with one paragraph. Do not revise the manuscript.",
+          files: [
+            {
+              name: "hubble-1929.pdf",
+              size: "552 KB",
+              source: "gbrain",
+              brainSlug: "hubble-1929",
+              workspacePath: "gbrain:hubble-1929",
+            },
+          ],
+          projectId,
+          streamPhases: true,
+        }),
+      });
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toContain(
+        "text/event-stream",
+      );
+      const events = await readSseEvents(response);
+      const finalEvent = events.at(-1) ?? {};
+      expect(finalEvent).toMatchObject({
+        text: expect.stringContaining(
+          "local AI model connection is unavailable",
+        ),
+        generatedFiles: [],
+        taskPhases: [
+          { id: "reading-file", label: "Reading file", status: "completed" },
           {
-            name: "hubble-1929.pdf",
-            size: "552 KB",
-            source: "gbrain",
-            brainSlug: "hubble-1929",
-            workspacePath: "gbrain:hubble-1929",
+            id: "importing-result",
+            label: "Importing result",
+            status: "failed",
           },
+          { id: "done", label: "Done", status: "pending" },
         ],
-        projectId,
-        streamPhases: true,
-      }),
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
-    const events = await readSseEvents(response);
-    const finalEvent = events.at(-1) ?? {};
-    expect(finalEvent).toMatchObject({
-      text: expect.stringContaining("local AI model connection is unavailable"),
-      generatedFiles: [],
-      taskPhases: [
-        { id: "reading-file", label: "Reading file", status: "completed" },
-        { id: "importing-result", label: "Importing result", status: "failed" },
-        { id: "done", label: "Done", status: "pending" },
-      ],
-    });
-    expect(finalEvent.text).toEqual(expect.stringContaining("Open Settings"));
-    expect(finalEvent.text).toEqual(expect.stringContaining("gemma4:e4b"));
+      });
+      expect(finalEvent.text).toEqual(expect.stringContaining("Open Settings"));
+      expect(finalEvent.text).toEqual(expect.stringContaining("gemma4:e2b"));
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(isolatedCwd, { recursive: true, force: true });
+    }
   });
 
   it("repairs an explicitly requested missing artifact through OpenClaw-authored content", async () => {

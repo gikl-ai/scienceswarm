@@ -80,6 +80,7 @@ const baseEnv: SavedLlmRuntimeEnv = {
   llmProvider: "openai",
   llmModel: null,
   ollamaModel: null,
+  defaultOllamaModel: null,
   anthropicApiKey: null,
   openaiApiKey: null,
   googleAiApiKey: null,

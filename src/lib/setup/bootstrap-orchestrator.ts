@@ -53,7 +53,8 @@ const DEFAULT_TASKS: InstallTask[] = [
 ];
 
 function toOpenClawOllamaModelRef(model: string): string {
-  return `ollama/${model}`;
+  const normalized = model.trim().replace(/^(ollama|openai)\//, "");
+  return `ollama/${normalized}`;
 }
 
 function isTerminalBootstrapStatus(
@@ -134,13 +135,20 @@ async function readPersistedOllamaModel(repoRoot: string): Promise<string> {
   }
 
   const doc = parseEnvFile(existing);
-  const persistedModel = doc.lines
-    .find(
-      (line): line is Extract<typeof line, { type: "entry" }> =>
-        line.type === "entry" && line.key === "OLLAMA_MODEL",
-    )
-    ?.value?.trim();
-  return persistedModel || resolveConfiguredLocalModel();
+  const entries = doc.lines.filter(
+    (line): line is Extract<typeof line, { type: "entry" }> =>
+      line.type === "entry",
+  );
+  const persistedModel = entries.find((line) =>
+    line.key === "OLLAMA_MODEL"
+  )?.value?.trim();
+  const persistedDefaultModel = entries.find((line) =>
+    line.key === "SCIENCESWARM_DEFAULT_OLLAMA_MODEL"
+  )?.value?.trim();
+  return resolveConfiguredLocalModel({
+    OLLAMA_MODEL: persistedModel,
+    SCIENCESWARM_DEFAULT_OLLAMA_MODEL: persistedDefaultModel,
+  });
 }
 
 /**
@@ -441,9 +449,25 @@ async function finalizeReadyFlags(args: {
     ?.value?.trim();
   const hasConfiguredOllamaApiKey =
     !!currentOllamaApiKey && currentOllamaApiKey.length > 0;
+  const currentOllamaModel = doc.lines
+    .find(
+      (line): line is Extract<typeof line, { type: "entry" }> =>
+        line.type === "entry" && line.key === "OLLAMA_MODEL",
+    )
+    ?.value?.trim();
+  const currentDefaultOllamaModel = doc.lines
+    .find(
+      (line): line is Extract<typeof line, { type: "entry" }> =>
+        line.type === "entry" &&
+        line.key === "SCIENCESWARM_DEFAULT_OLLAMA_MODEL",
+    )
+    ?.value?.trim();
 
   const updates: Record<string, string | null> = {};
-  const defaultLocalModel = resolveConfiguredLocalModel();
+  const defaultLocalModel = resolveConfiguredLocalModel({
+    OLLAMA_MODEL: currentOllamaModel,
+    SCIENCESWARM_DEFAULT_OLLAMA_MODEL: currentDefaultOllamaModel,
+  });
   if (args.openclawSucceeded) {
     updates.AGENT_BACKEND = "openclaw";
   }
@@ -461,12 +485,6 @@ async function finalizeReadyFlags(args: {
   // If LLM_PROVIDER=local already exists in .env from a previous run but
   // OLLAMA_MODEL was never persisted, the dashboard readiness check sees
   // LLM_PROVIDER=local + empty OLLAMA_MODEL → ready=false → redirect loop.
-  const currentOllamaModel = doc.lines
-    .find(
-      (line): line is Extract<typeof line, { type: "entry" }> =>
-        line.type === "entry" && line.key === "OLLAMA_MODEL",
-    )
-    ?.value?.trim();
   if (
     (updates.LLM_PROVIDER ?? currentProvider) === "local" &&
     !updates.OLLAMA_MODEL &&

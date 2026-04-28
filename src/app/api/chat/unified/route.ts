@@ -462,6 +462,8 @@ function configuredLocalModelForSavedRuntime(
   }
   return resolveConfiguredLocalModel({
     OLLAMA_MODEL: savedRuntimeEnv.ollamaModel ?? undefined,
+    SCIENCESWARM_DEFAULT_OLLAMA_MODEL:
+      savedRuntimeEnv.defaultOllamaModel ?? undefined,
   });
 }
 
@@ -3076,7 +3078,12 @@ function buildOpenClawVisibleFailureResponse(value: unknown): string | null {
     lower.includes("failed to connect");
 
   if (dependencyUnavailable) {
-    const configuredLocalModel = resolveConfiguredLocalModel();
+    const savedRuntimeEnv = readSavedLlmRuntimeEnv();
+    const configuredLocalModel = resolveConfiguredLocalModel({
+      OLLAMA_MODEL: savedRuntimeEnv.ollamaModel ?? undefined,
+      SCIENCESWARM_DEFAULT_OLLAMA_MODEL:
+        savedRuntimeEnv.defaultOllamaModel ?? undefined,
+    });
     return [
       "ScienceSwarm could not complete this request because the local AI model connection is unavailable.",
       "Your uploaded files and existing artifacts are still preserved in the workspace.",
