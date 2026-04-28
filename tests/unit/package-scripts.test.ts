@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_PORTS } from "../../src/lib/config/ports";
 
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
+  dependencies?: {
+    "@electric-sql/pglite"?: string;
+  };
   overrides?: {
     gbrain?: {
       "@electric-sql/pglite"?: string;
@@ -37,7 +40,9 @@ describe("package.json scripts", () => {
   });
 
   it("forces gbrain to reuse the hoisted PGLite package", () => {
-    expect(pkg.overrides?.gbrain?.["@electric-sql/pglite"]).toBe("0.4.3");
+    expect(pkg.overrides?.gbrain?.["@electric-sql/pglite"]).toBe(
+      pkg.dependencies?.["@electric-sql/pglite"],
+    );
   });
 
   it("keeps optional HTTPS dev server support on explicit ScienceSwarm certificate paths", () => {
