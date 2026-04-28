@@ -149,17 +149,20 @@
       "buildResources": "desktop/build"
     },
     "mac": {
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "target": [
         "dmg"
       ],
       "category": "public.app-category.productivity"
     },
     "win": {
+      "artifactName": "${productName}-${version}-windows-${arch}.${ext}",
       "target": [
         "nsis"
       ]
     },
     "linux": {
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
       "target": [
         "AppImage"
       ],
