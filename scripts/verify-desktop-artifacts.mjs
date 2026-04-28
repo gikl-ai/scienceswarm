@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
-import { createReadStream, existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,6 +10,7 @@ import {
   normalizeChecksumPath,
   resolveChecksumCliDistDir,
   resolveProjectChecksumDistDir,
+  sha256File,
 } from "./write-artifact-checksums.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -35,13 +35,7 @@ export function parseChecksumManifest(manifest) {
     });
 }
 
-export async function sha256File(filePath) {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(filePath)) {
-    hash.update(chunk);
-  }
-  return hash.digest("hex");
-}
+export { sha256File };
 
 export function isPrimaryInstallerArtifactPath(filePath) {
   const basename = path.basename(filePath);
