@@ -20,6 +20,10 @@ export function resolveDesktopLaunchMarkerPath(app) {
   return path.join(app.getPath("userData"), "desktop-first-launch.json");
 }
 
+export function isDesktopFirstLaunchComplete(app) {
+  return existsSync(resolveDesktopLaunchMarkerPath(app));
+}
+
 /**
  * @param {DesktopEnv} env
  * @param {DesktopStartOptions} options
@@ -52,6 +56,22 @@ export function resolveDesktopStartUrl(env = process.env, options = {}) {
   const url = new URL(`${protocol}://${host}:${port}`);
   url.pathname = resolveDesktopStartPath(env, options);
   return url.toString();
+}
+
+/**
+ * @param {DesktopEnv} env
+ */
+export function shouldStartStandaloneServer(env = process.env) {
+  return !env.SCIENCESWARM_DESKTOP_URL?.trim();
+}
+
+export function shouldWaitForDesktopServer(url) {
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 export function resolveStandaloneEntry(root = projectRoot) {
@@ -158,20 +178,24 @@ export async function launchDesktopShell(options = {}) {
   ]);
 
   await app.whenReady();
-  const firstLaunchComplete = existsSync(resolveDesktopLaunchMarkerPath(app));
+  const firstLaunchComplete = isDesktopFirstLaunchComplete(app);
   const startUrl = resolveDesktopStartUrl(options.env, { firstLaunchComplete });
-  await startStandaloneServer({
-    cwd: options.projectRoot,
-    env: options.env,
-  });
-  await waitForDesktopServer(startUrl, {
-    fetch: options.fetch,
-    intervalMs: options.serverReadyIntervalMs,
-    timeoutMs: options.serverReadyTimeoutMs,
-  });
+  if (shouldStartStandaloneServer(options.env)) {
+    await startStandaloneServer({
+      cwd: options.projectRoot,
+      env: options.env,
+    });
+  }
+  if (shouldWaitForDesktopServer(startUrl)) {
+    await waitForDesktopServer(startUrl, {
+      fetch: options.fetch,
+      intervalMs: options.serverReadyIntervalMs,
+      timeoutMs: options.serverReadyTimeoutMs,
+    });
+  }
   ipcMain.handle(DESKTOP_DIAGNOSTICS_CHANNEL, (event) => {
     const diagnosticsOptions = {
-      firstLaunchComplete: existsSync(resolveDesktopLaunchMarkerPath(app)),
+      firstLaunchComplete: isDesktopFirstLaunchComplete(app),
     };
     if (!isTrustedDesktopIpcSender(event, options.env, diagnosticsOptions)) {
       throw new Error("Blocked desktop diagnostics request from an untrusted renderer.");
@@ -191,7 +215,9 @@ export async function launchDesktopShell(options = {}) {
     if (BrowserWindow.getAllWindows().length === 0) {
       const nextWindow = new BrowserWindow(resolveDesktopWindowOptions());
       await nextWindow.loadURL(
-        resolveDesktopStartUrl(options.env, { firstLaunchComplete: true }),
+        resolveDesktopStartUrl(options.env, {
+          firstLaunchComplete: isDesktopFirstLaunchComplete(app),
+        }),
       );
     }
   });
