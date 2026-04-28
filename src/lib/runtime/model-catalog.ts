@@ -3,7 +3,6 @@ import {
   ollamaModelsMatch,
 } from "@/lib/ollama-models";
 import {
-  OLLAMA_LOW_MEMORY_MODEL,
   OLLAMA_RECOMMENDED_MODEL_ALIASES,
   OLLAMA_RECOMMENDED_MODEL,
 } from "@/lib/ollama-constants";
@@ -21,7 +20,6 @@ export interface LocalExecutionModelProfile {
 }
 
 export const DEFAULT_LOCAL_CHAT_MODEL = OLLAMA_RECOMMENDED_MODEL;
-export const LOW_MEMORY_LOCAL_CHAT_MODEL = OLLAMA_LOW_MEMORY_MODEL;
 export const DEFAULT_LOCAL_CHAT_MODEL_FAMILY = "gemma4";
 export const OPENHANDS_LOCAL_OLLAMA_BASE_URL =
   "http://host.docker.internal:11434/v1";

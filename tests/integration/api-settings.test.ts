@@ -170,6 +170,8 @@ describe("GET /api/settings", () => {
   });
 
   it("applies the saved default Ollama model fallback when no explicit model is set", async () => {
+    vi.stubEnv("OLLAMA_MODEL", "");
+
     const fs = await import("node:fs/promises");
     const readFileMock = fs.readFile as unknown as ReturnType<typeof vi.fn>;
     readFileMock.mockResolvedValueOnce(
