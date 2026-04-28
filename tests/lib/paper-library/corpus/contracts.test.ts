@@ -318,6 +318,25 @@ describe("paper-library corpus contracts", () => {
     })).not.toThrow();
   });
 
+  it("allows empty section maps only for non-current lifecycle states", () => {
+    const fixture = phase0CorpusFixtureDescriptors.find(
+      (descriptor) => descriptor.kind === "good_text_layer_pdf",
+    );
+    if (!fixture?.expectedSectionMap) {
+      throw new Error("expected good text-layer PDF section map");
+    }
+
+    expect(() => PaperSectionMapSchema.parse({
+      ...fixture.expectedSectionMap,
+      sections: [],
+    })).toThrow(/at least one section/);
+    expect(() => PaperSectionMapSchema.parse({
+      ...fixture.expectedSectionMap,
+      status: "queued",
+      sections: [],
+    })).not.toThrow();
+  });
+
   it("builds canonical corpus slugs from existing paper-library page slugs", () => {
     expect(paperCorpusSourceSlugForPaperSlug("wiki/entities/papers/arxiv-2401-01234")).toBe(
       "wiki/sources/papers/arxiv-2401-01234/source",

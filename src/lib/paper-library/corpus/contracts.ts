@@ -166,17 +166,27 @@ export const PaperSectionAnchorSchema = z.object({
 });
 export type PaperSectionAnchor = z.infer<typeof PaperSectionAnchorSchema>;
 
-export const PaperSectionMapSchema = z.object({
-  paperSlug: NonEmptyStringSchema,
-  sourceSlug: NonEmptyStringSchema,
-  sourceHash: NonEmptyStringSchema,
-  sectionMapHash: NonEmptyStringSchema,
-  status: CorpusArtifactStatusSchema,
-  sections: z.array(PaperSectionAnchorSchema).min(1),
-  createdAt: IsoDateStringSchema,
-  updatedAt: IsoDateStringSchema,
-  warnings: z.array(PaperCorpusWarningSchema).default([]),
-});
+export const PaperSectionMapSchema = z
+  .object({
+    paperSlug: NonEmptyStringSchema,
+    sourceSlug: NonEmptyStringSchema,
+    sourceHash: NonEmptyStringSchema,
+    sectionMapHash: NonEmptyStringSchema,
+    status: CorpusArtifactStatusSchema,
+    sections: z.array(PaperSectionAnchorSchema).default([]),
+    createdAt: IsoDateStringSchema,
+    updatedAt: IsoDateStringSchema,
+    warnings: z.array(PaperCorpusWarningSchema).default([]),
+  })
+  .superRefine((value, ctx) => {
+    if ((value.status === "current" || value.status === "stale") && value.sections.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sections"],
+        message: "current and stale section maps must include at least one section.",
+      });
+    }
+  });
 export type PaperSectionMap = z.infer<typeof PaperSectionMapSchema>;
 
 export const PaperSummaryTierSchema = z.enum([
