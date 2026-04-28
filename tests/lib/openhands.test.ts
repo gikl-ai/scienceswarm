@@ -53,7 +53,7 @@ describe("src/lib/openhands.ts", () => {
   it("defaults to the local OpenHands model when LLM_PROVIDER=local", async () => {
     vi.stubEnv("OPENHANDS_URL", "http://openhands.test");
     vi.stubEnv("LLM_PROVIDER", "local");
-    vi.stubEnv("OLLAMA_MODEL", "gemma4:latest");
+    vi.stubEnv("OLLAMA_MODEL", "gemma4:e4b");
     vi.stubEnv("OPENAI_API_KEY", "");
 
     const fetchMock = vi.fn().mockResolvedValueOnce(
@@ -67,7 +67,7 @@ describe("src/lib/openhands.ts", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://openhands.test/api/v1/app-conversations");
     expect(JSON.parse(String(init.body))).toMatchObject({
-      llm_model: "openai/gemma4:latest",
+      llm_model: "openai/gemma4:e4b",
     });
   });
 
@@ -81,7 +81,7 @@ describe("src/lib/openhands.ts", () => {
         strictLocalOnly: false,
         llmProvider: "local",
         llmModel: null,
-        ollamaModel: "gemma4:latest",
+        ollamaModel: "gemma4:e4b",
         openaiApiKey: null,
         agentBackend: null,
         agentUrl: null,
@@ -100,14 +100,14 @@ describe("src/lib/openhands.ts", () => {
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toMatchObject({
-      llm_model: "openai/gemma4:latest",
+      llm_model: "openai/gemma4:e4b",
     });
   });
 
   it("keeps an explicit req.model override even in local mode", async () => {
     vi.stubEnv("OPENHANDS_URL", "http://openhands.test");
     vi.stubEnv("LLM_PROVIDER", "local");
-    vi.stubEnv("OLLAMA_MODEL", "gemma4:latest");
+    vi.stubEnv("OLLAMA_MODEL", "gemma4:e4b");
 
     const fetchMock = vi.fn().mockResolvedValueOnce(
       Response.json({ id: "task-3" }),

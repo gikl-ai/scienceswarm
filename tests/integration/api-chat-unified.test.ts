@@ -1287,7 +1287,7 @@ describe("GET /api/chat/unified", () => {
     }
   });
 
-  it("defaults configuredLocalModel to gemma4:latest when local provider is selected without OLLAMA_MODEL", async () => {
+  it("defaults configuredLocalModel to gemma4:e4b when local provider is selected without OLLAMA_MODEL", async () => {
     const originalCwd = process.cwd();
     const isolatedCwd = mkdtempSync(
       path.join(tmpdir(), "scienceswarm-chat-health-"),
@@ -1311,7 +1311,7 @@ describe("GET /api/chat/unified", () => {
       });
       localHealthCheck.mockResolvedValueOnce({
         running: true,
-        models: ["gemma4:latest"],
+        models: ["gemma4:e4b"],
         url: "http://localhost:11434",
       });
       vi.stubGlobal(
@@ -1327,7 +1327,7 @@ describe("GET /api/chat/unified", () => {
       expect(response.status).toBe(200);
       const body = await response.json();
       expect(body.llmProvider).toBe("local");
-      expect(body.configuredLocalModel).toBe("gemma4:latest");
+      expect(body.configuredLocalModel).toBe("gemma4:e4b");
       expect(body.ready).toBe(true);
     } finally {
       process.chdir(originalCwd);
@@ -1354,7 +1354,7 @@ describe("GET /api/chat/unified", () => {
       });
       localHealthCheck.mockResolvedValueOnce({
         running: true,
-        models: ["gemma4:latest"],
+        models: ["gemma4:e4b"],
         url: "http://localhost:11434",
       });
       vi.stubGlobal(
@@ -1371,7 +1371,7 @@ describe("GET /api/chat/unified", () => {
       const body = await response.json();
       expect(body.llmProvider).toBe("local");
       expect(body.strictLocalOnly).toBe(true);
-      expect(body.configuredLocalModel).toBe("gemma4:latest");
+      expect(body.configuredLocalModel).toBe("gemma4:e4b");
       expect(body.ready).toBe(true);
     } finally {
       process.chdir(originalCwd);
@@ -1921,11 +1921,11 @@ describe("POST /api/chat/unified", () => {
     isLocalProviderConfigured.mockReturnValue(true);
     localHealthCheck.mockResolvedValueOnce({
       running: true,
-      models: ["gemma4:latest"],
+      models: ["gemma4:e4b"],
       url: "http://localhost:11434",
     });
     hasLocalModel.mockResolvedValueOnce(true);
-    getLocalModel.mockReturnValue("gemma4:latest");
+    getLocalModel.mockReturnValue("gemma4:e4b");
     mockDirectLLMStream("PubMed answer");
 
     const request = new Request("http://localhost/api/chat/command", {
@@ -2014,11 +2014,11 @@ describe("POST /api/chat/unified", () => {
     isLocalProviderConfigured.mockReturnValue(true);
     localHealthCheck.mockResolvedValueOnce({
       running: true,
-      models: ["gemma4:latest"],
+      models: ["gemma4:e4b"],
       url: "http://localhost:11434",
     });
     hasLocalModel.mockResolvedValueOnce(true);
-    getLocalModel.mockReturnValue("gemma4:latest");
+    getLocalModel.mockReturnValue("gemma4:e4b");
 
     const request = new Request("http://localhost/api/chat/unified", {
       method: "POST",
@@ -3138,7 +3138,7 @@ describe("POST /api/chat/unified", () => {
     });
     localHealthCheck.mockResolvedValueOnce({
       running: true,
-      models: ["gemma4:latest"],
+      models: ["gemma4:e4b"],
       url: "http://localhost:11434",
     });
     sendOpenClawMessage.mockResolvedValueOnce("OpenClaw reply");
@@ -5043,7 +5043,7 @@ describe("POST /api/chat/unified", () => {
       ],
     });
     expect(finalEvent.text).toEqual(expect.stringContaining("Open Settings"));
-    expect(finalEvent.text).toEqual(expect.stringContaining("gemma4:latest"));
+    expect(finalEvent.text).toEqual(expect.stringContaining("gemma4:e4b"));
   });
 
   it("repairs an explicitly requested missing artifact through OpenClaw-authored content", async () => {
@@ -8747,7 +8747,7 @@ describe("POST /api/chat/unified", () => {
     isLocalProviderConfigured.mockReturnValue(true);
     localHealthCheck.mockResolvedValueOnce({
       running: true,
-      models: ["gemma4:latest"],
+      models: ["gemma4:e4b"],
       url: "http://gpu-box.internal:11434",
     });
     enforceCloudPrivacy.mockResolvedValueOnce(

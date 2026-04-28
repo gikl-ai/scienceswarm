@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
 import { getOllamaUrl, getOpenHandsUrl } from "@/lib/config/ports";
 import { isLocalRequest } from "@/lib/local-guard";
+import { OLLAMA_RECOMMENDED_MODEL } from "@/lib/ollama-constants";
 import { isSupportedOpenAIModel, resolveOpenAIModel } from "@/lib/openai-models";
 import { getOllamaInstallStatus } from "@/lib/ollama-install";
 import { ollamaModelsMatch } from "@/lib/ollama-models";
@@ -566,7 +567,7 @@ export async function GET(): Promise<Response> {
     llmProvider: strictLocalOnly ? "local" : (env.LLM_PROVIDER || "openai"),
     strictLocalOnly,
     ollamaUrl: env.OLLAMA_URL || getOllamaUrl(),
-    ollamaModel: env.OLLAMA_MODEL || "gemma4",
+    ollamaModel: env.OLLAMA_MODEL || OLLAMA_RECOMMENDED_MODEL,
     userHandle: env.SCIENCESWARM_USER_HANDLE || "",
     userEmail: env.GIT_USER_EMAIL || "",
     telegramPhone: env.TELEGRAM_PHONE || "",
@@ -930,10 +931,10 @@ export async function POST(request: Request): Promise<Response> {
      *
      * The third was previously absent, so the OllamaSection component
      * could never leave its "running-missing-model" state even on a
-     * machine where gemma4 was already pulled. The `models` array
-     * already comes back from `/api/tags`; we treat `gemma4` and
-     * `gemma4:latest` as the same default model, but other tagged
-     * variants such as `gemma4:26b` remain distinct.
+     * machine where the default Gemma model was already pulled. The
+     * `models` array already comes back from `/api/tags`; matching is
+     * tag-aware so `gemma4:e4b` is distinct from larger variants such
+     * as `gemma4:26b`.
      */
     case "local-health": {
       const { healthCheck: localHealth } = await import("@/lib/local-llm");

@@ -45,7 +45,7 @@ interface FetchFixtures {
 function stubFetch(fixtures: FetchFixtures) {
   const state = {
     settings: {
-      ollamaModel: fixtures.settings?.ollamaModel ?? "gemma4",
+      ollamaModel: fixtures.settings?.ollamaModel ?? "gemma4:e4b",
     },
   };
 
@@ -243,7 +243,7 @@ describe("OllamaSection", () => {
             : input.url;
       const method = init?.method ?? "GET";
       if (url === "/api/settings" && method === "GET") {
-        return Promise.resolve(Response.json({ ollamaModel: "gemma4" }));
+        return Promise.resolve(Response.json({ ollamaModel: "gemma4:e4b" }));
       }
       if (url !== "/api/settings" || method !== "POST") {
         throw new Error(`Unhandled fetch: ${method} ${url}`);
@@ -302,7 +302,7 @@ describe("OllamaSection", () => {
     render(<OllamaSection initialStatus={initial} />);
 
     const pullButton = screen.getByTestId("ollama-pull-button");
-    expect(pullButton.textContent).toContain("Pull gemma4");
+    expect(pullButton.textContent).toContain("Pull gemma4:e4b");
 
     await act(async () => {
       fireEvent.click(pullButton);
@@ -321,7 +321,7 @@ describe("OllamaSection", () => {
     const parsed = JSON.parse(
       String((pullCall![1] as RequestInit).body),
     ) as { ollamaModel?: string };
-    expect(parsed.ollamaModel).toBe("gemma4");
+    expect(parsed.ollamaModel).toBe("gemma4:e4b");
 
     // Pulling UI is live.
     expect(screen.getByTestId("ollama-pull-progress")).toBeTruthy();
@@ -338,7 +338,7 @@ describe("OllamaSection", () => {
     render(<OllamaSection initialStatus={initial} />);
 
     const ready = screen.getByTestId("ollama-ready");
-    expect(ready.textContent).toContain("gemma4 ready");
+    expect(ready.textContent).toContain("gemma4:e4b ready");
     expect(screen.queryByTestId("ollama-pull-button")).toBeNull();
     expect(screen.queryByTestId("ollama-install-command")).toBeNull();
   });
@@ -370,7 +370,7 @@ describe("OllamaSection", () => {
     await vi.waitFor(() => {
       expect(onModelSelected).toHaveBeenCalledTimes(1);
     });
-    expect(onModelSelected).toHaveBeenCalledWith("gemma4");
+    expect(onModelSelected).toHaveBeenCalledWith("gemma4:e4b");
   });
 
   it("re-seeds the local probe when parent passes an updated initialStatus (pre-interaction)", () => {
@@ -470,10 +470,10 @@ describe("OllamaSection", () => {
       installed: true,
       running: true,
       hasRecommendedModel: true,
-      models: ["gemma4:latest"],
+      models: ["gemma4:e4b"],
     };
     const fetchMock = stubFetch({
-      settings: { ollamaModel: "gemma4" },
+      settings: { ollamaModel: "gemma4:e4b" },
       pullModel: { ok: true, pulling: true },
       pullStatus: { pulling: false, error: null },
       localHealth,
@@ -486,13 +486,13 @@ describe("OllamaSection", () => {
           installed: true,
           running: true,
           hasRecommendedModel: true,
-          models: ["gemma4:latest"],
+          models: ["gemma4:e4b"],
         })}
       />,
     );
 
     await vi.waitFor(() => {
-      expect(screen.getByTestId("ollama-ready").textContent).toContain("gemma4:latest ready");
+      expect(screen.getByTestId("ollama-ready").textContent).toContain("gemma4:e4b ready");
     });
 
     await act(async () => {
@@ -517,7 +517,7 @@ describe("OllamaSection", () => {
       ollamaModel: "gemma4:26b",
     });
 
-    localHealth.models = ["gemma4:latest", "gemma4:26b"];
+    localHealth.models = ["gemma4:e4b", "gemma4:26b"];
 
     await act(async () => {
       fireEvent.click(screen.getByTestId("ollama-pull-button"));
@@ -574,7 +574,7 @@ describe("OllamaSection", () => {
 
     expect(screen.getByTestId("ollama-pull-button")).toHaveTextContent("Pull qwen3:4b");
     expect(onModelSelected).not.toHaveBeenCalledWith("qwen3:4b");
-    expect(onModelSelected).not.toHaveBeenCalledWith("gemma4");
+    expect(onModelSelected).not.toHaveBeenCalledWith("gemma4:e4b");
   });
 
   it("hides the model picker in fixed-model mode and still shows Gemma as ready", () => {
@@ -586,17 +586,17 @@ describe("OllamaSection", () => {
           installed: true,
           running: true,
           hasRecommendedModel: true,
-          models: ["gemma4:latest", "qwen3:4b"],
+          models: ["gemma4:e4b", "qwen3:4b"],
         })}
-        fixedModel="gemma4"
+        fixedModel="gemma4:e4b"
       />,
     );
 
     expect(screen.getByTestId("ollama-ready")).toHaveTextContent(
-      "gemma4:latest ready",
+      "gemma4:e4b ready",
     );
     expect(screen.getByTestId("ollama-selected-model")).toHaveTextContent(
-      "gemma4:latest",
+      "gemma4:e4b",
     );
     expect(screen.getByText("Required local model")).toBeInTheDocument();
     expect(

@@ -71,6 +71,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setPlatform(originalPlatform);
+  vi.unstubAllEnvs();
 });
 
 describe("ollamaGemmaTask", () => {
@@ -114,12 +115,12 @@ describe("ollamaGemmaTask", () => {
     );
     expect(spawnMock).toHaveBeenCalledWith(
       "/opt/homebrew/bin/ollama",
-      ["pull", "gemma4:latest"],
+      ["pull", "gemma4:e4b"],
       expect.anything(),
     );
   });
 
-  it("does not pull again when gemma4:latest is already installed", async () => {
+  it("does not pull again when gemma4:e4b is already installed", async () => {
     spawnMock.mockImplementation((command: string, args: string[] = []) => {
       if (command === "which" && args[0] === "ollama") {
         return fakeProcess({ stdout: "/opt/homebrew/bin/ollama\n" });
@@ -129,7 +130,7 @@ describe("ollamaGemmaTask", () => {
       }
       if (command === "/opt/homebrew/bin/ollama" && args[0] === "list") {
         return fakeProcess({
-          stdout: "NAME ID SIZE MODIFIED\ngemma4:latest abc123 9GB now\n",
+          stdout: "NAME ID SIZE MODIFIED\ngemma4:e4b abc123 9.6GB now\n",
         });
       }
       return fakeProcess({ code: 1 });
@@ -139,11 +140,11 @@ describe("ollamaGemmaTask", () => {
 
     expect(events.at(-1)).toMatchObject({
       status: "succeeded",
-      detail: "gemma4:latest ready.",
+      detail: "gemma4:e4b ready.",
     });
     expect(spawnMock).not.toHaveBeenCalledWith(
       "/opt/homebrew/bin/ollama",
-      ["pull", "gemma4:latest"],
+      ["pull", "gemma4:e4b"],
       expect.anything(),
     );
   });
@@ -175,5 +176,36 @@ describe("ollamaGemmaTask", () => {
     expect(failed?.error).toContain("pulling manifest: file does not exist");
     expect(failed?.error).not.toContain("\u001b");
     expect(failed?.error).not.toContain("\r");
+  });
+
+  it("downloads the configured low-memory Gemma 4 model when requested", async () => {
+    vi.stubEnv("SCIENCESWARM_DEFAULT_OLLAMA_MODEL", "gemma4:e2b");
+    spawnMock.mockImplementation((command: string, args: string[] = []) => {
+      if (command === "which" && args[0] === "ollama") {
+        return fakeProcess({ stdout: "/opt/homebrew/bin/ollama\n" });
+      }
+      if (command === "/opt/homebrew/bin/ollama" && args[0] === "--version") {
+        return fakeProcess({ stdout: "ollama version is 0.11.6\n" });
+      }
+      if (command === "/opt/homebrew/bin/ollama" && args[0] === "list") {
+        return fakeProcess({ stdout: "NAME ID SIZE MODIFIED\n" });
+      }
+      if (command === "/opt/homebrew/bin/ollama" && args[0] === "pull") {
+        return fakeProcess({ stdout: "success\n" });
+      }
+      return fakeProcess({ code: 1 });
+    });
+
+    const events = await runTask();
+
+    expect(events).toContainEqual({
+      status: "running",
+      detail: "Downloading gemma4:e2b (~7.2GB) with Ollama…",
+    });
+    expect(spawnMock).toHaveBeenCalledWith(
+      "/opt/homebrew/bin/ollama",
+      ["pull", "gemma4:e2b"],
+      expect.anything(),
+    );
   });
 });

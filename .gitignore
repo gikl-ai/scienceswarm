@@ -63,6 +63,11 @@ bench-stdout.log
 .remember/
 .context/
 
+# local model weights are downloaded during setup, not committed or packaged
+.ollama/
+desktop/ollama-models/
+*.gguf
+
 # local main-edit bypass sentinel (PreToolUse hook in .claude/settings.json)
 .claude/allow-main-edits
 

@@ -1,9 +1,11 @@
 /**
  * ollama + gemma4 task. Installs Ollama via brew on macOS or via the
  * upstream install script on Linux, starts the daemon when needed, then
- * `ollama pull gemma4:latest`. If Ollama is already installed, skips
+ * downloads the configured Gemma model. If Ollama is already installed, skips
  * install and verifies/pulls the model.
  */
+
+import { resolveConfiguredLocalModel } from "@/lib/runtime/model-catalog";
 
 import type { InstallTask } from "./types";
 import {
@@ -15,13 +17,6 @@ import {
   startDetached,
 } from "./runtime-helpers";
 
-// Always pull the newest Gemma 4 family model. `gemma4:latest`
-// follows whatever Ollama blesses as the current default tag for
-// Gemma 4 — typically the mid-size variant sitting around 9 GB.
-// Do NOT downgrade to `gemma3:4b` or an older family: Gemma 3 has
-// weaker tool-calling and the whole point of local-first ScienceSwarm
-// is running the newest open model we can fit.
-const MODEL = "gemma4:latest";
 const OLLAMA_START_TIMEOUT_MS = 90_000;
 const OLLAMA_POLL_INTERVAL_MS = 1_500;
 
@@ -103,6 +98,17 @@ function modelMatches(installed: string, target: string): boolean {
   return installed === target || installed.startsWith(`${target}:`);
 }
 
+function modelDownloadSize(model: string): string | null {
+  if (model === "gemma4:e2b") return "7.2GB";
+  if (model === "gemma4:e4b") return "9.6GB";
+  return null;
+}
+
+function modelPullDetail(model: string): string {
+  const size = modelDownloadSize(model);
+  return `Downloading ${model}${size ? ` (~${size})` : ""} with Ollama…`;
+}
+
 async function waitForOllama(
   ollamaCli: string,
   timeoutMs = OLLAMA_START_TIMEOUT_MS,
@@ -148,6 +154,7 @@ async function startOllama(ollamaCli: string): Promise<void> {
 export const ollamaGemmaTask: InstallTask = {
   id: "ollama-gemma",
   async *run() {
+    const model = resolveConfiguredLocalModel();
     yield { status: "running", detail: "Checking for Ollama…" };
     let cli = await resolveOllamaCli();
     if (!cli) {
@@ -185,25 +192,25 @@ export const ollamaGemmaTask: InstallTask = {
       }
     }
 
-    if (local.models.some((name) => modelMatches(name, MODEL))) {
-      yield { status: "succeeded", detail: `${MODEL} ready.` };
+    if (local.models.some((name) => modelMatches(name, model))) {
+      yield { status: "succeeded", detail: `${model} ready.` };
       return;
     }
 
     yield {
       status: "running",
-      detail: `Pulling ${MODEL} (~9GB)…`,
+      detail: modelPullDetail(model),
     };
-    const { ok, stderr, stdout } = await runCommand(cli, ["pull", MODEL], {
+    const { ok, stderr, stdout } = await runCommand(cli, ["pull", model], {
       maxOutputChars: 20_000,
     });
     if (!ok) {
       yield {
         status: "failed",
-        error: `ollama pull ${MODEL} failed: ${cleanProcessOutput(stderr || stdout)}`,
+        error: `ollama pull ${model} failed: ${cleanProcessOutput(stderr || stdout)}`,
       };
       return;
     }
-    yield { status: "succeeded", detail: `${MODEL} ready.` };
+    yield { status: "succeeded", detail: `${model} ready.` };
   },
 };

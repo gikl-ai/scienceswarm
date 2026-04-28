@@ -23,8 +23,8 @@ export function LocalModelSection({
   return (
     <Section title="Local model">
       <p className="text-sm text-muted">
-        Settings defaults to Ollama + {OLLAMA_RECOMMENDED_MODEL}, and can switch to larger
-        local models like gemma4:26b.
+        Settings defaults to Ollama + {OLLAMA_RECOMMENDED_MODEL}, with gemma4:e2b
+        available for lower-memory machines and larger local models like gemma4:26b.
       </p>
       <div className="rounded-lg border border-border bg-background p-3 text-sm text-muted">
         <span className="font-medium text-foreground">Selected local model:</span>{" "}

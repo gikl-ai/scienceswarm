@@ -2,6 +2,10 @@ import {
   normalizeOllamaModelName,
   ollamaModelsMatch,
 } from "@/lib/ollama-models";
+import {
+  OLLAMA_LOW_MEMORY_MODEL,
+  OLLAMA_RECOMMENDED_MODEL,
+} from "@/lib/ollama-constants";
 import { DEFAULT_OPENAI_MODEL } from "@/lib/openai-models";
 
 export interface LocalExecutionModelProfile {
@@ -15,7 +19,8 @@ export interface LocalExecutionModelProfile {
   note: string;
 }
 
-export const DEFAULT_LOCAL_CHAT_MODEL = "gemma4:latest";
+export const DEFAULT_LOCAL_CHAT_MODEL = OLLAMA_RECOMMENDED_MODEL;
+export const LOW_MEMORY_LOCAL_CHAT_MODEL = OLLAMA_LOW_MEMORY_MODEL;
 export const DEFAULT_LOCAL_CHAT_MODEL_FAMILY = "gemma4";
 export const OPENHANDS_LOCAL_OLLAMA_BASE_URL =
   "http://host.docker.internal:11434/v1";
@@ -26,16 +31,26 @@ export const OPENHANDS_MINIMUM_CONTEXT = 22000;
 export const OPENHANDS_LOCAL_MODEL_CATALOG: LocalExecutionModelProfile[] = [
   {
     rank: 1,
-    servedModel: "gemma4:latest",
-    openHandsModel: "openai/gemma4:latest",
+    servedModel: "gemma4:e4b",
+    openHandsModel: "openai/gemma4:e4b",
     contextTarget: OPENHANDS_CONTEXT_TARGET,
     minimumContext: OPENHANDS_MINIMUM_CONTEXT,
     memoryGuidance: "Default ScienceSwarm local model.",
-    pullCommand: "ollama pull gemma4:latest",
+    pullCommand: "ollama pull gemma4:e4b",
     note: "First automatic attempt for local chat and OpenHands execution.",
   },
   {
     rank: 2,
+    servedModel: "gemma4:e2b",
+    openHandsModel: "openai/gemma4:e2b",
+    contextTarget: OPENHANDS_CONTEXT_TARGET,
+    minimumContext: OPENHANDS_MINIMUM_CONTEXT,
+    memoryGuidance: "Low-memory Gemma 4 fallback.",
+    pullCommand: "ollama pull gemma4:e2b",
+    note: "Use when the default Gemma 4 edge model is too large for the host.",
+  },
+  {
+    rank: 3,
     servedModel: "devstral-small-2",
     openHandsModel: "openai/devstral-small-2",
     contextTarget: OPENHANDS_CONTEXT_TARGET,
@@ -45,7 +60,7 @@ export const OPENHANDS_LOCAL_MODEL_CATALOG: LocalExecutionModelProfile[] = [
     note: "Fallback when Gemma 4 fails task-grade OpenHands smoke.",
   },
   {
-    rank: 3,
+    rank: 4,
     servedModel: "qwen3-coder:30b",
     openHandsModel: "openai/qwen3-coder:30b",
     contextTarget: OPENHANDS_CONTEXT_TARGET,
@@ -55,7 +70,7 @@ export const OPENHANDS_LOCAL_MODEL_CATALOG: LocalExecutionModelProfile[] = [
     note: "Use when larger local coding context is available.",
   },
   {
-    rank: 4,
+    rank: 5,
     servedModel: "openhands-lm:32b",
     openHandsModel: "openai/openhands-lm:32b",
     contextTarget: OPENHANDS_CONTEXT_TARGET,
@@ -65,7 +80,7 @@ export const OPENHANDS_LOCAL_MODEL_CATALOG: LocalExecutionModelProfile[] = [
     note: "Accepted only after local quantization passes smoke.",
   },
   {
-    rank: 5,
+    rank: 6,
     servedModel: "qwen3:14b",
     openHandsModel: "openai/qwen3:14b",
     contextTarget: OPENHANDS_CONTEXT_TARGET,
@@ -83,10 +98,16 @@ export function ollamaModelMatches(
   return ollamaModelsMatch(configuredModel, availableModel);
 }
 
+export function resolveDefaultLocalChatModel(
+  env: Record<string, string | undefined> | NodeJS.ProcessEnv = process.env,
+): string {
+  return env.SCIENCESWARM_DEFAULT_OLLAMA_MODEL?.trim() || DEFAULT_LOCAL_CHAT_MODEL;
+}
+
 export function resolveConfiguredLocalModel(
   env: Record<string, string | undefined> | NodeJS.ProcessEnv = process.env,
 ): string {
-  return env.OLLAMA_MODEL?.trim() || DEFAULT_LOCAL_CHAT_MODEL;
+  return env.OLLAMA_MODEL?.trim() || resolveDefaultLocalChatModel(env);
 }
 
 export function toOpenHandsModelId(servedModel: string): string {

@@ -207,13 +207,13 @@ describe("GET /api/setup/status", () => {
       };
     };
 
-    expect(body.runtimeContract.configuredLocalModel).toBe("gemma4:latest");
+    expect(body.runtimeContract.configuredLocalModel).toBe("gemma4:e4b");
     expect(
       body.runtimeContract.capabilities.find(
         (capability) => capability.capabilityId === "chat.local",
       ),
     ).toMatchObject({
-      model: "gemma4:latest",
+      model: "gemma4:e4b",
       nextAction: "Start Ollama.",
     });
   });

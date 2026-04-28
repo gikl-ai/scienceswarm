@@ -568,7 +568,7 @@ describe("getConfigStatus", () => {
 
     process.env.AGENT_BACKEND = "openclaw";
     process.env.LLM_PROVIDER = "local";
-    process.env.OLLAMA_MODEL = "gemma4:latest";
+    process.env.OLLAMA_MODEL = "gemma4:e4b";
     process.env.SCIENCESWARM_DIR = runtimeDir;
     process.env.OPENAI_API_KEY = "sk-runtime-secret";
 

@@ -8,7 +8,7 @@ const {
   mockIsLocalProviderConfigured,
 } = vi.hoisted(() => ({
   mockCompleteLocal: vi.fn(),
-  mockGetLocalModel: vi.fn(() => "gemma4:latest"),
+  mockGetLocalModel: vi.fn(() => "gemma4:e4b"),
   mockIsLocalProviderConfigured: vi.fn(() => false),
 }));
 
@@ -45,7 +45,7 @@ describe("brain LLM strict-local policy", () => {
     mockCreateCompletion.mockReset();
     mockCompleteLocal.mockReset();
     mockGetLocalModel.mockReset();
-    mockGetLocalModel.mockReturnValue("gemma4:latest");
+    mockGetLocalModel.mockReturnValue("gemma4:e4b");
     mockIsLocalProviderConfigured.mockReset();
     mockIsLocalProviderConfigured.mockReturnValue(false);
   });
@@ -80,14 +80,14 @@ describe("brain LLM strict-local policy", () => {
     expect(result.content).toBe("local synthesis");
     expect(result.cost).toMatchObject({
       estimatedUsd: 0,
-      model: "gemma4:latest",
+      model: "gemma4:e4b",
     });
     expect(mockCompleteLocal).toHaveBeenCalledWith(
       [
         { role: "system", content: "Summarize local notes." },
         { role: "user", content: "Private research notes" },
       ],
-      "gemma4:latest",
+      "gemma4:e4b",
     );
     expect(mockCreateCompletion).not.toHaveBeenCalled();
   });

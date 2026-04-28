@@ -6,7 +6,7 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-MODEL="gemma4:latest"
+MODEL="${OLLAMA_MODEL:-${SCIENCESWARM_DEFAULT_OLLAMA_MODEL:-gemma4:e4b}}"
 OPENHANDS_IMAGE="${OPENHANDS_IMAGE:-docker.openhands.dev/openhands/openhands@sha256:5c0dc26f467bf8e47a6e76308edb7a30af4084b17e23a3460b5467008b12111b}"
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -241,7 +241,7 @@ ensure_ollama_runtime() {
     ok "Ollama model ready: $MODEL"
     return 0
   fi
-  info "Pulling $MODEL"
+  info "Downloading $MODEL with Ollama"
   "$ollama_bin" pull "$MODEL" || warn "Model pull failed; /setup can retry it."
 }
 

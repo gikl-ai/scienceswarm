@@ -15,7 +15,7 @@ const READY_ENV_LINES = [
   `SCIENCESWARM_DIR=${process.cwd()}`,
   "AGENT_BACKEND=openclaw",
   "LLM_PROVIDER=local",
-  "OLLAMA_MODEL=gemma4:latest",
+  "OLLAMA_MODEL=gemma4:e4b",
 ];
 const RESET_ENV_LINES = [
   "SCIENCESWARM_DIR=",

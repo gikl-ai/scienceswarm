@@ -229,7 +229,7 @@ function buildFetchStub(options?: {
       openaiKey: options?.settings?.openaiKey ?? null,
       llmModel: options?.settings?.llmModel ?? DEFAULT_OPENAI_MODEL,
       llmProvider: options?.settings?.llmProvider ?? "local",
-      ollamaModel: options?.settings?.ollamaModel ?? "gemma4:latest",
+      ollamaModel: options?.settings?.ollamaModel ?? "gemma4:e4b",
       userHandle: options?.settings?.userHandle ?? "alice",
       userEmail: options?.settings?.userEmail ?? "",
       telegramPhone: options?.settings?.telegramPhone ?? "",
@@ -256,13 +256,13 @@ function buildFetchStub(options?: {
       configured: options?.openclaw?.configured ?? true,
       running: options?.openclaw?.running ?? false,
       version: options?.openclaw?.version ?? "2026.4.5",
-      model: options?.openclaw?.model ?? "ollama/gemma4:latest",
+      model: options?.openclaw?.model ?? "ollama/gemma4:e4b",
       configPath: options?.openclaw?.configPath ?? "~/.openclaw/openclaw.json",
       source: options?.openclaw?.source ?? "system",
     },
     localHealth: {
       running: options?.localHealth?.running ?? true,
-      models: options?.localHealth?.models ?? ["gemma4:latest"],
+      models: options?.localHealth?.models ?? ["gemma4:e4b"],
       binaryInstalled: options?.localHealth?.binaryInstalled ?? true,
       installCommand: options?.localHealth?.installCommand ?? "brew install ollama",
       startCommand: options?.localHealth?.startCommand ?? "ollama serve",
@@ -629,12 +629,12 @@ describe("SettingsPage runtime settings", () => {
 
   it("saves and applies the OpenAI runtime to OpenClaw from Settings", async () => {
     const fetchMock = buildFetchStub({
-      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:latest"] },
+      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:e4b"] },
       openclaw: {
         installed: true,
         configured: true,
         running: true,
-        model: "ollama/gemma4:latest",
+        model: "ollama/gemma4:e4b",
       },
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -709,7 +709,7 @@ describe("SettingsPage runtime settings", () => {
           llmProvider: "openai",
           llmModel: "",
         },
-        health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:latest"] },
+        health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:e4b"] },
         openclaw: {
           installed: true,
           configured: true,
@@ -733,14 +733,14 @@ describe("SettingsPage runtime settings", () => {
     const fetchMock = buildFetchStub({
       settings: {
         llmProvider: "local",
-        ollamaModel: "gemma4:latest",
+        ollamaModel: "gemma4:e4b",
       },
-      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:latest"] },
+      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:e4b"] },
       openclaw: {
         installed: true,
         configured: true,
         running: true,
-        model: "ollama/gemma4:latest",
+        model: "ollama/gemma4:e4b",
       },
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -774,7 +774,7 @@ describe("SettingsPage runtime settings", () => {
     expect(settingsActions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ action: "save-provider", provider: "local" }),
-        expect.objectContaining({ action: "save-ollama-model", ollamaModel: "gemma4:latest" }),
+        expect.objectContaining({ action: "save-ollama-model", ollamaModel: "gemma4:e4b" }),
       ]),
     );
 
@@ -851,7 +851,7 @@ describe("SettingsPage runtime settings", () => {
           },
         },
       },
-      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:latest"] },
+      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:e4b"] },
       openclaw: { installed: true, configured: true, running: true },
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -904,7 +904,7 @@ describe("SettingsPage runtime settings", () => {
           pendingPairing: null,
         },
       },
-      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:latest"] },
+      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:e4b"] },
       openclaw: { installed: true, configured: true, running: true },
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -961,7 +961,7 @@ describe("SettingsPage runtime settings", () => {
           },
         },
       },
-      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:latest"] },
+      health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:e4b"] },
       openclaw: { installed: true, configured: true, running: true },
       approvePendingWarning:
         "Warning: saved your Telegram user id but could not switch OpenClaw to allowlist mode.",
@@ -991,7 +991,7 @@ describe("SettingsPage runtime settings", () => {
     vi.stubGlobal(
       "fetch",
       buildFetchStub({
-        health: { openclaw: "disconnected", ollama: "connected", ollamaModels: ["gemma4:latest"] },
+        health: { openclaw: "disconnected", ollama: "connected", ollamaModels: ["gemma4:e4b"] },
         openclaw: { installed: true, configured: true, running: false },
       }),
     );
@@ -1016,7 +1016,7 @@ describe("SettingsPage runtime settings", () => {
     vi.stubGlobal(
       "fetch",
       buildFetchStub({
-        health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:latest"] },
+        health: { openclaw: "connected", ollama: "connected", ollamaModels: ["gemma4:e4b"] },
         openclaw: { installed: true, configured: true, running: true },
       }),
     );
@@ -1038,10 +1038,10 @@ describe("SettingsPage runtime settings", () => {
     vi.stubGlobal(
       "fetch",
       buildFetchStub({
-        health: { ollama: "connected", ollamaModels: ["gemma4:latest"] },
+        health: { ollama: "connected", ollamaModels: ["gemma4:e4b"] },
         localHealth: {
           running: true,
-          models: ["gemma4:latest"],
+          models: ["gemma4:e4b"],
           binaryInstalled: true,
         },
       }),
@@ -1056,7 +1056,7 @@ describe("SettingsPage runtime settings", () => {
     expect(await screen.findByText("Local model")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Settings defaults to Ollama + gemma4, and can switch to larger local models like gemma4:26b.",
+        /Settings defaults to Ollama \+ gemma4:e4b, with gemma4:e2b available/,
       ),
     ).toBeInTheDocument();
     expect(screen.getByTestId("ollama-model-select")).toBeInTheDocument();
@@ -1069,10 +1069,10 @@ describe("SettingsPage runtime settings", () => {
       "fetch",
       buildFetchStub({
         settings: { ollamaModel: "gemma4:26b" },
-        health: { ollama: "connected", ollamaModels: ["gemma4:latest"] },
+        health: { ollama: "connected", ollamaModels: ["gemma4:e4b"] },
         localHealth: {
           running: true,
-          models: ["gemma4:latest"],
+          models: ["gemma4:e4b"],
           binaryInstalled: true,
         },
       }),

@@ -127,6 +127,10 @@
     "files": [
       ".next/standalone/**/*",
       "desktop/**/*",
+      "!desktop/ollama-models/**",
+      "!desktop/**/*.gguf",
+      "!desktop/**/blobs/**",
+      "!desktop/**/manifests/**",
       "scripts/start-standalone.mjs",
       "package.json"
     ],

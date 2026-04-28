@@ -42,6 +42,27 @@ describe("OpenClaw gateway auth config", () => {
     );
   });
 
+  it("does not fall back to the user-global OpenClaw config in state-dir mode", () => {
+    const userConfigPath = path.join(tempHome, ".openclaw", "openclaw.json");
+    mkdirSync(path.dirname(userConfigPath), { recursive: true });
+    writeFileSync(
+      userConfigPath,
+      JSON.stringify({ gateway: { auth: { token: "user-global-token" } } }),
+      "utf8",
+    );
+
+    expect(getOpenClawGatewayAuthStatus()).toMatchObject({
+      configured: false,
+      configPath: null,
+    });
+    expect(
+      getOpenClawGatewayAuthStatus({ kind: "profile", profile: "default" }),
+    ).toMatchObject({
+      configured: true,
+      configPath: userConfigPath,
+    });
+  });
+
   it("reads the state-dir gateway token without exposing it in status", () => {
     const configPath = path.join(tempRoot, "openclaw", "openclaw.json");
     mkdirSync(path.dirname(configPath), { recursive: true });

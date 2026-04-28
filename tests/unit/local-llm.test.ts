@@ -5,11 +5,11 @@ vi.mock("@/lib/config/ports", () => ({
 }));
 
 vi.mock("@/lib/runtime/model-catalog", () => ({
-  resolveConfiguredLocalModel: vi.fn(() => "gemma4:latest"),
+  resolveConfiguredLocalModel: vi.fn(() => "gemma4:e4b"),
 }));
 
 vi.mock("@/lib/runtime-saved-env", () => ({
-  getCurrentLlmRuntimeEnv: vi.fn(() => ({ ollamaModel: "gemma4:latest" })),
+  getCurrentLlmRuntimeEnv: vi.fn(() => ({ ollamaModel: "gemma4:e4b" })),
 }));
 
 import { streamLocal } from "@/lib/local-llm";

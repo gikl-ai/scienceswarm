@@ -213,7 +213,7 @@ describe("OpenClaw healthCheck", () => {
       sessions: { count: 2 },
     });
     mockExecFile({
-      resolvedDefault: "ollama/gemma4:latest",
+      resolvedDefault: "ollama/gemma4:e4b",
       auth: {
         missingProvidersInUse: [],
       },
@@ -266,7 +266,7 @@ describe("OpenClaw healthCheck", () => {
         if (typeof callback !== "function") throw new Error("expected callback");
         callback(null, {
           stdout: JSON.stringify({
-            resolvedDefault: "ollama/gemma4:latest",
+            resolvedDefault: "ollama/gemma4:e4b",
             auth: { missingProvidersInUse: [] },
           }),
           stderr: "",
@@ -302,7 +302,7 @@ describe("OpenClaw healthCheck", () => {
           stdout: [
             "[agents/auth-profiles] synced openai-codex credentials from external cli",
             JSON.stringify({
-              resolvedDefault: "ollama/gemma4:latest",
+              resolvedDefault: "ollama/gemma4:e4b",
               auth: { missingProvidersInUse: [] },
             }),
           ].join("\n"),

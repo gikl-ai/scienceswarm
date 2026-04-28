@@ -9,7 +9,7 @@
  *
  *   1. OpenClaw installed but not running -> POST /api/settings/openclaw action:"start"
  *   2. Ollama not running -> POST /api/settings action:"start-ollama"
- *   3. Gemma4 not pulled -> POST /api/settings action:"pull-model"
+ *   3. Configured Gemma model not pulled -> POST /api/settings action:"pull-model"
  *
  * Each remediation attempt fires at most once per mount (tracked via
  * refs). Status updates are pushed into chat as system messages via
@@ -18,7 +18,7 @@
  * Constraints:
  *   - Does NOT run during the /setup flow — only on the project page.
  *   - OpenClaw binary calls go through the API route which uses runner.ts.
- *   - Local LLM is always gemma4:latest, never older.
+ *   - Local LLM defaults to gemma4:e4b unless explicitly configured.
  */
 
 import { useEffect, useRef, useCallback } from "react";

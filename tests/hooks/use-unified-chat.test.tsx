@@ -1757,7 +1757,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "disconnected",
           llmProvider: "local",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
         });
       }
@@ -3946,7 +3946,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "connected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });
@@ -4110,7 +4110,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "connected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });
@@ -6570,7 +6570,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "disconnected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });
@@ -6633,7 +6633,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "disconnected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });
@@ -6699,7 +6699,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "disconnected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });
@@ -6799,7 +6799,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "connected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });
@@ -6910,7 +6910,7 @@ describe("useUnifiedChat persistence", () => {
       nanoclaw: "disconnected",
       openhands: "connected",
       ollama: "connected",
-      ollamaModels: ["gemma4:latest"],
+      ollamaModels: ["gemma4:e4b"],
       configuredLocalModel: "gemma4",
       llmProvider: "local",
     }));
@@ -6938,7 +6938,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "connected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });
@@ -7013,7 +7013,7 @@ describe("useUnifiedChat persistence", () => {
             nanoclaw: "disconnected",
             openhands: "connected",
             ollama: "connected",
-            ollamaModels: ["gemma4:latest"],
+            ollamaModels: ["gemma4:e4b"],
             configuredLocalModel: "gemma4",
             llmProvider: "local",
           });
@@ -7025,7 +7025,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "connected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });
@@ -7095,7 +7095,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "connected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });
@@ -7160,7 +7160,7 @@ describe("useUnifiedChat persistence", () => {
             nanoclaw: "disconnected",
             openhands: "connected",
             ollama: "connected",
-            ollamaModels: ["gemma4:latest"],
+            ollamaModels: ["gemma4:e4b"],
             configuredLocalModel: "gemma4",
             llmProvider: "local",
           });
@@ -7172,7 +7172,7 @@ describe("useUnifiedChat persistence", () => {
           nanoclaw: "disconnected",
           openhands: "connected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });

@@ -26,7 +26,7 @@ describe("activateOpenClawAgentBackend", () => {
         "# User settings",
         "AGENT_BACKEND=none",
         "LLM_PROVIDER=local",
-        "OLLAMA_MODEL=gemma4:latest",
+        "OLLAMA_MODEL=gemma4:e4b",
       ].join("\n"),
       "utf-8",
     );
