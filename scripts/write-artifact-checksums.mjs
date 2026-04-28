@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,31 +52,36 @@ export function collectInstallerArtifactFiles(distDir) {
     ));
 }
 
-export function sha256File(filePath) {
+export async function sha256File(filePath) {
   const hash = createHash("sha256");
-  hash.update(readFileSync(filePath));
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk);
+  }
   return hash.digest("hex");
 }
 
-export function createChecksumManifest(files, distDir) {
+export async function createChecksumManifest(files, distDir) {
   if (files.length === 0) {
     throw new Error(`No desktop installer artifacts found in ${distDir}.`);
   }
 
-  return `${files.map((filePath) => {
+  const lines = [];
+  for (const filePath of files) {
     const relativePath = normalizeChecksumPath(path.relative(distDir, filePath));
-    return `${sha256File(filePath)}  ${relativePath}`;
-  }).join("\n")}\n`;
+    lines.push(`${await sha256File(filePath)}  ${relativePath}`);
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
-export function writeArtifactChecksums(options = {}) {
+export async function writeArtifactChecksums(options = {}) {
   const distDir = path.resolve(options.root ?? projectRoot, options.distDir ?? "dist");
   const outputFile = path.resolve(
     options.root ?? projectRoot,
     options.outputFile ?? path.join("dist", "SHA256SUMS.txt"),
   );
   const artifactFiles = collectInstallerArtifactFiles(distDir);
-  const manifest = createChecksumManifest(artifactFiles, distDir);
+  const manifest = await createChecksumManifest(artifactFiles, distDir);
 
   mkdirSync(path.dirname(outputFile), { recursive: true });
   writeFileSync(outputFile, manifest);
@@ -90,7 +95,7 @@ export function writeArtifactChecksums(options = {}) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const distDir = process.argv[2] || process.env.SCIENCESWARM_DESKTOP_DIST_DIR || "dist";
-  const result = writeArtifactChecksums({ distDir });
+  const result = await writeArtifactChecksums({ distDir });
   console.log(
     `Wrote ${result.artifactCount} desktop installer checksums to ${result.outputFile}`,
   );
