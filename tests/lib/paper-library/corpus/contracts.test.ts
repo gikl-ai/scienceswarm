@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   GbrainCorpusCapabilitiesSchema,
+  GbrainChunkHandleSchema,
   PaperIngestManifestSchema,
   PaperSectionMapSchema,
   PaperSourceArtifactSchema,
@@ -242,6 +243,16 @@ describe("paper-library corpus contracts", () => {
           chunkId: "chunk-abstract",
         },
       ],
+    })).not.toThrow();
+  });
+
+  it("rejects source-only gbrain chunk handles", () => {
+    expect(() => GbrainChunkHandleSchema.parse({
+      sourceSlug: "wiki/sources/papers/good-pdf-2024/source",
+    })).toThrow(/chunk disambiguator/);
+    expect(() => GbrainChunkHandleSchema.parse({
+      sourceSlug: "wiki/sources/papers/good-pdf-2024/source",
+      chunkIndex: 0,
     })).not.toThrow();
   });
 

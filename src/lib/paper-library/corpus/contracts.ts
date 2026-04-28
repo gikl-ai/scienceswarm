@@ -96,12 +96,21 @@ export const SourceQualitySchema = z.object({
 });
 export type SourceQuality = z.infer<typeof SourceQualitySchema>;
 
-export const GbrainChunkHandleSchema = z.object({
-  sourceSlug: NonEmptyStringSchema,
-  chunkId: z.union([z.string().min(1), z.number().int().nonnegative()]).optional(),
-  chunkIndex: z.number().int().nonnegative().optional(),
-  sectionId: NonEmptyStringSchema.optional(),
-});
+export const GbrainChunkHandleSchema = z
+  .object({
+    sourceSlug: NonEmptyStringSchema,
+    chunkId: z.union([z.string().min(1), z.number().int().nonnegative()]).optional(),
+    chunkIndex: z.number().int().nonnegative().optional(),
+    sectionId: NonEmptyStringSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.chunkId === undefined && value.chunkIndex === undefined && value.sectionId === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "GbrainChunkHandle must include at least one chunk disambiguator.",
+      });
+    }
+  });
 export type GbrainChunkHandle = z.infer<typeof GbrainChunkHandleSchema>;
 
 export const PaperSourceCandidateSchema = z.object({
