@@ -8,10 +8,10 @@ describe("runtime capability contract", () => {
       generatedAt: "2026-04-17T00:00:00.000Z",
       strictLocalOnly: false,
       llmProvider: "local",
-      localModel: "gemma4:latest",
+      localModel: "gemma4:e4b",
       ollama: {
         running: true,
-        models: ["gemma4:latest"],
+        models: ["gemma4:e4b"],
         url: "http://localhost:11434",
       },
       agent: { type: "openclaw", status: "connected" },
@@ -39,7 +39,7 @@ describe("runtime capability contract", () => {
       generatedAt: "2026-04-17T00:00:00.000Z",
       strictLocalOnly: false,
       llmProvider: "local",
-      configuredLocalModel: "gemma4:latest",
+      configuredLocalModel: "gemma4:e4b",
       summary: { state: "ready" },
       legacy: {
         chat: true,
@@ -57,7 +57,7 @@ describe("runtime capability contract", () => {
       status: "ready",
       privacy: "local-network",
       provider: "ollama",
-      model: "gemma4:latest",
+      model: "gemma4:e4b",
     });
     expect(
       contract.capabilities.find((capability) =>
@@ -80,7 +80,7 @@ describe("runtime capability contract", () => {
       strictLocalOnly: true,
       llmProvider: "local",
       localModel: "gemma4",
-      ollama: { running: true, models: ["gemma4:latest"] },
+      ollama: { running: true, models: ["gemma4:e4b"] },
       agent: { type: "openclaw", status: "connected" },
       openhands: {
         status: "connected",
@@ -119,7 +119,7 @@ describe("runtime capability contract", () => {
       strictLocalOnly: false,
       llmProvider: "local",
       localModel: "gemma4",
-      ollama: { running: true, models: ["gemma4:latest"] },
+      ollama: { running: true, models: ["gemma4:e4b"] },
       agent: { type: "none", status: "disconnected" },
       openhands: { status: "disconnected" },
       openaiKeyConfigured: false,
@@ -149,7 +149,7 @@ describe("runtime capability contract", () => {
       strictLocalOnly: true,
       llmProvider: "openai",
       localModel: "gemma4",
-      ollama: { running: true, models: ["gemma4:latest"] },
+      ollama: { running: true, models: ["gemma4:e4b"] },
       agent: { type: "openclaw", status: "connected" },
       openhands: {
         status: "connected",
@@ -177,7 +177,7 @@ describe("runtime capability contract", () => {
       strictLocalOnly: false,
       llmProvider: "local",
       localModel: "gemma4",
-      ollama: { running: true, models: ["gemma4:latest"] },
+      ollama: { running: true, models: ["gemma4:e4b"] },
       agent: { type: "nanoclaw", status: "connected" },
       openhands: { status: "disconnected" },
       openaiKeyConfigured: false,
@@ -202,7 +202,7 @@ describe("runtime capability contract", () => {
       strictLocalOnly: false,
       llmProvider: "local",
       localModel: "gemma4",
-      ollama: { running: true, models: ["gemma4:latest"] },
+      ollama: { running: true, models: ["gemma4:e4b"] },
       agent: { type: "openclaw", status: "connected" },
       openhands: {
         status: "connected",
@@ -245,21 +245,21 @@ describe("runtime capability contract", () => {
       llmProvider: "local",
       localModel: "   ",
       env: {},
-      ollama: { running: true, models: ["gemma4:latest"] },
+      ollama: { running: true, models: ["gemma4:e4b"] },
       agent: { type: "openclaw", status: "connected" },
       openhands: { status: "disconnected" },
       openaiKeyConfigured: false,
       structuredCritiqueConfigured: false,
     });
 
-    expect(contract.configuredLocalModel).toBe("gemma4:latest");
+    expect(contract.configuredLocalModel).toBe("gemma4:e4b");
     expect(
       contract.capabilities.find((capability) =>
         capability.capabilityId === "chat.local"
       ),
     ).toMatchObject({
       status: "ready",
-      model: "gemma4:latest",
+      model: "gemma4:e4b",
     });
   });
 
@@ -267,8 +267,8 @@ describe("runtime capability contract", () => {
     const contract = buildRuntimeCapabilityContract({
       strictLocalOnly: false,
       llmProvider: "local",
-      localModel: "gemma4:latest",
-      ollama: { running: true, models: ["gemma4:latest"] },
+      localModel: "gemma4:e4b",
+      ollama: { running: true, models: ["gemma4:e4b"] },
       agent: { type: "openclaw", status: "connected" },
       openhands: {
         status: "connected",

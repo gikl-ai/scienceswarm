@@ -21,8 +21,8 @@ The core system is:
 
 - Keep your research corpus in one workspace instead of scattering it across
   PDFs, notes, scripts, and chat logs
-- Run local-first by default with Ollama and `gemma4:latest`, with optional
-  cloud fallback when you want it
+- Run local-first by default with Ollama and `gemma4:e4b`, downloaded during
+  setup, with optional cloud fallback when you want it
 - Capture and organize work across chat, uploads, study pages, and optional
   Telegram/OpenClaw flows
 - Use one product for literature review, study memory, agent-assisted coding,
@@ -233,7 +233,7 @@ npm run test -- tests/integration/api-runtime-preview.test.ts tests/integration/
 ```
 
 The minimum manual smoke is: confirm OpenClaw local chat still works with the
-default `gemma4:latest` model, local-only policy blocks third-party destinations, cloud-ok
+downloaded default `gemma4:e4b` model, local-only policy blocks third-party destinations, cloud-ok
 policy shows a preview and approval gate, destination health renders missing or
 not-authenticated CLIs without crashing settings, and historical sessions remain
 readable.

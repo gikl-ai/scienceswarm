@@ -365,7 +365,7 @@ async function startReadyRuntimeServer(): Promise<ReadyRuntimeServer> {
     NEXT_TSCONFIG_PATH: tsconfigPath,
     AGENT_BACKEND: "openclaw",
     LLM_PROVIDER: "local",
-    OLLAMA_MODEL: "gemma4:latest",
+    OLLAMA_MODEL: "gemma4:e4b",
     SCIENCESWARM_HOME: runtimeHome,
     SCIENCESWARM_DIR: runtimeHome,
     BRAIN_ROOT: brainRoot,
@@ -513,8 +513,8 @@ async function installRuntimeRoutes(page: Page): Promise<RuntimeRouteState> {
         nanoclaw: "disconnected",
         openhands: "disconnected",
         llmProvider: "local",
-        ollamaModels: ["gemma4:latest"],
-        configuredLocalModel: "gemma4:latest",
+        ollamaModels: ["gemma4:e4b"],
+        configuredLocalModel: "gemma4:e4b",
       });
       return;
     }
@@ -522,7 +522,7 @@ async function installRuntimeRoutes(page: Page): Promise<RuntimeRouteState> {
     if (url.pathname === "/api/chat/unified" && method === "POST") {
       state.chatSends += 1;
       await fulfillJson(route, {
-        response: "OpenClaw local response from gemma4:latest",
+        response: "OpenClaw local response from gemma4:e4b",
         conversationId: "openclaw-conversation-1",
         messages: [],
       });
@@ -881,7 +881,7 @@ test.describe.serial("runtime hosts rollout smoke", () => {
 
     await sendProjectPrompt(page, "Use the local OpenClaw path.");
 
-    await expect(page.getByText("OpenClaw local response from gemma4:latest")).toBeVisible();
+    await expect(page.getByText("OpenClaw local response from gemma4:e4b")).toBeVisible();
     expect(state.chatSends).toBe(1);
     expect(state.previewRequests).toBe(0);
   });

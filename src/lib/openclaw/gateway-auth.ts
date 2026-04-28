@@ -48,7 +48,6 @@ export function getOpenClawGatewayAuthConfigPaths(
   if (mode.kind === "state-dir") {
     pushUnique(paths, mode.configPath);
     pushUnique(paths, getScienceSwarmOpenClawConfigPath());
-    pushUnique(paths, defaultOpenClawConfigPath());
   } else {
     // Preserve the existing profile-mode behavior: upstream OpenClaw owns
     // profile config resolution, while the gateway auth token is read from the

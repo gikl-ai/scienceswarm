@@ -44,7 +44,7 @@ describe("runtime env live reload", () => {
     vi.stubEnv("OPENAI_API_KEY", "sk-stale");
     vi.stubEnv("LLM_MODEL", "gpt-stale");
     vi.stubEnv("LLM_PROVIDER", "openai");
-    vi.stubEnv("OLLAMA_MODEL", "gemma4:latest");
+    vi.stubEnv("OLLAMA_MODEL", "gemma4:e4b");
     vi.stubEnv("SCIENCESWARM_STRICT_LOCAL_ONLY", "0");
 
     writeEnvFile(

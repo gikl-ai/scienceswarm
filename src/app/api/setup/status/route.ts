@@ -76,8 +76,8 @@ function getGbrainSnapshot(status: ConfigStatusForRuntime) {
  *
  * We parse stdout line-by-line instead of using `--format json`
  * because older Ollama builds don't support the flag. Matching treats
- * `gemma4` and `gemma4:latest` as the same default model, but keeps
- * other tagged variants distinct.
+ * the recommended `gemma4:e4b` tag and its current `gemma4:latest`
+ * alias as ready, but keeps larger tagged variants distinct.
  *
  * Failure is non-fatal: the /setup UI treats "not running" the same
  * as "unknown daemon" and prompts the user to start it.

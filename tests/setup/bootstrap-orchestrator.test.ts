@@ -390,12 +390,12 @@ describe("runBootstrap finalize ready flags", () => {
     }
     const contents = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
     expect(contents).toMatch(/^LLM_PROVIDER=local$/m);
-    expect(contents).toMatch(/^OLLAMA_MODEL=gemma4:latest$/m);
+    expect(contents).toMatch(/^OLLAMA_MODEL=gemma4:e4b$/m);
     // OpenClaw's Ollama provider plugin requires this sentinel to
     // register Ollama as an authenticated provider. Any value works;
     // "ollama-local" is the string the plugin's own error message
     // suggests. Without this, first agent call returns
-    // "Unknown model: ollama/gemma4:latest".
+    // "Unknown model: ollama/gemma4:e4b".
     expect(contents).toMatch(/^OLLAMA_API_KEY=ollama-local$/m);
   });
 
@@ -415,7 +415,7 @@ describe("runBootstrap finalize ready flags", () => {
     const contents = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
     expect(contents).toMatch(/^OPENAI_API_KEY=sk-test-1234567890abcdef$/m);
     expect(contents).toMatch(/^LLM_PROVIDER=local$/m);
-    expect(contents).toMatch(/^OLLAMA_MODEL=gemma4:latest$/m);
+    expect(contents).toMatch(/^OLLAMA_MODEL=gemma4:e4b$/m);
     expect(contents).toMatch(/^OLLAMA_API_KEY=ollama-local$/m);
   });
 
@@ -435,7 +435,7 @@ describe("runBootstrap finalize ready flags", () => {
     const contents = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
     expect(contents).toMatch(/^LLM_PROVIDER=openai$/m);
     expect(contents).not.toMatch(/^LLM_PROVIDER=local$/m);
-    expect(contents).not.toMatch(/^OLLAMA_MODEL=gemma4:latest$/m);
+    expect(contents).not.toMatch(/^OLLAMA_MODEL=gemma4:e4b$/m);
     expect(contents).not.toMatch(/^OLLAMA_API_KEY=/m);
   });
 
@@ -455,13 +455,13 @@ describe("runBootstrap finalize ready flags", () => {
     const contents = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
     expect(contents).toMatch(/^LLM_PROVIDER=openai$/m);
     expect(contents).not.toMatch(/^LLM_PROVIDER=local$/m);
-    expect(contents).not.toMatch(/^OLLAMA_MODEL=gemma4:latest$/m);
+    expect(contents).not.toMatch(/^OLLAMA_MODEL=gemma4:e4b$/m);
   });
 
   it("backfills the OLLAMA_API_KEY sentinel when local provider is already configured", async () => {
     await fs.writeFile(
       path.join(repoRoot, ".env"),
-      "LLM_PROVIDER=local\nOLLAMA_MODEL=gemma4:latest\n",
+      "LLM_PROVIDER=local\nOLLAMA_MODEL=gemma4:e4b\n",
       "utf8",
     );
     const tasks: InstallTask[] = [
@@ -473,7 +473,7 @@ describe("runBootstrap finalize ready flags", () => {
     }
     const contents = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
     expect(contents).toMatch(/^LLM_PROVIDER=local$/m);
-    expect(contents).toMatch(/^OLLAMA_MODEL=gemma4:latest$/m);
+    expect(contents).toMatch(/^OLLAMA_MODEL=gemma4:e4b$/m);
     expect(contents).toMatch(/^OLLAMA_API_KEY=ollama-local$/m);
   });
 
@@ -515,7 +515,7 @@ describe("runBootstrap finalize ready flags", () => {
     });
     expect(providerConfig.models).toContainEqual(
       expect.objectContaining({
-        id: "gemma4:latest",
+        id: "gemma4:e4b",
         reasoning: true,
       }),
     );
@@ -525,15 +525,16 @@ describe("runBootstrap finalize ready flags", () => {
         "set",
         "agents.defaults.models",
         JSON.stringify({
-          "ollama/gemma4:latest": {},
+          "ollama/gemma4:e4b": {},
           "ollama/gemma4": {},
+          "ollama/gemma4:latest": {},
         }),
         "--strict-json",
       ],
       { timeoutMs: 10_000 },
     ]);
     expect(modelCall).toEqual([
-      ["models", "set", "ollama/gemma4:latest"],
+      ["models", "set", "ollama/gemma4:e4b"],
       {
         timeoutMs: 10_000,
         extraEnv: { OLLAMA_API_KEY: "ollama-local" },
@@ -611,7 +612,7 @@ describe("runBootstrap finalize ready flags", () => {
       const contents = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
       expect(contents).toMatch(/^AGENT_BACKEND=openclaw$/m);
       expect(contents).toMatch(/^LLM_PROVIDER=local$/m);
-      expect(contents).toMatch(/^OLLAMA_MODEL=gemma4:latest$/m);
+      expect(contents).toMatch(/^OLLAMA_MODEL=gemma4:e4b$/m);
     });
 
     releaseDockerWarmup?.();

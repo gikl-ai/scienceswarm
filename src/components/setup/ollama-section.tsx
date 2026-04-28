@@ -10,7 +10,7 @@
  * Four UI states, all derived from the same probe shape:
  *   1. Not installed  — show install command + install URL fallback.
  *   2. Installed, not running — show start command.
- *   3. Running, missing model — show "Pull gemma4" button; poll progress.
+ *   3. Running, missing model — show "Pull <configured model>" button; poll progress.
  *   4. Running + model ready  — show green check.
  *
  * Probing hits the existing `/api/settings?action=local-health` POST,
@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   OLLAMA_LOCAL_MODEL_OPTIONS,
+  OLLAMA_RECOMMENDED_MODEL_ALIASES,
   OLLAMA_RECOMMENDED_MODEL,
 } from "@/lib/ollama-constants";
 import {
@@ -107,7 +108,7 @@ function resolveInstalledModel(installedModels: string[], targetModel: string): 
 
 function isRecommendedFamilyFallbackModel(model: string): boolean {
   const trimmed = model.trim();
-  return trimmed === RECOMMENDED_MODEL || trimmed === `${RECOMMENDED_MODEL}:latest`;
+  return OLLAMA_RECOMMENDED_MODEL_ALIASES.includes(trimmed);
 }
 
 function probeHasTargetModel(probe: ProbeShape | null, targetModel: string): boolean {

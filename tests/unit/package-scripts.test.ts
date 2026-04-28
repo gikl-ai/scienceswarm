@@ -13,6 +13,9 @@ const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
     };
   };
   scripts: Record<string, string>;
+  build?: {
+    files?: string[];
+  };
 };
 const startScript = fs.readFileSync("start.sh", "utf-8");
 const installScript = fs.readFileSync("install.sh", "utf-8");
@@ -60,6 +63,17 @@ describe("package.json scripts", () => {
     expect(installScript).toContain("FRONTEND_USE_HTTPS");
     expect(installScript).toContain(
       "Manual setup URL: ${FRONTEND_SCHEME}://127.0.0.1:${FRONTEND_PORT}/setup",
+    );
+  });
+
+  it("excludes downloaded local model blobs from desktop installer artifacts", () => {
+    expect(pkg.build?.files).toEqual(
+      expect.arrayContaining([
+        "!desktop/ollama-models/**",
+        "!desktop/**/*.gguf",
+        "!desktop/**/blobs/**",
+        "!desktop/**/manifests/**",
+      ]),
     );
   });
 });

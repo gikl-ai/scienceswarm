@@ -2,6 +2,7 @@ import {
   buildOpenClawOllamaProviderConfig,
   OPENCLAW_OLLAMA_PROVIDER_KEY,
 } from "@/lib/openclaw/ollama-provider";
+import { OLLAMA_RECOMMENDED_MODEL_ALIASES } from "@/lib/ollama-constants";
 import { normalizeOllamaModelName } from "@/lib/ollama-models";
 import { runOpenClaw } from "@/lib/openclaw/runner";
 
@@ -25,7 +26,12 @@ export function buildLocalOpenClawAllowedModels(
   const modelId = normalizeOllamaModelName(model).trim();
   const allowedModels = new Set<string>();
   if (modelId) {
-    allowedModels.add(`ollama/${modelId}`);
+    const modelIds = OLLAMA_RECOMMENDED_MODEL_ALIASES.includes(modelId)
+      ? OLLAMA_RECOMMENDED_MODEL_ALIASES
+      : [modelId];
+    for (const id of modelIds) {
+      allowedModels.add(`ollama/${id}`);
+    }
     if (modelId.endsWith(":latest")) {
       allowedModels.add(`ollama/${modelId.slice(0, -":latest".length)}`);
     }

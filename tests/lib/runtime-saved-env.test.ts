@@ -12,7 +12,7 @@ describe("resolveSavedLlmRuntimeEnv", () => {
         NODE_ENV: "test",
         LLM_PROVIDER: "local",
         LLM_MODEL: "gpt-4.1",
-        OLLAMA_MODEL: "gemma4:latest",
+        OLLAMA_MODEL: "gemma4:e4b",
         OPENAI_API_KEY: "placeholder-openai-process-key",
       },
       [
@@ -61,13 +61,13 @@ describe("resolveSavedLlmRuntimeEnv", () => {
       {
         NODE_ENV: "test",
         LLM_PROVIDER: "local",
-        OLLAMA_MODEL: "gemma4:latest",
+        OLLAMA_MODEL: "gemma4:e4b",
       },
       null,
     );
 
     expect(runtime.llmProvider).toBe("local");
-    expect(runtime.ollamaModel).toBe("gemma4:latest");
+    expect(runtime.ollamaModel).toBe("gemma4:e4b");
     expect(runtime.llmModel).toBeNull();
   });
 

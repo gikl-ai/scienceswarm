@@ -531,7 +531,7 @@ describe("GET /api/health", () => {
     vi.stubEnv("OLLAMA_MODEL", "gemma4");
     localHealth.mockResolvedValue({
       running: true,
-      models: ["gemma4:latest"],
+      models: ["gemma4:e4b"],
       url: "http://localhost:11434",
     });
 
@@ -550,7 +550,7 @@ describe("GET /api/health", () => {
     vi.stubEnv("LLM_PROVIDER", "openai");
     localHealth.mockResolvedValue({
       running: true,
-      models: ["gemma4:latest"],
+      models: ["gemma4:e4b"],
       url: "http://localhost:11434",
     });
 
@@ -594,7 +594,7 @@ describe("GET /api/health", () => {
     vi.stubEnv("OLLAMA_MODEL", "gemma4");
     localHealth.mockResolvedValue({
       running: true,
-      models: ["gemma4:latest"],
+      models: ["gemma4:e4b"],
       url: "http://localhost:11434",
     });
     vi.stubGlobal(

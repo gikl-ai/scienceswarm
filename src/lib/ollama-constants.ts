@@ -8,7 +8,13 @@
  */
 
 /** Single source of truth for the recommended local model. */
-export const OLLAMA_RECOMMENDED_MODEL = "gemma4";
+export const OLLAMA_RECOMMENDED_MODEL = "gemma4:e4b";
+export const OLLAMA_LOW_MEMORY_MODEL = "gemma4:e2b";
+export const OLLAMA_RECOMMENDED_MODEL_ALIASES = [
+  OLLAMA_RECOMMENDED_MODEL,
+  "gemma4",
+  "gemma4:latest",
+];
 
 export interface OllamaLocalModelOption {
   value: string;
@@ -19,9 +25,14 @@ export interface OllamaLocalModelOption {
 /** First-class local model choices exposed in Settings. */
 export const OLLAMA_LOCAL_MODEL_OPTIONS: OllamaLocalModelOption[] = [
   {
-    value: "gemma4",
-    label: "gemma4 (recommended)",
-    description: "Default local Gemma path.",
+    value: OLLAMA_RECOMMENDED_MODEL,
+    label: "gemma4:e4b (recommended)",
+    description: "Default Gemma 4 edge model for local chat and execution.",
+  },
+  {
+    value: OLLAMA_LOW_MEMORY_MODEL,
+    label: "gemma4:e2b",
+    description: "Smaller Gemma 4 edge model for low-memory machines.",
   },
   {
     value: "gemma4:26b",

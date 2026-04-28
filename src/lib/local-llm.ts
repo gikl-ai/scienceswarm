@@ -10,7 +10,7 @@ import { resolveConfiguredLocalModel } from "@/lib/runtime/model-catalog";
 import { getCurrentLlmRuntimeEnv } from "@/lib/runtime-saved-env";
 
 export interface LocalModelConfig {
-  model: string; // "gemma4", "gemma4:27b", "llama3", etc.
+  model: string; // "gemma4:e4b", "gemma4:26b", "llama3", etc.
   url: string;
 }
 

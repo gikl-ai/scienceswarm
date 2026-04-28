@@ -9,6 +9,7 @@ import { probeGbrainEngineHealth } from "@/lib/brain/engine-readiness";
 import {
   buildOpenHandsLocalEvidenceSnapshot,
   buildRuntimeCapabilityContract,
+  DEFAULT_LOCAL_CHAT_MODEL,
   readOpenHandsLocalEvidence,
 } from "@/lib/runtime";
 import type { RuntimeCapabilityContract } from "@/lib/runtime";
@@ -181,7 +182,7 @@ async function probeLocal(): Promise<LocalProbe> {
   const runtimeEnv = getCurrentLlmRuntimeEnv(process.env);
   let ollama: ServiceStatus["ollama"] = "disconnected";
   let ollamaModels: string[] = [];
-  let configuredLocalModel = runtimeEnv.ollamaModel ?? "gemma4";
+  let configuredLocalModel = runtimeEnv.ollamaModel ?? DEFAULT_LOCAL_CHAT_MODEL;
   let localProviderConfigured = runtimeEnv.llmProvider === "local";
   try {
     const {

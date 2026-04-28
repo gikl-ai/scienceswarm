@@ -9,7 +9,7 @@ const TASK_LABELS: Record<BootstrapTaskId, string> = {
   "gbrain-init": "Local research store",
   openclaw: "Private OpenClaw runtime",
   "openhands-docker": "OpenHands code execution",
-  "ollama-gemma": "Ollama + gemma4 local model",
+  "ollama-gemma": "Ollama + Gemma 4 local model",
   "telegram-bot": "Telegram account connection",
 };
 

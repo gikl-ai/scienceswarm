@@ -27,7 +27,7 @@ describe("useAutoRemediation", () => {
           openclaw: "disconnected",
           nanoclaw: "disconnected",
           ollama: "connected",
-          ollamaModels: ["gemma4:latest"],
+          ollamaModels: ["gemma4:e4b"],
           configuredLocalModel: "gemma4",
           llmProvider: "local",
         });

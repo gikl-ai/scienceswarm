@@ -503,9 +503,9 @@ describe("GET /api/settings/openclaw", () => {
 
     delete process.env.OPENAI_API_KEY;
     process.env.LLM_PROVIDER = "local";
-    process.env.OLLAMA_MODEL = "gemma4:latest";
+    process.env.OLLAMA_MODEL = "gemma4:e4b";
     readFileMock.mockResolvedValue(
-      "LLM_PROVIDER=local\nOLLAMA_MODEL=gemma4:latest\n",
+      "LLM_PROVIDER=local\nOLLAMA_MODEL=gemma4:e4b\n",
     );
 
     const configuredModels: string[] = [];
@@ -566,24 +566,25 @@ describe("GET /api/settings/openclaw", () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data.ok).toBe(true);
-      expect(data.model).toBe("ollama/gemma4:latest");
-      expect(configuredModels).toContain("ollama/gemma4:latest");
+      expect(data.model).toBe("ollama/gemma4:e4b");
+      expect(configuredModels).toContain("ollama/gemma4:e4b");
       expect(providerConfigs.length).toBe(1);
       const providerConfig = JSON.parse(providerConfigs[0]!.args[3] ?? "{}") as {
         apiKey?: string;
         models?: Array<{ id?: string; reasoning?: boolean }>;
       };
       expect(providerConfig.apiKey).toBe("ollama-local");
-      expect(providerConfig.models?.map((model) => model.id)).toContain("gemma4:latest");
+      expect(providerConfig.models?.map((model) => model.id)).toContain("gemma4:e4b");
       expect(
         providerConfig.models?.some(
-          (model) => model.id === "gemma4:latest" && model.reasoning === true,
+          (model) => model.id === "gemma4:e4b" && model.reasoning === true,
         ),
       ).toBe(true);
       expect(allowedModelConfigs.length).toBe(1);
       expect(JSON.parse(allowedModelConfigs[0]!)).toEqual({
-        "ollama/gemma4:latest": {},
+        "ollama/gemma4:e4b": {},
         "ollama/gemma4": {},
+        "ollama/gemma4:latest": {},
       });
       expect(modelSetEnvs.some((env) => env.OLLAMA_API_KEY === "ollama-local")).toBe(true);
     } finally {
@@ -673,7 +674,7 @@ describe("GET /api/settings/openclaw", () => {
     process.env.LLM_PROVIDER = "openai";
     delete process.env.OLLAMA_MODEL;
     readFileMock.mockResolvedValue(
-      "LLM_PROVIDER=local\nOLLAMA_MODEL=gemma4:latest\n",
+      "LLM_PROVIDER=local\nOLLAMA_MODEL=gemma4:e4b\n",
     );
 
     const configuredModels: string[] = [];
@@ -706,8 +707,8 @@ describe("GET /api/settings/openclaw", () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data.ok).toBe(true);
-      expect(data.model).toBe("ollama/gemma4:latest");
-      expect(configuredModels).toContain("ollama/gemma4:latest");
+      expect(data.model).toBe("ollama/gemma4:e4b");
+      expect(configuredModels).toContain("ollama/gemma4:e4b");
     } finally {
       if (prevOpenAiKey === undefined) {
         delete process.env.OPENAI_API_KEY;

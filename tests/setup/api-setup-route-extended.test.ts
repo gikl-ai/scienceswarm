@@ -267,7 +267,7 @@ describe("POST /api/setup — extended schema (PR B stage B1)", () => {
       jsonRequest("http://localhost/api/setup", {
         llmProvider: "local",
         agentBackend: "openclaw",
-        ollamaModel: "gemma4:latest",
+        ollamaModel: "gemma4:e4b",
       }),
     );
     expect(res.status).toBe(200);
@@ -276,13 +276,13 @@ describe("POST /api/setup — extended schema (PR B stage B1)", () => {
     };
 
     expect(configureOpenClawModelMock).toHaveBeenCalledWith(
-      "ollama/gemma4:latest",
+      "ollama/gemma4:e4b",
       "local",
       { timeoutMs: 10_000 },
     );
     expect(body.openClawModelSync).toEqual({
       ok: true,
-      model: "ollama/gemma4:latest",
+      model: "ollama/gemma4:e4b",
     });
   });
 
@@ -294,7 +294,7 @@ describe("POST /api/setup — extended schema (PR B stage B1)", () => {
       jsonRequest("http://localhost/api/setup", {
         llmProvider: "local",
         agentBackend: "openclaw",
-        ollamaModel: "gemma4:latest",
+        ollamaModel: "gemma4:e4b",
       }),
     );
 
@@ -308,7 +308,7 @@ describe("POST /api/setup — extended schema (PR B stage B1)", () => {
     const map = entriesMap(env);
     expect(map.get("LLM_PROVIDER")).toBe("local");
     expect(map.get("AGENT_BACKEND")).toBe("openclaw");
-    expect(map.get("OLLAMA_MODEL")).toBe("gemma4:latest");
+    expect(map.get("OLLAMA_MODEL")).toBe("gemma4:e4b");
   });
 
   it("empty string on an enum / non-clearable field is a no-op (preserves the existing value)", async () => {

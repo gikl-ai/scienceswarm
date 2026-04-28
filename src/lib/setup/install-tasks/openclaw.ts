@@ -185,7 +185,7 @@ async function* applyProfileGatewayConfig(): AsyncGenerator<TaskYield, void, unk
  * `gateway.port`: upstream onboarding creates the agent workspace, writes
  * bootstrap prompt files, configures gateway auth, sets session defaults, and
  * registers the Ollama provider/plugin shape OpenClaw expects. ScienceSwarm
- * then layers its own Telegram bot token and gemma4:latest default on top in
+ * then layers its own Telegram bot token and Gemma 4 local default on top in
  * later setup steps.
  */
 async function* applyStateDirOnboarding(

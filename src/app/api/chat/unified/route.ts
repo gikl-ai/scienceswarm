@@ -3076,10 +3076,11 @@ function buildOpenClawVisibleFailureResponse(value: unknown): string | null {
     lower.includes("failed to connect");
 
   if (dependencyUnavailable) {
+    const configuredLocalModel = resolveConfiguredLocalModel();
     return [
       "ScienceSwarm could not complete this request because the local AI model connection is unavailable.",
       "Your uploaded files and existing artifacts are still preserved in the workspace.",
-      "Open Settings and make sure Ollama is running with `gemma4:latest`, then retry the same prompt.",
+      `Open Settings and make sure Ollama is running with \`${configuredLocalModel}\`, then retry the same prompt.`,
       `Technical detail: ${detail}`,
     ].join("\n\n");
   }

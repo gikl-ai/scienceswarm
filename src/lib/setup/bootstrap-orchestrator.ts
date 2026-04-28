@@ -20,6 +20,7 @@ import * as path from "node:path";
 import { promises as fs } from "node:fs";
 
 import { buildLocalOpenClawAllowedModels } from "@/lib/openclaw/model-config";
+import { resolveConfiguredLocalModel } from "@/lib/runtime/model-catalog";
 import {
   mergeEnvValues,
   parseEnvFile,
@@ -51,7 +52,9 @@ const DEFAULT_TASKS: InstallTask[] = [
   telegramBotTask,
 ];
 
-const OPENCLAW_OLLAMA_MODEL_REF = "ollama/gemma4:latest";
+function toOpenClawOllamaModelRef(model: string): string {
+  return `ollama/${model}`;
+}
 
 function isTerminalBootstrapStatus(
   status: BootstrapStepStatus | undefined,
@@ -119,6 +122,25 @@ async function hasPersistedTelegramBotToken(repoRoot: string): Promise<boolean> 
       line.key === "TELEGRAM_BOT_TOKEN" &&
       line.value.trim().length > 0,
   );
+}
+
+async function readPersistedOllamaModel(repoRoot: string): Promise<string> {
+  const envPath = path.join(repoRoot, ".env");
+  let existing = "";
+  try {
+    existing = await fs.readFile(envPath, { encoding: "utf8" });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+
+  const doc = parseEnvFile(existing);
+  const persistedModel = doc.lines
+    .find(
+      (line): line is Extract<typeof line, { type: "entry" }> =>
+        line.type === "entry" && line.key === "OLLAMA_MODEL",
+    )
+    ?.value?.trim();
+  return persistedModel || resolveConfiguredLocalModel();
 }
 
 /**
@@ -216,6 +238,7 @@ export async function* runBootstrap(
       taskSucceeded("ollama-gemma")
     ) {
       await finalizeOpenClawDefaults({
+        repoRoot: input.repoRoot,
         openclawSucceeded: true,
         ollamaSucceeded: true,
       });
@@ -326,6 +349,7 @@ export async function* runBootstrap(
   if (!openClawDefaultsFinalized) {
     try {
       await finalizeOpenClawDefaults({
+        repoRoot: input.repoRoot,
         openclawSucceeded: taskSucceeded("openclaw"),
         ollamaSucceeded: taskSucceeded("ollama-gemma"),
       });
@@ -361,8 +385,8 @@ export async function* runBootstrap(
  *     retry from `/dashboard/settings` (or manually set `nanoclaw`).
  *
  *   - If the ollama-gemma task succeeded, write `LLM_PROVIDER=local`
- *     and `OLLAMA_MODEL=gemma4:latest` (the model the task actually
- *     pulls). This is the common fresh-install path — the one-screen
+ *     and the configured `OLLAMA_MODEL` (the model the task actually
+ *     downloads). This is the common fresh-install path — the one-screen
  *     setup form deliberately does NOT ask the user to choose between
  *     local and cloud during bootstrap, so a successful local install
  *     should land in local mode by default even when `.env` already
@@ -419,13 +443,14 @@ async function finalizeReadyFlags(args: {
     !!currentOllamaApiKey && currentOllamaApiKey.length > 0;
 
   const updates: Record<string, string | null> = {};
+  const defaultLocalModel = resolveConfiguredLocalModel();
   if (args.openclawSucceeded) {
     updates.AGENT_BACKEND = "openclaw";
   }
   if (!hasConfiguredProvider) {
     if (args.ollamaSucceeded) {
       updates.LLM_PROVIDER = "local";
-      updates.OLLAMA_MODEL = "gemma4:latest";
+      updates.OLLAMA_MODEL = defaultLocalModel;
     } else if (hasApiKey) {
       updates.LLM_PROVIDER = "openai";
     }
@@ -447,7 +472,7 @@ async function finalizeReadyFlags(args: {
     !updates.OLLAMA_MODEL &&
     !(currentOllamaModel ?? "").length
   ) {
-    updates.OLLAMA_MODEL = "gemma4:latest";
+    updates.OLLAMA_MODEL = defaultLocalModel;
   }
 
   const effectiveProvider = updates.LLM_PROVIDER ?? currentProvider;
@@ -462,7 +487,7 @@ async function finalizeReadyFlags(args: {
     // so in its error message ("Set OLLAMA_API_KEY='ollama-local'
     // (any value works)"). Without this env var, every first
     // message to the local model fails with "Unknown model:
-    // ollama/gemma4:latest" and the bot replies "Something went wrong
+    // the configured ollama model and the bot replies "Something went wrong
     // while processing your request." Writing the sentinel here
     // so start.sh picks it up on the next launch, even when the user
     // already had LLM_PROVIDER=local in their .env.
@@ -477,8 +502,8 @@ async function finalizeReadyFlags(args: {
 }
 
 /**
- * Point OpenClaw's default model at the local Ollama provider
- * (`ollama/gemma4:latest`) after a successful fresh-install bootstrap, and
+ * Point OpenClaw's default model at the local Ollama provider after a
+ * successful fresh-install bootstrap, and
  * register the provider itself in `openclaw.json`.
  *
  * Why: OpenClaw's stock default is `openai/gpt-5.4`, which requires
@@ -489,10 +514,10 @@ async function finalizeReadyFlags(args: {
  * set OPENAI_API_KEY, then try again." on their very first Telegram
  * DM. This step switches the default to the local model we just
  * pulled in the ollama-gemma install task. We write an explicit provider
- * entry because `openclaw models set ollama/gemma4:latest` only updates
+ * entry because `openclaw models set ollama/<model>` only updates
  * `agents.defaults.*`; without `models.providers.ollama`, a fresh gateway
  * can still mark the model as `missing` and log
- * `Unknown model: ollama/gemma4:latest` during startup.
+ * `Unknown model: ollama/<model>` during startup.
  *
  * We only run this step when:
  *   - openclaw task succeeded (so the CLI is installed and on PATH)
@@ -500,7 +525,7 @@ async function finalizeReadyFlags(args: {
  *
  * If either didn't succeed, the stock OpenClaw default stays in
  * place and the user can recover from `/dashboard/settings` later
- * (or by running `openclaw models set ollama/gemma4:latest` themselves).
+ * (or by running `openclaw models set ollama/<model>` themselves).
  *
  * The call goes through `runOpenClaw`, which exports
  * `OPENCLAW_STATE_DIR`/`OPENCLAW_CONFIG_PATH` for the spawned child,
@@ -509,6 +534,7 @@ async function finalizeReadyFlags(args: {
  * personal `~/.openclaw/openclaw.json`.
  */
 async function finalizeOpenClawDefaults(args: {
+  repoRoot: string;
   openclawSucceeded: boolean;
   ollamaSucceeded: boolean;
 }): Promise<void> {
@@ -518,13 +544,15 @@ async function finalizeOpenClawDefaults(args: {
   // need the full openclaw/runner module graph. The dynamic import
   // is resolved once at call time; there's no measurable overhead.
   const { runOpenClaw } = await import("@/lib/openclaw/runner");
+  const localModel = await readPersistedOllamaModel(args.repoRoot);
+  const openClawOllamaModelRef = toOpenClawOllamaModelRef(localModel);
 
   const providerResult = await runOpenClaw(
     [
       "config",
       "set",
       "models.providers.ollama",
-      JSON.stringify(buildOpenClawOllamaProviderConfig(OPENCLAW_OLLAMA_MODEL_REF)),
+      JSON.stringify(buildOpenClawOllamaProviderConfig(openClawOllamaModelRef)),
       "--strict-json",
     ],
     { timeoutMs: 10_000 },
@@ -540,7 +568,7 @@ async function finalizeOpenClawDefaults(args: {
       "config",
       "set",
       "agents.defaults.models",
-      JSON.stringify(buildLocalOpenClawAllowedModels(OPENCLAW_OLLAMA_MODEL_REF)),
+      JSON.stringify(buildLocalOpenClawAllowedModels(openClawOllamaModelRef)),
       "--strict-json",
     ],
     { timeoutMs: 10_000 },
@@ -553,19 +581,16 @@ async function finalizeOpenClawDefaults(args: {
 
   // The model id format is `<provider>/<model>`. `ollama` is a
   // bundled provider plugin (`@openclaw/ollama-provider`), and
-  // `gemma4:latest` is the exact model tag the ollama-gemma install
-  // task pulls from ollama.com. Changing either side requires
-  // updating the other. We deliberately do NOT pin to a smaller
-  // gemma3 variant — gemma 3 has weaker tool-calling and the whole
-  // point of local-first ScienceSwarm is running the newest open
-  // model that fits.
-  const modelResult = await runOpenClaw(["models", "set", OPENCLAW_OLLAMA_MODEL_REF], {
+  // `localModel` is the exact model tag the ollama-gemma install
+  // task downloads from Ollama. Changing either side requires
+  // updating the other.
+  const modelResult = await runOpenClaw(["models", "set", openClawOllamaModelRef], {
     timeoutMs: 10_000,
     extraEnv: { OLLAMA_API_KEY: "ollama-local" },
   });
   if (!modelResult.ok) {
     throw new Error(
-      `openclaw models set ${OPENCLAW_OLLAMA_MODEL_REF} failed: ${modelResult.stderr || `exit ${modelResult.code}`}`,
+      `openclaw models set ${openClawOllamaModelRef} failed: ${modelResult.stderr || `exit ${modelResult.code}`}`,
     );
   }
 }
