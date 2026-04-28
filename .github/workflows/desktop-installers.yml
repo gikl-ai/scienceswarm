@@ -29,6 +29,7 @@ jobs:
             artifact-path: |
               dist/*.dmg
               dist/*.dmg.blockmap
+              dist/SHA256SUMS.txt
           - name: Windows NSIS
             os: windows-latest
             package-script: desktop:pack:win
@@ -36,6 +37,7 @@ jobs:
             artifact-path: |
               dist/*.exe
               dist/*.exe.blockmap
+              dist/SHA256SUMS.txt
           - name: Linux AppImage
             os: ubuntu-latest
             package-script: desktop:pack:linux
@@ -43,6 +45,7 @@ jobs:
             artifact-path: |
               dist/*.AppImage
               dist/*.AppImage.zsync
+              dist/SHA256SUMS.txt
 
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -69,6 +72,9 @@ jobs:
 
       - name: Build desktop installer
         run: npm run ${{ matrix.package-script }}
+
+      - name: Generate installer checksums
+        run: npm run desktop:checksums
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

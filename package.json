@@ -23,6 +23,7 @@
     "build:standalone": "SCIENCESWARM_STANDALONE_BUILD=1 next build --webpack && node scripts/prepare-standalone-build.mjs",
     "desktop:dev": "electron desktop/main.mjs",
     "prepare:desktop-package": "node scripts/prepare-desktop-package.mjs",
+    "desktop:checksums": "node scripts/write-artifact-checksums.mjs",
     "desktop:dist": "npm run prepare:desktop-package && electron-builder --projectDir .desktop-package/app --dir",
     "desktop:pack": "npm run prepare:desktop-package && electron-builder --projectDir .desktop-package/app",
     "desktop:pack:linux": "npm run prepare:desktop-package && electron-builder --projectDir .desktop-package/app --linux AppImage --publish never",

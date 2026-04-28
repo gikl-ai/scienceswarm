@@ -101,6 +101,9 @@ describe("package.json scripts", () => {
     expect(pkg.scripts["prepare:desktop-package"]).toBe(
       "node scripts/prepare-desktop-package.mjs",
     );
+    expect(pkg.scripts["desktop:checksums"]).toBe(
+      "node scripts/write-artifact-checksums.mjs",
+    );
     expect(pkg.scripts["desktop:pack"]).toContain("prepare:desktop-package");
     expect(pkg.scripts["desktop:pack"]).toContain("--projectDir .desktop-package/app");
     expect(pkg.scripts["desktop:pack:mac"]).toContain("--mac dmg");
@@ -123,7 +126,9 @@ describe("package.json scripts", () => {
     }
 
     expect(desktopInstallersWorkflow).toContain("npm run build:standalone");
+    expect(desktopInstallersWorkflow).toContain("npm run desktop:checksums");
     expect(desktopInstallersWorkflow).toContain("CSC_IDENTITY_AUTO_DISCOVERY");
+    expect(desktopInstallersWorkflow).toContain("dist/SHA256SUMS.txt");
     expect(desktopInstallersWorkflow).toContain("dist/*.dmg");
     expect(desktopInstallersWorkflow).toContain("dist/*.exe");
     expect(desktopInstallersWorkflow).toContain("dist/*.AppImage");
