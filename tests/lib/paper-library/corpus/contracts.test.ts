@@ -430,12 +430,18 @@ describe("paper-library corpus contracts", () => {
       ...fixture.expectedRelevanceSummary,
       sourceHash: undefined,
       sectionMapHash: undefined,
+      promptVersion: undefined,
     })).toThrow(/sourceHash/);
+    expect(() => PaperSummaryArtifactSchema.parse({
+      ...fixture.expectedRelevanceSummary,
+      promptVersion: undefined,
+    })).toThrow(/promptVersion/);
     expect(() => PaperSummaryArtifactSchema.parse({
       ...fixture.expectedRelevanceSummary,
       status: "missing",
       sourceHash: undefined,
       sectionMapHash: undefined,
+      promptVersion: undefined,
     })).not.toThrow();
   });
 

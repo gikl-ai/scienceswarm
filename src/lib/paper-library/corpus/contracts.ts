@@ -285,7 +285,7 @@ export const PaperSummaryArtifactSchema = z
     status: PaperSummaryStatusSchema,
     sourceHash: NonEmptyStringSchema.optional(),
     sectionMapHash: NonEmptyStringSchema.optional(),
-    promptVersion: NonEmptyStringSchema,
+    promptVersion: NonEmptyStringSchema.optional(),
     modelId: NonEmptyStringSchema.optional(),
     generationSettings: z.record(z.string(), z.unknown()).default({}),
     createdAt: IsoDateStringSchema,
@@ -309,6 +309,13 @@ export const PaperSummaryArtifactSchema = z
         code: "custom",
         path: ["sectionMapHash"],
         message: "current and stale summaries must include sectionMapHash.",
+      });
+    }
+    if ((value.status === "current" || value.status === "stale") && value.promptVersion === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["promptVersion"],
+        message: "current and stale summaries must include promptVersion.",
       });
     }
     if (value.status === "stale" && value.staleReason === undefined) {
