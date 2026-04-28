@@ -24,8 +24,17 @@ const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
     };
     electronVersion?: string;
     files?: string[];
+    linux?: {
+      artifactName?: string;
+    };
+    mac?: {
+      artifactName?: string;
+    };
     npmRebuild?: boolean;
     asarUnpack?: string[];
+    win?: {
+      artifactName?: string;
+    };
   };
 };
 const desktopInstallersWorkflow = fs.readFileSync(
@@ -116,6 +125,15 @@ describe("package.json scripts", () => {
     expect(pkg.build?.npmRebuild).toBe(false);
     expect(pkg.build?.asar).toBe(true);
     expect(pkg.build?.asarUnpack).toContain(".next/standalone/**");
+    expect(pkg.build?.mac?.artifactName).toBe(
+      "${productName}-${version}-mac-${arch}.${ext}",
+    );
+    expect(pkg.build?.win?.artifactName).toBe(
+      "${productName}-${version}-windows-${arch}.${ext}",
+    );
+    expect(pkg.build?.linux?.artifactName).toBe(
+      "${productName}-${version}-linux-${arch}.${ext}",
+    );
 
     for (const scriptName of [
       "desktop:pack:mac",
