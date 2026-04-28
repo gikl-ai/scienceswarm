@@ -101,20 +101,19 @@ def plateau_reference(
     """Return the finite-sample plateau reference for the connected SFF.
 
     For non-degenerate spectra this is the sample mean of
-    Z(2 beta) / Z(beta)^2.  For GSE, Kramers degeneracy doubles each
-    eigenvalue's multiplicity.  The late-time diagonal contribution is then
-    sum_j d_j^2 exp(-2 beta E_j) / (sum_j d_j exp(-beta E_j))^2, not the
-    naive all-eigenvalue Z(2 beta) / Z(beta)^2, which would be too small by
-    roughly a factor of two.
+    Z(2 beta) / Z(beta)^2.  For GSE, collapse Kramers pairs first and compute
+    the normalized diagonal contribution on distinct levels.  The uniform
+    Kramers degeneracy cancels in that normalized expression, but collapsing
+    first avoids the naive all-eigenvalue estimate, which would be too small
+    by roughly a factor of two.
     """
     if cls == "GSE":
         distinct, _, _ = collapse_kramers_pairs(eigvals)
-        degeneracy = 2.0
-        numerator = (degeneracy**2) * np.exp(-2 * beta * distinct).sum(axis=1)
-        denominator = (degeneracy * np.exp(-beta * distinct).sum(axis=1)) ** 2
+        numerator = np.exp(-2 * beta * distinct).sum(axis=1)
+        denominator = np.exp(-beta * distinct).sum(axis=1) ** 2
         return (
             float(np.mean(numerator / denominator)),
-            "degeneracy-aware Kramers-pair time average",
+            "collapsed Kramers-pair time average",
         )
 
     numerator = np.exp(-2 * beta * eigvals).sum(axis=1)
@@ -385,7 +384,7 @@ def main() -> None:
     if not plateau_ok:
         failures.append(
             f"plateau at t_max ({plateau_g:.3e}) differs from "
-            f"theoretical Z(2 beta)/Z(beta)^2 ({plateau_ref:.3e}) by >50%; "
+            f"{plateau_ref_kind} ({plateau_ref:.3e}) by >50%; "
             f"extend t_max"
         )
     if failures:
@@ -395,7 +394,7 @@ def main() -> None:
 
     print("\nOK: <r> within tolerance for the expected Wigner-Dyson class")
     print("OK: dip-ramp-plateau structure present")
-    print("OK: late-time plateau matches Z(2 beta) / Z(beta)^2")
+    print(f"OK: late-time plateau matches {plateau_ref_kind}")
 
 
 if __name__ == "__main__":
