@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_PORTS } from "../../src/lib/config/ports";
+import { OLLAMA_RECOMMENDED_MODEL_ALIASES } from "../../src/lib/ollama-constants";
 
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
   dependencies?: {
@@ -85,5 +86,16 @@ describe("package.json scripts", () => {
     expect(runtimePrereqsScript).toContain('MODEL="${MODEL#ollama/}"');
     expect(runtimePrereqsScript).toContain('awk -v target="$MODEL"');
     expect(runtimePrereqsScript).not.toContain('grep -Eq "^${MODEL}');
+  });
+
+  it("keeps shell Gemma alias matching aligned with TypeScript constants", () => {
+    const aliasBlock = runtimePrereqsScript.match(
+      /Keep the Gemma 4 alias rows in sync[\s\S]*?END \{ exit found \? 0 : 1 \}/,
+    )?.[0] ?? "";
+
+    expect(aliasBlock).not.toBe("");
+    for (const alias of OLLAMA_RECOMMENDED_MODEL_ALIASES) {
+      expect(aliasBlock).toContain(`"${alias}"`);
+    }
   });
 });
