@@ -805,7 +805,8 @@ function extractMarkdownSection(markdown: string, titles: readonly string[]): st
   const match = pattern.exec(markdown);
   if (!match || match.index === undefined) return undefined;
   const bodyStart = match.index + match[0].length;
-  const next = /^#{1,6}\s+.+$/gim;
+  const headingLevel = match[0].match(/^#+/)?.[0].length ?? 1;
+  const next = new RegExp(`^#{1,${headingLevel}}\\s+.+$`, "gim");
   next.lastIndex = bodyStart;
   const nextMatch = next.exec(markdown);
   return markdown.slice(bodyStart, nextMatch?.index ?? markdown.length).trim();

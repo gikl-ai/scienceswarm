@@ -103,6 +103,8 @@ describe("paper-library corpus extraction adapters", () => {
               <ol>
                 <li>[1] Roe, B. (2019). "Semantic sidecars for research." Web Journal, 2019. DOI registered 2020. doi:10.1000/html-sidecar.</li>
               </ol>
+              <h4>Dataset references</h4>
+              <p>[2] Doe, J. (2021). "Nested reference headings." Corpus Journal. doi:10.1000/html-nested-ref.</p>
             </article>
           </body>
         </html>
@@ -120,11 +122,18 @@ describe("paper-library corpus extraction adapters", () => {
     expect(result.sourceArtifact.normalizedMarkdown.split("\n").filter((line) => line === "HTML Evidence Paper"))
       .toHaveLength(0);
     expect(result.sectionMap?.sections.map((section) => section.title)).toContain("Results");
-    expect(result.bibliography[0]).toMatchObject({
-      bibliographySlug: "wiki/bibliography/doi-10-1000-html-sidecar",
-      year: 2019,
-      seenIn: [expect.objectContaining({ extractionSource: "html_references" })],
-    });
+    expect(result.bibliography.find(
+      (entry) => entry.bibliographySlug === "wiki/bibliography/doi-10-1000-html-sidecar",
+    ))
+      .toMatchObject({
+        bibliographySlug: "wiki/bibliography/doi-10-1000-html-sidecar",
+        year: 2019,
+        seenIn: [expect.objectContaining({ extractionSource: "html_references" })],
+      });
+    expect(result.bibliography.map((entry) => entry.bibliographySlug)).toEqual(expect.arrayContaining([
+      "wiki/bibliography/doi-10-1000-html-sidecar",
+      "wiki/bibliography/doi-10-1000-html-nested-ref",
+    ]));
   });
 
   it("guards malformed bibliography metadata instead of emitting invalid artifacts", () => {
