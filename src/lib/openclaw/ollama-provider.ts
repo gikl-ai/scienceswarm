@@ -10,7 +10,7 @@ export const OPENCLAW_OLLAMA_PROVIDER_KEY = OPENHANDS_LOCAL_SENTINEL_API_KEY;
 
 function modelIdsForOpenClawProvider(modelId: string): string[] {
   if (OLLAMA_RECOMMENDED_MODEL_ALIASES.includes(modelId)) {
-    return [...new Set(OLLAMA_RECOMMENDED_MODEL_ALIASES)];
+    return OLLAMA_RECOMMENDED_MODEL_ALIASES;
   }
   return [modelId];
 }

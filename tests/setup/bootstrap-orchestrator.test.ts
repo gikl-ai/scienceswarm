@@ -590,6 +590,34 @@ describe("runBootstrap finalize ready flags", () => {
     expect(modelCall?.[0]).toEqual(["models", "set", "ollama/gemma4:e2b"]);
   });
 
+  it("falls back to process env for the pulled model when .env has no Ollama model", async () => {
+    const previousOllamaModel = process.env.OLLAMA_MODEL;
+    process.env.OLLAMA_MODEL = "gemma4:26b";
+    try {
+      const tasks: InstallTask[] = [
+        fakeTask("openclaw", [{ status: "succeeded" }]),
+        fakeTask("ollama-gemma", [{ status: "succeeded" }]),
+      ];
+
+      for await (const _ of runBootstrap({ handle: "h", repoRoot }, { tasks })) {
+        void _;
+      }
+
+      const contents = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
+      expect(contents).toMatch(/^OLLAMA_MODEL=gemma4:26b$/m);
+      const modelCall = runOpenClawMock.mock.calls.filter(
+        (call) => call[0][0] === "models" && call[0][1] === "set",
+      ).at(-1);
+      expect(modelCall?.[0]).toEqual(["models", "set", "ollama/gemma4:26b"]);
+    } finally {
+      if (previousOllamaModel === undefined) {
+        delete process.env.OLLAMA_MODEL;
+      } else {
+        process.env.OLLAMA_MODEL = previousOllamaModel;
+      }
+    }
+  });
+
   it("does NOT write AGENT_BACKEND when the openclaw task failed", async () => {
     const tasks: InstallTask[] = [
       fakeTask("openclaw", [{ status: "failed", error: "boom" }]),
