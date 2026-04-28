@@ -102,6 +102,32 @@ the `bridge-research-layout` maintenance action to preview legacy `wiki/*`
 homes and optionally create non-destructive README bridges for the canonical
 research-first layout.
 
+### Desktop Installer Artifacts
+
+Maintainers can build unsigned desktop installer artifacts from GitHub Actions
+with the **Desktop Installers** workflow, or by pushing a `v*` tag. The workflow
+builds the standalone Next.js bundle and uploads:
+
+- macOS: DMG
+- Windows: NSIS `.exe`
+- Linux: AppImage
+
+Local package commands are available when you need to reproduce one platform
+target in its native environment:
+
+```bash
+npm run build:standalone
+npm run desktop:pack:mac
+npm run desktop:pack:win
+npm run desktop:pack:linux
+```
+
+Desktop installers do not bundle local model weights. Setup downloads the
+selected Ollama model instead, defaulting to `gemma4:e4b` and offering
+`gemma4:e2b` as the lower-memory option. Packaging stages a minimal desktop app
+under `.desktop-package/app` so installer builds do not scan or ship the
+repository's development `node_modules`.
+
 ### Windows via WSL2
 
 ScienceSwarm does not support native Windows yet. The supported Windows route is

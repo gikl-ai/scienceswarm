@@ -19,6 +19,7 @@
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
@@ -65,6 +66,7 @@ bench-stdout.log
 
 # local model weights are downloaded during setup, not committed or packaged
 .ollama/
+.desktop-package/
 desktop/ollama-models/
 *.gguf
 
