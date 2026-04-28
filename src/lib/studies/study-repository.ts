@@ -38,6 +38,11 @@ export class DuplicateStudyError extends Error {
   }
 }
 
+interface ResolvedStudyCreateIdentity {
+  name: string;
+  slug: string;
+}
+
 const studyCreateTails = new Map<string, Promise<void>>();
 
 async function withStudyCreateLock<T>(
@@ -104,11 +109,18 @@ export function createStudyRepository(
 
     async create(input): Promise<StudyRecord> {
       const trimmedName = input.name.trim();
-      const slug = input.slug
+      const requestedSlug = input.slug
         ? assertSafeProjectSlug(input.slug)
         : assertSafeProjectSlug(slugifyStudyName(trimmedName));
-      return withStudyCreateLock(slug, async () => {
+      return withStudyCreateLock(requestedSlug, async () => {
         const brain = await store();
+        const { name, slug } = await resolveStudyCreateIdentity({
+          brain,
+          explicitSlug: Boolean(input.slug),
+          requestedName: trimmedName,
+          requestedSlug,
+        });
+
         const existingPage = await brain.getPage(slug);
         const existing = pageToStudyRecord(existingPage);
         if (existing && existing.status !== "archived") {
@@ -125,7 +137,7 @@ export function createStudyRepository(
         const createdAt = now().toISOString();
         const record: StudyRecord = {
           slug,
-          name: trimmedName,
+          name,
           description: input.description?.trim() || "New study",
           createdAt,
           lastActive: createdAt,
@@ -179,6 +191,73 @@ export function createStudyRepository(
   };
 }
 
+async function resolveStudyCreateIdentity({
+  brain,
+  explicitSlug,
+  requestedName,
+  requestedSlug,
+}: {
+  brain: BrainStore;
+  explicitSlug: boolean;
+  requestedName: string;
+  requestedSlug: string;
+}): Promise<ResolvedStudyCreateIdentity> {
+  if (explicitSlug) {
+    return { name: requestedName, slug: requestedSlug };
+  }
+
+  const requestedUse = await getStudySlugUse(brain, requestedSlug);
+  if (!requestedUse.used) {
+    return { name: requestedName, slug: requestedSlug };
+  }
+  if (!requestedUse.onlyArchivedStudyRecords) {
+    throw new DuplicateStudyError(requestedSlug);
+  }
+
+  const versioned = await resolveArchivedStudyVersionedSlug(brain, requestedSlug);
+  return {
+    name: `${requestedName}-${versioned.version}`,
+    slug: versioned.slug,
+  };
+}
+
+async function resolveArchivedStudyVersionedSlug(
+  brain: BrainStore,
+  baseSlug: string,
+): Promise<{ slug: string; version: number }> {
+  for (let version = 2; version < Number.MAX_SAFE_INTEGER; version += 1) {
+    const slug = assertSafeProjectSlug(`${baseSlug}-${version}`);
+    const use = await getStudySlugUse(brain, slug);
+    if (!use.used) {
+      return { slug, version };
+    }
+  }
+
+  throw new Error(`Unable to allocate versioned study slug for ${baseSlug}`);
+}
+
+async function getStudySlugUse(
+  brain: BrainStore,
+  slug: string,
+): Promise<{ onlyArchivedStudyRecords: boolean; used: boolean }> {
+  const exactPage = await brain.getPage(slug);
+  const exactRecord = pageToStudyRecord(exactPage);
+  if (exactPage && !exactRecord) {
+    return { onlyArchivedStudyRecords: false, used: true };
+  }
+  if (exactRecord && exactRecord.status !== "archived") {
+    return { onlyArchivedStudyRecords: false, used: true };
+  }
+
+  const matchingRecords = await findStudyRecordsBySlug(brain, slug);
+  if (matchingRecords.some((record) => record.status !== "archived")) {
+    return { onlyArchivedStudyRecords: false, used: true };
+  }
+
+  const used = Boolean(exactRecord) || matchingRecords.length > 0;
+  return { onlyArchivedStudyRecords: used, used };
+}
+
 async function listStudyAndLegacyProjectPages(store: BrainStore): Promise<BrainPage[]> {
   const [studyPages, legacyProjectPages] = await Promise.all([
     store.listPages({ type: "study", limit: 5000 }),
@@ -191,13 +270,20 @@ async function findStudyRecordBySlug(
   store: BrainStore,
   slug: string,
 ): Promise<StudyRecord | null> {
+  const records = await findStudyRecordsBySlug(store, slug);
+  return records[0] ?? null;
+}
+
+async function findStudyRecordsBySlug(
+  store: BrainStore,
+  slug: string,
+): Promise<StudyRecord[]> {
   const pages = await listStudyAndLegacyProjectPages(store);
-  const records = pages
+  return pages
     .map(pageToStudyRecord)
     .filter((record): record is StudyRecord => Boolean(record))
     .filter((record) => record.slug === slug)
     .sort(compareStudyRecordsByRecency);
-  return records[0] ?? null;
 }
 
 function dedupeStudyRecords(records: StudyRecord[]): StudyRecord[] {

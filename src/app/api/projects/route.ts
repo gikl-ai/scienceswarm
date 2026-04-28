@@ -68,23 +68,46 @@ async function createDiskFallbackProject(input: {
   name: string;
   description?: string;
 }): Promise<ProjectRecord> {
-  const existing = (await listProjectRecordsFromDisk()).find(
+  const records = await listProjectRecordsFromDisk();
+  const activeExisting = records.find(
     (record) => record.slug === input.slug && record.status !== "archived",
   );
-  if (existing) {
+  if (activeExisting) {
     throw new DuplicateProjectError(input.slug);
+  }
+
+  let slug = input.slug;
+  let name = input.name;
+  if (records.some((record) => record.slug === input.slug)) {
+    const version = resolveDiskFallbackProjectVersion(records, input.slug);
+    slug = `${input.slug}-${version}`;
+    name = `${input.name}-${version}`;
   }
 
   const createdAt = new Date().toISOString();
   return {
-    slug: input.slug,
-    name: input.name,
+    slug,
+    name,
     description: input.description?.trim() || "New project",
     createdAt,
     lastActive: createdAt,
     status: "active",
     projectPageSlug: input.slug,
   };
+}
+
+function resolveDiskFallbackProjectVersion(
+  records: ProjectRecord[],
+  baseSlug: string,
+): number {
+  const usedSlugs = new Set(records.map((record) => record.slug));
+  for (let version = 2; version < Number.MAX_SAFE_INTEGER; version += 1) {
+    if (!usedSlugs.has(`${baseSlug}-${version}`)) {
+      return version;
+    }
+  }
+
+  throw new Error(`Unable to allocate versioned project slug for ${baseSlug}`);
 }
 
 async function archiveDiskFallbackProject(slug: string): Promise<{
