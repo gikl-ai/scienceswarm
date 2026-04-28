@@ -38,7 +38,7 @@ Do not introduce a new canonical data store that bypasses `gbrain`.
   `src/AGENTS.md`.
 - Prefer integrating with OpenHands through `src/lib/openhands.ts` and the
   existing proxy routes before changing the upstream submodule.
-- Preserve the local-first path and the documented `gemma4:latest` default
+- Preserve the local-first path and the documented `gemma4:e4b` default
   unless intentionally changing product behavior.
 
 ## Validation

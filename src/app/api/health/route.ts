@@ -10,6 +10,7 @@ import {
   buildOpenHandsLocalEvidenceSnapshot,
   buildRuntimeCapabilityContract,
   DEFAULT_LOCAL_CHAT_MODEL,
+  ollamaModelMatches,
   readOpenHandsLocalEvidence,
 } from "@/lib/runtime";
 import type { RuntimeCapabilityContract } from "@/lib/runtime";
@@ -277,9 +278,7 @@ export async function GET(): Promise<Response> {
   const configuredLlmProvider = localProviderConfigured ? "local" : "openai";
 
   const configuredLocalModelAvailable = ollamaModels.some(
-    (availableModel) =>
-      availableModel === configuredLocalModel ||
-      availableModel.startsWith(`${configuredLocalModel}:`),
+    (availableModel) => ollamaModelMatches(configuredLocalModel, availableModel),
   );
   const localChatReady = ollama === "connected" && configuredLocalModelAvailable;
   const strictLocalChatReady = localProviderConfigured && localChatReady;
