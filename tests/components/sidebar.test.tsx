@@ -38,21 +38,21 @@ describe("Sidebar", () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
   });
 
-  it("routes workspace and gbrain links with the active project scope", () => {
+  it("routes workspace and gbrain links with the active study scope", () => {
     render(<Sidebar />);
 
-    expect(screen.getByTitle("Workspace")).toHaveAttribute("href", "/dashboard/project?name=demo-project");
+    expect(screen.getByTitle("Workspace")).toHaveAttribute("href", "/dashboard/study?name=demo-project");
     expect(screen.getByTitle("gbrain")).toHaveAttribute("href", "/dashboard/gbrain?name=demo-project");
     expect(screen.getByTitle("Reasoning")).toHaveAttribute("href", "/dashboard/reasoning");
   });
 
-  it("falls back to the remembered project slug when the URL is unscoped", () => {
+  it("falls back to the remembered study slug when the URL is unscoped", () => {
     searchParamsValue = "";
     window.localStorage.setItem("scienceswarm.project.lastSlug", "remembered-project");
 
     render(<Sidebar />);
 
-    expect(screen.getByTitle("Workspace")).toHaveAttribute("href", "/dashboard/project?name=remembered-project");
+    expect(screen.getByTitle("Workspace")).toHaveAttribute("href", "/dashboard/study?name=remembered-project");
     expect(screen.getByTitle("gbrain")).toHaveAttribute("href", "/dashboard/gbrain?name=remembered-project");
   });
 });

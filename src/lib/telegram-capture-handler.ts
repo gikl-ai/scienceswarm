@@ -82,17 +82,17 @@ function formatCaptureReply(result: Awaited<ReturnType<typeof processCapture>>):
     const choices =
       result.choices.length > 0
         ? `Choices: ${result.choices.join(", ")}`
-        : "Reply with the project slug you want this linked to.";
+        : "Reply with the study slug you want this linked to.";
     return [
       "Saved capture to the inbox without linking it yet.",
-      result.clarificationQuestion ?? "Which project should I link this capture to?",
+      result.clarificationQuestion ?? "Which study should I link this capture to?",
       choices,
     ].join("\n\n");
   }
 
   const projectLine = result.project
-    ? `Project: ${result.project}`
-    : "Saved without a project link.";
+    ? `Study: ${result.project}`
+    : "Saved without a study link.";
   const pathLine = result.materializedPath
     ? `Memory page: ${result.materializedPath}`
     : `Raw capture: ${result.rawPath}`;

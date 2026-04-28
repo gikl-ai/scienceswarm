@@ -17,6 +17,7 @@ import {
   runtimeErrorResponse,
   runtimeHostHistoryForSession,
   runtimeInvalidRequest,
+  studyScopedIdFromBody,
   turnModeFromBody,
 } from "../../_shared";
 import { RuntimeHostError } from "@/lib/runtime-hosts/errors";
@@ -66,7 +67,7 @@ export async function POST(request: Request): Promise<Response> {
       requireStringField(body, "prompt"),
       hostId,
     );
-    const projectId = requireSafeProjectId(body.projectId);
+    const projectId = requireSafeProjectId(studyScopedIdFromBody(body));
     const conversationId = optionalStringField(body, "conversationId") ?? null;
     const approvalState = approvalStateFromBody(body);
     const inputFileRefs = optionalStringArrayField(body, "inputFileRefs") ?? [];

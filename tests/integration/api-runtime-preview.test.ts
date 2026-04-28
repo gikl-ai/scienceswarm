@@ -135,7 +135,7 @@ describe("POST /api/runtime/preview", () => {
       }),
       expect.objectContaining({
         kind: "gbrain-excerpt",
-        label: "Compact gbrain project brief",
+        label: "Compact gbrain study brief",
       }),
       expect.objectContaining({
         kind: "mcp-tool-call",

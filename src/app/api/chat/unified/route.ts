@@ -36,11 +36,17 @@ function detectPythonPath(): string {
   }
   return _cachedPythonPath;
 }
+
+async function loadReadyBrainStore() {
+  const { ensureBrainStoreReady, getBrainStore } = await import("@/brain/store");
+  await ensureBrainStoreReady();
+  return getBrainStore();
+}
+
 import {
   resolveAgentConfig,
   agentHealthCheck,
 } from "@/lib/agent-client";
-import { ensureBrainStoreReady, getBrainStore } from "@/brain/store";
 import {
   completeSetup,
   createSetupState,
@@ -90,6 +96,7 @@ import {
   type ChatTimingTelemetry,
 } from "@/lib/chat-timing-telemetry";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
+import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 import {
   getProjectBrainRootForBrainRoot,
   getProjectStateRootForBrainRoot,
@@ -114,7 +121,7 @@ import {
   materializeGbrainCheckout,
 } from "@/lib/openhands/gbrain-checkout";
 import { ensureProjectShellForProjectSlug } from "@/lib/projects/ensure-project-shell";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 import {
   getCurrentExplicitLlmRuntimeConfig,
   getCurrentLlmRuntimeEnv,
@@ -349,6 +356,28 @@ type ChatTimingMetaName =
   | "gateway_ack"
   | "first_gateway_event"
   | "final_assistant_text";
+
+type ServerProgressStatus = "started" | "running" | "complete" | "failed";
+
+type ServerProgressEntryPayload = {
+  kind: "activity";
+  text: string;
+  source: "server";
+  timestampMs: number;
+  phase?: string;
+  status?: ServerProgressStatus;
+  label?: string;
+};
+
+type ServerProgressPayload = {
+  text: string;
+  source: "server";
+  timestampMs: number;
+  phase?: string;
+  status?: ServerProgressStatus;
+  label?: string;
+  progressEntries?: ServerProgressEntryPayload[];
+};
 
 function finishChatTimingResponse(
   timing: ChatTimingTelemetry,
@@ -1468,13 +1497,13 @@ async function mergeReferencedWorkspaceFiles(
         ...files,
         ...implicitWorkspaceFiles.map((workspacePath) => ({
           name: path.basename(workspacePath),
-          size: "implicit project context",
+          size: "implicit study context",
           workspacePath,
         })),
       ],
       referenceNotes: {
         resolved: implicitWorkspaceFiles.map((workspacePath) => ({
-          requested: "visible imported project context",
+          requested: "visible imported study context",
           workspacePath,
         })),
         ambiguous: [],
@@ -1647,7 +1676,7 @@ function buildWorkspaceReferenceNotesSection(
 
   if (referenceNotes.resolved.length > 0) {
     sections.push(
-      "Resolved project file references for this turn:",
+      "Resolved study file references for this turn:",
       ...referenceNotes.resolved.map(
         (entry) => `- ${escapePromptXml(entry.requested)} -> ${escapePromptXml(entry.workspacePath)}`,
       ),
@@ -1656,7 +1685,7 @@ function buildWorkspaceReferenceNotesSection(
 
   if (referenceNotes.ambiguous.length > 0) {
     sections.push(
-      "Ambiguous project file references were not auto-attached. Ask the user to confirm one of:",
+      "Ambiguous study file references were not auto-attached. Ask the user to confirm one of:",
       ...referenceNotes.ambiguous.map(
         (entry) => `- ${escapePromptXml(entry.requested)}: ${entry.candidates.map((candidate) => escapePromptXml(candidate)).join(", ")}`,
       ),
@@ -1715,8 +1744,8 @@ async function buildWorkspaceFileContext(
       file.brainSlug || gbrainSlugFromReference(file.workspacePath);
     if (gbrainSlug) {
       try {
-        await ensureBrainStoreReady();
-        const page = await getBrainStore().getPage(gbrainSlug);
+        const store = await loadReadyBrainStore();
+        const page = await store.getPage(gbrainSlug);
         if (!page) {
           missingFiles.push(`gbrain:${gbrainSlug}`);
           continue;
@@ -1817,7 +1846,7 @@ async function buildWorkspaceFileContext(
 /**
  * Inject the "currently selected file" context into the message list.
  *
- * This covers the case where the user clicks a file in the project list and
+ * This covers the case where the user clicks a file in the study list and
  * then asks a question about "it" — the preview card is visible in the chat
  * pane, but the file was never explicitly uploaded or @-mentioned.  We add a
  * structured user message so every backend path sees the context without
@@ -2239,8 +2268,8 @@ function buildOpenClawMessage(
 
   const isClarificationRequest = isExplanatoryClarificationRequest(ruleMessage);
   const guidance = options.forceToolExecution && !isClarificationRequest
-    ? `Execute all steps using your tools when real work is required. Prefer canonical gbrain tools such as brain_capture for task/note/decision/hypothesis page creation and brain_project_organize or brain_import_registry for read-only project-state summaries. Use exec/read/write only for ordinary workspace files outside .brain. Use ABSOLUTE paths only when a workspace file path is actually required. For Python, use: ${process.env.PYTHON_PATH || detectPythonPath() || "python3"}. Do not describe steps — do them. Continue until fully complete.`
-    : "Answer the user's latest request directly using the visible project context. Keep ordinary conversational replies brief; for greetings, acknowledgements, or short status questions, answer in 1-2 sentences and do not volunteer workspace actions unless asked. Do not create, edit, run, or export files unless the user's latest request explicitly asks for a workspace change or generated artifact. Ignore project brief next-move suggestions unless the user explicitly asks you to act on them in this turn.";
+    ? `Execute all steps using your tools when real work is required. Prefer canonical gbrain tools such as brain_capture for task/note/decision/hypothesis page creation and brain_study_organize or brain_study_import_registry for read-only study-state summaries. Use exec/read/write only for ordinary workspace files outside .brain. Use ABSOLUTE paths only when a workspace file path is actually required. For Python, use: ${process.env.PYTHON_PATH || detectPythonPath() || "python3"}. Do not describe steps — do them. Continue until fully complete.`
+    : "Answer the user's latest request directly using the visible study context. Keep ordinary conversational replies brief; for greetings, acknowledgements, or short status questions, answer in 1-2 sentences and do not volunteer workspace actions unless asked. Do not create, edit, run, or export files unless the user's latest request explicitly asks for a workspace change or generated artifact. Ignore study brief next-move suggestions unless the user explicitly asks you to act on them in this turn.";
 
   return [...contextParts, "", message, "", guidance].join("\n");
 }
@@ -2294,7 +2323,7 @@ function buildCompactOpenClawArtifactRetryMessage(params: {
     "",
     "ScienceSwarm web task rules:",
     "- Produce only scientist-facing output. Do not mention internal tool, gateway, session, model, or subagent mechanics.",
-    "- Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to project-visible relative paths such as `docs/result.md`, not machine-local absolute paths.",
+    "- Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to study-visible relative paths such as `docs/result.md`, not machine-local absolute paths.",
     "- Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
     "- Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     "- Do not spawn subagents, background agents, sessions, or gateway pairing flows. Complete the task in this OpenClaw session.",
@@ -2359,7 +2388,7 @@ function buildOpenClawWebTaskGuardrails(
   const rules = [
     "ScienceSwarm web task rules:",
     "- Produce only scientist-facing output. Do not mention internal tool, gateway, session, model, or subagent mechanics.",
-    "- Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to project-visible relative paths such as `docs/result.md`, not machine-local absolute paths.",
+    "- Use absolute workspace paths only inside tool arguments. In final responses and saved scientist-facing documents, refer to study-visible relative paths such as `docs/result.md`, not machine-local absolute paths.",
     "- Do not mention Codex, Claude Code, Pi, or any other external agent brand in the response.",
     "- Do not promise future background monitoring, follow-up messages, or later progress updates after your final response.",
     "- If an internal tool attempt fails but you recover, do not mention the failed attempt or tool name. Summarize only the final visible result. If you cannot recover, explain the user-visible blocker in plain language without tool names.",
@@ -2367,7 +2396,7 @@ function buildOpenClawWebTaskGuardrails(
     "- Do not run git add, git commit, or git push unless the user explicitly asked for repo version-control work.",
     "- Do not mutate .brain/state or .brain/wiki directly when a canonical gbrain tool exists.",
     "- For task, note, decision, or hypothesis page creation in gbrain, use brain_capture instead of direct filesystem edits.",
-    "- For organizer or import inventory reads, prefer brain_project_organize or brain_import_registry over ad hoc .brain scans.",
+    "- For organizer or import inventory reads, prefer brain_study_organize or brain_study_import_registry over ad hoc .brain scans.",
     "- Treat provided gbrain/file excerpts as enough evidence when they answer the request.",
     "- Do not auto-read AGENTS.md or other startup-convention files unless the user explicitly asks.",
   ];
@@ -2378,7 +2407,7 @@ function buildOpenClawWebTaskGuardrails(
       `- Use absolute paths rooted under ${projectRoot} for every write, exec, and saved artifact. If you need a scratch or artifacts folder, create it under ${projectRoot}.`,
       `- Never write to the generic OpenClaw workspace, WORK_DIR, home directory, or any path outside ${projectRoot} unless the user explicitly asked for that destination.`,
       `- For toy or local validation runs, prefer the Python standard library or dependencies already available in the current environment. Do not install new packages unless the user explicitly asked you to modify the environment.`,
-      `- If a tool wrote something outside ${projectRoot}, treat that as a mistake: rewrite or move it into ${projectRoot} before you finish, then report the project-visible path.`,
+      `- If a tool wrote something outside ${projectRoot}, treat that as a mistake: rewrite or move it into ${projectRoot} before you finish, then report the study-visible path.`,
     );
   }
 
@@ -2462,7 +2491,7 @@ function buildRevisionArtifactRules(
       : `- Keep the critique artifact at ${critiquePath} and the approval-gated revision plan at ${planPath} when those artifacts are relevant.`,
     "- Keep the plan explicitly approval-gated. Do not rewrite the manuscript until the user clearly approves the current plan.",
     asksForPlanChange
-      ? `- If the user asks for a plan change, update ${planPath} so the visible project artifact reflects the latest plan and state that it needs fresh approval.`
+      ? `- If the user asks for a plan change, update ${planPath} so the visible study artifact reflects the latest plan and state that it needs fresh approval.`
       : "- If the user later asks for a plan change, update the plan artifact and require fresh approval.",
     asksForPlanChange
       ? "- After changing the plan artifact, read it back and confirm the requested change is present before claiming success. If the requested change is not present, rewrite the full plan artifact or tell the user the visible plan could not be updated."
@@ -2699,7 +2728,7 @@ function isCoverLetterOnlyRequest(message: string): boolean {
     /\b(?:write|draft|create|produce|generate)\s+(?:the\s+)?revised manuscript\b/i.test(
       message,
     ) ||
-    /\b(?:write|draft|create|produce|generate)\b[^.?!\n]{0,100}\bvisible project artifacts?\b[^.?!\n]{0,160}\brevised manuscript\b/i.test(
+    /\b(?:write|draft|create|produce|generate)\b[^.?!\n]{0,100}\bvisible study artifacts?\b[^.?!\n]{0,160}\brevised manuscript\b/i.test(
       message,
     ) ||
     /\brevised manuscript\b[^.?!\n]{0,100}\b(?:and|plus)\b[^.?!\n]{0,100}\b(?:editor\s+)?cover letter\b/i.test(
@@ -3160,7 +3189,7 @@ async function materializeGbrainProjectWorkspaceForAgent(
     return Array.from(materializedPaths).sort();
   } catch (error) {
     console.warn(
-      "Could not materialize gbrain-backed project files for agent workspace",
+      "Could not materialize gbrain-backed study files for agent workspace",
       {
         projectId,
         error: error instanceof Error ? error.message : String(error),
@@ -3268,12 +3297,7 @@ function projectPageMatches(
   page: { frontmatter?: Record<string, unknown> },
   projectId: string,
 ): boolean {
-  const frontmatter = page.frontmatter ?? {};
-  return (
-    frontmatter.project === projectId ||
-    (Array.isArray(frontmatter.projects) &&
-      frontmatter.projects.includes(projectId))
-  );
+  return frontmatterMatchesStudy(page.frontmatter, projectId);
 }
 
 async function resolveArtifactSourceSnapshots(
@@ -3285,8 +3309,7 @@ async function resolveArtifactSourceSnapshots(
   }
 
   try {
-    await ensureBrainStoreReady();
-    const store = getBrainStore();
+    const store = await loadReadyBrainStore();
     const resolvedSnapshots = new Map<
       string,
       import("@/lib/artifact-provenance").ArtifactSourceSnapshot
@@ -4105,12 +4128,12 @@ async function findLatestPriorExperimentDesignCritique(params: {
 }): Promise<{
   findings: Array<{ flaw_type?: string; description: string }>;
   } | null> {
-  await ensureBrainStoreReady();
-  const pages = await getBrainStore().listPages({ type: "critique", limit: 250 });
+  const store = await loadReadyBrainStore();
+  const pages = await store.listPages({ type: "critique", limit: 250 });
   const matchingPages = pages.filter((page) => {
     const frontmatter = page.frontmatter ?? {};
     return (
-      frontmatter.project === params.projectId
+      frontmatterMatchesStudy(frontmatter, params.projectId)
       && frontmatter.source_filename === params.sourceFilename
     );
   });
@@ -4146,7 +4169,7 @@ async function maybeHandleExperimentDesignCritique(params: {
     return Response.json(
       {
         response:
-          "Open a project and select the design memo or protocol you want critiqued, then ask again. ScienceSwarm only saves this critique loop when it has a project workspace to attach it to.",
+          "Open a study and select the design memo or protocol you want critiqued, then ask again. ScienceSwarm only saves this critique loop when it has a study workspace to attach it to.",
         backend: "openclaw",
         mode: params.chatMode,
         generatedFiles: [],
@@ -4193,7 +4216,7 @@ async function maybeHandleExperimentDesignCritique(params: {
     return Response.json(
       {
         response:
-          "ScienceSwarm could not find a visible text protocol or experiment-plan file to critique. Open the design memo in the project preview, or reference a `.md`/`.txt` plan file in your request, then retry.",
+          "ScienceSwarm could not find a visible text protocol or experiment-plan file to critique. Open the design memo in the study preview, or reference a `.md`/`.txt` plan file in your request, then retry.",
         backend: "openclaw",
         mode: params.chatMode,
         generatedFiles: [],
@@ -4348,7 +4371,7 @@ async function maybeHandleModelSystemApplicability(params: {
     return Response.json(
       {
         response:
-          "Open a project before running a model-system applicability assessment so ScienceSwarm can save the result with the visible research context.",
+          "Open a study before running a model-system applicability assessment so ScienceSwarm can save the result with the visible research context.",
         backend: "openclaw",
         mode: params.chatMode,
         generatedFiles: [],
@@ -4531,7 +4554,7 @@ async function maybeHandleTargetPrioritization(params: {
     return Response.json(
       {
         response:
-          "Open a project before prioritizing targets or biomarkers so ScienceSwarm can save the ranking with visible project evidence.",
+          "Open a study before prioritizing targets or biomarkers so ScienceSwarm can save the ranking with visible study evidence.",
         backend: "openclaw",
         mode: params.chatMode,
         generatedFiles: [],
@@ -5241,7 +5264,7 @@ function buildRevisionArtifactCompletenessRetryMessage(params: {
     return [
       `[Workspace: ${params.projectRoot} — use ABSOLUTE paths for all read/write/exec operations]`,
       "",
-      "The previous response claimed the revision plan was updated, but the visible project artifact does not yet contain the requested requirements.",
+      "The previous response claimed the revision plan was updated, but the visible study artifact does not yet contain the requested requirements.",
       `Plan artifact to update: ${path.join(params.projectRoot, params.paths.plan)}`,
       "",
       "Update the visible plan artifact now so it explicitly includes these requested requirements:",
@@ -5589,10 +5612,10 @@ function buildMissingRequestedArtifactRepairMessage(params: {
   return [
     `[Workspace: ${params.projectRoot} — use ABSOLUTE paths for all read/write/exec operations]`,
     "",
-    "ScienceSwarm could not verify that the requested visible artifact exists in the project workspace.",
+    "ScienceSwarm could not verify that the requested visible artifact exists in the study workspace.",
     `Requested artifact: ${absoluteTargetPath}`,
     "",
-    "Create that visible artifact now. Use the current project files and artifacts as evidence, and write scientist-facing content that satisfies the original request.",
+    "Create that visible artifact now. Use the current study files and artifacts as evidence, and write scientist-facing content that satisfies the original request.",
     `After writing it, read back enough of ${absoluteTargetPath} to verify it exists before claiming success.`,
     "",
     ...buildOpenClawAuthoredArtifactFallbackInstructions(params.workspacePath),
@@ -5614,11 +5637,11 @@ function buildMissingRequestedArtifactRepairMessage(params: {
 
 function buildVerifiedRequestedArtifactsResponse(paths: string[]): string {
   if (paths.length === 1) {
-    return `I created \`${paths[0]}\` and verified it is visible in the project workspace.`;
+    return `I created \`${paths[0]}\` and verified it is visible in the study workspace.`;
   }
 
   return [
-    "I created the requested artifacts and verified they are visible in the project workspace:",
+    "I created the requested artifacts and verified they are visible in the study workspace:",
     ...paths.map((workspacePath) => `- ${workspacePath}`),
   ].join("\n");
 }
@@ -6015,7 +6038,7 @@ function buildAuditArtifactRepairMessage(params: {
   return [
     `[Workspace: ${params.projectRoot} — use ABSOLUTE paths for all read/write/exec operations]`,
     "",
-    "ScienceSwarm could not verify that this required audit-stage artifact exists in the visible project workspace.",
+    "ScienceSwarm could not verify that this required audit-stage artifact exists in the visible study workspace.",
     `Required artifact: ${params.artifact.label}`,
     `Target path: ${absoluteTargetPath}`,
     "",
@@ -6078,7 +6101,7 @@ function buildAuditArtifactsRepairMessage(params: {
   return [
     `[Workspace: ${params.projectRoot} — use ABSOLUTE paths for all read/write/exec operations]`,
     "",
-    "ScienceSwarm could not verify that these required audit-stage artifacts exist in the visible project workspace.",
+    "ScienceSwarm could not verify that these required audit-stage artifacts exist in the visible study workspace.",
     "",
     "Create all missing artifacts now using the real visible workspace inputs. Do not invent results: if a rerun, figure, table, or translation step cannot be completed, state the blocker inside the relevant artifact.",
     "Do not write a revised manuscript or editor cover letter in this repair pass. The revision plan must remain approval-gated.",
@@ -7068,7 +7091,7 @@ function rewriteOpenClawResponsePaths(
     rewritten = [
       rewritten.trimEnd(),
       "",
-      "Imported into the current project workspace:",
+      "Imported into the current study workspace:",
       ...missingMentions.map((workspacePath) => `- ${workspacePath}`),
     ].join("\n");
   }
@@ -7714,13 +7737,48 @@ function streamOpenClawResponse(params: {
             },
           });
         };
-        const sendServerProgress = (text: string): boolean =>
-          sendEvent({
+        const sendServerProgress = (
+          text: string,
+          meta: Omit<Partial<ServerProgressPayload>, "source" | "text"> = {},
+        ): boolean => {
+          const timestampMs =
+            typeof meta.timestampMs === "number" && Number.isFinite(meta.timestampMs)
+              ? Math.floor(meta.timestampMs)
+              : Date.now();
+          const phase =
+            typeof meta.phase === "string" && meta.phase.trim().length > 0
+              ? meta.phase.trim()
+              : undefined;
+          const label =
+            typeof meta.label === "string" && meta.label.trim().length > 0
+              ? meta.label.trim()
+              : undefined;
+          const payload: ServerProgressPayload = {
+            text,
+            source: "server",
+            timestampMs,
+            ...(phase ? { phase } : {}),
+            ...(meta.status ? { status: meta.status } : {}),
+            ...(label ? { label } : {}),
+            progressEntries: [
+              {
+                kind: "activity",
+                text,
+                source: "server",
+                timestampMs,
+                ...(phase ? { phase } : {}),
+                ...(meta.status ? { status: meta.status } : {}),
+                ...(label ? { label } : {}),
+              },
+            ],
+          };
+          return sendEvent({
             progress: {
               type: "server_progress",
-              payload: { text },
+              payload,
             },
           });
+        };
         const closeStream = () => {
           if (streamClosed) {
             return;
@@ -7928,8 +7986,16 @@ function streamOpenClawResponse(params: {
                 // Keep both messages ahead of the first gateway event so the
                 // transcript shows immediate human-readable progress even when
                 // OpenClaw's first streamed callback arrives synchronously.
-                sendServerProgress("Sending request to OpenClaw");
-                sendServerProgress("Waiting for OpenClaw to respond");
+                sendServerProgress("Sending request to OpenClaw", {
+                  phase: "send",
+                  status: "started",
+                  label: "Send",
+                });
+                sendServerProgress("Waiting for OpenClaw to respond", {
+                  phase: "waiting",
+                  status: "running",
+                  label: "Wait",
+                });
               },
               sendToOpenClaw: sendToOpenClawWithProgress,
               message:
@@ -8498,10 +8564,16 @@ export async function handleUnifiedChatPost(
       mode: rawMode,
       conversationId,
       files: rawFiles = [],
-      projectId = null,
+      studyId = null,
+      studySlug = null,
+      study = null,
+      projectId: legacyProjectId = null,
       streamPhases = false,
       activeFile: rawActiveFile,
     } = body;
+    const projectId = [studyId, studySlug, study, legacyProjectId].find(
+      (value): value is string => typeof value === "string" && value.trim().length > 0,
+    ) ?? null;
     const chatMode = normalizeChatMode(rawMode);
     responseChatMode = chatMode;
     const commandTransport = options.commandTransport === true;
@@ -8576,7 +8648,7 @@ export async function handleUnifiedChatPost(
       : [];
 
     // Resolve the optional "currently selected file" context sent by the
-    // project workspace.  This is NOT the same as an uploaded/attached file —
+    // study workspace.  This is NOT the same as an uploaded/attached file —
     // it is the file whose preview card is visible in the chat pane.  We
     // inject it as a system message for the LLM messages array and also into
     // the message string so the OpenClaw path sees the file context too.
@@ -8621,7 +8693,7 @@ export async function handleUnifiedChatPost(
         return finishChatTimingResponse(
           chatTiming,
           Response.json(
-            { error: "projectId must be a safe bare slug" },
+            { error: "studyId must be a safe bare slug" },
             { status: 400 },
           ),
           "invalid_project_id",
@@ -9612,7 +9684,10 @@ export async function GET(request: Request) {
       return Response.json({ messages: [], backend: "strict-local-only" });
     }
     const since = url.searchParams.get("since");
-    const projectId = url.searchParams.get("projectId");
+    const projectId = url.searchParams.get("studyId")
+      ?? url.searchParams.get("studySlug")
+      ?? url.searchParams.get("study")
+      ?? url.searchParams.get("projectId");
     const conversationId = url.searchParams.get("conversationId");
 
     if (!isValidTimestamp(since) || (!projectId && !conversationId)) {

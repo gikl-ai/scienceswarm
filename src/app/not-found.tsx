@@ -12,7 +12,7 @@ export default function NotFound() {
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
           If you are setting up for the first time, start with OpenClaw and
-          Telegram. If your runtime is already connected, open the project
+          Telegram. If your runtime is already connected, open the study
           workspace and import research data to build your brain.
         </p>
       </div>
@@ -25,7 +25,7 @@ export default function NotFound() {
           Connect OpenClaw
         </Link>
         <Link
-          href="/dashboard/project"
+          href="/dashboard/study"
           className="rounded-xl border border-border bg-white px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-surface"
         >
           Open workspace

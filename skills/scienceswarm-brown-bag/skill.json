@@ -1,0 +1,25 @@
+{
+  "slug": "scienceswarm-brown-bag",
+  "name": "ScienceSwarm Brown Bag",
+  "description": "Stress-test an early research idea into a durable written brief with a sharper research question, landscape/novelty pass, decisive test, hard-objection map, hard pursuit verdict, evidence grading, publication fit, publication roadmap, review loop, and next research assignment.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "research-design",
+    "planning",
+    "brown-bag"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "A rigorous brown-bag partner for scientists, mathematicians, social scientists, and engineers: turn a rough research idea into a saved and reviewed Research Brown Bag Brief with landscape/novelty synthesis, evidence grades, hard objections, alternative framings, a pursue/narrow/park/explore/kill verdict, publication fit, publication pathway, and the smallest decisive next test.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-27T00:00:00.000Z",
+  "updatedAt": "2026-04-27T00:00:00.000Z"
+}

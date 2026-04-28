@@ -163,6 +163,11 @@ export function buildArtifactPageMarkdown(input: {
   uploadedBy: string;
 }): string {
   const parsed = matter(input.content);
+  const {
+    project: _legacyProject,
+    projects: _legacyProjects,
+    ...parsedFrontmatter
+  } = parsed.data;
   const tags = Array.from(
     new Set([
       input.projectSlug,
@@ -173,12 +178,14 @@ export function buildArtifactPageMarkdown(input: {
   );
 
   const frontmatter = {
-    ...parsed.data,
+    ...parsedFrontmatter,
     date: input.date,
     title: input.title,
     type: "artifact",
     para: "projects",
-    project: input.projectSlug,
+    study: input.projectSlug,
+    study_slug: input.projectSlug,
+    legacy_project_slug: input.projectSlug,
     status: "completed",
     tags,
     artifact_type: input.artifactType,

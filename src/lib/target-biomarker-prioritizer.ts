@@ -325,7 +325,7 @@ export function buildTargetPrioritizationAssessment(input: {
   const markdown = [
     `# ${title}`,
     "",
-    "## Project Goal",
+    "## Study Goal",
     "",
     compactWhitespace(input.prompt),
     "",

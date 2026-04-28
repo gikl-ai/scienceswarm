@@ -9,6 +9,12 @@ import type {
 } from "@/hooks/use-unified-chat";
 import { StepCards, type Step } from "@/components/research/step-cards";
 import { TaskPhaseRail } from "@/components/research/task-phase-rail";
+import {
+  AssistantProgressTranscript,
+  PROGRESS_SECTION_META,
+  type ProgressTranscriptBlock,
+} from "@/components/research/assistant-progress-transcript";
+import { inferProgressEntryLabel } from "@/lib/chat-progress-label";
 import { Spinner } from "@/components/spinner";
 
 // ── Channel badges ─────────────────────────────────────────────
@@ -36,7 +42,7 @@ export interface ChatMessageProps {
   isStreaming?: boolean;
   taskPhases?: ChatTaskPhase[];
   steps?: Step[];
-  /** Project ID for workspace media URLs — avoids SSR window.location access. */
+  /** Study ID for workspace media URLs - avoids SSR window.location access. */
   projectId?: string;
 }
 
@@ -151,47 +157,6 @@ function buildFallbackProgressLog(
   return entries;
 }
 
-type ProgressTranscriptBlock =
-  | {
-      type: "narrative";
-      entry: MessageProgressEntry;
-      section: "thinking" | "activity";
-    }
-  | {
-      type: "explored";
-      stableKey: string;
-      lines: string[];
-      rawCount: number;
-      section: "activity";
-    };
-
-const PROGRESS_SECTION_META: Record<
-  "thinking" | "activity",
-  {
-    title: string;
-    compactTitle: string;
-    icon: string;
-    className: string;
-    rowClassName: string;
-  }
-> = {
-  thinking: {
-    title: "Thinking Trace",
-    compactTitle: "Thinking",
-    icon: "🧠",
-    className: "border-rule bg-sunk text-body",
-    rowClassName: "text-strong/90",
-  },
-  activity: {
-    title: "OpenClaw Activity",
-    compactTitle: "Activity",
-    icon: "⚙️",
-    className: "border-border bg-sunk text-muted",
-    rowClassName: "text-muted",
-  },
-};
-
-const EXPLORED_INLINE_LINE_LIMIT = 3;
 const EXPLORE_COMMAND_PREFIXES = [
   "Read ",
   "Write ",
@@ -205,6 +170,8 @@ const EXPLORE_COMMAND_PREFIXES = [
   "Waited for background terminal",
   "Interacted with background terminal",
 ];
+const COLLAPSED_PROGRESS_BLOCK_LIMIT = 3;
+const MIN_PROGRESS_BLOCKS_TO_COLLAPSE = 5;
 const COMPACT_STEP_VERB_LABELS: Record<Step["verb"], string> = {
   reading: "Reading",
   searching: "Searching",
@@ -845,7 +812,14 @@ function buildProgressTranscript(entries: MessageProgressEntry[]): ProgressTrans
     flushExploredLines();
     blocks.push({
       type: "narrative",
-      entry: { ...entry, text },
+      entry: {
+        ...entry,
+        text,
+        label:
+          entry.kind === "activity"
+            ? (entry.label ?? inferProgressEntryLabel(text))
+            : entry.label,
+      },
       section: entry.kind,
     });
   }
@@ -984,150 +958,91 @@ function summarizeCompactSteps(steps: Step[]): string[] {
   return [];
 }
 
-function ExploredTranscriptBlock({
-  blockIndex,
-  lines,
-  rawCount,
-  compact,
-}: {
-  blockIndex: number;
-  lines: string[];
-  rawCount: number;
-  compact: boolean;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const hiddenCount = Math.max(0, lines.length - EXPLORED_INLINE_LINE_LIMIT);
-  const visibleLines =
-    expanded || hiddenCount === 0
-      ? lines
-      : lines.slice(0, EXPLORED_INLINE_LINE_LIMIT);
-  const actionCountLabel = `${rawCount} action${rawCount === 1 ? "" : "s"}`;
+function summarizeCompactProgressMetadata(entries: MessageProgressEntry[]): string[] {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    const summaries: string[] = [];
 
-  return (
-    <div className={compact ? "space-y-1.5" : "space-y-1"}>
-      <div className={`flex items-start gap-2 ${PROGRESS_SECTION_META.activity.rowClassName}`}>
-        <span aria-hidden="true" className="pt-0.5 text-quiet">• </span>
-        <span className="font-medium">Explored</span>
-        <span
-          data-testid={`assistant-explored-count-${blockIndex}`}
-          className="inline-flex items-center rounded-full border border-rule bg-raised px-2 py-0.5 text-[10px] font-medium text-dim"
-        >
-          {actionCountLabel}
-        </span>
-      </div>
-      <div className={`${compact ? "space-y-1 pl-4" : "space-y-1 pl-5"} text-muted`}>
-        {visibleLines.map((line, lineIndex) => (
-          <div
-            key={`${blockIndex}-${lineIndex}-${line}`}
-            className="flex items-start gap-2 whitespace-pre-wrap"
-          >
-            <span aria-hidden="true" className="text-quiet">
-              {lineIndex === 0 ? "└ " : "· "}
-            </span>
-            <span className="min-w-0 flex-1">
-              {renderInlineMarkdownLite(
-                line,
-                `progress-explored-${blockIndex}-${lineIndex}`,
-              )}
-            </span>
-          </div>
-        ))}
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            data-testid={`assistant-explored-toggle-${blockIndex}`}
-            className="inline-flex items-center gap-2 rounded-full border border-rule bg-raised px-2.5 py-1 text-[11px] font-medium text-body transition hover:bg-sunk"
-            onClick={() => setExpanded((current) => !current)}
-          >
-            {expanded
-              ? "Hide extra lines"
-              : `Show ${hiddenCount} more line${hiddenCount === 1 ? "" : "s"}`}
-          </button>
-        )}
-      </div>
-    </div>
-  );
+    if (entry.source === "gateway") {
+      summaries.push("OpenClaw");
+    } else if (entry.source === "agent") {
+      summaries.push("Agent");
+    } else if (entry.source === "server") {
+      summaries.push("Server");
+    } else if (entry.source === "client") {
+      summaries.push("Client");
+    }
+
+    if (entry.status === "started") {
+      summaries.push("Started");
+    } else if (entry.status === "running") {
+      summaries.push("Running");
+    } else if (entry.status === "complete") {
+      summaries.push("Complete");
+    } else if (entry.status === "failed") {
+      summaries.push("Failed");
+    }
+
+    if (summaries.length > 0) {
+      return summaries;
+    }
+  }
+
+  return [];
 }
 
-function buildProgressSectionChanges(
-  blocks: ProgressTranscriptBlock[],
-  options: { compact?: boolean } = {},
-): ReactNode[] {
-  const compact = options.compact === true;
-  const elements: ReactNode[] = [];
-  let lastSection: "thinking" | "activity" | null = null;
-
-  blocks.forEach((block, index) => {
-    const nextSection = block.section;
-    // Repeat labels on section switches so interleaved thinking/activity reads
-    // like the live OpenClaw transcript order instead of two detached panels.
-    if (nextSection !== lastSection) {
-      const sectionMeta = PROGRESS_SECTION_META[nextSection];
-      elements.push(
-        compact ? (
-          <div
-            key={`section-${nextSection}-${index}`}
-            className="text-[10px] font-semibold uppercase tracking-[0.14em] text-dim"
-          >
-            {sectionMeta.compactTitle}
-          </div>
-        ) : (
-          <div
-            key={`section-${nextSection}-${index}`}
-            className={`mb-2 inline-flex w-fit items-center gap-2 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.1em] ${sectionMeta.className}`}
-          >
-            <span aria-hidden="true">{sectionMeta.icon}</span>
-            <span>{sectionMeta.title}</span>
-          </div>
-        ),
-      );
-      lastSection = nextSection;
-    }
-
-    if (block.type === "explored") {
-      elements.push(
-        <ExploredTranscriptBlock
-          key={block.stableKey}
-          blockIndex={index}
-          lines={block.lines}
-          rawCount={block.rawCount}
-          compact={compact}
-        />,
-      );
-      return;
-    }
-
-    const rowClassName = PROGRESS_SECTION_META[block.section].rowClassName;
-    const isMarkdownBlock = shouldRenderProgressMarkdownBlock(block.entry.text);
-    elements.push(
-      <div
-        key={`${index}-${block.entry.kind}-${block.entry.text}`}
-        className={`flex items-start gap-2 ${isMarkdownBlock ? "" : "whitespace-pre-wrap"} ${rowClassName}`}
-      >
-        <span
-          aria-hidden="true"
-          className={`text-quiet ${isMarkdownBlock ? "pt-1.5" : "pt-0.5"}`}
-        >
-          {isMarkdownBlock ? "↳ " : "• "}
-        </span>
-        {isMarkdownBlock
-          ? renderProgressMarkdown(block.entry.text)
-          : (
-            <span className="min-w-0 flex-1">
-              {renderInlineMarkdownLite(block.entry.text, `progress-${index}`)}
-            </span>
-          )}
-      </div>,
-    );
-  });
-
-  return elements;
+function hasFailedRunState(params: {
+  progressEntries: MessageProgressEntry[];
+  taskPhases: ChatTaskPhase[];
+  steps: Step[];
+}): boolean {
+  if (params.taskPhases.some((phase) => phase.status === "failed")) {
+    return true;
+  }
+  if (params.steps.some((step) => step.status === "error")) {
+    return true;
+  }
+  return params.progressEntries.some((entry) => entry.status === "failed");
 }
 
 type RunStateDetail = {
   label: string;
   text: string;
 };
+
+function summarizeProgressSourceLabel(
+  source: MessageProgressEntry["source"],
+): string | null {
+  if (source === "gateway") {
+    return "OpenClaw";
+  }
+  if (source === "agent") {
+    return "Agent";
+  }
+  if (source === "server") {
+    return "Server";
+  }
+  if (source === "client") {
+    return "Client";
+  }
+  return null;
+}
+
+function summarizeEntryDetailLabel(entry: MessageProgressEntry): string {
+  if (entry.kind === "activity") {
+    return (
+      entry.label
+      ?? inferProgressEntryLabel(entry.text)
+      ?? summarizeProgressSourceLabel(entry.source)
+      ?? PROGRESS_SECTION_META.activity.compactTitle
+    );
+  }
+  return (
+    entry.label
+    ?? summarizeProgressSourceLabel(entry.source)
+    ?? PROGRESS_SECTION_META.thinking.compactTitle
+  );
+}
 
 function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunStateDetail | null {
   const compactDetail = (value: string): string | null => {
@@ -1147,7 +1062,7 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunSt
       const detail = compactDetail(block.entry.text);
       if (detail) {
         return {
-          label: PROGRESS_SECTION_META[block.section].compactTitle,
+          label: summarizeEntryDetailLabel(block.entry),
           text: detail,
         };
       }
@@ -1156,14 +1071,14 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunSt
     if (block.lines.length > 0) {
       if (block.rawCount > 1) {
         return {
-          label: PROGRESS_SECTION_META[block.section].compactTitle,
+          label: "Explored",
           text: `Explored ${block.rawCount} actions`,
         };
       }
       const detail = compactDetail(block.lines[block.lines.length - 1]);
       if (detail) {
         return {
-          label: PROGRESS_SECTION_META[block.section].compactTitle,
+          label: "Explored",
           text: detail,
         };
       }
@@ -1173,29 +1088,81 @@ function summarizeLatestRunStateDetail(blocks: ProgressTranscriptBlock[]): RunSt
   return null;
 }
 
+function runStateSummaryChipClassName(summary: string): string {
+  if (summary === "Failed") {
+    return "border-danger/30 bg-danger/10 text-danger";
+  }
+  if (summary === "Running") {
+    return "border-amber-300/70 bg-amber-50 text-amber-800";
+  }
+  if (summary === "Started") {
+    return "border-accent/30 bg-accent/10 text-accent";
+  }
+  if (summary === "Complete") {
+    return "border-ok/30 bg-ok/10 text-ok";
+  }
+  if (summary === "Agent") {
+    return "border-emerald-300/70 bg-emerald-50 text-emerald-800";
+  }
+  if (summary === "OpenClaw") {
+    return "border-sky-300/70 bg-sky-50 text-sky-800";
+  }
+  if (summary === "Client") {
+    return "border-violet-300/70 bg-violet-50 text-violet-800";
+  }
+  return "border-rule bg-raised text-body";
+}
+
+function runStateDetailChipClassName(label: string): string {
+  if (label === "Failed") {
+    return "border-danger/30 bg-danger/10 text-danger";
+  }
+  if (label === "Agent") {
+    return "border-emerald-300/70 bg-emerald-50 text-emerald-800";
+  }
+  if (label === "OpenClaw") {
+    return "border-sky-300/70 bg-sky-50 text-sky-800";
+  }
+  if (label === "Client") {
+    return "border-violet-300/70 bg-violet-50 text-violet-800";
+  }
+  if (label === "Server") {
+    return "border-rule bg-raised text-body";
+  }
+  return "border-rule/80 bg-raised text-dim";
+}
+
 function ActiveRunStateSurface({
   workingElapsed,
   summaries,
   detail,
+  failed,
 }: {
   workingElapsed: string | null;
   summaries: string[];
   detail: RunStateDetail | null;
+  failed: boolean;
 }) {
+  const headingText = failed
+    ? (workingElapsed ? `Failed (${workingElapsed})` : "Failed")
+    : (workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…");
+
   return (
     <div
       data-testid="assistant-run-state"
       className="mb-3 rounded-xl border border-rule bg-sunk/70 px-3.5 py-3 text-[13px] leading-6 text-foreground/95"
     >
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-dim">
-        <span className="inline-flex items-center gap-1.5 font-medium text-body">
-          <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />
-          <span>{workingElapsed ? `Working (${workingElapsed} • esc to interrupt)` : "Working…"}</span>
+        <span className={`inline-flex items-center gap-1.5 font-medium ${failed ? "text-danger" : "text-body"}`}>
+          {failed
+            ? <WarningCircle size={14} weight="fill" aria-hidden="true" />
+            : <Spinner size="h-3.5 w-3.5" testId="chat-streaming-spinner" />}
+          <span>{headingText}</span>
         </span>
         {summaries.map((summary, index) => (
           <span
             key={`${summary}-${index}`}
-            className="inline-flex items-center rounded-full border border-rule bg-raised px-2 py-0.5 text-[10px] font-medium text-body"
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${runStateSummaryChipClassName(summary)}`}
           >
             {summary}
           </span>
@@ -1203,7 +1170,7 @@ function ActiveRunStateSurface({
       </div>
       {detail && (
         <div className="mt-2 flex flex-wrap items-start gap-2 text-[12px] leading-6 text-dim">
-          <span className="inline-flex items-center rounded-full border border-rule/80 bg-raised px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dim">
+          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${runStateDetailChipClassName(detail.label)}`}>
             {detail.label}
           </span>
           <span className="min-w-0 flex-1 break-words text-body/80">
@@ -1674,15 +1641,15 @@ function renderContent(
           key: `content-${i}`,
           kind: "flow",
           node: (
-          <div key={i} className="my-2">
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             <iframe
               src={src}
               title={filePath}
-              className="w-full min-w-0 h-[80vh] min-h-[700px] rounded-lg border border-border bg-white"
+              className="block h-[80vh] min-h-[700px] w-full min-w-0 rounded-[1rem] bg-white"
               sandbox="allow-scripts"
             />
             <span className={captionClass}>{filePath}</span>
-          </div>
+          </figure>
           ),
         }];
       }
@@ -1691,15 +1658,15 @@ function renderContent(
           key: `content-${i}`,
           kind: "flow",
           node: (
-          <div key={i} className="my-2">
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             <iframe
               src={src}
               title={filePath}
-              className="w-full min-w-0 h-[80vh] min-h-[600px] rounded-lg border border-border bg-white"
+              className="block h-[80vh] min-h-[600px] w-full min-w-0 rounded-[1rem] bg-white"
               sandbox="allow-same-origin allow-downloads"
             />
             <span className={captionClass}>{filePath}</span>
-          </div>
+          </figure>
           ),
         }];
       }
@@ -1722,12 +1689,12 @@ function renderContent(
           key: `content-${i}`,
           kind: "flow",
           node: (
-          <div key={i} className="my-2">
-            <video controls className="max-w-full max-h-[50vh] rounded-lg border border-border bg-black">
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
+            <video controls className={`${ASSISTANT_MEDIA_FRAME_CLASS} rounded-[1rem] bg-black`}>
               <source src={src} type={getVideoMimeType(ext)} />
             </video>
             <span className={captionClass}>{filePath}</span>
-          </div>
+          </figure>
           ),
         }];
       }
@@ -1736,12 +1703,12 @@ function renderContent(
           key: `content-${i}`,
           kind: "flow",
           node: (
-          <div key={i} className="my-2">
+          <figure key={i} className={`my-2 p-3 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             <audio controls className="w-full">
               <source src={src} type={getAudioMimeType(ext)} />
             </audio>
             <span className={captionClass}>{filePath}</span>
-          </div>
+          </figure>
           ),
         }];
       }
@@ -1831,16 +1798,16 @@ function renderContent(
           key: `content-${i}`,
           kind: "flow",
           node: (
-          <div key={i} className="my-2">
+          <figure key={i} className={`my-2 p-2 ${ASSISTANT_MEDIA_CARD_CLASS}`}>
             <iframe
               src={embedUrl}
               title={embedTitle}
-              className="w-full min-w-0 min-h-[700px] rounded-lg border border-border bg-white"
+              className="block min-h-[700px] w-full min-w-0 rounded-[1rem] bg-white"
               style={{ height: embedHeight }}
               sandbox="allow-scripts"
             />
             <span className={captionClass}>{embedTitle}</span>
-          </div>
+          </figure>
           ),
         }];
       }
@@ -1958,14 +1925,26 @@ export function ChatMessage({
       : [];
   const progressTranscript = buildProgressTranscript(visibleProgressLog);
   const compactLiveRunSummary = isLiveAssistantTurn
-    ? [
-        ...summarizeCompactPhaseStatus(visibleTaskPhases),
-        ...summarizeCompactSteps(visibleSteps),
-      ]
+    ? (() => {
+        const summaries = [
+          ...summarizeCompactPhaseStatus(visibleTaskPhases),
+          ...summarizeCompactSteps(visibleSteps),
+        ];
+        if (summaries.length > 0) {
+          return summaries;
+        }
+        return summarizeCompactProgressMetadata(visibleProgressLog);
+      })()
     : [];
   const liveRunStateDetail = isLiveAssistantTurn
     ? summarizeLatestRunStateDetail(progressTranscript)
     : null;
+  const hasFailedLiveRunState = isLiveAssistantTurn
+    && hasFailedRunState({
+      progressEntries: visibleProgressLog,
+      taskPhases: visibleTaskPhases,
+      steps: visibleSteps,
+    });
   const liveElapsedMs = getProgressElapsedMs(timestamp, isStreaming);
   const workingElapsed =
     liveElapsedMs === null ? null : formatElapsedCompact(liveElapsedMs);
@@ -1982,6 +1961,7 @@ export function ChatMessage({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const copyFeedbackTimerRef = useRef<number | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [isStoredTranscriptExpanded, setIsStoredTranscriptExpanded] = useState(false);
   const hasCopyableText = content.trim().length > 0 && !isStreaming;
   const timestampText = `${timestamp.toLocaleDateString(undefined, {
     month: "short",
@@ -2041,6 +2021,17 @@ export function ChatMessage({
   const footerRowClass = isAssistantTurn
     ? "mt-4 flex items-center justify-end"
     : "mt-3 flex items-center justify-end gap-3";
+  const shouldCollapseStoredTranscript =
+    useCompactAssistantTranscript
+    && progressTranscript.length >= MIN_PROGRESS_BLOCKS_TO_COLLAPSE;
+  const visibleStoredTranscript =
+    shouldCollapseStoredTranscript && !isStoredTranscriptExpanded
+      ? progressTranscript.slice(0, COLLAPSED_PROGRESS_BLOCK_LIMIT)
+      : progressTranscript;
+  const hiddenStoredTranscriptCount = Math.max(
+    0,
+    progressTranscript.length - COLLAPSED_PROGRESS_BLOCK_LIMIT,
+  );
 
   useEffect(() => () => {
     if (copyFeedbackTimerRef.current !== null) {
@@ -2121,6 +2112,7 @@ export function ChatMessage({
           workingElapsed={workingElapsed}
           summaries={compactLiveRunSummary}
           detail={null}
+          failed={hasFailedLiveRunState}
         />
       )}
 
@@ -2134,11 +2126,18 @@ export function ChatMessage({
             workingElapsed={workingElapsed}
             summaries={compactLiveRunSummary}
             detail={liveRunStateDetail}
+            failed={hasFailedLiveRunState}
           />
 
           {progressTranscript.length > 0 && (
             <div className="space-y-2" data-testid="assistant-progress-transcript">
-              {buildProgressSectionChanges(progressTranscript, { compact: true })}
+              <AssistantProgressTranscript
+                blocks={progressTranscript}
+                compact
+                renderInlineContent={renderInlineMarkdownLite}
+                shouldRenderMarkdownBlock={shouldRenderProgressMarkdownBlock}
+                renderMarkdownBlock={renderProgressMarkdown}
+              />
             </div>
           )}
         </div>
@@ -2151,13 +2150,24 @@ export function ChatMessage({
           data-testid="assistant-progress-transcript"
           role="log"
         >
-          {buildProgressSectionChanges(progressTranscript)}
-
-          {workingElapsed && (
-            <div className="flex items-start gap-2 whitespace-pre-wrap text-dim">
-              <span aria-hidden="true" className="pt-0.5 text-quiet">• </span>
-              <span>{`Working (${workingElapsed} • esc to interrupt)`}</span>
-            </div>
+          <AssistantProgressTranscript
+            blocks={visibleStoredTranscript}
+            workingElapsed={workingElapsed}
+            renderInlineContent={renderInlineMarkdownLite}
+            shouldRenderMarkdownBlock={shouldRenderProgressMarkdownBlock}
+            renderMarkdownBlock={renderProgressMarkdown}
+          />
+          {shouldCollapseStoredTranscript && (
+            <button
+              type="button"
+              data-testid="assistant-progress-transcript-toggle"
+              className="inline-flex items-center gap-2 rounded-full border border-rule bg-raised px-3 py-1 text-[11px] font-medium text-body transition hover:bg-sunk"
+              onClick={() => setIsStoredTranscriptExpanded((current) => !current)}
+            >
+              {isStoredTranscriptExpanded
+                ? "Hide transcript"
+                : `Show full transcript (${hiddenStoredTranscriptCount} more block${hiddenStoredTranscriptCount === 1 ? "" : "s"})`}
+            </button>
           )}
         </div>
       )}

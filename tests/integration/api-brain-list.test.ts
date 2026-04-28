@@ -57,6 +57,47 @@ describe("GET /api/brain/list", () => {
       },
     ]);
     expect(dbQuery).toHaveBeenCalledTimes(1);
+    const [sql] = dbQuery.mock.calls[0] as unknown as [string, unknown[]];
+    expect(sql).toContain("study_slugs");
+    expect(sql).toContain("legacy_project_slugs");
+  });
+
+  it("falls back to legacy project when canonical study is blank", async () => {
+    const dbQuery = vi.fn(async () => ({
+      rows: [
+        {
+          slug: "papers/fallback",
+          type: "paper",
+          title: "Fallback",
+          frontmatter: {
+            project: "alpha-project",
+          },
+        },
+      ],
+    }));
+
+    vi.doMock("@/brain/store", () => ({
+      ensureBrainStoreReady: vi.fn(async () => {}),
+      getBrainStore: vi.fn(() => ({
+        engine: {
+          db: {
+            query: dbQuery,
+          },
+        },
+      })),
+      isBrainBackendUnavailableError: vi.fn(() => false),
+    }));
+
+    const { GET } = await importRoute();
+    const response = await GET(
+      new Request("http://localhost/api/brain/list?study=&project=alpha-project"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(dbQuery).toHaveBeenCalledWith(
+      expect.any(String),
+      ["alpha-project", expect.any(Number)],
+    );
   });
 
   it("returns an empty degraded list when the brain backend is unavailable", async () => {

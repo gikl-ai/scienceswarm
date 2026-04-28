@@ -724,7 +724,7 @@ export function formatBrainPrompt(context: ChatContext): string {
     lines.push("### Matching Brain Pages");
     lines.push("");
     lines.push("Use this gbrain page inventory when the user asks what is in their brain.");
-    lines.push("For path or location questions, prefer each page's gbrain path and source metadata over guessing from a project folder name.");
+    lines.push("For path or location questions, prefer each page's gbrain path and source metadata over guessing from a study folder name.");
     lines.push("");
     lines.push(formatBrainInventory(context.inventory));
     lines.push("");

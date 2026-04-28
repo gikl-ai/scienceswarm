@@ -16,7 +16,7 @@ import {
   assertSafeProjectSlug,
   InvalidSlugError,
 } from "@/lib/state/project-manifests";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 
 interface ProjectMeta {
   id: string;

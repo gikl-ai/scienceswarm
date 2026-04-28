@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -39,7 +41,7 @@ vi.mock("@/lib/projects/materialize-project", () => ({
   materializeProjectFolder,
 }));
 
-vi.mock("@/lib/setup/gbrain-installer", () => ({
+vi.mock("@/lib/setup/current-user-handle", () => ({
   getCurrentUserHandle,
 }));
 
@@ -98,7 +100,7 @@ describe("ensureProjectShellForProjectSlug", () => {
     expect(repo.create).toHaveBeenCalledWith({
       slug: "alpha--beta",
       name: "Alpha Beta",
-      description: "Project created from saved critique artifacts for alpha.pdf.",
+      description: "Study created from saved critique artifacts for alpha.pdf.",
       createdBy: "test-scientist",
     });
     expect(materializeProjectFolder).toHaveBeenCalledWith(record);
@@ -108,7 +110,7 @@ describe("ensureProjectShellForProjectSlug", () => {
     const record: ProjectRecord = {
       slug: "project-alpha",
       name: "Project Alpha",
-      description: "Project created from saved critique artifacts for alpha.pdf.",
+      description: "Study created from saved critique artifacts for alpha.pdf.",
       createdAt: "2026-04-20T00:00:00.000Z",
       lastActive: "2026-04-20T00:00:00.000Z",
       status: "active",
@@ -142,7 +144,7 @@ describe("ensureProjectShellForProjectSlug", () => {
     expect(repo.create).toHaveBeenCalledWith({
       slug: "project-alpha",
       name: "Project Alpha",
-      description: "Project created from saved critique artifacts for alpha.pdf.",
+      description: "Study created from saved critique artifacts for alpha.pdf.",
       createdBy: "test-scientist",
     });
   });
@@ -178,5 +180,18 @@ describe("ensureProjectShellForProjectSlug", () => {
       }),
     ).rejects.toThrow("SCIENCESWARM_USER_HANDLE is required");
     expect(repo.create).not.toHaveBeenCalled();
+  });
+
+  it("lazy-loads the brain store instead of importing it at module scope", async () => {
+    const source = await readFile(
+      new URL("../../../src/lib/projects/ensure-project-shell.ts", import.meta.url),
+      "utf-8",
+    );
+
+    expect(source).toContain('await import("@/brain/store")');
+    expect(source).toContain("async function loadReadyBrainStore()");
+    expect(source).not.toContain('import { ensureBrainStoreReady, getBrainStore } from "@/brain/store";');
+    expect(source).toContain('from "@/lib/setup/current-user-handle"');
+    expect(source).not.toContain('from "@/lib/setup/gbrain-installer"');
   });
 });

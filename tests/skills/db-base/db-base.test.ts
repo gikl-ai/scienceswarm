@@ -261,12 +261,14 @@ describe("db-base", () => {
     const disk = matter(readFileSync(first.diskPath, "utf-8"));
     expect(gbrainPage?.frontmatter.created_by).toBe("@db-tester");
     expect(gbrainPage?.frontmatter.updated_by).toBe("@second-user");
-    expect(gbrainPage?.frontmatter.project).toBe("project-beta");
-    expect(gbrainPage?.frontmatter.projects).toEqual(["project-alpha", "project-beta"]);
+    expect(gbrainPage?.frontmatter.study).toBe("project-beta");
+    expect(gbrainPage?.frontmatter.study_slug).toBe("project-beta");
+    expect(gbrainPage?.frontmatter.studies).toEqual(["project-alpha", "project-beta"]);
     expect(disk.data.created_by).toBe("@db-tester");
     expect(disk.data.updated_by).toBe("@second-user");
-    expect(disk.data.project).toBe("project-beta");
-    expect(disk.data.projects).toEqual(["project-alpha", "project-beta"]);
+    expect(disk.data.study).toBe("project-beta");
+    expect(disk.data.study_slug).toBe("project-beta");
+    expect(disk.data.studies).toEqual(["project-alpha", "project-beta"]);
   });
 
   it("deduplicates duplicate search hits before returning or writing a search page", async () => {

@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import type { ProjectRecord } from "@/brain/gbrain-data-contracts";
+import type { ProjectRecord, StudyRecord } from "@/brain/gbrain-data-contracts";
 import { writeJsonFile } from "@/lib/state/atomic-json";
 import {
   StudyIdSchema,
@@ -61,11 +61,34 @@ export function buildStudyStateForProjectRecord(
   });
 }
 
+export function buildStudyStateForStudyRecord(
+  study: Pick<StudyRecord, "slug" | "lastActive" | "legacyProjectSlug">,
+): StudyState {
+  const legacyProjectSlug = StudySlugSchema.parse(study.legacyProjectSlug ?? study.slug);
+  const studyId = studyIdForLegacyProjectSlug(legacyProjectSlug);
+  return StudyStateSchema.parse({
+    version: 1,
+    studyId,
+    legacyProjectSlug,
+    workspaceId: `workspace_${studyId.slice("study_".length)}`,
+    updatedAt: study.lastActive,
+  });
+}
+
 export async function writeStudyStateForProjectRecord(
   project: Pick<ProjectRecord, "slug" | "lastActive">,
   stateRoot?: string,
 ): Promise<StudyState> {
   const state = buildStudyStateForProjectRecord(project);
+  await writeJsonFile(getStudyStatePath(state.studyId, stateRoot), state);
+  return state;
+}
+
+export async function writeStudyStateForStudyRecord(
+  study: Pick<StudyRecord, "slug" | "lastActive" | "legacyProjectSlug">,
+  stateRoot?: string,
+): Promise<StudyState> {
+  const state = buildStudyStateForStudyRecord(study);
   await writeJsonFile(getStudyStatePath(state.studyId, stateRoot), state);
   return state;
 }

@@ -54,7 +54,7 @@ async function handleCommand(
         "`/papers` — explain how to inspect real project papers from the gbrain-backed workspace",
         "`/help` — show this help message",
         "",
-        "Or just type naturally. In the workspace chat, ask me to \"organize this project\" for a real gbrain-backed summary.",
+        "Or just type naturally. In the workspace chat, ask me to \"organize this study\" for a real gbrain-backed summary.",
       ].join("\n"),
     };
   }
@@ -69,7 +69,7 @@ async function handleCommand(
         "**Channel**: " + msg.channel,
         "",
         "This legacy command path is not connected to live gbrain project summaries.",
-        "Use the workspace chat and ask `organize this project` for real project threads, duplicates, stale exports, and next steps.",
+        "Use the workspace chat and ask `organize this study` for real study threads, duplicates, stale exports, and next steps.",
       ].join("\n"),
     };
   }
@@ -78,11 +78,11 @@ async function handleCommand(
     return {
       handled: true,
       response: [
-        "**Project Papers**",
+        "**Study Papers**",
         "",
         "This legacy command path does not have a live paper listing.",
         "",
-        "Use the workspace chat and ask `organize this project` or `show me duplicate papers` to inspect the real gbrain-backed project papers.",
+        "Use the workspace chat and ask `organize this study` or `show me duplicate papers` to inspect the real gbrain-backed study papers.",
       ].join("\n"),
     };
   }

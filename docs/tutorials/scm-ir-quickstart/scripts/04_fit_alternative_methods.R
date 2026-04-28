@@ -52,20 +52,36 @@ to_panel_long <- function(case) {
 fit_gsynth <- function(case) {
   if (!requireNamespace("gsynth", quietly = TRUE)) return(NULL)
   long <- to_panel_long(case)
-  out <- tryCatch(
-    gsynth::gsynth(
-      Y = "outcome",
-      D = "treat",
-      data = as.data.frame(long),
-      index = c("unit", "year"),
-      force = "two-way",
-      CV = TRUE,
-      r = c(0, 5),
-      se = TRUE,
-      inference = "parametric",
-      nboots = 200,
-      parallel = FALSE
-    ),
+  out <- tryCatch({
+    result <- NULL
+    verbose_message <- character()
+    verbose_output <- capture.output(
+      verbose_message <- capture.output(
+        result <- suppressWarnings(gsynth::gsynth(
+          Y = "outcome",
+          D = "treat",
+          data = as.data.frame(long),
+          index = c("unit", "year"),
+          force = "two-way",
+          CV = TRUE,
+          r = c(0, 5),
+          se = TRUE,
+          inference = "parametric",
+          nboots = 200,
+          parallel = FALSE
+        )),
+        type = "message"
+      ),
+      type = "output"
+    )
+    verbose <- c(verbose_output, verbose_message)
+    if (length(verbose) > 0L) {
+      message("[gsynth] ", case$case_id,
+              " completed cross-validation/bootstrap (suppressed ",
+              length(verbose), " verbose diagnostic lines)")
+    }
+    result
+  },
     error = function(e) {
       message("[gsynth] ", case$case_id, " failed: ", conditionMessage(e))
       NULL

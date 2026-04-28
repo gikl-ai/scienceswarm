@@ -47,8 +47,8 @@ async function buildRecentProjectConversationSection(
   if (recentMessages.length === 0) return "";
 
   return [
-    "## Recent Project Requests",
-    `Project: ${projectId}`,
+    "## Recent Study Requests",
+    `Study: ${projectId}`,
     "These are recent user asks only. Prior assistant prose is not authoritative evidence.",
     "",
     ...recentMessages.map((message) =>
@@ -67,7 +67,7 @@ function buildTrustBoundarySection(projectId?: string): string {
   ];
 
   if (projectId) {
-    lines.push(`Project in scope: ${projectId}`);
+    lines.push(`Study in scope: ${projectId}`);
   }
 
   return lines.join("\n");
@@ -180,8 +180,8 @@ async function buildProjectBriefSection(projectId: string): Promise<string> {
   try {
     const brief = await buildProjectBrief({ config, project: projectId });
     const sections = [
-      "## Project Brief",
-      `Project: ${brief.project}`,
+      "## Study Brief",
+      `Study: ${brief.project}`,
     ];
 
     if (brief.topMatters.length > 0) {
@@ -207,7 +207,7 @@ function buildGbrainStructureSection(projectId?: string): string {
     "gbrain is the source of truth for ScienceSwarm data. Use gbrain page metadata, page paths, file_refs, and source_refs before guessing from filesystem folders.",
     "Core page types include project, paper, dataset/data, code, artifact, note, task, decision, experiment, concept/topic, survey, method, research_packet, overnight_journal, person, and frontier_item.",
     "Imported papers are gbrain pages with type=paper. Their page path, source_path/source_refs, and file_refs identify the original imported file or workspace mirror path.",
-    "The project workspace under SCIENCESWARM_DIR/projects/<project> is a browsable mirror/cache, not the durable source of truth.",
+    "The study workspace under SCIENCESWARM_DIR/projects/<project> is a browsable mirror/cache, not the durable source of truth.",
   ];
 
   if (projectId) {
@@ -287,8 +287,8 @@ export async function injectBrainContextIntoUserMessage(
 
     return [
       "Use the following gbrain context and structure when it is relevant.",
-      "Treat gbrain state as authoritative project memory rather than generic background.",
-      "Treat prior user requests as authoritative for user intent only, not as project evidence. Prior assistant prose is not authoritative evidence.",
+      "Treat gbrain state as authoritative study memory rather than generic background.",
+      "Treat prior user requests as authoritative for user intent only, not as study evidence. Prior assistant prose is not authoritative evidence.",
       "When the user asks where data lives, use gbrain page paths, source_refs, file_refs, and workspace mirror details from this context instead of guessing or saying you lack access.",
       "",
       brainSection,

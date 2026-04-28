@@ -1,7 +1,7 @@
 {
   "slug": "scienceswarm-research-reasoning",
   "name": "ScienceSwarm Research Reasoning",
-  "description": "Use optional reasoning prompt patterns for research questions without committing the project to a fixed UI workflow.",
+  "description": "Use optional reasoning prompt patterns for research questions without committing the study to a fixed UI workflow.",
   "visibility": "public",
   "status": "ready",
   "tags": [

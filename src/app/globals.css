@@ -73,6 +73,20 @@ body.scienceswarm-resizing-y { cursor: row-resize; user-select: none; }
   padding-left: 1.25rem;
 }
 
+/* Fallback for file-markdown renderers that do not pass through the
+   ReactMarkdown component map. Tailwind preflight removes markers. */
+.file-markdown ul {
+  list-style-type: disc;
+}
+
+.file-markdown ol {
+  list-style-type: decimal;
+}
+
+.file-markdown li {
+  padding-left: 0.25rem;
+}
+
 .file-markdown code {
   border-radius: var(--radius-1);
   background: var(--surface-sunk);

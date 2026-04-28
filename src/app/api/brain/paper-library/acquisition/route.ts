@@ -9,7 +9,7 @@ import {
   executeAcquisitionPlan,
   readAcquisitionPlan,
 } from "@/lib/paper-library/acquisition";
-import { paperLibraryBadRequest, readJsonBody, requirePaperLibraryRequest } from "../_shared";
+import { normalizeStudyBody, paperLibraryBadRequest, readJsonBody, readStudyOrProjectParam, requirePaperLibraryRequest } from "../_shared";
 
 const AcquisitionLookupRequestSchema = z.object({
   project: ProjectSlugSchema,
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const parsed = AcquisitionLookupRequestSchema.safeParse({
-    project: url.searchParams.get("project"),
+    project: readStudyOrProjectParam(url),
     id: url.searchParams.get("id"),
   });
   if (!parsed.success) return paperLibraryBadRequest(parsed.error);
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     return paperLibraryBadRequest(error);
   }
 
-  const parsed = PaperLibraryAcquisitionRequestSchema.safeParse(body);
+  const parsed = PaperLibraryAcquisitionRequestSchema.safeParse(normalizeStudyBody(body));
   if (!parsed.success) return paperLibraryBadRequest(parsed.error);
 
   try {

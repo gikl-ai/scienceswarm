@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -34,6 +34,17 @@ describe("gbrain runtime bridge import paths", () => {
     expect(runtimeBridge.createRuntimeEngine).toEqual(expect.any(Function));
   });
 
+  it("avoids a static require.resolve gbrain literal in the runtime bridge source", async () => {
+    const source = await readFile(
+      new URL("../../src/brain/stores/gbrain-runtime.mjs", import.meta.url),
+      "utf-8",
+    );
+
+    expect(source).not.toContain('require.resolve("gbrain")');
+    expect(source).toContain("require.resolve(GBRAIN_PACKAGE_NAME)");
+    expect(source.match(/webpackIgnore: true/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+  });
+
   it("falls back to the installed gbrain extract source when the package subpath is absent", async () => {
     const brainDir = await mkdtemp(join(tmpdir(), "scienceswarm-gbrain-extract-"));
     try {
@@ -65,5 +76,21 @@ describe("gbrain runtime bridge import paths", () => {
     } finally {
       await rm(brainDir, { recursive: true, force: true });
     }
+  });
+
+  it("keeps config-status on the cheap root-readiness path", async () => {
+    const configStatusSource = await readFile(
+      new URL("../../src/lib/setup/config-status.ts", import.meta.url),
+      "utf-8",
+    );
+    const rootReadinessSource = await readFile(
+      new URL("../../src/lib/brain/root-readiness.ts", import.meta.url),
+      "utf-8",
+    );
+
+    expect(configStatusSource).toContain('from "@/lib/brain/root-readiness"');
+    expect(configStatusSource).not.toContain('from "@/lib/brain/readiness"');
+    expect(rootReadinessSource).not.toContain('@/brain/store');
+    expect(rootReadinessSource).not.toContain("probeGbrainEngineHealth");
   });
 });

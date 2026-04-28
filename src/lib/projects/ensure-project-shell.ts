@@ -1,12 +1,11 @@
 import type { BrainPage } from "@/brain/store";
-import { ensureBrainStoreReady, getBrainStore } from "@/brain/store";
 import type { ProjectRecord } from "@/brain/gbrain-data-contracts";
 import {
   createProjectRepository,
   DuplicateProjectError,
 } from "@/lib/projects/project-repository";
 import { materializeProjectFolder } from "@/lib/projects/materialize-project";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 
 export interface EnsureProjectShellOptions {
@@ -52,9 +51,15 @@ function readPageTimestamp(page: BrainPage): number {
   return 0;
 }
 
-async function listRelatedProjectPages(projectSlug: string): Promise<BrainPage[]> {
+async function loadReadyBrainStore() {
+  const { ensureBrainStoreReady, getBrainStore } = await import("@/brain/store");
   await ensureBrainStoreReady();
-  const pages = await getBrainStore().listPages({ limit: 5000 });
+  return getBrainStore();
+}
+
+async function listRelatedProjectPages(projectSlug: string): Promise<BrainPage[]> {
+  const store = await loadReadyBrainStore();
+  const pages = await store.listPages({ limit: 5000 });
   return pages
     .filter((page) => {
       const frontmatter = page.frontmatter ?? {};
@@ -81,7 +86,7 @@ function inferProjectDescription(
 
   const sourceFilename = trimOrNull(options.sourceFilename);
   if (sourceFilename) {
-    return `Project created from a saved ScienceSwarm critique for ${sourceFilename}.`;
+    return `Study created from a saved ScienceSwarm critique for ${sourceFilename}.`;
   }
 
   const relatedCritique = relatedPages.find((page) => {
@@ -98,13 +103,13 @@ function inferProjectDescription(
         : null,
     );
     if (critiqueSource) {
-      return `Project created from saved critique artifacts for ${critiqueSource}.`;
+      return `Study created from saved critique artifacts for ${critiqueSource}.`;
     }
-    return "Project created from saved ScienceSwarm critique artifacts.";
+    return "Study created from saved ScienceSwarm critique artifacts.";
   }
 
   if (relatedPages.length > 0) {
-    return `Project created from saved ScienceSwarm artifacts for ${humanizeProjectSlug(projectSlug)}.`;
+    return `Study created from saved ScienceSwarm artifacts for ${humanizeProjectSlug(projectSlug)}.`;
   }
 
   return null;

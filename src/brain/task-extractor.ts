@@ -341,7 +341,9 @@ export async function createTaskPages(
       };
 
       if (task.project) {
-        frontmatter.project = task.project;
+        frontmatter.study = task.project;
+        frontmatter.study_slug = task.project;
+        frontmatter.legacy_project_slug = task.project;
       }
       if (task.dueDate) {
         frontmatter.due_date = task.dueDate;

@@ -309,7 +309,7 @@ export function FileTree({
       <div className="flex-1 overflow-y-auto py-1">
         {files.length === 0 ? (
           <div className="px-3 py-8 text-center">
-            <p className="text-xs text-muted">Drop files here to start your research project</p>
+            <p className="text-xs text-muted">Drop files here to start your research study</p>
             <div className="mt-4 flex flex-col gap-2">
               {onUploadFolder && (
                 <button

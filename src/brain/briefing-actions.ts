@@ -284,7 +284,9 @@ async function handleCreateTask(
     "para: projects",
     "status: open",
     `tags: [from-briefing]`,
-    action.project ? `project: "${action.project}"` : null,
+    action.project ? `study: "${action.project}"` : null,
+    action.project ? `study_slug: "${action.project}"` : null,
+    action.project ? `legacy_project_slug: "${action.project}"` : null,
     "---",
   ]
     .filter(Boolean)

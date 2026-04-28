@@ -10,7 +10,7 @@ import { scanCorpus, approveAndImport } from "@/brain/coldstart";
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { createIngestService } from "@/brain/ingest/service";
 import { isLocalRequest } from "@/lib/local-guard";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 import { getBrainConfig, getLLMClient, isErrorResponse } from "../_shared";
 
 export async function POST(request: Request) {

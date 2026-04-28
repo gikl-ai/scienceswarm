@@ -58,9 +58,9 @@ export function ProjectRuntimeSection({
       data-testid="project-runtime-section"
     >
       <div>
-        <h2 className="text-lg font-semibold">Project AI destinations</h2>
+        <h2 className="text-lg font-semibold">Study AI destinations</h2>
         <p className="mt-1 max-w-3xl text-sm text-muted">
-          Use the project chat composer switcher for everyday Claude Code and OpenClaw
+          Use the study chat composer switcher for everyday Claude Code and OpenClaw
           sends. Settings keeps destination diagnostics, advanced modes, compare targets,
           and session history in one place.
         </p>
@@ -68,7 +68,7 @@ export function ProjectRuntimeSection({
 
       {projectOptions.length > 0 ? (
         <label className="block max-w-sm space-y-2">
-          <span className="text-sm font-medium text-foreground">Project</span>
+          <span className="text-sm font-medium text-foreground">Study</span>
           <select
             className="w-full rounded-lg border-2 border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
             value={projectId}
@@ -84,7 +84,7 @@ export function ProjectRuntimeSection({
         </label>
       ) : (
         <p className="text-sm text-muted">
-          Create a project before configuring project-specific runtime settings.
+          Create a study before configuring study-specific runtime settings.
         </p>
       )}
 

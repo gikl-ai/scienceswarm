@@ -13,7 +13,7 @@ vi.mock("@/app/api/brain/_shared", () => ({
   isErrorResponse: mockIsErrorResponse,
 }));
 
-describe("GET /api/brain/project-organizer", () => {
+describe("GET /api/brain/study-organizer", () => {
   beforeEach(() => {
     mockBuildProjectOrganizerReadout.mockReset();
     mockGetBrainConfig.mockReset();
@@ -33,7 +33,7 @@ describe("GET /api/brain/project-organizer", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns a read-only organizer summary for a valid project slug", async () => {
+  it("returns a read-only organizer summary for a valid study slug", async () => {
     mockBuildProjectOrganizerReadout.mockResolvedValue({
       project: "alpha",
       generatedAt: "2026-04-19T12:00:00.000Z",
@@ -50,12 +50,12 @@ describe("GET /api/brain/project-organizer", () => {
       nextMove: { recommendation: "Review the imported notes." },
       dueTasks: [],
       frontier: [],
-      suggestedPrompts: ["Organize this project."],
+      suggestedPrompts: ["Organize this study."],
     });
 
-    const { GET } = await import("@/app/api/brain/project-organizer/route");
+    const { GET } = await import("@/app/api/brain/study-organizer/route");
     const response = await GET(
-      new Request("http://localhost/api/brain/project-organizer?project=alpha"),
+      new Request("http://localhost/api/brain/study-organizer?study=alpha"),
     );
 
     expect(response.status).toBe(200);
@@ -70,23 +70,54 @@ describe("GET /api/brain/project-organizer", () => {
     );
   });
 
-  it("rejects missing project parameter", async () => {
-    const { GET } = await import("@/app/api/brain/project-organizer/route");
+  it("falls back to legacy project when canonical study is blank", async () => {
+    mockBuildProjectOrganizerReadout.mockResolvedValue({
+      project: "alpha",
+      generatedAt: "2026-04-19T12:00:00.000Z",
+      pageCount: 0,
+      pageScanLimit: 5000,
+      pageScanLimitReached: false,
+      pageCountsByType: {},
+      importSummary: null,
+      threads: [],
+      duplicatePapers: [],
+      importDuplicateGroups: [],
+      trackedExportCount: 0,
+      staleExports: [],
+      nextMove: { recommendation: "Review the imported notes." },
+      dueTasks: [],
+      frontier: [],
+      suggestedPrompts: [],
+    });
+
+    const { GET } = await import("@/app/api/brain/study-organizer/route");
     const response = await GET(
-      new Request("http://localhost/api/brain/project-organizer"),
+      new Request("http://localhost/api/brain/study-organizer?study=&project=alpha"),
     );
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: "Missing project parameter" });
+    expect(response.status).toBe(200);
+    expect(mockBuildProjectOrganizerReadout).toHaveBeenCalledWith(
+      expect.objectContaining({ project: "alpha" }),
+    );
   });
 
-  it("rejects an unsafe project slug", async () => {
-    const { GET } = await import("@/app/api/brain/project-organizer/route");
+  it("rejects missing study parameter", async () => {
+    const { GET } = await import("@/app/api/brain/study-organizer/route");
     const response = await GET(
-      new Request("http://localhost/api/brain/project-organizer?project=../alpha"),
+      new Request("http://localhost/api/brain/study-organizer"),
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: "project must be a safe bare slug" });
+    await expect(response.json()).resolves.toEqual({ error: "Missing study parameter" });
+  });
+
+  it("rejects an unsafe study slug", async () => {
+    const { GET } = await import("@/app/api/brain/study-organizer/route");
+    const response = await GET(
+      new Request("http://localhost/api/brain/study-organizer?study=../alpha"),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "study must be a safe bare slug" });
   });
 });

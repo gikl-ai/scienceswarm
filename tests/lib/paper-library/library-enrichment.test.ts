@@ -147,7 +147,8 @@ describe("paper-library library enrichment", () => {
     expect(page?.content).toContain("Download status: no legal open PDF was persisted");
     expect(page?.frontmatter.custom).toBe("keep-me");
     expect(page?.frontmatter.paper_library_enrichment).toMatchObject({
-      project: "project-alpha",
+      study: "project-alpha",
+      study_slug: "project-alpha",
       status: "metadata_persisted",
       source_url: "https://doi.org/10.3000/metadata",
     });

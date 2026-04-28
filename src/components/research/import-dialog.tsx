@@ -1036,7 +1036,7 @@ function describeImportProgress(
   if (job.status === "completed") {
     return {
       label: `Imported ${formatCount(job.progress.importedFiles)} unique files from ${formatCount(job.progress.detectedItems)} scanned items.`,
-      detail: "Finalizing the local project summary and refreshing the workspace.",
+      detail: "Finalizing the local study summary and refreshing the workspace.",
       percent: 100,
       percentLabel: "100% of the initial local scan",
     };

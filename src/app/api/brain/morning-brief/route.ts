@@ -3,7 +3,7 @@
  *
  * Research-aware morning briefing.
  * GET ?project=<slug>  — Returns MorningBrief for a specific project
- * GET (no params)      — Returns MorningBrief across all active projects
+ * GET (no params)      — Returns MorningBrief across all active studys
  * POST { projects, format? } — Returns formatted brief
  */
 
@@ -159,7 +159,7 @@ function buildDegradedBrief(project?: string): MorningBrief {
     openQuestions: [],
     nextMove: {
       recommendation:
-        "Check the project workspace now, then refresh the morning brief shortly for the synthesized version.",
+        "Check the study workspace now, then refresh the morning brief shortly for the synthesized version.",
       reasoning:
         "The route hit its latency budget before the full multi-step brief completed.",
       assumptions: ["The research brain configuration is available."],

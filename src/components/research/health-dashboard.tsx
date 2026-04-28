@@ -128,7 +128,7 @@ export function HealthDashboard() {
       {!expanded && (
         <div className="px-4 pb-2 text-[11px] text-muted flex items-center gap-2">
           {allGreen
-            ? "Next step: import a local project or open chat to turn the runtime into project results."
+            ? "Next step: import a local study or open chat to turn the runtime into study results."
             : runtimeHint}
           {runtime?.nextAction && !allGreen && (
             <span className="inline-flex items-center rounded-full border border-warn/30 bg-raised px-2 py-0.5 text-[10px] font-semibold text-warn">

@@ -124,6 +124,18 @@ describe("paper-library scan route", () => {
     });
   });
 
+  it("returns a null latest scan for an empty study", async () => {
+    const { GET } = await import("@/app/api/brain/paper-library/scan/route");
+
+    const response = await GET(new Request("http://localhost/api/brain/paper-library/scan?study=empty-study&latest=1"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      scan: null,
+    });
+  });
+
   it("rejects non-local requests", async () => {
     mockIsLocal.mockResolvedValue(false);
     const { POST } = await import("@/app/api/brain/paper-library/scan/route");

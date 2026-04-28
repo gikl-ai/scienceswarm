@@ -6,6 +6,7 @@ import { ingestPdfFromPath } from "@/brain/ingest/pdf-to-page";
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { getBrainStore, type BrainPage } from "@/brain/store";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { frontmatterMatchesStudy } from "@/lib/studies/frontmatter";
 
 import { paperLibraryPageSlugForMetadata } from "./applied-metadata";
 import {
@@ -162,10 +163,11 @@ function pageProjectMatches(page: BrainPage, project: string): boolean {
   const paperLibrary = frontmatterObject(frontmatter.paper_library);
   const enrichment = frontmatterObject(frontmatter.paper_library_enrichment);
   return (
-    frontmatter.project === project
+    frontmatterMatchesStudy(frontmatter, project)
     || paperLibrary.project === project
+    || paperLibrary.study === project
     || enrichment.project === project
-    || (Array.isArray(frontmatter.projects) && frontmatter.projects.includes(project))
+    || enrichment.study === project
   );
 }
 
@@ -582,7 +584,9 @@ export async function persistPaperAcquisitionRecordToGbrain(input: {
     const previousFrontmatter = existing?.frontmatter ?? {};
     const enrichment = {
       ...frontmatterObject(previousFrontmatter.paper_library_enrichment),
-      project: record.project,
+      study: record.project,
+      study_slug: record.project,
+      legacy_project_slug: record.project,
       status: record.status,
       tool: record.tool,
       source_url: record.sourceUrl,
@@ -609,7 +613,9 @@ export async function persistPaperAcquisitionRecordToGbrain(input: {
         frontmatter: compactObject({
           ...previousFrontmatter,
           entity_type: "paper",
-          project: previousFrontmatter.project ?? record.project,
+          study: previousFrontmatter.study ?? record.project,
+          study_slug: previousFrontmatter.study_slug ?? record.project,
+          legacy_project_slug: previousFrontmatter.legacy_project_slug ?? previousFrontmatter.project ?? record.project,
           paper_library_enrichment: enrichment,
           identifiers: record.suggestion.identifiers,
           authors: previousFrontmatter.authors,

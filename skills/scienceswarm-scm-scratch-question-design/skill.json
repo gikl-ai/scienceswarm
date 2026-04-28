@@ -1,0 +1,26 @@
+{
+  "slug": "scienceswarm-scm-scratch-question-design",
+  "name": "ScienceSwarm SCM From-Scratch Question Design",
+  "description": "Frame the from-scratch synthetic-control research question and turn it into an approval-gated analysis plan before code exists.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "causal-inference",
+    "planning",
+    "from-scratch"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "First step of the from-scratch SCM workflow: define the question, estimand, donor pool, assumptions, artifact plan, and approval gate before any R code is generated.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-26T00:00:00.000Z",
+  "updatedAt": "2026-04-26T00:00:00.000Z"
+}

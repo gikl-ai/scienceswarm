@@ -92,7 +92,7 @@ export async function POST(request: Request) {
 
       return Response.json(
         {
-          error: `Project ${bundle.projectSlug} is ${bundle.privacy}; artifact execution requires execution-ok privacy`,
+          error: `Study ${bundle.projectSlug} is ${bundle.privacy}; artifact execution requires execution-ok privacy`,
           assumptions: [],
           reviewFirst: [],
         },
@@ -104,6 +104,7 @@ export async function POST(request: Request) {
       version: 1,
       idempotencyKey: artifactRequest.idempotencyKey,
       jobId: artifactRequest.idempotencyKey,
+      study: bundle.projectSlug,
       project: bundle.projectSlug,
       artifactType: bundle.artifactType,
       intent: bundle.intent,
@@ -165,6 +166,7 @@ export async function POST(request: Request) {
       version: 1,
       idempotencyKey: artifactRequest.idempotencyKey,
       jobId: artifactRequest.idempotencyKey,
+      study: bundle.projectSlug,
       project: bundle.projectSlug,
       artifactType: bundle.artifactType,
       intent: bundle.intent,
@@ -213,6 +215,7 @@ export async function POST(request: Request) {
           version: 1,
           idempotencyKey: jobContext.jobId,
           jobId: jobContext.jobId,
+          study: jobContext.projectSlug,
           project: jobContext.projectSlug,
           artifactType: jobContext.artifactType,
           intent: jobContext.intent,
@@ -275,6 +278,6 @@ function mapErrorStatus(message: string): number {
   ) {
     return 503;
   }
-  if (message.includes("Project manifest not found")) return 404;
+  if (message.includes("Project manifest not found") || message.includes("Study manifest not found")) return 404;
   return 500;
 }

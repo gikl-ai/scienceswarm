@@ -78,22 +78,24 @@ export async function POST(request: Request): Promise<Response> {
     capture.userId = body.userId;
   }
 
-  if (body.project !== undefined && body.project !== null && typeof body.project !== "string") {
-    return Response.json({ error: "project must be a string, null, or omitted" }, { status: 400 });
+  const hasStudy = Object.prototype.hasOwnProperty.call(body, "study");
+  const requestedStudy = hasStudy ? body.study : body.project;
+  if (requestedStudy !== undefined && requestedStudy !== null && typeof requestedStudy !== "string") {
+    return Response.json({ error: "study must be a string, null, or omitted" }, { status: 400 });
   }
-  if (typeof body.project === "string") {
-    const project = body.project.trim();
-    if (!project) {
+  if (typeof requestedStudy === "string") {
+    const study = requestedStudy.trim();
+    if (!study) {
       capture.project = null;
     } else {
       try {
-        assertSafeProjectSlug(project);
+        assertSafeProjectSlug(study);
       } catch {
-        return Response.json({ error: "project must be a safe bare slug" }, { status: 400 });
+        return Response.json({ error: "study must be a safe bare slug" }, { status: 400 });
       }
-      capture.project = project;
+      capture.project = study;
     }
-  } else if (body.project === null) {
+  } else if (requestedStudy === null) {
     capture.project = null;
   }
 

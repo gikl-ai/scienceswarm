@@ -1,0 +1,25 @@
+{
+  "slug": "scienceswarm-literature-landscape",
+  "name": "ScienceSwarm Literature Landscape",
+  "description": "Map the literature around a research idea using supplied and searched sources, identifying source sufficiency, canonical anchors, closest prior art, frontier work, disagreements, novelty threats, gaps, and publishable positioning.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "literature",
+    "research-design",
+    "evidence"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "A literature-positioning skill for scientists, mathematicians, social scientists, and engineers. Produces a saved Literature Landscape Map with search audit, source sufficiency verdict, source tiers, evidence grades, prior-art map, novelty threats, disagreements, positioning options, and read-next priorities.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-27T00:00:00.000Z",
+  "updatedAt": "2026-04-27T00:00:00.000Z"
+}

@@ -1,7 +1,7 @@
 {
   "slug": "scienceswarm-dashboard",
   "name": "ScienceSwarm — Dashboard",
-  "description": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the project workspace, settings, communications panel, or how to configure features in the web interface.",
+  "description": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the study workspace, settings, communications panel, or how to configure features in the web interface.",
   "visibility": "public",
   "status": "ready",
   "tags": [
@@ -12,7 +12,7 @@
     "openclaw"
   ],
   "owner": "scienceswarm",
-  "summary": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the project workspace, settings, communications panel, or how to configure features in the web interface.",
+  "summary": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the study workspace, settings, communications panel, or how to configure features in the web interface.",
   "source": {
     "kind": "local"
   },

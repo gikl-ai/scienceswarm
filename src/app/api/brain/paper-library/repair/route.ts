@@ -1,7 +1,7 @@
 import { repairAppliedManifest } from "@/lib/paper-library/apply";
 import { RepairManifestRequestSchema, paperLibraryError } from "@/lib/paper-library/contracts";
 import { persistAppliedPaperLocations } from "@/lib/paper-library/gbrain-writer";
-import { paperLibraryBadRequest, readJsonBody, requirePaperLibraryRequest } from "../_shared";
+import { normalizeStudyBody, paperLibraryBadRequest, readJsonBody, requirePaperLibraryRequest } from "../_shared";
 
 export async function POST(request: Request) {
   const guard = await requirePaperLibraryRequest(request);
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     return paperLibraryBadRequest(error);
   }
 
-  const parsed = RepairManifestRequestSchema.safeParse(body);
+  const parsed = RepairManifestRequestSchema.safeParse(normalizeStudyBody(body));
   if (!parsed.success) return paperLibraryBadRequest(parsed.error);
 
   try {

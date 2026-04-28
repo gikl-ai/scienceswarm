@@ -1,36 +1,44 @@
 ---
 name: scienceswarm-scm-inference-and-placebos
-description: "Run permutation-based inference for synthetic control: in-space placebos across donors, in-time placebos across alternate treatment years, and leave-one-out donor sensitivity."
+description: "Summarize synthetic-control inference: in-space donor placebos, clearly labeled in-time falsification support, and leave-one-out sensitivity status."
 ---
 
 # ScienceSwarm SCM Inference and Placebos
 
 Use this skill once a fitted SC model exists and the cross-method check
-has passed. Standard SC inference is non-parametric; this skill runs
-the three placebo families and reports them.
+has passed. Standard SC inference is non-parametric; this skill reports
+which placebo families were fully run, approximated, or deferred.
 
 ## Workflow
 
-1. **In-space placebo (Abadie/Diamond/Hainmueller 2010).** Re-fit the
-   synthetic control once for each donor unit, treating that donor as if
-   it were the treated unit. Compute the post/pre RMSPE ratio for each
-   placebo. The exact p-value is the share of placebos with ratio ≥ the
-   treated unit's ratio.
-2. **In-time placebo / falsification.** Re-assign treatment to alternate
-   years inside the pre-period. The post/pre RMSPE ratio at the actual
-   treatment year should stand out clearly above the placebo
-   distribution; if it does not, the fit may be picking up pre-existing
-   trends rather than the shock.
-3. **Leave-one-out donor sensitivity.** Re-fit dropping the
-   heaviest-weighted donor; the ATT should not change sign or move by
-   more than ~25%.
-4. Report: exact p-value, placebo distribution, in-time falsification
-   plot, leave-one-out range. Do not report only a single ATT point
+1. **In-space placebo (Abadie/Diamond/Hainmueller 2010).** Use the
+   donor-refit permutation stored in the classic fit artifacts. Compute
+   the post/pre RMSPE ratio for each placebo. The exact p-value is the
+   share of placebos with ratio >= the treated unit's ratio.
+2. **In-time placebo / falsification.** Report the available
+   treatment-year falsification evidence. If the runtime uses the
+   tutorial renderer's fast no-refit approximation instead of full
+   refits, label it as approximated in the confidence boundary.
+3. **Leave-one-out donor sensitivity.** Report LOO refits only when the
+   artifacts exist. Otherwise list the top-weighted donors that must be
+   dropped in a full sensitivity pass and mark this family as deferred.
+4. Run any compact tutorial summary script when available, such as
+   `scripts/05_summarize_inference.R`, and cite its Markdown/JSON output
+   instead of pasting raw R console tables.
+5. Report: exact p-value, placebo distribution, in-time falsification
+   status, leave-one-out status. Do not report only a single ATT point
    estimate.
-5. Produce an `SCM Inference Note` brain asset with `asset_kind:
+6. Produce an `SCM Inference Note` brain asset with `asset_kind:
    scm_inference_note` containing all three placebo families and a
    `Confidence Boundary` that names which placebo, if any, is closest to
    undermining the result.
 
-Do not produce the final HTML report until all three placebo families
-have been run and reported.
+When the `scienceswarm` MCP tools are available, save the inference note with
+`gbrain_capture` before answering. Use a clear title, the asset kind above,
+the active study, and links or references to the upstream fit and method
+comparison notes. If saving fails, report the exact save failure and do not
+present the note as durable.
+
+Do not present an inference family as completed unless the corresponding
+artifact was actually run. The final HTML report can be produced after the
+inference note clearly names which checks were run, approximated, or deferred.

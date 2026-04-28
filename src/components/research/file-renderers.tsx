@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -12,6 +12,7 @@ import {
   getShikiLanguageForPath,
   type FilePreviewState,
 } from "@/lib/file-visualization";
+import { cn } from "@/lib/utils";
 
 const HIGHLIGHT_SIZE_LIMIT_BYTES = 300 * 1024;
 const SHIKI_CACHE_MAX_ENTRIES = 100;
@@ -59,6 +60,24 @@ const markdownSanitizeSchema = {
       ["encoding"],
     ],
   },
+};
+
+const FILE_MARKDOWN_COMPONENTS: Components = {
+  ul: ({ className, node: _node, ...props }) => (
+    <ul
+      {...props}
+      className={cn("list-disc space-y-1 pl-5 marker:text-quiet", className)}
+    />
+  ),
+  ol: ({ className, node: _node, ...props }) => (
+    <ol
+      {...props}
+      className={cn("list-decimal space-y-1 pl-5 marker:font-medium marker:text-dim", className)}
+    />
+  ),
+  li: ({ className, node: _node, ...props }) => (
+    <li {...props} className={cn("pl-1", className)} />
+  ),
 };
 
 function cheapHash(value: string): string {
@@ -249,6 +268,7 @@ export function MarkdownRenderer({ content }: { content: string }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypeKatex, { strict: false }], [rehypeSanitize, markdownSanitizeSchema]]}
+        components={FILE_MARKDOWN_COMPONENTS}
       >
         {content}
       </ReactMarkdown>
@@ -277,7 +297,26 @@ export function LatexRenderer({ content }: { content: string }) {
   return <MarkdownRenderer content={latexToMarkdown(content)} />;
 }
 
-export function HtmlRenderer({ content, title }: { content: string; title: string }) {
+export function HtmlRenderer({
+  content,
+  rawUrl,
+  title,
+}: {
+  content: string;
+  rawUrl?: string;
+  title: string;
+}) {
+  if (rawUrl) {
+    return (
+      <iframe
+        title={title}
+        src={rawUrl}
+        sandbox="allow-scripts"
+        className="h-full w-full border-0 bg-white"
+      />
+    );
+  }
+
   return (
     <iframe
       title={title}
@@ -576,7 +615,7 @@ export function RenderedFileContent({ preview }: { preview: Extract<FilePreviewS
     case "notebook":
       return <NotebookRenderer content={content} />;
     case "html":
-      return <HtmlRenderer content={content} title={preview.path} />;
+      return <HtmlRenderer content={content} rawUrl={preview.rawUrl} title={preview.path} />;
     case "data":
       return <DataTableRenderer content={content} path={preview.path} />;
     case "pdf":

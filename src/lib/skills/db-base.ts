@@ -1023,20 +1023,46 @@ function buildProjectLinks(
 function projectFrontmatter(
   existing: Record<string, unknown> | undefined,
   project: string | undefined,
-): { project?: string; projects?: string[] } {
+): {
+  study?: string;
+  study_slug?: string;
+  studies?: string[];
+  legacy_project_slug?: string;
+} {
+  const existingStudy = typeof existing?.study === "string"
+    ? existing.study.trim()
+    : typeof existing?.study_slug === "string"
+      ? existing.study_slug.trim()
+      : typeof existing?.legacy_project_slug === "string"
+        ? existing.legacy_project_slug.trim()
+        : typeof existing?.project === "string"
+          ? existing.project.trim()
+          : "";
+  const existingStudies = mergeStringArrays(
+    readStringArray(existing?.studies),
+    readStringArray(existing?.projects),
+  );
   const existingProject = typeof existing?.project === "string"
     ? existing.project.trim()
     : "";
   const nextProject = project?.trim() ?? "";
   const projects = mergeStringArrays(
-    readStringArray(existing?.projects),
-    [existingProject, nextProject].filter(Boolean),
+    existingStudies,
+    [existingStudy, existingProject, nextProject].filter(Boolean),
   );
+  const study = nextProject || existingStudy || existingProject || undefined;
 
   return cleanUndefined({
-    project: nextProject || existingProject || undefined,
-    projects: projects.length > 0 ? projects : undefined,
-  }) as { project?: string; projects?: string[] };
+    study,
+    study_slug: study,
+    legacy_project_slug: study,
+    studies: projects.length > 0 ? projects : undefined,
+  }) as {
+    study?: string;
+    study_slug?: string;
+    studies?: string[];
+    legacy_project_slug?: string;
+  };
 }
 
 function appendTimeline(

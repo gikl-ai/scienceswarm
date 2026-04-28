@@ -119,6 +119,50 @@ export function getFileDisplayName(filePath: string): string {
   return filePath.split("/").pop() || filePath;
 }
 
+export function normalizeWorkspaceRelativePath(filePath: string): string | null {
+  const segments: string[] = [];
+  for (const segment of filePath.replaceAll("\\", "/").split("/")) {
+    if (!segment || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      return null;
+    }
+    segments.push(segment);
+  }
+
+  const normalized = segments.join("/");
+  if (!normalized || normalized === "." || normalized === "..") {
+    return null;
+  }
+  return normalized;
+}
+
+export function buildWorkspaceRawPreviewUrl(
+  filePath: string,
+  projectId: string | null,
+  { preferPathRoute = false }: { preferPathRoute?: boolean } = {},
+): string | null {
+  const normalizedPath = normalizeWorkspaceRelativePath(filePath);
+  if (!normalizedPath) {
+    return null;
+  }
+
+  if (preferPathRoute && projectId) {
+    const encodedSegments = normalizedPath
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    return `/api/workspace/raw/${encodeURIComponent(projectId)}/${encodedSegments}`;
+  }
+
+  const params = new URLSearchParams({ action: "raw", file: normalizedPath });
+  if (projectId) {
+    params.set("projectId", projectId);
+  }
+  return `/api/workspace?${params.toString()}`;
+}
+
 export function classifyFile(filePath: string, mime?: string): FileVisualizationKind {
   const normalizedMime = (mime ?? "").toLowerCase();
   if (normalizedMime.startsWith("application/pdf")) return "pdf";

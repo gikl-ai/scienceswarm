@@ -183,6 +183,50 @@ describe("isArxivReference", () => {
   });
 });
 
+// ── applyArxivRateLimit (concurrency reservation) ────
+
+describe("applyArxivRateLimit", () => {
+  it("reserves the slot before yielding so concurrent callers serialise", async () => {
+    const { applyArxivRateLimit, resetRateLimit } = await import(
+      "@/brain/arxiv-download"
+    );
+    resetRateLimit();
+
+    // Tiny rate limit so the test runs quickly. The race is the
+    // failure mode under any positive rate limit.
+    const rateLimitMs = 30;
+
+    // Prime the timer with one call so subsequent ones see the gate.
+    await applyArxivRateLimit({ rateLimitMs });
+
+    // Fire two concurrent calls. With buggy "update-after-await"
+    // semantics they would read the same `lastDownloadTime`, sleep
+    // the same duration, and resolve at roughly the same wall-clock
+    // moment. With reservation in place, the second caller's
+    // observed `lastDownloadTime` is already in the future, so it
+    // sleeps an additional full window beyond the first.
+    const first = applyArxivRateLimit({ rateLimitMs });
+    // Give the first caller a microtask tick to set its reservation.
+    await Promise.resolve();
+    const second = applyArxivRateLimit({ rateLimitMs });
+
+    const t0 = Date.now();
+    const t1 = await first.then(() => Date.now());
+    const t2 = await second.then(() => Date.now());
+
+    const firstWait = t1 - t0;
+    const secondWait = t2 - t0;
+
+    // The first call sleeps roughly one window. Allow generous
+    // tolerance for OS scheduler jitter on CI.
+    expect(firstWait).toBeGreaterThanOrEqual(rateLimitMs - 5);
+    // The second call's resolution must be at least roughly TWO
+    // windows after t0 — i.e., it observed the first caller's
+    // reservation and waited past it.
+    expect(secondWait).toBeGreaterThanOrEqual(rateLimitMs * 2 - 10);
+  });
+});
+
 // ── arXiv Download ───────────────────────────────────
 
 describe("downloadArxivPdf", () => {

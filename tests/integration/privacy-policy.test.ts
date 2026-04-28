@@ -295,7 +295,7 @@ describe("privacy policy", () => {
     expect(startConversation).not.toHaveBeenCalled();
   });
 
-  it("blocks execution without project context", async () => {
+  it("blocks execution without study context", async () => {
     const response = await agentPost(new Request("http://localhost/api/agent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -307,7 +307,7 @@ describe("privacy policy", () => {
 
     expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.error).toContain("projectId is required");
+    expect(body.error).toContain("studyId is required");
     expect(startConversation).not.toHaveBeenCalled();
   });
 });

@@ -206,7 +206,7 @@ describe("commitImportedProject", () => {
     expect(existsSync(join(ROOT, first.sourcePagePaths[1]))).toBe(true);
 
     const projectPage = readFileSync(join(ROOT, first.projectPagePath), "utf-8");
-    expect(projectPage).toContain("type: project");
+    expect(projectPage).toContain("type: study");
     expect(projectPage).toContain('source_refs: [{"kind":"import","ref":"notes/summary.md","hash":"hash-summary"}');
     expect(projectPage).toContain(`[[${summaryPath}]]`);
 
@@ -293,7 +293,7 @@ describe("commitImportedProject", () => {
     ]);
     expect(pages[0].content).toContain("file_refs:");
     expect(pages[0].content).toContain("source_file_object_id:");
-    expect(pages[1].content).toContain("type: project");
+    expect(pages[1].content).toContain("type: study");
     expect(result.warnings).toEqual(expect.arrayContaining([
       expect.objectContaining({
         code: "source-fallback-unsupported",

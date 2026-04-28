@@ -25,9 +25,9 @@ import {
 } from "@/components/runtime/RuntimeHostMatrix";
 import { RuntimeSetupCallouts } from "@/components/runtime/RuntimeSetupCallouts";
 import {
-  readLastProjectSlug,
-  safeProjectSlugOrNull,
-} from "@/lib/project-navigation";
+  readLastStudySlug,
+  safeStudySlugOrNull,
+} from "@/lib/study-navigation";
 
 /* ---------- types ---------- */
 
@@ -117,8 +117,8 @@ interface ProjectOption {
   name: string;
 }
 
-interface ProjectListResult {
-  projects?: Array<{
+interface StudyListResult {
+  studies?: Array<{
     slug?: string;
     name?: string;
   }>;
@@ -317,11 +317,11 @@ export default function SettingsPage() {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const res = await fetch("/api/projects");
+      const res = await fetch("/api/studies");
       if (!res.ok) return;
-      const data = (await res.json()) as ProjectListResult;
-      const projects = Array.isArray(data.projects)
-        ? data.projects
+      const data = (await res.json()) as StudyListResult;
+      const projects = Array.isArray(data.studies)
+        ? data.studies
             .filter(
               (project): project is { slug: string; name: string } =>
                 Boolean(
@@ -337,7 +337,7 @@ export default function SettingsPage() {
               name: project.name.trim(),
             }))
         : [];
-      const rememberedProject = readLastProjectSlug();
+      const rememberedProject = readLastStudySlug();
       const initialProject = projects.some((project) => project.id === rememberedProject)
         ? rememberedProject ?? ""
         : projects[0]?.id ?? "";
@@ -349,8 +349,9 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    const project = safeProjectSlugOrNull(
-      new URLSearchParams(window.location.search).get("project"),
+    const project = safeStudySlugOrNull(
+      new URLSearchParams(window.location.search).get("study")
+        ?? new URLSearchParams(window.location.search).get("project"),
     );
     if (project) {
       setRuntimeProject(project);
@@ -691,7 +692,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!runtimeProject && projectOptions.length > 0) {
-      const rememberedProject = readLastProjectSlug();
+      const rememberedProject = readLastStudySlug();
       const fallbackProject = projectOptions.some((project) => project.id === rememberedProject)
         ? rememberedProject ?? ""
         : projectOptions[0]?.id ?? "";

@@ -5,8 +5,8 @@
 [![Node >=22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](.node-version)
 
 ScienceSwarm is a local-first AI research workspace. It lets you import papers,
-notes, code, and datasets into one project workspace, search and organize that
-material, chat with an assistant that knows your project, and hand off heavier
+notes, code, and datasets into one Study workspace, search and organize that
+material, chat with an assistant that knows your study, and hand off heavier
 execution work to a local agent runtime when needed.
 
 The core system is:
@@ -23,31 +23,31 @@ The core system is:
   PDFs, notes, scripts, and chat logs
 - Run local-first by default with Ollama and `gemma4:latest`, with optional
   cloud fallback when you want it
-- Capture and organize work across chat, uploads, project pages, and optional
+- Capture and organize work across chat, uploads, study pages, and optional
   Telegram/OpenClaw flows
-- Use one product for literature review, project memory, agent-assisted coding,
+- Use one product for literature review, study memory, agent-assisted coding,
   and reasoning/audit workflows
 
 ## Key Features
 
-- Project-scoped imports for papers, notes, code, and datasets
+- Study-scoped imports for papers, notes, code, and datasets
 - Research-first brain setup that defaults new installs to the
   `scientific_research` preset while still offering a
   `generic_scientist` preset for broader workflows
-- A searchable `gbrain`-backed research memory that enriches chat with project
+- A searchable `gbrain`-backed research memory that enriches chat with study
   context
 - A local-first Paper Library workflow that scans messy PDF archives, proposes
   better metadata, previews rename and move plans, and keeps citation graph,
-  cluster, and gap-finder views tied to the same project corpus
+  cluster, and gap-finder views tied to the same study corpus
 - Deterministic literature-packet runs across PubMed, arXiv, OpenAlex, and
   Crossref, with durable `research_packet` and `overnight_journal` artifacts
 - Direct chat plus OpenClaw-routed chat when the agent runtime is available
 - OpenHands-backed execution for code and longer-running agent tasks
 - AI destination controls for OpenClaw, Claude Code, Codex, Gemini CLI, and
-  OpenHands, with per-project privacy policy gates and preview approval before
+  OpenHands, with per-study privacy policy gates and preview approval before
   third-party or execution-capable sends
 - Dream Cycle and Research Radar overnight runs that leave auditable journal
-  artifacts in the brain, including project-specific frontier matches that
+  artifacts in the brain, including study-specific frontier matches that
   explain what changed and can be saved back into gbrain memory
 - A reasoning workspace for critique, review, and structured audit flows
 - Private local installation of third-party market plugin bundles from pinned
@@ -128,9 +128,9 @@ Important:
 
 1. Complete `/setup` and keep the default `scientific_research` preset unless
    you specifically want the broader `generic_scientist` layout
-2. Open `/dashboard/project` with `./scienceswarm open`
+2. Open `/dashboard/study` with `./scienceswarm open`
 3. Import a folder of papers, notes, code, or datasets
-4. Start chatting with a project that already has context
+4. Start chatting with a study that already has context
 5. Run a literature packet from chat or MCP when you want a deterministic
    multi-source landscape review with durable packet/journal outputs
 
@@ -139,7 +139,7 @@ Important:
 ScienceSwarm includes a Paper Library workflow for turning a large local PDF
 archive into something you can actually work with.
 
-From the `Paper Library` view inside a project, you can:
+From the `Paper Library` view inside a study, you can:
 
 1. Run a dry-run scan against a local folder of PDFs, even when filenames are
    inconsistent or metadata is incomplete
@@ -151,18 +151,18 @@ From the `Paper Library` view inside a project, you can:
 5. Use manifest history to undo a move set or retry metadata writeback if the
    local file operations finished before a gbrain update did
 
-The workflow is project-scoped, so each project can organize and explore its
+The workflow is study-scoped, so each study can organize and explore its
 own paper archive without treating every imported folder as one global library.
 
 ### AI Destinations
 
-OpenClaw remains the local-first default destination. The project composer starts
+OpenClaw remains the local-first default destination. The study composer starts
 with the `local-only` policy, which allows OpenClaw chat and blocks third-party
 Claude Code, Codex, and Gemini CLI sends before prompt construction. You can
 choose `cloud-ok` for turns where third-party subscription-native CLIs are
 acceptable, or `execution-ok` when OpenHands-style execution is acceptable.
 
-The project chat composer includes a compact destination switcher next to Send.
+The study chat composer includes a compact destination switcher next to Send.
 Use it to pick Claude Code, OpenClaw, Codex, Gemini CLI, or compare mode
 without leaving the conversation. Settings remains the diagnostics and
 advanced-history surface for destinations, policies, compare targets, and
@@ -174,7 +174,7 @@ context or attachments, preserves Claude Code's native session id for resume,
 streams Claude Code output into the assistant bubble, and does not apply
 OpenClaw response cleanup to Claude Code text before you see it. Any third-party,
 task, compare, or execution-capable turn is previewed before send: the preview
-lists where the data will be sent, account source, and the prompt or project
+lists where the data will be sent, account source, and the prompt or study
 context that will leave the local workspace. ScienceSwarm does not store
 Claude Code, Codex, or Gemini subscription tokens; those destinations use your local
 CLI login. API-key adapters read keys from `.env` only when configured
@@ -182,8 +182,8 @@ and do not echo secret values back through the UI.
 
 Claude Code launches from a generated ScienceSwarm session capsule rather than
 the ScienceSwarm source checkout. The capsule includes `SCIENCESWARM.md` for
-product and project orientation, a thin `CLAUDE.md` that points Claude back to
-that guidance, a compact gbrain project brief, and a destination-scoped MCP config
+product and study orientation, a thin `CLAUDE.md` that points Claude back to
+that guidance, a compact gbrain study brief, and a destination-scoped MCP config
 for selective gbrain search/read/write tools. MCP bearer credentials are injected
 through the spawned process environment rather than the prompt text, and the
 temporary MCP config is deleted after each invocation. The preview lists this
@@ -219,10 +219,10 @@ gemini
 # If Gemini opens without asking for an auth method, its native CLI session is usable.
 ```
 
-After the CLI is installed and signed in, open a project, use the composer
-destination switcher to choose Claude Code, switch Project policy from `local-only`
+After the CLI is installed and signed in, open a study, use the composer
+destination switcher to choose Claude Code, switch Study policy from `local-only`
 to `cloud-ok` when prompted, and approve the preview before sending third-party
-context. Settings > Project AI destinations remains available for session history,
+context. Settings > Study AI destinations remains available for session history,
 diagnostics, and advanced modes.
 
 Rollback smoke after reverting or patching an AI-destination PR:
@@ -256,8 +256,8 @@ resolved commit SHA, then stores a pinned private bundle snapshot under
 
 - installs the bundle into the local OpenClaw state under
   `SCIENCESWARM_DIR/openclaw`
-- projects bundled skills into repo-local `.codex/skills/`
-- projects bundled skills into repo-local `.claude/skills/`
+- exposes bundled skills in repo-local `.codex/skills/`
+- exposes bundled skills in repo-local `.claude/skills/`
 
 These installs are not added to `skills/public-index.json`, are not promoted
 into the public ScienceSwarm catalog automatically, and stay local by default.
@@ -280,7 +280,7 @@ terminal attached as the live server log and open the dashboard automatically
 after the frontend health check passes. For headless runs, use
 `./scienceswarm start --no-open` or `./scienceswarm restart --no-open`.
 
-## Project Status
+## Release Status
 
 ScienceSwarm is alpha software.
 
@@ -309,6 +309,18 @@ planning, acceptance, and launch-process docs are not part of this release.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
 and [SECURITY.md](SECURITY.md).
+
+If a change affects OpenClaw chat latency or progress rendering, run the local
+benchmark helper and include the key timing output in the PR body:
+
+```bash
+SCIENCESWARM_CHAT_TIMING=1 npx tsx scripts/benchmark-chat-hi.ts --timing-artifact
+```
+
+See [`docs/local-chat-benchmark.md`](docs/local-chat-benchmark.md) for the
+timing field guide and JSON inspection examples.
+Use `Observed split` to reason about the local route path and `Server timing`
+to reason about downstream OpenClaw or model latency.
 
 ## License
 

@@ -28,12 +28,12 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-function stubProjectsFetch() {
+function stubStudiesFetch() {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    if (url === "/api/projects") {
+    if (url === "/api/studies") {
       return Response.json({
-        projects: [
+        studies: [
           {
             id: "my-first-test-project",
             slug: "my-first-test-project",
@@ -52,38 +52,38 @@ function stubProjectsFetch() {
 describe("DashboardPage", () => {
   beforeEach(() => {
     pushMock.mockReset();
-    vi.stubGlobal("fetch", stubProjectsFetch());
+    vi.stubGlobal("fetch", stubStudiesFetch());
   });
 
-  it("shows the normalized slug preview while creating a project", async () => {
+  it("shows the normalized slug preview while creating a study", async () => {
     render(<DashboardPage />);
 
     // The ?new=1 page shows the creation form immediately — no list button.
-    await screen.findByText("Create a new project");
-    fireEvent.change(screen.getByPlaceholderText("project-alpha"), {
+    await screen.findByText("Create a new study");
+    fireEvent.change(screen.getByPlaceholderText("study-alpha"), {
       target: { value: "my_first_test_project" },
     });
 
-    expect(screen.getByText(/Project slug:/)).toHaveTextContent("Project slug: my-first-test-project");
-    const workspaceCopy = screen.getByText(/Creates a local project workspace/);
+    expect(screen.getByText(/Study slug:/)).toHaveTextContent("Study slug: my-first-test-project");
+    const workspaceCopy = screen.getByText(/Creates a local study workspace/);
     expect(workspaceCopy).toHaveTextContent(
-      "Creates a local project workspace with upload, import, chat, and artifact review ready to use, then opens the project workspace.",
+      "Creates a local study workspace with upload, import, chat, and artifact review ready to use, then opens the study workspace.",
     );
     expect(workspaceCopy).not.toHaveTextContent("~/.scienceswarm");
   });
 
 
-  it("opens the new project in its workspace onboarding flow after creation", async () => {
+  it("opens the new study in its workspace onboarding flow after creation", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
-      if (url === "/api/projects" && !init?.method) {
-        return Response.json({ projects: [] });
+      if (url === "/api/studies" && !init?.method) {
+        return Response.json({ studies: [] });
       }
 
-      if (url === "/api/projects" && init?.method === "POST") {
+      if (url === "/api/studies" && init?.method === "POST") {
         return Response.json({
-          project: {
+          study: {
             id: "my-first-test-project",
             slug: "my-first-test-project",
             name: "My First Test Project",
@@ -100,32 +100,32 @@ describe("DashboardPage", () => {
     render(<DashboardPage />);
 
     // The ?new=1 page shows the creation form immediately.
-    await screen.findByText("Create a new project");
-    fireEvent.change(screen.getByPlaceholderText("project-alpha"), {
+    await screen.findByText("Create a new study");
+    fireEvent.change(screen.getByPlaceholderText("study-alpha"), {
       target: { value: "My First Test Project" },
     });
     fireEvent.change(
       screen.getByPlaceholderText("Analyzing citation patterns in public benchmark datasets..."),
       { target: { value: "Track frontier AI work." } },
     );
-    fireEvent.click(screen.getByRole("button", { name: "Create Project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Study" }));
 
     await waitFor(() => {
       expect(pushMock).toHaveBeenCalledWith(
-        "/dashboard/project?name=my-first-test-project&description=Track+frontier+AI+work.&onboarding=1",
+        "/dashboard/study?name=my-first-test-project&description=Track+frontier+AI+work.&onboarding=1",
       );
     });
   });
 
-  it("surfaces a create error when the API omits the created project payload", async () => {
+  it("surfaces a create error when the API omits the created study payload", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
-      if (url === "/api/projects" && !init?.method) {
-        return Response.json({ projects: [] });
+      if (url === "/api/studies" && !init?.method) {
+        return Response.json({ studies: [] });
       }
 
-      if (url === "/api/projects" && init?.method === "POST") {
+      if (url === "/api/studies" && init?.method === "POST") {
         return Response.json({ created: true });
       }
 
@@ -136,14 +136,14 @@ describe("DashboardPage", () => {
     render(<DashboardPage />);
 
     // The ?new=1 page shows the creation form immediately.
-    await screen.findByText("Create a new project");
-    fireEvent.change(screen.getByPlaceholderText("project-alpha"), {
+    await screen.findByText("Create a new study");
+    fireEvent.change(screen.getByPlaceholderText("study-alpha"), {
       target: { value: "My First Test Project" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create Project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Study" }));
 
     expect(
-      await screen.findByText(/server response did not include project details/i),
+      await screen.findByText(/server response did not include study details/i),
     ).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
   });

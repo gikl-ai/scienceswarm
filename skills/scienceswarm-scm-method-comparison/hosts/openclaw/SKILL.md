@@ -1,6 +1,15 @@
 ---
 name: scienceswarm-scm-method-comparison
 description: Run modern SCM variants — generalized SCM (Xu), synthetic DiD (Arkhangelsky et al.), and doubly-robust SC (Ben-Michael et al.) — alongside classic Abadie SCM and gate the result on cross-method sign consistency.
+owner: scienceswarm
+runtime: in-session
+tier: synthetic-control-pipeline
+aliases:
+  - scm-methods
+outputs:
+  - SCM Method Comparison Note brain asset with asset_kind scm_method_comparison_note
+  - cross-method ATT table
+  - sign-consistency gate result
 ---
 
 # ScienceSwarm SCM Method Comparison
@@ -27,5 +36,11 @@ ATT is robust to modeling choices.
    scm_method_comparison_note` listing each method's ATT, standard
    error, and confidence interval, and a `Confidence Boundary` that
    states which method is the headline estimate and why.
+
+When the `scienceswarm` MCP tools are available, save the comparison note with
+`gbrain_capture` before answering. Use a clear title, the asset kind above,
+the active study, and links or references to the upstream fit note. If
+saving fails, report the exact save failure and do not present the note as
+durable.
 
 Do not report a headline ATT without cross-method confirmation.

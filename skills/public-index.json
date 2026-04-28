@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-26T06:00:10.764Z",
+  "generatedAt": "2026-04-27T18:56:41.934Z",
   "skills": [
     {
       "slug": "db-arxiv",
@@ -189,22 +189,6 @@
       "summary": "Fetch structures from RCSB PDB by PDB ID or search PDB entries"
     },
     {
-      "slug": "project-organizer",
-      "name": "Project Organizer",
-      "description": "Use when the user asks to organize a project, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm.",
-      "tags": [
-        "scienceswarm",
-        "product",
-        "organization"
-      ],
-      "hosts": [
-        "openclaw"
-      ],
-      "owner": "scienceswarm",
-      "status": "ready",
-      "summary": "Use when the user asks to organize a project, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm."
-    },
-    {
       "slug": "db-pubmed",
       "name": "PubMed Database Wrapper",
       "description": "Fetch papers from PubMed by PMID or DOI, or search PubMed by query",
@@ -256,7 +240,7 @@
     {
       "slug": "scienceswarm-dashboard",
       "name": "ScienceSwarm — Dashboard",
-      "description": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the project workspace, settings, communications panel, or how to configure features in the web interface.",
+      "description": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the study workspace, settings, communications panel, or how to configure features in the web interface.",
       "tags": [
         "scienceswarm",
         "product"
@@ -266,12 +250,12 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the project workspace, settings, communications panel, or how to configure features in the web interface."
+      "summary": "Help users navigate and use the ScienceSwarm dashboard UI. Use when someone asks about the study workspace, settings, communications panel, or how to configure features in the web interface."
     },
     {
       "slug": "scienceswarm-getting-started",
       "name": "ScienceSwarm — Getting Started",
-      "description": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up the project, run the dev server, connect services, or troubleshoot first-run issues.",
+      "description": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up ScienceSwarm, run the dev server, connect services, or troubleshoot first-run issues.",
       "tags": [
         "scienceswarm",
         "product"
@@ -281,7 +265,7 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up the project, run the dev server, connect services, or troubleshoot first-run issues."
+      "summary": "Help users install, configure, and run ScienceSwarm. Use when someone asks how to set up ScienceSwarm, run the dev server, connect services, or troubleshoot first-run issues."
     },
     {
       "slug": "scienceswarm-research-radar",
@@ -297,6 +281,25 @@
       "owner": "scienceswarm",
       "status": "ready",
       "summary": "Help users set up and use the Research Radar feature for personalized daily briefings. Use when someone asks about monitoring papers, getting research updates, configuring radar topics, or running on-demand briefings."
+    },
+    {
+      "slug": "scienceswarm-brown-bag",
+      "name": "ScienceSwarm Brown Bag",
+      "description": "Stress-test an early research idea into a durable written brief with a sharper research question, landscape/novelty pass, decisive test, hard-objection map, hard pursuit verdict, evidence grading, publication fit, publication roadmap, review loop, and next research assignment.",
+      "tags": [
+        "science",
+        "research-design",
+        "planning",
+        "brown-bag"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A rigorous brown-bag partner for scientists, mathematicians, social scientists, and engineers: turn a rough research idea into a saved and reviewed Research Brown Bag Brief with landscape/novelty synthesis, evidence grades, hard objections, alternative framings, a pursue/narrow/park/explore/kill verdict, publication fit, publication pathway, and the smallest decisive next test."
     },
     {
       "slug": "scienceswarm-evidence-triangulation",
@@ -334,9 +337,28 @@
       "summary": "Use the local citation graph to suggest missing papers for a research question, request per-session consent before legal downloads, and write downloaded or metadata-only papers to gbrain."
     },
     {
+      "slug": "scienceswarm-literature-landscape",
+      "name": "ScienceSwarm Literature Landscape",
+      "description": "Map the literature around a research idea using supplied and searched sources, identifying source sufficiency, canonical anchors, closest prior art, frontier work, disagreements, novelty threats, gaps, and publishable positioning.",
+      "tags": [
+        "science",
+        "literature",
+        "research-design",
+        "evidence"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A literature-positioning skill for scientists, mathematicians, social scientists, and engineers. Produces a saved Literature Landscape Map with search audit, source sufficiency verdict, source tiers, evidence grades, prior-art map, novelty threats, disagreements, positioning options, and read-next priorities."
+    },
+    {
       "slug": "scienceswarm-md-evidence-grounding",
       "name": "ScienceSwarm MD Evidence Grounding",
-      "description": "Search the project paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.",
+      "description": "Search the study paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.",
       "tags": [
         "science",
         "molecular-dynamics",
@@ -349,7 +371,7 @@
       ],
       "owner": "scienceswarm",
       "status": "ready",
-      "summary": "Ground MD planning in project literature before external search and preserve evidence classes for downstream parameter decisions."
+      "summary": "Ground MD planning in study literature before external search and preserve evidence classes for downstream parameter decisions."
     },
     {
       "slug": "scienceswarm-md-execution-handoff",
@@ -478,6 +500,25 @@
       "summary": "Turns an MD study goal and evidence packet into a precise molecular system definition before parameter planning."
     },
     {
+      "slug": "scienceswarm-methods-review",
+      "name": "ScienceSwarm Methods Review",
+      "description": "Review whether a proposed research method can support the claim, with method-specific checks, fatal-flaw detection, assumptions, validity threats, alternatives, diagnostics, robustness checks, and stop conditions.",
+      "tags": [
+        "science",
+        "methods",
+        "review",
+        "validity"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A focused methods and validity review for empirical, theoretical, computational, social-science, mathematical, and engineering research plans. Produces a saved Methods Review Report with method-specific checks, fatal-flaw assessment, assumptions, alternatives, diagnostics, robustness checks, and a verdict."
+    },
+    {
       "slug": "scienceswarm-paper-to-plan",
       "name": "ScienceSwarm Paper To Plan",
       "description": "Turn a paper, method, or technical writeup into a concrete reproduction or implementation plan with validation checkpoints.",
@@ -496,9 +537,47 @@
       "summary": "A cross-host planning skill for moving from a source artifact to an executable reproduction or implementation plan."
     },
     {
+      "slug": "scienceswarm-research-autoplan",
+      "name": "ScienceSwarm Research Autoplan",
+      "description": "Run the full pre-execution research review sequence and consolidate an idea, brief, protocol, or study plan into a saved decision-audited research execution plan with conflict synthesis and a one-page command decision.",
+      "tags": [
+        "science",
+        "research-design",
+        "planning",
+        "review"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A full research planning gauntlet for scientists, mathematicians, social scientists, and engineers. It combines idea stress testing, literature landscape, design review, methods review, reproducibility planning, publication fit, conflict synthesis, and decision logging into one execution-ready research autoplan with a one-page command decision."
+    },
+    {
+      "slug": "scienceswarm-research-design-review",
+      "name": "ScienceSwarm Research Design Review",
+      "description": "Review and upgrade a research idea, protocol, brown-bag brief, or study plan into an execution-ready research design document with validity checks, concrete Day 1 execution packet, analysis plan, reproducibility package, and handoff tasks.",
+      "tags": [
+        "science",
+        "research-design",
+        "review",
+        "planning"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "A rigorous pre-execution research design review for scientists, mathematicians, social scientists, and engineers. Produces a saved Execution-Ready Research Design with claims, method fit, validity threats, workstreams, tests, reproducibility, publication fit, a Cannot Execute Until gate, and a Day 1 Execution Packet."
+    },
+    {
       "slug": "scienceswarm-research-reasoning",
       "name": "ScienceSwarm Research Reasoning",
-      "description": "Use optional reasoning prompt patterns for research questions without committing the project to a fixed UI workflow.",
+      "description": "Use optional reasoning prompt patterns for research questions without committing the study to a fixed UI workflow.",
       "tags": [
         "science",
         "reasoning",
@@ -531,6 +610,125 @@
       "owner": "scienceswarm",
       "status": "ready",
       "summary": "Second step of the SCM pipeline: assemble a balanced unit-time panel with documented sources and validated coverage."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-data-authoring",
+      "name": "ScienceSwarm SCM From-Scratch Data Authoring",
+      "description": "Author and review the data acquisition and munging code for a from-scratch synthetic-control panel after the study design is approved.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "data",
+        "panel",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Second step of the from-scratch SCM workflow: generate only the selected data acquisition and panel-building code, then validate balance and provenance."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-inference-placebos",
+      "name": "ScienceSwarm SCM From-Scratch Inference and Placebos",
+      "description": "Author placebo and sensitivity code for from-scratch SCM fits, including in-space, in-time, and leave-one-out checks.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "inference",
+        "placebo",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fifth step of the from-scratch SCM workflow: generate selected placebo and sensitivity code, then summarize non-parametric inference limits."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-method-choice",
+      "name": "ScienceSwarm SCM From-Scratch Method Choice",
+      "description": "Author method-comparison code for from-scratch SCM results and decide whether classic SCM is robust enough to carry forward.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "robustness",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Fourth step of the from-scratch SCM workflow: compare classic SCM with modern variants and gate reporting on method-level robustness."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-pretreatment-fit",
+      "name": "ScienceSwarm SCM From-Scratch Pretreatment Fit",
+      "description": "Author the classic Abadie synthetic-control fit code for prepared from-scratch panels and gate the result on pre-treatment diagnostics.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "fitting",
+        "abadie",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Third step of the from-scratch SCM workflow: generate only the classic SCM fit code for approved panels and stop on failed pre-treatment fit."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-question-design",
+      "name": "ScienceSwarm SCM From-Scratch Question Design",
+      "description": "Frame the from-scratch synthetic-control research question and turn it into an approval-gated analysis plan before code exists.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "causal-inference",
+        "planning",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "First step of the from-scratch SCM workflow: define the question, estimand, donor pool, assumptions, artifact plan, and approval gate before any R code is generated."
+    },
+    {
+      "slug": "scienceswarm-scm-scratch-results-report",
+      "name": "ScienceSwarm SCM From-Scratch Results Report",
+      "description": "Author the final from-scratch SCM reporting code and surface comparable figures, tables, interpretation, and artifact links in the project.",
+      "tags": [
+        "science",
+        "synthetic-control",
+        "visualization",
+        "html",
+        "from-scratch"
+      ],
+      "hosts": [
+        "openclaw",
+        "claude-code",
+        "codex"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Sixth step of the from-scratch SCM workflow: generate the selected report-rendering code and surface final artifacts with provenance."
     },
     {
       "slug": "scienceswarm-scm-inference-and-placebos",
@@ -627,6 +825,24 @@
       "summary": "Sixth and final step of the SCM pipeline: produce the publication-grade HTML deliverable."
     },
     {
+      "slug": "scientific-report-html",
+      "name": "Scientific Report (HTML)",
+      "description": "Render a typed JSON spec into a sophisticated, themed HTML report — magazine-grade typography, embedded interactive Plotly figures, plot/figure captions, validation tables, and glossary. Currently ships a 'broadsheet' theme used by the SCM-IR quickstart; intended as the shared renderer for any ScienceSwarm tutorial that wants a polished output page alongside its raw artifacts.",
+      "tags": [
+        "scienceswarm",
+        "tutorial",
+        "presentation",
+        "html",
+        "renderer"
+      ],
+      "hosts": [
+        "cli"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Theme-driven HTML report renderer. Consumes a JSON spec and emits a single HTML file (interactive Plotly charts and Google Fonts loaded from CDNs at view time)."
+    },
+    {
       "slug": "db-semantic-scholar",
       "name": "Semantic Scholar Database Wrapper",
       "description": "Fetch papers from Semantic Scholar by ID, or search Semantic Scholar by query",
@@ -642,6 +858,22 @@
       "owner": "scienceswarm",
       "status": "ready",
       "summary": "Fetch papers from Semantic Scholar by ID, or search Semantic Scholar by query"
+    },
+    {
+      "slug": "study-organizer",
+      "name": "Study Organizer",
+      "description": "Use when the user asks to organize a study, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm.",
+      "tags": [
+        "scienceswarm",
+        "product",
+        "organization"
+      ],
+      "hosts": [
+        "openclaw"
+      ],
+      "owner": "scienceswarm",
+      "status": "ready",
+      "summary": "Use when the user asks to organize a study, identify the main research threads, look for duplicate papers, or suggest the next pages or tasks worth creating inside ScienceSwarm."
     },
     {
       "slug": "db-uniprot",

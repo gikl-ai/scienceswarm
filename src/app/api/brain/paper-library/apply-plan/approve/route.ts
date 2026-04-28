@@ -3,7 +3,7 @@ import {
   paperLibraryError,
 } from "@/lib/paper-library/contracts";
 import { approveApplyPlan } from "@/lib/paper-library/apply";
-import { paperLibraryBadRequest, readJsonBody, requirePaperLibraryRequest } from "../../_shared";
+import { normalizeStudyBody, paperLibraryBadRequest, readJsonBody, requirePaperLibraryRequest } from "../../_shared";
 
 export async function POST(request: Request) {
   const guard = await requirePaperLibraryRequest(request);
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     return paperLibraryBadRequest(error);
   }
 
-  const parsed = ApplyPlanApproveRequestSchema.safeParse(body);
+  const parsed = ApplyPlanApproveRequestSchema.safeParse(normalizeStudyBody(body));
   if (!parsed.success) return paperLibraryBadRequest(parsed.error);
 
   try {

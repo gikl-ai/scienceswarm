@@ -1,6 +1,6 @@
 ---
 name: scienceswarm-md-evidence-grounding
-description: Search the project paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.
+description: Search the study paper library first, then external sources, to collect comparable MD protocols, key papers, structures, targets, ligands, and evidence gaps.
 owner: scienceswarm
 runtime: in-session
 tier: molecular-dynamics-pipeline
@@ -8,7 +8,7 @@ aliases:
   - md-evidence
 outputs:
   - Evidence Grounding Packet brain asset with asset_kind md_evidence_grounding_packet
-  - project-library-first source list
+  - study-library-first source list
   - comparable protocol patterns
 ---
 
@@ -17,13 +17,13 @@ outputs:
 Use this skill after `scienceswarm-md-study-design` when the user needs
 literature-grounded MD planning rather than unsupported parameter guesses.
 
-Search the user's project library first. Only move to external sources when the
-project library is insufficient or the user asks for outside evidence.
+Search the user's study library first. Only move to external sources when the
+study library is insufficient or the user asks for outside evidence.
 
 ## Source Priority
 
-1. Project Paper Library and gbrain artifacts.
-2. Project notes, prior study briefs, run logs, and decision records.
+1. Study Paper Library and gbrain artifacts.
+2. Study notes, prior study briefs, run logs, and decision records.
 3. PDB, UniProt, ChEMBL, PubMed, OpenAlex, Crossref, arXiv, and bioRxiv.
 4. Official tool documentation and recognized best-practice references.
 
@@ -31,10 +31,10 @@ project library is insufficient or the user asks for outside evidence.
 
 Use these labels consistently:
 
-- `project-literature`: evidence from the user's library or project memory.
+- `study-literature`: evidence from the user's library or study memory.
 - `external-literature`: evidence from outside papers, databases, or official
   records.
-- `common-heuristic`: common practice without direct project-specific support.
+- `common-heuristic`: common practice without direct study-specific support.
 - `tool-default`: a default inherited from a simulation package or workflow.
 - `speculative`: plausible but weakly supported.
 
@@ -59,7 +59,7 @@ Produce an `Evidence Grounding Packet`:
 ```markdown
 # Evidence Grounding Packet: {study title}
 
-## Project-Library Evidence
+## Study-Library Evidence
 
 | Source | Relevant System | Protocol Details | Evidence Class | Transferability | Validation Basis | Notes |
 |---|---|---|---|---|---|---|

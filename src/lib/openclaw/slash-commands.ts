@@ -148,7 +148,7 @@ export function buildOpenClawSlashCommandPrompt(
     [
       "Scope rule: the current user request is authoritative.",
       "Do not substitute a different molecule, project, prior study, or previous MD asset unless the user explicitly names it in this request.",
-      "Use prior project artifacts only when they match the requested system and question.",
+      "Use prior study artifacts only when they match the requested system and question.",
     ].join(" "),
   ];
 
@@ -206,7 +206,7 @@ export function renderOpenClawSlashHelp(
   return [
     "**ScienceSwarm slash commands**",
     "",
-    "Use `/<command> [arguments]` in the project chat composer.",
+    "Use `/<command> [arguments]` in the study chat composer.",
     "",
     "**Built-in**",
     ...builtIns.map(formatSlashCommandLine),

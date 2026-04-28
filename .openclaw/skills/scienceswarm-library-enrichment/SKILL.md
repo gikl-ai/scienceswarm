@@ -4,7 +4,7 @@ description: Suggest and import legally available missing papers from the local 
 owner: scienceswarm
 runtime: in-session
 tier: research
-entity_types: [paper, project]
+entity_types: [paper, study]
 network: optional
 tools:
   - paper_library_enrichment_context
@@ -33,8 +33,8 @@ ScienceSwarm to find/import missing papers from the paper library graph.
 
 1. Start from the user's current research question. Do not rank the whole
    literature universe without a question or explicit graph-gap request.
-2. Load the project graph context from
-   `/api/brain/paper-library/enrichment?project=<project>&question=<question>`.
+2. Load the study graph context from
+   `/api/brain/paper-library/enrichment?study=<study>&question=<question>`.
    Use graph summaries, identifiers, abstracts/excerpts, source URLs, and short
    graph paths. Do not send raw PDFs to hosted tools under local-only policy.
 3. Return a short list of suggestions with title, known identifiers/source URL,

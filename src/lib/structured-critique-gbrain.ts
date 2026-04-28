@@ -102,8 +102,10 @@ export function buildStructuredCritiquePageMarkdown(
 
   const parsedFrontmatter: CritiqueFrontmatter = CritiqueFrontmatterSchema.parse({
     type: "critique",
-    project: primaryProjectSlug,
-    projects: projectSlugs,
+    study: primaryProjectSlug,
+    study_slug: primaryProjectSlug,
+    legacy_project_slug: primaryProjectSlug,
+    studies: projectSlugs,
     parent: input.parentSlug,
     source_filename: input.sourceFilename || undefined,
     uploaded_at: uploadedAt,

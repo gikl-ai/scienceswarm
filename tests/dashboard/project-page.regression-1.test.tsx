@@ -8,7 +8,7 @@ const replaceMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
-  usePathname: () => "/dashboard/project",
+  usePathname: () => "/dashboard/study",
   useRouter: () => ({
     replace: replaceMock,
   }),
@@ -26,7 +26,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import ProjectPage from "@/app/dashboard/project/page";
+import ProjectPage from "@/app/dashboard/study/page";
 
 describe("Project dashboard Dream Cycle regressions", () => {
   beforeAll(() => {
@@ -41,7 +41,7 @@ describe("Project dashboard Dream Cycle regressions", () => {
     window.localStorage.clear();
   });
 
-  it("keeps gbrain controls off the project workspace surface", async () => {
+  it("keeps gbrain controls off the study workspace surface", async () => {
     // gbrain now has a dedicated dashboard page, so the project
     // workspace should stay focused on files, visualizer, and chat.
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -99,7 +99,7 @@ describe("Project dashboard Dream Cycle regressions", () => {
         });
       }
 
-      if (url === "/api/projects/my-project/import-summary") {
+      if (url === "/api/studies/my-project/import-summary") {
         return Response.json({ project: "my-project", lastImport: null });
       }
 
@@ -107,7 +107,7 @@ describe("Project dashboard Dream Cycle regressions", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=my-project") {
+      if (url === "/api/chat/thread?study=my-project") {
         return Response.json({
           version: 1,
           project: "my-project",
@@ -120,8 +120,8 @@ describe("Project dashboard Dream Cycle regressions", () => {
         return Response.json({ ok: true });
       }
 
-      if (url === "/api/projects") {
-        return Response.json({ projects: [] });
+      if (url === "/api/studies") {
+        return Response.json({ studies: [] });
       }
 
       return Response.json({ status: "disconnected" });
@@ -131,7 +131,7 @@ describe("Project dashboard Dream Cycle regressions", () => {
 
     render(<ProjectPage />);
 
-    await screen.findByText("No project selected");
+    await screen.findByText("No study selected");
 
     expect(screen.queryByText("Dream Cycle")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Search research brain")).not.toBeInTheDocument();

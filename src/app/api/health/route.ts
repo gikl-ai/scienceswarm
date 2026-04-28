@@ -5,7 +5,7 @@
 // agrees with /api/chat/unified?action=health on every probe.
 
 import { getOpenHandsUrl } from "@/lib/config/ports";
-import { probeGbrainEngineHealth } from "@/lib/brain/readiness";
+import { probeGbrainEngineHealth } from "@/lib/brain/engine-readiness";
 import {
   buildOpenHandsLocalEvidenceSnapshot,
   buildRuntimeCapabilityContract,
@@ -18,7 +18,7 @@ import {
 } from "@/lib/structured-critique-client";
 import { getStructuredCritiqueConfigStatus } from "@/lib/structured-critique-config";
 import { getCurrentLlmRuntimeEnv } from "@/lib/runtime-saved-env";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 
 interface UserHandleStatus {
   configured: boolean;
@@ -348,7 +348,7 @@ export async function GET(): Promise<Response> {
       return {
         state: "ready",
         title: "Strict local-only chat ready",
-        detail: `Strict local-only mode is enabled. Project chat uses Ollama with ${configuredLocalModel}, and non-local backends are blocked.`,
+        detail: `Strict local-only mode is enabled. Study chat uses Ollama with ${configuredLocalModel}, and non-local backends are blocked.`,
       };
     }
 
@@ -374,7 +374,7 @@ export async function GET(): Promise<Response> {
       return {
         state: "ready",
         title: "Local chat ready",
-        detail: `Ollama is running with ${configuredLocalModel}, so project chat can use the local model path.`,
+        detail: `Ollama is running with ${configuredLocalModel}, so study chat can use the local model path.`,
       };
     }
 
@@ -422,7 +422,7 @@ export async function GET(): Promise<Response> {
           : agent.type === "nanoclaw"
             ? "NanoClaw active"
             : `${agent.type} active`,
-      detail: "The project loop is connected and ready for chat, import follow-up, and brief generation.",
+      detail: "The study loop is connected and ready for chat, import follow-up, and brief generation.",
     };
   })();
 

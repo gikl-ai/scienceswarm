@@ -18,9 +18,9 @@ describe("openclaw slash commands", () => {
         emoji: "CC",
       },
       {
-        slug: "project-organizer",
-        name: "project-organizer",
-        description: "Organize the current project",
+        slug: "study-organizer",
+        name: "study-organizer",
+        description: "Organize the current study",
         runtime: "in-session",
         emoji: null,
       },
@@ -43,7 +43,7 @@ describe("openclaw slash commands", () => {
     expect(commands.map((command) => command.command)).toEqual([
       "help",
       "capture",
-      "project-organizer",
+      "study-organizer",
       "pubmed",
     ]);
     expect(
@@ -191,9 +191,9 @@ Question: does it stay folded?`,
   it("renders a help response that lists the available commands", () => {
     const commands = buildOpenClawSlashCommands([
       {
-        slug: "project-organizer",
-        name: "project-organizer",
-        description: "Organize the current project",
+        slug: "study-organizer",
+        name: "study-organizer",
+        description: "Organize the current study",
         runtime: "in-session",
         emoji: null,
       },
@@ -202,6 +202,6 @@ Question: does it stay folded?`,
     const help = renderOpenClawSlashHelp(commands);
     expect(help).toContain("**ScienceSwarm slash commands**");
     expect(help).toContain("`/help`");
-    expect(help).toContain("`/project-organizer [request]`");
+    expect(help).toContain("`/study-organizer [request]`");
   });
 });

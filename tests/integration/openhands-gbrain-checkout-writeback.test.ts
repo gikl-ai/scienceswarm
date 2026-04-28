@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 import type { BrainPage, BrainStore, ImportResult } from "@/brain/store";
 import type {
@@ -47,6 +49,16 @@ class FakeStore implements BrainStore {
 }
 
 describe("OpenHands gbrain checkout/writeback", () => {
+  it("lazy-loads the brain store in the checkout builder module", async () => {
+    const source = await readFile(
+      new URL("../../src/lib/openhands/gbrain-checkout.ts", import.meta.url),
+      "utf-8",
+    );
+
+    expect(source).toContain('await import("@/brain/store")');
+    expect(source).not.toContain('import { ensureBrainStoreReady, getBrainStore, type BrainStore } from "@/brain/store";');
+  });
+
   it("builds checkout manifests from gbrain file refs", async () => {
     const store = new FakeStore([
       {

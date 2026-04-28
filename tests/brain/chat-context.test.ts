@@ -747,9 +747,9 @@ describe("injectBrainContext", () => {
       const prompt = "You are a helpful assistant.";
       const result = await injectBrainContext(prompt, "Tell me about Cas12a CRISPR", "demo-project");
 
-      expect(result).toContain("## Recent Project Requests");
+      expect(result).toContain("## Recent Study Requests");
       expect(result).toContain("Current project slug: demo-project");
-      expect(result).toContain("Project: demo-project");
+      expect(result).toContain("Study: demo-project");
       expect(result).toContain("- hi");
       expect(result).not.toContain("hello from the remembered thread");
     } finally {
@@ -798,7 +798,7 @@ describe("injectBrainContext", () => {
       const prompt = "You are a helpful assistant.";
       const result = await injectBrainContext(prompt, "Tell me about Cas12a CRISPR", "demo-project");
 
-      expect(result).toContain("## Recent Project Requests");
+      expect(result).toContain("## Recent Study Requests");
       expect(result).not.toContain("remembered from legacy global chat");
       expect(
         readFileSync(

@@ -164,8 +164,8 @@ export function RuntimeAccountSetupGuide({
       </ol>
 
       <p className="mt-3 text-xs text-muted">
-        After sign-in, use Project policy: Cloud ok. Third-party sends still show a preview
-        before any prompt or project context leaves the local workspace.
+        After sign-in, use Study policy: Cloud ok. Third-party sends still show a preview
+        before any prompt or study context leaves the local workspace.
       </p>
     </section>
   );

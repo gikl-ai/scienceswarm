@@ -29,18 +29,20 @@
  * want; the JSON `data` line is the canonical payload.
  */
 
-import {
-  defaultInstallerEnvironment,
-  runInstaller,
-  type InstallerEvent,
-} from "@/lib/setup/gbrain-installer";
 import { type BrainPresetId, isBrainPresetId } from "@/brain/presets/types";
+import type { InstallerEvent } from "@/lib/setup/gbrain-installer";
 import { isLocalRequest } from "@/lib/local-guard";
 
 interface RequestBody {
   brainRoot?: string;
   brainPreset?: BrainPresetId;
   skipNetworkCheck?: boolean;
+}
+
+type InstallerModule = typeof import("@/lib/setup/gbrain-installer");
+
+async function loadInstallerModule(): Promise<InstallerModule> {
+  return await import("@/lib/setup/gbrain-installer");
 }
 
 function parseBody(raw: unknown): RequestBody | { error: string } {
@@ -114,11 +116,14 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: parsed.error }, { status: 400 });
   }
 
-  // 2. Build the production environment up front so any setup error
-  //    surfaces as a normal JSON 500 (not a half-opened stream).
-  let env;
+  // 2. Lazy-load the heavy installer runtime and build its production
+  //    environment up front so any setup error still surfaces as a
+  //    normal JSON 500 (not a half-opened stream).
+  let installer: InstallerModule;
+  let env: Awaited<ReturnType<InstallerModule["defaultInstallerEnvironment"]>>;
   try {
-    env = await defaultInstallerEnvironment();
+    installer = await loadInstallerModule();
+    env = await installer.defaultInstallerEnvironment();
   } catch (err) {
     console.error("api/setup/install-brain: failed to construct environment", err);
     return Response.json(
@@ -135,7 +140,7 @@ export async function POST(request: Request): Promise<Response> {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        for await (const event of runInstaller(
+        for await (const event of installer.runInstaller(
           {
             repoRoot: process.cwd(),
             brainRoot: parsed.brainRoot,

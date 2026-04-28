@@ -21,6 +21,7 @@ import {
   requireStringField,
   runtimeErrorResponse,
   runtimeInvalidRequest,
+  studyScopedIdFromBody,
 } from "../_shared";
 
 const PATH_KINDS = [
@@ -65,7 +66,7 @@ export async function POST(request: Request): Promise<Response> {
       throw runtimeInvalidRequest("Invalid artifact action.", { action });
     }
 
-    const projectId = requireSafeProjectId(body.projectId);
+    const projectId = requireSafeProjectId(studyScopedIdFromBody(body));
     const hostId = requireStringField(body, "hostId");
     const sessionId = requireStringField(body, "sessionId");
     const approvalState = approvalStateFromBody(body);

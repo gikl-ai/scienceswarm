@@ -467,7 +467,7 @@ export function DataPanel({
           <div className="text-4xl mb-4">📊</div>
           <h3 className="text-lg font-bold text-foreground mb-2">No workspace tables yet</h3>
           <p className="text-sm text-muted">
-            The Data tab shows tabular files already present in the current project workspace,
+            The Data tab shows tabular files already present in the current study workspace,
             such as CSV, TSV, JSON, and spreadsheet files.
           </p>
         </div>
@@ -481,7 +481,7 @@ export function DataPanel({
         <div className="border-b border-border px-4 py-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-muted">Workspace data</h3>
           <p className="mt-1 text-xs text-muted">
-            Showing {dataFiles.length} table{dataFiles.length === 1 ? "" : "s"} from this project.
+            Showing {dataFiles.length} table{dataFiles.length === 1 ? "" : "s"} from this study.
           </p>
         </div>
         <div className="overflow-y-auto p-2">

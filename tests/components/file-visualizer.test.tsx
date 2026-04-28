@@ -89,6 +89,26 @@ describe("FileVisualizer", () => {
     });
   });
 
+  it("renders markdown numbered and bulleted lists with visible marker styles", () => {
+    render(
+      <FileVisualizer
+        preview={ready({
+          content: "# Workflow\n\n1. Start the project\n2. Import the tutorial\n\n- Check files\n- Send the prompt",
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const lists = screen.getAllByRole("list");
+    const orderedList = lists.find((list) => list.tagName === "OL");
+    const unorderedList = lists.find((list) => list.tagName === "UL");
+
+    expect(orderedList).toHaveClass("list-decimal");
+    expect(unorderedList).toHaveClass("list-disc");
+    expect(screen.getByText("Start the project").closest("li")).toHaveClass("pl-1");
+    expect(screen.getByText("Check files").closest("li")).toHaveClass("pl-1");
+  });
+
   it("calls use-in-chat and close callbacks", () => {
     const onUseInChat = vi.fn();
     const onClose = vi.fn();
@@ -120,7 +140,28 @@ describe("FileVisualizer", () => {
     expect(screen.getByRole("button", { name: "In chat context" })).toBeDisabled();
   });
 
-  it("renders HTML in a scriptless sandboxed iframe", () => {
+  it("renders HTML through the raw preview URL so scripts and sibling assets can run", () => {
+    const rawUrl = "/api/workspace/raw/test-project/reports/index.html";
+    const { container } = render(
+      <FileVisualizer
+        preview={ready({
+          path: "reports/index.html",
+          kind: "html",
+          content: "<h1>Report</h1><script src=\"lib/chart.js\"></script>",
+          rawUrl,
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const iframe = container.querySelector("iframe");
+    expect(iframe).not.toBeNull();
+    expect(iframe).toHaveAttribute("sandbox", "allow-scripts");
+    expect(iframe).toHaveAttribute("src", rawUrl);
+    expect(iframe).not.toHaveAttribute("srcdoc");
+  });
+
+  it("falls back to a scriptless sandboxed iframe when no raw URL is available", () => {
     const { container } = render(
       <FileVisualizer
         preview={ready({

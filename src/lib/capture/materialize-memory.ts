@@ -266,7 +266,9 @@ function buildFrontmatter(
     type: input.capture.kind,
     para: input.project ? "projects" : "resources",
     tags: [],
-    project: input.project ?? undefined,
+    study: input.project ?? undefined,
+    study_slug: input.project ?? undefined,
+    legacy_project_slug: input.project ?? undefined,
     source_refs: [sourceRef, ...input.capture.sourceRefs],
     confidence: input.confidence,
     privacy: input.capture.privacy,
@@ -544,14 +546,17 @@ async function ensureProjectPage(
     "",
     "## Overview",
     "",
-    "Project page created by the capture pipeline.",
+    "Study page created by the capture pipeline.",
     "",
     "## Timeline",
   ].join("\n");
   const seedFrontmatter = {
     title,
     date: formatDate(new Date()),
-    type: "project",
+    type: "study",
+    study: safeProject,
+    study_slug: safeProject,
+    legacy_project_slug: safeProject,
     para: "projects",
     tags: [],
     privacy,
@@ -568,7 +573,7 @@ async function ensureProjectPage(
   let diskFrontmatter: Record<string, unknown> = seedFrontmatter;
   if (existing == null) {
     await engine.putPage(safeProject, {
-      type: "project",
+      type: "study",
       title,
       compiled_truth: seedBody,
       timeline: "",
@@ -703,7 +708,7 @@ export async function materializeMemory(input: MaterializeInput): Promise<Materi
     //    semantic kind down the road.
     await engine.addLink(pageSlug, safeProject, "capture", "references");
 
-    // 5. Project Timeline back-link entry. gbrain's `addTimelineEntry`
+    // 5. Study Timeline back-link entry. gbrain's `addTimelineEntry`
     //    is a plain INSERT against `timeline_entries` with no unique
     //    constraint on (slug, date, summary) — so we have to enforce
     //    de-dup ourselves before the call, otherwise re-materializing
@@ -779,7 +784,7 @@ export async function materializeMemory(input: MaterializeInput): Promise<Materi
     }
   }
 
-  // 6. Project manifest update lives on the ScienceSwarm side (state
+  // 6. Study manifest update lives on the ScienceSwarm side (state
   //    dir, not gbrain) and tracks the per-project decision/task path
   //    lists used by briefings. This is unchanged from PR #235.
   await updateProjectManifest(

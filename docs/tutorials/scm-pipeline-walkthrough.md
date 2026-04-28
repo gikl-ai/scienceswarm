@@ -1,160 +1,331 @@
 # ScienceSwarm SCM pipeline walkthrough
 
-This walkthrough shows how to drive ScienceSwarm's six synthetic-control
-planning skills end-to-end on three canonical international-relations
-shocks. The skills produce durable brain assets that capture the
-scientific judgment behind each decision; this walkthrough pairs each
-skill with the artifact it should produce, using the
-[SCM-IR quickstart](scm-ir-quickstart/README.md) (Brexit, Russia 2022,
-Basque Country / ETA terrorism) as the concrete example.
+This walkthrough shows how to drive ScienceSwarm's synthetic-control method
+(SCM) skills from the UI with Claude Code. You should not need to open a
+terminal or type shell commands. The example is the
+[SCM-IR quickstart](scm-ir-quickstart/README.md): Brexit, Russia 2022
+sanctions, and Basque Country / ETA terrorism.
 
-The skills in execution order:
+The expected final state is:
 
-| # | Skill | Asset kind | Purpose |
+- study-scoped SCM decision assets saved in gbrain,
+- a completed deterministic R pipeline run,
+- an interactive `output/scm-ir-report.html` with its sibling `output/lib/`
+  assets,
+- a saved SCM Run Log, and
+- a final report asset whose claims trace back to the earlier study, data,
+  fit, methods, and inference notes.
+
+The example is a tutorial scaffold, not a new political-science result.
+
+---
+
+## 0. Create the study and choose Claude Code
+
+1. Start ScienceSwarm and complete setup if the app asks.
+2. Open the dashboard and create a study. A name like `SCM IR quickstart`
+   is fine.
+3. Open the study. You should see the study chat composer at the bottom of
+   the page.
+4. Import this checkout, or the `docs/tutorials/scm-ir-quickstart/` folder,
+   into the study. The important imported files are `setup.R` and the
+   `scripts/` folder.
+5. If the import says `README.md`, `setup.R`, or the R scripts were saved
+   without typed conversion, continue. They are still available to Claude Code
+   as study files.
+6. In the study chat composer, open the assistant selector and choose
+   `Claude Code`.
+7. If ScienceSwarm shows a send-review sheet for Claude Code, confirm the
+   destination is `Claude Code`, the study is the SCM project, and the
+   included data is the prompt plus study context. Then click the send
+   button in that sheet.
+
+Use Claude Code for every step below.
+
+---
+
+## How to run each skill
+
+For each step:
+
+1. Stay on the study page.
+2. Confirm the assistant selector says `Claude Code`.
+3. Click the message box.
+4. Paste the text block for the step.
+5. Click `Send`.
+6. Wait until the `Stop` button disappears and the assistant reports a saved
+   gbrain slug before starting the next step.
+
+The SCM slash commands used here are:
+
+| Step | Command | Skill | Asset |
 |---|---|---|---|
-| 1 | `scienceswarm-scm-question-design` | `scm_study_brief` | Decide whether SCM is the right method, and for which scoped treated unit, donor pool, outcome, and pre/post window. |
-| 2 | `scienceswarm-scm-data-acquisition` | `scm_data_manifest` | Pull and curate the balanced unit-time panel. Document every source. |
-| 3 | `scienceswarm-scm-pretreatment-fit` | `scm_pretreatment_fit_note` | Fit classic Abadie SCM. Gate on pre-period RMSPE / outcome SD ≤ 0.25. |
-| 4 | `scienceswarm-scm-method-comparison` | `scm_method_comparison_note` | Cross-check ATT against gsynth, synthetic DiD, doubly-robust SC. Reject sign-disagreement. |
-| 5 | `scienceswarm-scm-inference-and-placebos` | `scm_inference_note` | In-space and in-time placebos plus leave-one-out donor sensitivity. |
-| 6 | `scienceswarm-scm-results-rendering` | `scm_results_report` | Render the interactive HTML deliverable with all seven wow elements. |
-
-Each skill is documented in `skills/scienceswarm-scm-*/hosts/<host>/SKILL.md`
-and is invocable from OpenClaw, Claude Code, or Codex.
+| 1 | `/scm-question` | `scienceswarm-scm-question-design` | `scm_study_brief` |
+| 2 | `/scm-data` | `scienceswarm-scm-data-acquisition` | `scm_data_manifest` |
+| 3 | `/scm-fit` | `scienceswarm-scm-pretreatment-fit` | `scm_pretreatment_fit_note` |
+| 4 | `/scm-methods` | `scienceswarm-scm-method-comparison` | `scm_method_comparison_note` |
+| 5 | `/scm-inference` | `scienceswarm-scm-inference-and-placebos` | `scm_inference_note` |
+| 6 | `/scm-report` | `scienceswarm-scm-results-rendering` | `scm_results_report` |
 
 ---
 
-## Why a pipeline, not a single skill
+## 1. Design the SCM question
 
-Synthetic control is decision-dense. A single agent prompt that says
-"run synthetic control on the UK after Brexit" gives you a fit, not an
-answer — because the choices that determine whether the fit is
-interpretable (donor pool inclusion criteria, predictor list, pre-period
-fit quality, robustness across method variants, placebo distribution)
-are not in the prompt and not in the trajectory plot.
+Paste this into the study chat:
 
-The pipeline asks for those decisions explicitly, before any HTML is
-rendered. Each skill produces a markdown asset with a `Confidence
-Boundary` section: what the asset supports, what it does not support,
-and what would change the recommendation. That section is the single
-most useful part of every asset. It survives the run and tells future
-readers what the report is actually evidence for.
+```text
+/scm-question Create an SCM Study Brief for the SCM-IR quickstart.
 
----
+Scientific goal: demonstrate a ScienceSwarm UI-driven synthetic control
+workflow on three canonical international-relations shocks.
 
-## Walking the three IR cases
+Cases:
+- Brexit referendum, treated unit United Kingdom, treatment year 2016.
+- Russia 2022 sanctions, treated unit Russian Federation, treatment year 2022.
+- Basque Country / ETA terrorism, treated unit Basque Country, treatment year
+  1975.
 
-### 1 — `scienceswarm-scm-question-design`
+Primary outcome: GDP per capita in real terms.
 
-Decide whether SCM is appropriate. For each case the verdict is
-`scm-fit` because (a) there is one cleanly identified treated unit,
-(b) the treatment date is sharp and unambiguous, (c) the donor pool of
-structurally comparable economies is well-defined, and (d) the outcome
-(GDP per capita) is observed continuously before and after.
+Desired claim: this is a validated tutorial scaffold showing how SCM decisions,
+fits, placebos, and report artifacts are made traceable. It is not a new
+political-science finding.
 
-Asset shape (excerpt for Brexit):
-
-```markdown
-## SCM Suitability Verdict
-
-`scm-fit`
-
-## Treatment Definition
-
-| Treated unit | Treatment date | Outcome |
-|---|---|---|
-| United Kingdom | 2016 (referendum) | GDP per capita (constant 2015 USD) |
-
-## Donor Pool
-
-27 OECD economies excluding co-shocked refugee-crisis countries.
-Pre-period 1995–2015, post-period 2016–2023.
+Map each case to treated unit, treatment date, donor pool inclusion/exclusion
+criteria, primary outcome, secondary predictors, pre/post windows, suitability
+verdict, stop criteria, and confidence boundary. Save a durable study-scoped
+SCM Study Brief with gbrain_capture before answering.
 ```
 
-For Russia 2022, the verdict is `scm-with-caveats` because the
-post-period is short (2 years of WB data as of pull) and the donor pool
-must explicitly exclude Ukraine and Belarus. The brief flags that the
-ATT estimate is strictly short-run.
-
-For Basque Country / ETA terrorism, the verdict is `scm-fit` and the
-brief notes this is a textbook replication of Abadie & Gardeazabal
-(2003, *AER*) — the *original* synthetic control paper, which estimated
-that ETA-related political violence cost the Basque Country roughly 10%
-of pre-conflict GDP per capita.
-
-### 2 — `scienceswarm-scm-data-acquisition`
-
-For Brexit and Russia, the panel comes from the World Bank API via the
-`WDI` R package: `NY.GDP.PCAP.KD` (real GDP per capita), `NE.TRD.GNFS.ZS`
-(trade openness), `NE.GDI.TOTL.ZS` (gross capital formation),
-`PA.NUS.FCRF` (official exchange rate). For Basque Country / ETA terrorism the
-data is bundled in the `Synth` R package as `data("basque")` (17 Spanish
-regions over 1955–1997).
-
-The data manifest records, per source, the indicator code, vintage
-date, and license. The balance gate requires ≥ 85% non-missing cells on
-the primary outcome; both Brexit and Russia panels easily clear this.
-
-### 3 — `scienceswarm-scm-pretreatment-fit`
-
-Predictors are pre-period averages of the secondary outcomes
-(trade openness, investment share, FX rate where applicable) plus three
-lagged outcome snapshots (start, midpoint, end of pre-period).
-
-The fit gate: `pre_rmspe / outcome_sd ≤ 0.25`. In the quickstart this
-gate passes for all three cases. A failure here means the synthetic
-counterfactual is not tracking the pre-period closely enough — the
-right response is to widen the donor pool or revisit predictors, not to
-report the post-period gap.
-
-### 4 — `scienceswarm-scm-method-comparison`
-
-Each case is re-fit with `gsynth` (Xu 2017), synthetic DiD (Arkhangelsky
-et al. 2021), and a doubly-robust SC approximation (Ben-Michael et al.
-2021). The robustness gate requires at least 3 of 4 methods to agree on
-the sign of the ATT. For Brexit and Russia the headline ATT is
-negative across all four methods; for Basque Country / ETA terrorism, all four
-methods agree on a sign and rough magnitude consistent with the Abadie
-2015 published estimate.
-
-### 5 — `scienceswarm-scm-inference-and-placebos`
-
-Three placebo families:
-
-- **In-space placebo:** the treated unit's post/pre RMSPE ratio is
-  compared against the distribution of donor placebos. The exact
-  p-value is the share of donors with a ratio ≥ the treated unit.
-- **In-time placebo:** treatment is re-assigned to alternate years
-  inside the pre-period; the actual treatment year's ratio should
-  stand out.
-- **Leave-one-out:** the heaviest-weighted donor is dropped and the
-  ATT is re-estimated; the sign and rough magnitude should be stable.
-
-### 6 — `scienceswarm-scm-results-rendering`
-
-The deliverable is a single interactive HTML page (~1–2 MB with
-embedded Plotly assets) containing, per case:
-
-1. Animated counterfactual trajectory
-2. Donor weight bar chart with hover/click
-3. Placebo distribution of post/pre RMSPE ratios
-4. What-if treatment-year falsification chart (in-time placebo)
-5. Method-comparison forest plot
-6. Method-comparison forest plot
-7. Auto-generated paper-ready Methods paragraph
-
-Plus a page-level Methodology Explainer modal aimed at non-experts
-("How synthetic control works in 60 seconds") and a tab switcher
-across the three cases.
+Continue only after the assistant says it saved an `SCM Study Brief`. Check for
+`scm-fit` or `scm-with-caveats`, explicit donor-pool exclusions, and a
+confidence boundary.
 
 ---
 
-## What the pipeline does not cover
+## 2. Acquire and validate the data
 
-- **Staggered adoption.** When many units receive treatment at
-  different times, use Callaway–Sant'Anna or Sun–Abraham staggered DiD
-  instead. A future ScienceSwarm pipeline will cover this.
-- **Bayesian synthetic control.** Compatible with this scaffolding but
-  not yet wired in.
-- **Causal forests / heterogeneous treatment effects.** Different
-  question, different tool.
+Paste:
+
+```text
+/scm-data Build the SCM Data Manifest for the SCM-IR quickstart.
+
+Use the latest study-scoped SCM Study Brief from this study and the
+imported tutorial files. If the full ScienceSwarm checkout is imported, use
+docs/tutorials/scm-ir-quickstart/. If only the tutorial folder is imported, use
+the current study folder.
+
+Use setup.R as the dependency contract, then run scripts/01_fetch_data.R and
+scripts/02_prepare_panels.R from the tutorial root. Do not install R packages
+into the app checkout or imported study folder. Use the ScienceSwarm-managed
+R library under $SCIENCESWARM_DIR/runtimes/r/R-<major.minor>/<platform>/library/.
+
+Record every source, indicator code, data vintage if available, license or
+source note, donor exclusion, cache path, and balance check. Stop if any case
+has fewer than 10 pre-treatment years or fewer than 15 donor candidates. Save a
+durable study-scoped SCM Data Manifest with gbrain_capture before answering.
+```
+
+Expected sources:
+
+- World Bank Development Indicators via the World Bank API for Brexit and Russia.
+- `Synth::basque` for Basque Country / ETA terrorism.
+
+Expected generated files:
+
+- `data/raw/wdi_panel.rds`
+- `data/raw/basque_bundled.rds`
+- `data/prepared/brexit.rds`
+- `data/prepared/russia.rds`
+- `data/prepared/basque.rds`
+
+---
+
+## 3. Fit classic SCM and gate pre-treatment fit
+
+Paste:
+
+```text
+/scm-fit Fit classic Abadie synthetic control for the SCM-IR quickstart.
+
+Use the study SCM Study Brief and Data Manifest. Run
+scripts/03_fit_classic_scm.R from the tutorial root. Stop if the script reports
+a failed pre-period RMSPE / outcome-SD gate.
+
+For each case, report treated unit, treatment year, donor-weight concentration,
+pre-RMSPE, pre-RMSPE / outcome SD, post/pre RMSPE ratio, average post-treatment
+gap, and placebo p-value. Explain whether each classic fit is interpretable as
+a counterfactual under the tutorial gate. Save a durable study-scoped SCM
+Pretreatment Fit Note with gbrain_capture before answering.
+```
+
+Continue only if all three cases pass `pre_rmspe_over_sd <= 0.25`. A failed
+fit means the right next step is to revise donor pools or predictors, not to
+render a report.
+
+---
+
+## 4. Compare methods
+
+Paste:
+
+```text
+/scm-methods Compare classic SCM against modern SCM variants for the SCM-IR
+quickstart.
+
+Use the study SCM Study Brief, Data Manifest, and Pretreatment Fit Note. Run
+scripts/04_fit_alternative_methods.R from the tutorial root. Treat synthdid as
+optional if it is unavailable in the managed R library; do not block the whole
+tutorial solely because synthdid is skipped.
+
+For each case, report the available estimates from classic SCM, gsynth,
+synthetic DiD if available, and the doubly-robust SC approximation. Apply the
+sign-consistency gate from the script and explain whether the result is robust
+enough to carry forward. Save a durable study-scoped SCM Method Comparison
+Note with gbrain_capture before answering.
+```
+
+Continue only if each case clears the sign-consistency gate for the available
+methods.
+
+---
+
+## 5. Interpret placebo inference and sensitivity
+
+Paste:
+
+```text
+/scm-inference Create the SCM Inference Note for the SCM-IR quickstart.
+
+Use the study SCM Study Brief, Data Manifest, Pretreatment Fit Note, Method
+Comparison Note, and the generated classic fit files under output/fits/. Run
+scripts/05_summarize_inference.R from the tutorial root and use
+output/inference_summary.md as the primary source for the note; do not paste
+raw console tables into the chat.
+
+Report the in-space placebo p-value for each case, the post/pre RMSPE ratio,
+which donor placebos are closest to the treated unit, and what the in-time
+falsification and leave-one-out sensitivity checks support or do not support.
+If the existing script output approximates an inference family rather than
+fully refitting it, label that clearly in the confidence boundary. Save a
+durable study-scoped SCM Inference Note with gbrain_capture before answering.
+```
+
+Check that the note does not report only a single ATT point estimate. It should
+describe the placebo distribution and the limits of the tutorial-scale checks.
+
+---
+
+## 6. Render the report
+
+Paste:
+
+```text
+/scm-report Render the final SCM-IR interactive report.
+
+Use the study SCM Study Brief, Data Manifest, Pretreatment Fit Note, Method
+Comparison Note, Inference Note, and generated fit files. Run
+scripts/06_render_html.R from the tutorial root. Keep the HTML and sibling
+lib/ folder together.
+
+Report the final output path, total HTML plus lib/ asset size, the three case
+headlines, and whether the report validation markers passed. Do not tell the
+user to run `open` or another shell command; reference the ScienceSwarm project
+artifact path and keep the HTML plus lib/ folder together. Save a durable
+study-scoped SCM Results Report with gbrain_capture before answering.
+```
+
+The report is valid only if:
+
+- `output/scm-ir-report.html` exists,
+- `output/lib/` exists next to it,
+- HTML plus `lib/` assets total at least 1 MB, and
+- the report contains the required markers for trajectory, donor weights,
+  placebo distribution, method comparison, in-time falsification, Methods
+  paragraph, and methodology explainer.
+
+---
+
+## 7. Save the run log
+
+If the previous steps did not already create a run log, paste:
+
+```text
+Create a study-scoped SCM Run Log for the completed SCM-IR quickstart.
+
+Summarize the R version, managed R library path, scripts run, generated files,
+validation gates, optional methods skipped or included, and final report path.
+Link or reference the SCM Study Brief, Data Manifest, Pretreatment Fit Note,
+Method Comparison Note, Inference Note, and Results Report. Save the run log
+with gbrain_capture before answering.
+```
+
+This step is plain text rather than a slash command because it records the
+execution provenance for the whole run, not a new scientific decision.
+
+---
+
+## Done checklist
+
+You are done when gbrain contains:
+
+- SCM Study Brief
+- SCM Data Manifest
+- SCM Pretreatment Fit Note
+- SCM Method Comparison Note
+- SCM Inference Note
+- SCM Results Report
+- SCM Run Log
+
+And the study workspace contains:
+
+- `data/raw/wdi_panel.rds`
+- `data/raw/basque_bundled.rds`
+- `data/prepared/brexit.rds`
+- `data/prepared/russia.rds`
+- `data/prepared/basque.rds`
+- `output/fits/classic_brexit.rds`
+- `output/fits/classic_russia.rds`
+- `output/fits/classic_basque.rds`
+- `output/fits/alternatives_brexit.rds`
+- `output/fits/alternatives_russia.rds`
+- `output/fits/alternatives_basque.rds`
+- `output/scm-ir-report.html`
+- `output/lib/`
+
+The final answer you want from ScienceSwarm is a traceable chain from the
+substantive question, to data choices, to model fit, to robustness checks, to
+placebo inference, to a report whose claims are bounded by those assets.
+
+---
+
+## Method and platform boundaries
+
+Use SCM when there is one clean treated unit, a sharp treatment date, a
+structurally comparable donor pool, and a meaningful pre-treatment outcome
+history. Do not use this pipeline for staggered adoption, many treated units
+with different treatment dates, or heterogeneous-treatment-effect questions.
+
+ScienceSwarm should keep:
+
+- scientific runtime dependencies under `$SCIENCESWARM_DIR/runtimes/`,
+- generated tutorial outputs inside the imported study tutorial folder, and
+- durable interpretation, provenance, and decision notes in gbrain via
+  `gbrain_capture`.
+
+The platform should not require users to recover by typing terminal commands.
+If setup, dependency installation, data fetch, or report rendering fails, the
+assistant should show the exact failure and either fix it inside the project
+runtime or ask one concrete permission question.
+
+---
+
+## Further reading
+
+- [`docs/tutorials/scm-ir-quickstart/README.md`](scm-ir-quickstart/README.md)
+  - the deterministic SCM-IR quickstart.
+- `skills/scienceswarm-scm-*/hosts/claude-code/SKILL.md` - the Claude Code
+  instructions embedded by the slash commands.
+- Abadie & Gardeazabal (2003, *AER*) - Basque Country / ETA terrorism.
+- Abadie, Diamond & Hainmueller (2010, *JASA*) and Abadie (2021, *JEL*) -
+  synthetic control foundations and diagnostics.

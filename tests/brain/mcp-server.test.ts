@@ -543,7 +543,7 @@ describe("brain_project_organize", () => {
     const result = await handleBrainProjectOrganize(config, { project: "" });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("project is required");
+    expect(result.content[0].text).toContain("study is required");
   });
 
   it("rejects an unsafe project slug", async () => {
@@ -593,7 +593,7 @@ describe("brain_import_registry", () => {
     const result = await handleBrainImportRegistry(config, { project: "" });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("project is required");
+    expect(result.content[0].text).toContain("study is required");
   });
 });
 

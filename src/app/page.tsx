@@ -149,12 +149,12 @@ export default function Home() {
             AI-powered research workspace
           </div>
           <h1 className="text-5xl sm:text-7xl font-bold tracking-tight leading-[1.1] mb-6">
-            Research projects,
+            Research studies,
             <br />
             <span className="text-accent">end to end.</span>
           </h1>
           <p className="text-xl sm:text-2xl text-muted max-w-2xl mx-auto mb-12 leading-relaxed">
-            Literature review to publication. One workspace for your entire research project.
+            Literature review to publication. One workspace for your entire research study.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link

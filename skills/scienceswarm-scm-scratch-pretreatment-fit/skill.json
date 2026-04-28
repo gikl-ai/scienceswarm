@@ -1,0 +1,26 @@
+{
+  "slug": "scienceswarm-scm-scratch-pretreatment-fit",
+  "name": "ScienceSwarm SCM From-Scratch Pretreatment Fit",
+  "description": "Author the classic Abadie synthetic-control fit code for prepared from-scratch panels and gate the result on pre-treatment diagnostics.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "fitting",
+    "abadie",
+    "from-scratch"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Third step of the from-scratch SCM workflow: generate only the classic SCM fit code for approved panels and stop on failed pre-treatment fit.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-26T00:00:00.000Z",
+  "updatedAt": "2026-04-26T00:00:00.000Z"
+}

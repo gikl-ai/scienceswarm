@@ -10,7 +10,7 @@ import {
   readApplyPlan,
   windowApplyOperations,
 } from "@/lib/paper-library/apply";
-import { paperLibraryBadRequest, readJsonBody, requirePaperLibraryRequest } from "../_shared";
+import { normalizeStudyBody, paperLibraryBadRequest, readJsonBody, readStudyOrProjectParam, requirePaperLibraryRequest } from "../_shared";
 
 const ApplyPlanLookupRequestSchema = z.object({
   project: ProjectSlugSchema,
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const parsed = ApplyPlanLookupRequestSchema.safeParse({
-    project: url.searchParams.get("project"),
+    project: readStudyOrProjectParam(url),
     id: url.searchParams.get("id"),
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     return paperLibraryBadRequest(error);
   }
 
-  const parsed = ApplyPlanCreateRequestSchema.safeParse(body);
+  const parsed = ApplyPlanCreateRequestSchema.safeParse(normalizeStudyBody(body));
   if (!parsed.success) return paperLibraryBadRequest(parsed.error);
 
   try {

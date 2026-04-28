@@ -179,6 +179,10 @@ describe("ChatMessage", () => {
       />,
     );
 
+    expect(screen.getByAltText("docs/results_chart.png")).toHaveClass("rounded-[1rem]");
+    expect(screen.getByAltText("docs/results_chart.png").closest("figure")).toHaveClass(
+      "shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]",
+    );
     expect(screen.getByText("docs/results_chart.png")).toHaveClass("text-[11px]");
     expect(screen.getByText(expectedFooter)).toHaveClass("text-[9px]");
     expect(screen.getByText(expectedFooter)).toHaveClass("border-rule/60");
@@ -497,6 +501,92 @@ describe("ChatMessage", () => {
     expect(screen.getByRole("log")).toHaveTextContent("Read docs/results_table.csv");
   });
 
+  it("uses structured progress metadata for compact run-state summary chips when phases are absent", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text: "Waiting for OpenClaw to respond",
+            source: "server",
+            status: "running",
+            label: "Wait",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:30.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    const runState = screen.getByTestId("assistant-run-state");
+    expect(progressLog).toHaveTextContent("Server");
+    expect(progressLog).toHaveTextContent("Running");
+    expect(progressLog).toHaveTextContent("Wait");
+    expect(progressLog).toHaveTextContent("Waiting for OpenClaw to respond");
+    expect(within(runState).getByText("Server")).toHaveClass("text-body");
+    expect(within(runState).getByText("Running")).toHaveClass("text-amber-800");
+  });
+
+  it("falls back to the structured progress source for run-state detail labels", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text: "Queued follow-up execution",
+            source: "gateway",
+            status: "running",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:30.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent("OpenClaw");
+    expect(progressLog).toHaveTextContent("Queued follow-up execution");
+    expect(
+      screen.getAllByText("OpenClaw").some((element) => element.className.includes("text-sky-800")),
+    ).toBe(true);
+  });
+
+  it("renders structured progress metadata chips alongside transcript rows", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text: "Waiting for OpenClaw to respond",
+            source: "server",
+            status: "running",
+          },
+          {
+            kind: "activity",
+            text: "Summarized findings for the chart review",
+            source: "agent",
+            status: "complete",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:30.000Z")}
+        isStreaming
+      />,
+    );
+
+    const progressLog = screen.getByRole("log");
+    expect(progressLog).toHaveTextContent("Server");
+    expect(progressLog).toHaveTextContent("Running");
+    expect(progressLog).toHaveTextContent("Agent");
+    expect(progressLog).toHaveTextContent("Complete");
+  });
+
   it("renders a dedicated run-state surface before transcript progress arrives", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
@@ -514,6 +604,31 @@ describe("ChatMessage", () => {
       "Working (5s • esc to interrupt)",
     );
     expect(screen.getByTestId("chat-streaming-spinner")).toBeInTheDocument();
+  });
+
+  it("renders a failed run-state surface when structured progress metadata reports failure", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T10:00:05.000Z"));
+
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text: "OpenClaw transport failed",
+            source: "server",
+            status: "failed",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-run-state")).toHaveTextContent("Failed (5s)");
+    expect(screen.queryByTestId("chat-streaming-spinner")).not.toBeInTheDocument();
   });
 
   it("renders assistant progress as a single inline transcript", () => {
@@ -584,7 +699,7 @@ describe("ChatMessage", () => {
     );
 
     expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
-      "Activity",
+      "Explored",
     );
     expect(screen.getByTestId("assistant-run-state")).toHaveTextContent(
       "Explored 3 actions",
@@ -686,9 +801,35 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(runState).toHaveTextContent("Activity");
+    expect(runState).toHaveTextContent("Read");
     expect(runState).toHaveTextContent("Read docs/results_table.csv");
     expect(runState).not.toHaveTextContent("Plan: inspect the saved chart.");
+  });
+
+  it("prefers explicit progress metadata labels in the live run-state detail", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        progressLog={[
+          {
+            kind: "activity",
+            text: "Waiting for OpenClaw to respond",
+            source: "server",
+            phase: "waiting",
+            status: "running",
+            label: "Wait",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:00:00.000Z")}
+        isStreaming
+      />,
+    );
+
+    const runState = screen.getByTestId("assistant-run-state");
+    expect(runState).toHaveTextContent("Wait");
+    expect(runState).toHaveTextContent("Waiting for OpenClaw to respond");
+    expect(runState).not.toHaveTextContent("Activity");
   });
 
   it("wraps long run-state detail content without forcing horizontal overflow", () => {
@@ -1343,6 +1484,36 @@ describe("ChatMessage", () => {
     expect(progressLog).not.toHaveTextContent("Working (");
   });
 
+  it("collapses long stored progress transcripts until the user expands them", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content="Final answer"
+        progressLog={[
+          { kind: "thinking", text: "Planning how to inspect the chart files." },
+          { kind: "activity", text: "Preparing workspace context" },
+          { kind: "thinking", text: "Comparing prior chart revisions." },
+          { kind: "activity", text: "Waiting for OpenClaw to respond" },
+          { kind: "thinking", text: "Drafting the summary notes." },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:00.000Z")}
+        isStreaming={false}
+      />,
+    );
+
+    const transcript = screen.getByTestId("assistant-progress-transcript");
+    expect(within(transcript).getByText("Planning how to inspect the chart files.")).toBeInTheDocument();
+    expect(within(transcript).getByText("Preparing workspace context")).toBeInTheDocument();
+    expect(within(transcript).queryByText("Drafting the summary notes.")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("assistant-progress-transcript-toggle"));
+
+    expect(within(transcript).getByText("Drafting the summary notes.")).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-progress-transcript-toggle")).toHaveTextContent(
+      "Hide transcript",
+    );
+  });
+
   it("renders workspace media hints as chat media", () => {
     render(
       <ChatMessage
@@ -1452,8 +1623,15 @@ describe("ChatMessage", () => {
       />,
     );
 
+    const video = container.querySelector("video");
+    const audio = container.querySelector("audio");
+
     expect(container.querySelector("video source")).toHaveAttribute("type", "video/mp4");
     expect(container.querySelector("audio source")).toHaveAttribute("type", "audio/mp4");
+    expect(video?.closest("figure")).toHaveClass("rounded-[1.35rem]");
+    expect(video?.closest("figure")).toHaveClass("shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]");
+    expect(audio?.closest("figure")).toHaveClass("rounded-[1.35rem]");
+    expect(audio?.closest("figure")).toHaveClass("shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]");
   });
 
   it("renders PDF MEDIA references as inline iframe", () => {
@@ -1470,6 +1648,8 @@ describe("ChatMessage", () => {
     expect(iframe).not.toBeNull();
     expect(iframe?.getAttribute("src")).toContain("file=reports%2Fpaper.pdf");
     expect(iframe?.getAttribute("sandbox")).toBe("allow-same-origin allow-downloads");
+    expect(iframe?.parentElement).toHaveClass("rounded-[1.35rem]");
+    expect(iframe?.parentElement).toHaveClass("shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]");
   });
 
   it("renders FLAC/OPUS/AAC MEDIA references as inline audio", () => {
@@ -1543,10 +1723,13 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByTitle("Snake")).toHaveAttribute(
+    const iframe = screen.getByTitle("Snake");
+    expect(iframe).toHaveAttribute(
       "src",
       "/api/workspace/raw/project-alpha/figures/snake-game/index.html",
     );
+    expect(iframe.parentElement).toHaveClass("rounded-[1.35rem]");
+    expect(iframe.parentElement).toHaveClass("shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]");
   });
 
   it("maps legacy MEDIA html aliases to project index previews", () => {
@@ -1559,10 +1742,13 @@ describe("ChatMessage", () => {
       />,
     );
 
-    expect(screen.getByTitle("snake")).toHaveAttribute(
+    const iframe = screen.getByTitle("snake");
+    expect(iframe).toHaveAttribute(
       "src",
       "/api/workspace/raw/project-alpha/snake/index.html",
     );
+    expect(iframe.parentElement).toHaveClass("rounded-[1.35rem]");
+    expect(iframe.parentElement).toHaveClass("shadow-[0_16px_36px_-24px_rgba(15,23,42,0.4)]");
   });
 
   it("maps legacy embed refs to project index previews", () => {

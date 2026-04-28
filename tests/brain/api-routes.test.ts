@@ -267,6 +267,26 @@ describe("POST /api/brain/capture", () => {
     expect(data.materializedPath).toMatch(/^wiki\/decisions\//);
   });
 
+  it("lets canonical study null clear a legacy project association", async () => {
+    await writeProjectManifest(makeManifest("alpha"), join(TEST_ROOT, "state"));
+    const { POST } = await import("@/app/api/brain/capture/route");
+
+    const request = new Request("http://localhost/api/brain/capture", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: "Capture this unscoped note",
+        study: null,
+        project: "alpha",
+      }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.project).toBeNull();
+  });
+
   it("accepts research-native capture kinds", async () => {
     await writeProjectManifest(makeManifest("alpha"), join(TEST_ROOT, "state"));
     const { POST } = await import("@/app/api/brain/capture/route");

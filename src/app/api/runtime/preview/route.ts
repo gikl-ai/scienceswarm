@@ -11,6 +11,7 @@ import {
   requireStringField,
   runtimeErrorResponse,
   runtimeInvalidRequest,
+  studyScopedIdFromBody,
   turnModeFromBody,
 } from "../_shared";
 
@@ -20,7 +21,7 @@ export async function POST(request: Request): Promise<Response> {
     const body = await parseJsonObject(request);
     const services = getRuntimeApiServices();
     const mode = turnModeFromBody(body, "chat");
-    const projectId = optionalSafeProjectId(body.projectId);
+    const projectId = optionalSafeProjectId(studyScopedIdFromBody(body));
     const selectedHostIds = mode === "compare"
       ? requireStringArrayField(body, "selectedHostIds")
       : undefined;

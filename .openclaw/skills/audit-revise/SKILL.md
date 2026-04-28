@@ -41,7 +41,7 @@ research-radar and ad-hoc queries).
 
 | Tool | When to call | Must-have preconditions |
 |---|---|---|
-| `resolve_artifact(project, hint?)` | At the start of every request to find the paper/critique/plan/revision the user is referring to. Always the first call unless the user already gave a slug. | project is set |
+| `resolve_artifact(study, hint?)` | At the start of every request to find the paper/critique/plan/revision the user is referring to. Always the first call unless the user already gave a slug. | study is set |
 | `read_artifact(slug)` | Before `critique_artifact` or `draft_revision_plan` to confirm the artifact's type and current state. | slug returned by `resolve_artifact` |
 | `critique_artifact(slug, style?)` | To materialize the first-class critique for a paper. MUST precede `draft_revision_plan`. | `slug` points at a `type: paper` page |
 | `draft_revision_plan(parent_slug, critique_slug, scope_hints?)` | After the user has seen a critique and wants a revision plan drafted. MUST come after `critique_artifact`. | a `type: critique` page exists for `parent_slug` |
@@ -76,7 +76,7 @@ the critique usually takes **8-10 minutes** before you make the call.
 No silent spinners. Then:
 
 ```
-resolve_artifact(project, hint=<paper-title>)
+resolve_artifact(study, hint=<paper-title>)
 read_artifact(<paper-slug>)                  # confirm type: paper
 critique_artifact(<paper-slug>)              # default style: professional
 ```
@@ -183,6 +183,6 @@ link_artifact(<cover-letter-slug>, <revision-slug>, "cover_letter_for")
 - Never block the user on a silent spinner — always announce wall time.
 - Never auto-approve a plan, never resume a cancelled job, never
   retry a failed job without the user saying so.
-- Dashboard surfaces you can reference: `/dashboard/project` (FileTree
+- Dashboard surfaces you can reference: `/dashboard/study` (FileTree
   + chat), `/dashboard/reasoning?brain_slug=<slug>` (critique + plan
   viewer).

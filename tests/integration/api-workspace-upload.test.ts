@@ -125,7 +125,7 @@ describe("POST /api/workspace/upload", () => {
     expect(entry.word_count).toBeGreaterThan(0);
     expect(fake.calls).toHaveLength(1);
     expect(fake.calls[0].content).toContain("type: paper");
-    expect(fake.calls[0].content).toContain("project: hubble-demo");
+    expect(fake.calls[0].content).toContain("study: hubble-demo");
     expect(fake.calls[0].content).toContain("source_file_object_id: 'sha256:");
   });
 
@@ -310,7 +310,8 @@ describe("POST /api/workspace/upload", () => {
 
       await ensureBrainStoreReady();
       const page = await getBrainStore().getPage("chisq");
-      expect(page?.frontmatter.project).toBe("demo");
+      expect(page?.frontmatter.study).toBe("demo");
+      expect(page?.frontmatter.study_slug).toBe("demo");
       expect(page?.frontmatter.type).toBe("code");
       expect(page?.frontmatter.source_file_object_id).toBe(body.slugs[0].fileObjectId);
       expect(page?.content).toContain("```python");

@@ -657,7 +657,9 @@ description: Run the radar
     render(<GbrainPage />);
 
     expect(await screen.findByRole("heading", { name: "research-radar" })).toBeInTheDocument();
-    expect(replaceMock).toHaveBeenCalledWith("/dashboard/gbrain?view=skills&skills_catalog=workspace&skill=research-radar");
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/dashboard/gbrain?view=skills&skills_catalog=workspace&skill=research-radar");
+    });
     expect(replaceMock).not.toHaveBeenCalledWith("/setup");
   });
 
@@ -691,8 +693,10 @@ description: Run the radar
 
     expect(await screen.findByText("ScienceSwarm skills")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "db-pubmed" })).toBeInTheDocument();
-    expect(replaceMock).toHaveBeenCalledWith("/dashboard/gbrain?view=skills&skills_catalog=workspace&skill=db-pubmed");
-    expect(screen.queryByText("No project selected")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/dashboard/gbrain?view=skills&skills_catalog=workspace&skill=db-pubmed");
+    });
+    expect(screen.queryByText("No study selected")).not.toBeInTheDocument();
   });
 
   it("renders private market installs in the installed skills catalog", async () => {

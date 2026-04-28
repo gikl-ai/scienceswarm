@@ -1,7 +1,7 @@
 // POST /api/workspace/upload
 //
 // Canonical dashboard ingest entry point. The route owns multipart parsing,
-// project/user validation, and response-shape compatibility; the shared
+// study/user validation, and response-shape compatibility; the shared
 // IngestService owns byte storage, conversion, and gbrain page writes.
 // Test overrides still resolve through createIngestService so this route stays
 // on the shared gbrain adapter path.
@@ -18,7 +18,7 @@ import {
   assertSafeProjectSlug,
   InvalidSlugError,
 } from "@/lib/state/project-manifests";
-import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
+import { getCurrentUserHandle } from "@/lib/setup/current-user-handle";
 import { getWorkspaceUploadRouteIngestService } from "@/lib/testing/workspace-upload-route-overrides";
 
 export const runtime = "nodejs";
@@ -57,6 +57,17 @@ interface UploadCompilationSummary {
   error?: string;
 }
 
+function readStudyScopedId(formData: FormData): string | null {
+  const fields = ["studyId", "studySlug", "study", "projectId"] as const;
+  for (const field of fields) {
+    const value = formData.get(field);
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
 export async function POST(request: Request): Promise<Response> {
   if (!(await isLocalRequest(request))) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -80,14 +91,10 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const rawProjectId = formData.get("projectId");
-  const projectId =
-    typeof rawProjectId === "string" && rawProjectId.length > 0
-      ? rawProjectId
-      : null;
+  const projectId = readStudyScopedId(formData);
   if (!projectId) {
     return Response.json(
-      { error: "projectId is required for workspace uploads." },
+      { error: "studyId is required for workspace uploads." },
       { status: 400 },
     );
   }
@@ -98,7 +105,7 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof InvalidSlugError) {
       return Response.json(
-        { error: `Invalid projectId: ${error.message}` },
+        { error: `Invalid studyId: ${error.message}` },
         { status: 400 },
       );
     }

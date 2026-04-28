@@ -320,6 +320,7 @@ export async function processCapture(input: ProcessCaptureInput): Promise<Captur
       captureId,
       (current) => ({
         ...current,
+        study: resolvedProject,
         project: resolvedProject,
         requiresClarification: false,
         clarificationQuestion: undefined,
@@ -342,7 +343,7 @@ export async function processCapture(input: ProcessCaptureInput): Promise<Captur
             ? {
                 captureId,
                 rawPath: rawCapture.rawPath,
-                question: projectResolution.clarificationQuestion ?? "Which project should I link this capture to?",
+                question: projectResolution.clarificationQuestion ?? "Which study should I link this capture to?",
                 choices: projectResolution.choices,
               }
             : null,
@@ -382,6 +383,7 @@ export async function processCapture(input: ProcessCaptureInput): Promise<Captur
     channel,
     userId,
     kind: classification.kind,
+    study: resolvedProject,
     project: resolvedProject,
     privacy,
     rawPath: rawCapture.rawPath,

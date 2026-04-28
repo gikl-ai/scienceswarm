@@ -165,7 +165,7 @@ export function registerRuntimeMcpTools(
       content: z.string().describe("Capture body in markdown"),
       kind: z.string().optional().describe("Capture kind"),
       title: z.string().optional().describe("Optional title"),
-      project: z.string().optional().describe("Project slug"),
+      project: z.string().optional().describe("Study slug (legacy field name)"),
       tags: z.array(z.string()).optional().describe("Tags"),
       channel: z.string().optional().describe("Origin channel"),
       userId: z.string().optional().describe("Originating user identifier"),
@@ -182,11 +182,11 @@ export function registerRuntimeMcpTools(
 
   server.tool(
     "project_workspace_read",
-    "Runtime-authorized project workspace file read",
+    "Runtime-authorized study workspace file read",
     {
       ...runtimeMcpAuthSchema,
-      workspacePath: z.string().describe("Project-relative file path"),
-      projectRoot: z.string().optional().describe("Project root override"),
+      workspacePath: z.string().describe("Study-relative file path"),
+      projectRoot: z.string().optional().describe("Study root override"),
       maxBytes: z.number().optional().describe("Maximum bytes to return"),
     },
     async (params) => runRuntimeTool(() =>
@@ -230,7 +230,7 @@ export function registerRuntimeMcpTools(
         ])
         .describe("Artifact import reason"),
       targetPath: z.string().optional().describe("Optional project-relative target"),
-      projectRoot: z.string().optional().describe("Project root override"),
+      projectRoot: z.string().optional().describe("Study root override"),
       hostWorkspaceRoot: z.string().optional().describe("Runtime host workspace root"),
       requireFile: z.boolean().optional().describe("Require source to be a file"),
       promptHash: z.string().optional().describe("Prompt hash for artifact provenance"),

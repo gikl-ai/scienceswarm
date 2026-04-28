@@ -1,0 +1,26 @@
+{
+  "slug": "scienceswarm-scm-scratch-data-authoring",
+  "name": "ScienceSwarm SCM From-Scratch Data Authoring",
+  "description": "Author and review the data acquisition and munging code for a from-scratch synthetic-control panel after the study design is approved.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "data",
+    "panel",
+    "from-scratch"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Second step of the from-scratch SCM workflow: generate only the selected data acquisition and panel-building code, then validate balance and provenance.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-26T00:00:00.000Z",
+  "updatedAt": "2026-04-26T00:00:00.000Z"
+}

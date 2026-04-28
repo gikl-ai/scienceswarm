@@ -25,7 +25,7 @@ Use this skill after results interpretation, failed execution, or new evidence.
 
 When the `scienceswarm` MCP tools are available, save the decision update with
 `gbrain_capture` before answering. Use a clear title, the asset kind above,
-the active project, and links or references to the upstream results and run
+the active study, and links or references to the upstream results and run
 artifacts. If saving fails, report the exact save failure and do not present the
 decision as durable.
 

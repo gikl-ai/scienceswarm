@@ -116,7 +116,9 @@ export async function persistAppliedPaperLocations(input: PersistAppliedPaperLoc
             ? previousFrontmatter.paper_library as Record<string, unknown>
             : {}
         ),
-        project: input.project,
+        study: input.project,
+        study_slug: input.project,
+        legacy_project_slug: input.project,
         paper_id: operation.paperId,
         apply_plan_id: input.plan.id,
         apply_manifest_id: input.manifestId,

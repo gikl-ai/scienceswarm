@@ -6,7 +6,7 @@ import {
 } from "@/lib/project-workspace-tabs";
 
 describe("flattenWorkspaceTree", () => {
-  it("flattens files relative to the visible project workspace root and normalizes extensions", () => {
+  it("flattens files relative to the visible study workspace root and normalizes extensions", () => {
     const tree: WorkspaceTreeLikeNode[] = [
       {
         name: "papers",
@@ -53,7 +53,7 @@ describe("flattenWorkspaceTree", () => {
 });
 
 describe("buildWorkspaceTabSnapshot", () => {
-  it("classifies files relative to the visible project workspace root", () => {
+  it("classifies files relative to the visible study workspace root", () => {
     const tree: WorkspaceTreeLikeNode[] = [
       {
         name: "papers",
@@ -126,7 +126,7 @@ describe("buildWorkspaceTabSnapshot", () => {
       "train model",
     ]);
     expect(snapshot.experiments.map((experiment) => experiment.description)).toEqual([
-      "Runs the main benchmark or comparison pipeline for this project.",
+      "Runs the main benchmark or comparison pipeline for this study.",
       "Launches the main training or fine-tuning run for this workspace.",
     ]);
 

@@ -49,6 +49,7 @@ const RAW_DIRECTORY_BY_TYPE: Record<ContentType, string> = {
   topic: "topics",
   survey: "surveys",
   method: "methods",
+  study: "studies",
   project: "projects",
   decision: "decisions",
   task: "tasks",

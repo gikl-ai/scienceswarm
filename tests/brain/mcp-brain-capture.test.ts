@@ -74,7 +74,9 @@ describe("buildCapturePage", () => {
     expect(parsed.data.date).toBe("2026-04-13");
     expect(parsed.data.kind).toBe("observation");
     expect(parsed.data.type).toBe("observation");
-    expect(parsed.data.project).toBe("alpha-cohort");
+    expect(parsed.data.study).toBe("alpha-cohort");
+    expect(parsed.data.study_slug).toBe("alpha-cohort");
+    expect(parsed.data.legacy_project_slug).toBe("alpha-cohort");
     expect(parsed.data.channel).toBe("openclaw");
     expect(parsed.data.userId).toBe("alice");
     expect(parsed.data.tags).toEqual(["lab", "sequencing"]);

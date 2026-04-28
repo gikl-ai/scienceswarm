@@ -17,21 +17,21 @@ import { FrontierWatchComposer } from "@/components/settings/frontier-watch-comp
 import { DreamCycleRoutinePanel } from "@/components/routines/dream-cycle-routine-panel";
 import type { ProjectWatchConfig } from "@/lib/watch/types";
 import {
-  buildGbrainHrefForSlug,
-  buildRoutinesHrefForSlug,
-  buildWorkspaceHrefForSlug,
-  persistLastProjectSlug,
-  readLastProjectSlug,
-  safeProjectSlugOrNull,
-} from "@/lib/project-navigation";
+  buildGbrainHrefForStudySlug as buildGbrainHrefForSlug,
+  buildRoutinesHrefForStudySlug as buildRoutinesHrefForSlug,
+  buildStudyWorkspaceHrefForSlug as buildWorkspaceHrefForSlug,
+  persistLastStudySlug as persistLastProjectSlug,
+  readLastStudySlug as readLastProjectSlug,
+  safeStudySlugOrNull as safeProjectSlugOrNull,
+} from "@/lib/study-navigation";
 
 interface ProjectOption {
   id: string;
   name: string;
 }
 
-interface ProjectListResult {
-  projects?: Array<{
+interface StudyListResult {
+  studies?: Array<{
     slug?: string;
     name?: string;
   }>;
@@ -58,6 +58,7 @@ function RoutinesPageContent() {
   const searchParams = useSearchParams();
   const projectFromUrl =
     safeProjectSlugOrNull(searchParams.get("name")) ??
+    safeProjectSlugOrNull(searchParams.get("study")) ??
     safeProjectSlugOrNull(searchParams.get("project"));
   const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
   const [selectedProject, setSelectedProject] = useState(projectFromUrl ?? "");
@@ -74,11 +75,11 @@ function RoutinesPageContent() {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const response = await fetch("/api/projects");
+      const response = await fetch("/api/studies");
       if (!response.ok) return;
-      const data = (await response.json()) as ProjectListResult;
-      const projects = Array.isArray(data.projects)
-        ? data.projects
+      const data = (await response.json()) as StudyListResult;
+      const projects = Array.isArray(data.studies)
+        ? data.studies
             .filter(
               (project): project is { slug: string; name: string } =>
                 Boolean(
@@ -122,7 +123,7 @@ function RoutinesPageContent() {
     setWatchError(null);
     setWatchMessage(null);
     try {
-      const response = await fetch(`/api/brain/watch-config?project=${encodeURIComponent(project)}`, {
+      const response = await fetch(`/api/brain/watch-config?study=${encodeURIComponent(project)}`, {
         signal,
       });
       const data = (await response.json()) as {
@@ -177,7 +178,7 @@ function RoutinesPageContent() {
 
   async function saveWatchConfig() {
     if (!selectedProject.trim()) {
-      setWatchError("Choose a project before saving Frontier Watch");
+      setWatchError("Choose a study before saving Frontier Watch");
       return;
     }
 
@@ -189,7 +190,7 @@ function RoutinesPageContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          project: selectedProject,
+          study: selectedProject,
           config: watchConfig,
         }),
       });
@@ -230,13 +231,13 @@ function RoutinesPageContent() {
             </div>
             <h1 className="mt-1 text-xl font-semibold text-foreground">Recurring workbench</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted">
-              Project jobs, Dream Cycle, Frontier Watch, and Research Radar in one scheduled-work surface.
+              Study jobs, Dream Cycle, Frontier Watch, and Research Radar in one scheduled-work surface.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <label className="sr-only" htmlFor="routines-project">
-              Project
+              Study
             </label>
             <select
               id="routines-project"
@@ -247,7 +248,7 @@ function RoutinesPageContent() {
             >
               {projectOptions.length === 0 ? (
                 <option value={selectedProject}>
-                  {selectedProject || "No projects"}
+                  {selectedProject || "No studies"}
                 </option>
               ) : (
                 <>
@@ -286,7 +287,7 @@ function RoutinesPageContent() {
 
       <nav className="flex shrink-0 gap-2 overflow-x-auto border-b border-border bg-white px-4 py-2">
         {[
-          ["#project-jobs", "Project jobs"],
+          ["#project-jobs", "Study jobs"],
           ["#dream-cycle", "Dream Cycle"],
           ["#frontier-watch", "Frontier Watch"],
           ["#research-radar", "Research Radar"],
@@ -305,15 +306,15 @@ function RoutinesPageContent() {
         <RoutineSection
           id="project-jobs"
           icon={<CalendarCheck size={16} />}
-          title="Project jobs"
-          eyebrow={selectedProject ? selectedProjectLabel : "No project selected"}
+          title="Study jobs"
+          eyebrow={selectedProject ? selectedProjectLabel : "No study selected"}
           description="Scheduled commands, reruns, and pipelines tied to the selected workspace."
         >
           {selectedProject ? (
             <div className="h-[560px] overflow-hidden rounded-lg border border-border bg-white">
               <SchedulerPanel
                 projectId={selectedProject}
-                defaultJobName="Nightly project rerun"
+                defaultJobName="Nightly study rerun"
                 defaultJobType="recurring"
                 defaultSchedule="0 0 * * *"
                 defaultActionType="run-script"
@@ -343,8 +344,8 @@ function RoutinesPageContent() {
           id="frontier-watch"
           icon={<Broadcast size={16} />}
           title="Frontier Watch"
-          eyebrow={selectedProject ? selectedProjectLabel : "No project selected"}
-          description="Project-scoped recurring research briefs powered by OpenClaw."
+          eyebrow={selectedProject ? selectedProjectLabel : "No study selected"}
+          description="Study-scoped recurring research briefs powered by OpenClaw."
         >
           {selectedProject ? (
             <div className="space-y-3">
@@ -430,7 +431,7 @@ function RoutineSection({
 function EmptyProjectCallout() {
   return (
     <div className="rounded-lg border border-border bg-background px-4 py-5 text-sm text-muted">
-      Select or create a project to configure project-scoped routines.
+      Select or create a study to configure study-scoped routines.
     </div>
   );
 }

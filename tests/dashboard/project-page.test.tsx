@@ -19,7 +19,7 @@ interface LatestImportSummary {
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(searchParamsValue),
-  usePathname: () => "/dashboard/project",
+  usePathname: () => "/dashboard/study",
   useRouter: () => ({
     replace: replaceMock,
   }),
@@ -37,7 +37,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import ProjectPage from "@/app/dashboard/project/page";
+import ProjectPage from "@/app/dashboard/study/page";
 import { FILE_PREVIEW_LOCATION_STORAGE_KEY } from "@/lib/file-preview-preferences";
 
 function createRuntimeStreamResponse(events: unknown[]): Response {
@@ -196,7 +196,7 @@ describe("Project dashboard smoke test", () => {
                 error: "No research brain is initialized yet.",
                 code: "brain_not_initialized",
                 nextAction:
-                  "Open /setup to connect OpenClaw and initialize the local store, then import your first corpus from /dashboard/project.",
+                  "Open /setup to connect OpenClaw and initialize the local store, then import your first corpus from /dashboard/study.",
               },
               { status: 503 },
             ),
@@ -219,7 +219,7 @@ describe("Project dashboard smoke test", () => {
                 error: "No research brain is initialized yet.",
                 code: "brain_not_initialized",
                 nextAction:
-                  "Open /setup to connect OpenClaw and initialize the local store, then import your first corpus from /dashboard/project.",
+                  "Open /setup to connect OpenClaw and initialize the local store, then import your first corpus from /dashboard/study.",
               },
               { status: 503 },
             ),
@@ -229,11 +229,11 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json(projectBrief));
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Promise.resolve(Response.json(gbrainPages));
       }
 
-      if (url === "/api/brain/paper-library/scan?project=demo-project&latest=1") {
+      if (url === "/api/brain/paper-library/scan?study=demo-project&latest=1") {
         if (paperLibraryScanStatus !== 200) {
           return Promise.resolve(
             Response.json(
@@ -263,7 +263,7 @@ describe("Project dashboard smoke test", () => {
         );
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         if (importSummaryStatus !== 200) {
           return Promise.resolve(
             Response.json(
@@ -287,7 +287,7 @@ describe("Project dashboard smoke test", () => {
     });
   }
 
-  it("does not render fixed reasoning panels on the project workspace", async () => {
+  it("does not render fixed reasoning panels on the study workspace", async () => {
     const fetchMock = stubDashboardFetch({
       projectBrief: {
         project: "demo-project",
@@ -311,7 +311,7 @@ describe("Project dashboard smoke test", () => {
 
     render(<ProjectPage />);
 
-    expect(await screen.findByLabelText("Chat with your project")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Chat with your study")).toBeInTheDocument();
     expect(screen.queryByText("Evidence Map")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Analyze evidence" })).not.toBeInTheDocument();
     expect(screen.queryByText("Project Understanding")).not.toBeInTheDocument();
@@ -333,20 +333,23 @@ describe("Project dashboard smoke test", () => {
     expect(column).toHaveClass("gap-6");
   });
 
-  it("renders a tokenized composer surface without redundant context chrome", async () => {
+  it("renders subtle study context above the composer", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ProjectPage />);
 
     const composer = await screen.findByTestId("project-chat-composer");
-    const input = within(composer).getByLabelText("Chat with your project");
+    const input = within(composer).getByLabelText("Chat with your study");
 
-    expect(input).toHaveAttribute("placeholder", "");
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "Summarize the latest paper I uploaded",
+    );
     expect(composer).toHaveClass("shadow-sm");
     expect(input).toHaveClass("py-2.5");
     expect(input).toHaveClass("pl-3");
-    expect(input).toHaveClass("pr-20");
+    expect(input).toHaveClass("pr-12");
     expect(input).toHaveClass("bg-sunk/35");
     expect(input).not.toHaveClass("px-0");
     expect(input).not.toHaveClass("py-1");
@@ -354,12 +357,15 @@ describe("Project dashboard smoke test", () => {
     expect(composer).toHaveClass("bg-raised");
     expect(composer).toHaveClass("border-rule");
     expect(within(composer).getByTestId("composer-footer")).toHaveClass("border-rule/70");
-    expect(within(composer).queryByText("Project Chat")).not.toBeInTheDocument();
+    expect(within(composer).getByText("Study Chat")).toBeInTheDocument();
     expect(
-      within(composer).queryByText("Keep the next turn grounded in this workspace."),
-    ).not.toBeInTheDocument();
+      within(composer).getByText(
+        "Ask about the study, run a task, or compare runtimes without leaving the thread.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(composer).getByText("demo-project")).toBeInTheDocument();
     expect(within(composer).getByText("OpenClaw")).toBeInTheDocument();
-    expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
+    expect(within(composer).getByText("Chat mode")).toBeInTheDocument();
   });
 
   it("reflects the selected runtime host in the composer runtime switcher", async () => {
@@ -382,10 +388,31 @@ describe("Project dashboard smoke test", () => {
     await waitFor(() => {
       expect(within(composer).getByText("Codex")).toBeInTheDocument();
     });
-    expect(within(composer).queryByText("demo-project")).not.toBeInTheDocument();
+    expect(within(composer).getByText("demo-project")).toBeInTheDocument();
   });
 
-  it("renders footer controls as one compact row with a visible send button", async () => {
+  it("uses singular compare copy when compareHostIds is empty and floors to one host", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    window.localStorage.setItem(
+      "scienceswarm.runtime.project.demo-project",
+      JSON.stringify({
+        projectPolicy: "cloud-ok",
+        mode: "compare",
+        selectedHostId: "codex",
+        compareHostIds: [],
+      }),
+    );
+
+    render(<ProjectPage />);
+
+    const composer = await screen.findByTestId("project-chat-composer");
+    await waitFor(() => {
+      expect(within(composer).getByText("Compare 1 host")).toBeInTheDocument();
+    });
+  });
+
+  it("renders footer controls as one compact row with a disabled idle send button", async () => {
     const fetchMock = stubDashboardFetch();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -405,7 +432,106 @@ describe("Project dashboard smoke test", () => {
     expect(
       within(guidance).getByText("Enter to send · Shift+Enter for a new line."),
     ).toBeInTheDocument();
-    expect(within(composer).getByRole("button", { name: "Send message" })).toBeDisabled();
+    expect(within(composer).getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
+  it("enables the footer send button once the composer has input", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectPage />);
+
+    const composer = await screen.findByTestId("project-chat-composer");
+    const input = within(composer).getByTestId("chat-input");
+    fireEvent.change(input, { target: { value: "Hi" } });
+
+    expect(within(composer).getByRole("button", { name: "Send" })).toBeEnabled();
+  });
+
+  it("pauses placeholder rotation while the composer has typed input", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.useFakeTimers();
+
+    render(<ProjectPage />);
+
+    const composer = screen.getByTestId("project-chat-composer");
+    const input = within(composer).getByLabelText("Chat with your study");
+
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "Summarize the latest paper I uploaded",
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4100);
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "What's still open from last week?",
+    );
+
+    fireEvent.change(input, { target: { value: "Hi" } });
+    const pausedPlaceholder = input.getAttribute("placeholder");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4100);
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      pausedPlaceholder,
+    );
+
+    fireEvent.change(input, { target: { value: "" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4100);
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "Show me unfinished tasks",
+    );
+  });
+
+  it("rotates placeholder prompts only while the composer is empty and unfocused", async () => {
+    const fetchMock = stubDashboardFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.useFakeTimers();
+
+    render(<ProjectPage />);
+
+    const composer = screen.getByTestId("project-chat-composer");
+    const input = within(composer).getByLabelText("Chat with your study");
+
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "Summarize the latest paper I uploaded",
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4100);
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "What's still open from last week?",
+    );
+
+    fireEvent.focus(input);
+    const focusedPlaceholder = input.getAttribute("placeholder");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4100);
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      focusedPlaceholder,
+    );
+
+    fireEvent.blur(input);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4100);
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "Show me unfinished tasks",
+    );
   });
 
   it("keeps the empty-state card hidden when the project already has paper-library activity", async () => {
@@ -425,7 +551,7 @@ describe("Project dashboard smoke test", () => {
       expect(
         fetchMock.mock.calls.some(
           ([url]) =>
-            url === "/api/brain/paper-library/scan?project=demo-project&latest=1",
+            url === "/api/brain/paper-library/scan?study=demo-project&latest=1",
         ),
       ).toBe(true),
     );
@@ -469,7 +595,7 @@ describe("Project dashboard smoke test", () => {
     render(<ProjectPage />);
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith("/dashboard/project?name=demo-project");
+      expect(replaceMock).toHaveBeenCalledWith("/dashboard/study?name=demo-project");
     });
   });
 
@@ -543,7 +669,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -551,11 +677,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -568,9 +694,9 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ ok: true });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -588,7 +714,7 @@ describe("Project dashboard smoke test", () => {
     const view = render(<ProjectPage />);
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith("/dashboard/project?name=demo-project");
+      expect(replaceMock).toHaveBeenCalledWith("/dashboard/study?name=demo-project");
     });
 
     view.rerender(<ProjectPage />);
@@ -646,8 +772,8 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ added: [], updated: [], missing: [], changed: [] });
       }
 
-      if (url === "/api/projects") {
-        return Response.json({ projects: [] });
+      if (url === "/api/studies") {
+        return Response.json({ studies: [] });
       }
 
       throw new Error(`Unexpected fetch: ${url}`);
@@ -656,7 +782,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
-    expect(await screen.findByText("No project selected")).toBeInTheDocument();
+    expect(await screen.findByText("No study selected")).toBeInTheDocument();
     expect(screen.queryByText(/Research workspace ready for/i)).not.toBeInTheDocument();
 
     const calledUrls = fetchMock.mock.calls.map(([input]) =>
@@ -706,7 +832,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -722,7 +848,7 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([
           {
             slug: "wiki/entities/papers/demo/hubble-1929.md",
@@ -743,7 +869,7 @@ describe("Project dashboard smoke test", () => {
             frontmatter: { project: "demo-project" },
           },
           {
-            slug: "wiki/projects/demo-project.md",
+            slug: "wiki/studies/demo-project.md",
             title: "Demo Project Brain Page",
             type: "project",
             frontmatter: { project: "demo-project" },
@@ -760,7 +886,7 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -773,9 +899,9 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ ok: true });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -793,7 +919,7 @@ describe("Project dashboard smoke test", () => {
 
     render(<ProjectPage />);
 
-    expect(await screen.findAllByText("Projects")).not.toHaveLength(0);
+    expect(await screen.findAllByText("Studies")).not.toHaveLength(0);
     expect(await screen.findByText("Brain Artifacts")).toBeInTheDocument();
     expect(screen.queryByText("Your workspace is empty")).not.toBeInTheDocument();
     expect(screen.queryByText("hubble-1929.pdf")).not.toBeInTheDocument();
@@ -806,14 +932,14 @@ describe("Project dashboard smoke test", () => {
 
     const projectTreePanel = screen.getByTestId("project-tree-panel");
     expect(projectTreePanel).toHaveAttribute("data-project-tree-mode", "auto");
-    fireEvent.click(screen.getByRole("button", { name: "Hide project tree" }));
+    fireEvent.click(screen.getByRole("button", { name: "Hide study tree" }));
     expect(projectTreePanel).toHaveAttribute("data-project-tree-mode", "closed");
-    expect(screen.getByRole("button", { name: "Show project tree" })).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(screen.getByRole("button", { name: "Show project tree" }));
+    expect(screen.getByRole("button", { name: "Show study tree" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Show study tree" }));
     expect(projectTreePanel).toHaveAttribute("data-project-tree-mode", "open");
-    expect(screen.getByRole("button", { name: "Hide project tree" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Hide study tree" })).toHaveAttribute("aria-pressed", "true");
 
-    const chatInput = screen.getByLabelText("Chat with your project") as HTMLTextAreaElement;
+    const chatInput = screen.getByLabelText("Chat with your study") as HTMLTextAreaElement;
     fireEvent.change(chatInput, { target: { value: "@critique" } });
     chatInput.setSelectionRange(9, 9);
     fireEvent.keyUp(chatInput);
@@ -894,7 +1020,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -906,11 +1032,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ revision: "watch-1", changed: false });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -923,9 +1049,9 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ ok: true });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -952,7 +1078,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
-    const chatInput = (await screen.findByLabelText("Chat with your project")) as HTMLTextAreaElement;
+    const chatInput = (await screen.findByLabelText("Chat with your study")) as HTMLTextAreaElement;
 
     fireEvent.change(chatInput, { target: { value: "/capt" } });
     chatInput.setSelectionRange(5, 5);
@@ -1026,7 +1152,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -1034,11 +1160,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -1082,9 +1208,9 @@ describe("Project dashboard smoke test", () => {
         throw new Error("unexpected unified chat send");
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -1101,7 +1227,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
     fireEvent.change(input, { target: { value: "/capture note this result" } });
     submitComposerWithEnter();
 
@@ -1149,7 +1275,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -1157,11 +1283,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -1205,9 +1331,9 @@ describe("Project dashboard smoke test", () => {
         throw new Error("unexpected unified chat send");
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -1224,7 +1350,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
     fireEvent.change(input, { target: { value: "/tmp" } });
     submitComposerWithEnter();
 
@@ -1276,7 +1402,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -1284,11 +1410,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -1477,9 +1603,9 @@ describe("Project dashboard smoke test", () => {
         ]);
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -1510,7 +1636,7 @@ describe("Project dashboard smoke test", () => {
     });
     expect(await screen.findByTestId("composer-runtime-switcher")).toBeInTheDocument();
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
     fireEvent.change(input, { target: { value: "Talk to Codex directly" } });
     submitComposerWithEnter();
 
@@ -1636,7 +1762,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -1644,11 +1770,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -1816,9 +1942,9 @@ describe("Project dashboard smoke test", () => {
         ]);
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -1849,7 +1975,7 @@ describe("Project dashboard smoke test", () => {
     });
     expect(await screen.findByTestId("composer-runtime-switcher")).toBeInTheDocument();
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
     fireEvent.change(input, { target: { value: "Talk to Codex with auto approval" } });
     submitComposerWithEnter();
 
@@ -1878,7 +2004,7 @@ describe("Project dashboard smoke test", () => {
     });
   });
 
-  it("opens project navigation from the mobile projects button", async () => {
+  it("opens study navigation from the mobile studies button", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       const method = init?.method ?? "GET";
@@ -1917,7 +2043,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -1925,11 +2051,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -1942,9 +2068,9 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ ok: true });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -1967,14 +2093,14 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Open projects" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open studies" }));
 
-    const navigationDialog = await screen.findByRole("dialog", { name: "Project navigation" });
+    const navigationDialog = await screen.findByRole("dialog", { name: "Study navigation" });
     expect(within(navigationDialog).getByText("Second Project")).toBeInTheDocument();
 
-    fireEvent.click(within(navigationDialog).getByRole("button", { name: "Close projects" }));
+    fireEvent.click(within(navigationDialog).getByRole("button", { name: "Close studies" }));
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Project navigation" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Study navigation" })).not.toBeInTheDocument();
     });
   });
 
@@ -2018,7 +2144,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -2028,11 +2154,11 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -2074,9 +2200,9 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ ok: true });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -2137,7 +2263,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -2150,11 +2276,11 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -2212,9 +2338,9 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ ok: true });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -2287,7 +2413,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -2295,7 +2421,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -2308,9 +2434,9 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ ok: true });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -2376,7 +2502,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -2384,11 +2510,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -2401,9 +2527,9 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ ok: true });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -2473,7 +2599,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -2493,11 +2619,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ file: "code/analysis.py", content: "print('selected')\n" });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -2520,9 +2646,9 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -2551,7 +2677,7 @@ describe("Project dashboard smoke test", () => {
     expect(within(visualizer).queryByRole("button", { name: "Use in chat" })).not.toBeInTheDocument();
     expect(screen.queryByText(/^Context:/)).not.toBeInTheDocument();
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
     fireEvent.change(input, { target: { value: "summarize the selected file" } });
     submitComposerWithEnter();
     expect(await screen.findByText("answer-1")).toBeInTheDocument();
@@ -2623,7 +2749,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -2635,11 +2761,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ added: [], updated: [], missing: [], changed: [] });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -2664,9 +2790,9 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -2684,7 +2810,7 @@ describe("Project dashboard smoke test", () => {
     render(<ProjectPage />);
 
     const visualizer = await screen.findByLabelText("File visualizer");
-    const image = within(visualizer).getByRole("img", {
+    const image = await within(visualizer).findByRole("img", {
       name: "Brain Artifacts/gbrain:wiki/artifacts/cat-image",
     });
     expect(image).toHaveAttribute(
@@ -2756,7 +2882,7 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ project: "demo-project", dueTasks: [], frontier: [] }));
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
       }
 
@@ -2768,11 +2894,11 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ added: [], updated: [], missing: [], changed: [] }));
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Promise.resolve(Response.json([]));
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Promise.resolve(
           Response.json({
             version: 1,
@@ -2796,10 +2922,10 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Promise.resolve(
           Response.json({
-            projects: [
+            studies: [
               {
                 id: "demo-project",
                 slug: "demo-project",
@@ -2885,7 +3011,7 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ project: "demo-project", dueTasks: [], frontier: [] }));
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
       }
 
@@ -2897,11 +3023,11 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ added: [], updated: [], missing: [], changed: [] }));
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Promise.resolve(Response.json([]));
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Promise.resolve(
           Response.json({
             version: 1,
@@ -2928,10 +3054,10 @@ describe("Project dashboard smoke test", () => {
         return Promise.reject(new Error("page failed"));
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Promise.resolve(
           Response.json({
-            projects: [
+            studies: [
               {
                 id: "demo-project",
                 slug: "demo-project",
@@ -3013,7 +3139,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -3041,11 +3167,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ added: [], updated: [], missing: [], changed: [] });
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Response.json([]);
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -3062,9 +3188,9 @@ describe("Project dashboard smoke test", () => {
         return streamChatResponse();
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -3089,7 +3215,7 @@ describe("Project dashboard smoke test", () => {
     const preview = await screen.findByLabelText("File visualizer");
     expect(await within(preview).findByText("Before stream")).toBeInTheDocument();
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
     fireEvent.change(input, { target: { value: "refresh the selected summary" } });
     submitComposerWithEnter();
 
@@ -3148,7 +3274,7 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ project: "demo-project", dueTasks: [], frontier: [] }));
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
       }
 
@@ -3175,11 +3301,11 @@ describe("Project dashboard smoke test", () => {
         return betaResponse;
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Promise.resolve(Response.json([]));
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Promise.resolve(Response.json({
           version: 1,
           project: "demo-project",
@@ -3192,9 +3318,9 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ ok: true }));
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Promise.resolve(Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -3273,7 +3399,7 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ project: "demo-project", dueTasks: [], frontier: [] }));
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
       }
 
@@ -3281,11 +3407,11 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ tree: [] }));
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Promise.resolve(Response.json([]));
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Promise.resolve(Response.json({
           version: 1,
           project: "demo-project",
@@ -3302,9 +3428,9 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(stream.response);
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Promise.resolve(Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -3321,7 +3447,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
     fireEvent.change(input, { target: { value: "keep streaming" } });
     submitComposerWithEnter();
 
@@ -3390,7 +3516,7 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ project: "demo-project", dueTasks: [], frontier: [] }));
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
       }
 
@@ -3398,11 +3524,11 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ tree: [] }));
       }
 
-      if (url === "/api/brain/list?project=demo-project") {
+      if (url === "/api/brain/list?study=demo-project") {
         return Promise.resolve(Response.json([]));
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Promise.resolve(Response.json({
           version: 1,
           project: "demo-project",
@@ -3419,9 +3545,9 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(stream.response);
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Promise.resolve(Response.json({
-          projects: [
+          studies: [
             {
               id: "demo-project",
               slug: "demo-project",
@@ -3438,7 +3564,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ProjectPage />);
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
     fireEvent.change(input, { target: { value: "keep streaming" } });
     submitComposerWithEnter();
 
@@ -3511,7 +3637,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project" });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -3519,7 +3645,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -3548,7 +3674,7 @@ describe("Project dashboard smoke test", () => {
 
     render(<ProjectPage />);
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
 
     fireEvent.change(input, { target: { value: "first prompt" } });
     submitComposerWithEnter();
@@ -3617,7 +3743,7 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ project: "demo-project" }));
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
       }
 
@@ -3625,7 +3751,7 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ tree: [] }));
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Promise.resolve(
           Response.json({
             version: 1,
@@ -3653,7 +3779,7 @@ describe("Project dashboard smoke test", () => {
 
     render(<ProjectPage />);
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
 
     fireEvent.change(input, { target: { value: "clear me after send" } });
     submitComposerWithEnter();
@@ -3739,7 +3865,7 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ location: "workspace-pane" }));
       }
 
-      if (url === "/api/projects/demo-project/import-state") {
+      if (url === "/api/studies/demo-project/import-state") {
         return Promise.resolve(
           Response.json({
             projectId: "demo-project",
@@ -3751,7 +3877,7 @@ describe("Project dashboard smoke test", () => {
         );
       }
 
-      if (url === "/api/projects/demo-project") {
+      if (url === "/api/studies/demo-project") {
         return Promise.resolve(
           Response.json({
             project: {
@@ -3771,7 +3897,7 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ project: "demo-project" }));
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Promise.resolve(Response.json({ project: "demo-project", lastImport: null }));
       }
 
@@ -3779,7 +3905,7 @@ describe("Project dashboard smoke test", () => {
         return Promise.resolve(Response.json({ tree: [] }));
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Promise.resolve(
           Response.json({
             version: 1,
@@ -3807,7 +3933,7 @@ describe("Project dashboard smoke test", () => {
 
     render(<ProjectPage />);
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
 
     fireEvent.change(input, { target: { value: "original prompt" } });
     submitComposerWithEnter();
@@ -3862,9 +3988,9 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             { id: "demo-project", slug: "demo-project", name: "Demo Project", status: "active" },
             { id: "alpha-project", slug: "alpha-project", name: "Alpha Project", status: "active" },
           ],
@@ -3892,12 +4018,12 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project, dueTasks: [], frontier: [] });
       }
 
-      if (url.startsWith("/api/projects/") && url.endsWith("/import-summary")) {
+      if (url.startsWith("/api/studies/") && url.endsWith("/import-summary")) {
         const project = url.split("/")[3] ?? "demo-project";
         return Response.json({ project, lastImport: null });
       }
 
-      if (url.startsWith("/api/projects/") && !url.includes("/import-summary") && !url.includes("/import-state")) {
+      if (url.startsWith("/api/studies/") && !url.includes("/import-summary") && !url.includes("/import-state")) {
         const project = url.split("/")[3] ?? "demo-project";
         return Response.json({
           project: {
@@ -3908,7 +4034,7 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url.startsWith("/api/projects/") && url.endsWith("/import-state")) {
+      if (url.startsWith("/api/studies/") && url.endsWith("/import-state")) {
         const project = url.split("/")[3] ?? "demo-project";
         return Response.json({
           projectId: project,
@@ -3939,11 +4065,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ pages: [] });
       }
 
-      if (url.startsWith("/api/brain/list?project=")) {
+      if (url.startsWith("/api/brain/list?study=")) {
         return Response.json([]);
       }
 
-      if (url.startsWith("/api/chat/thread?project=")) {
+      if (url.startsWith("/api/chat/thread?study=")) {
         const project = new URL(`http://localhost${url}`).searchParams.get("project") ?? "demo-project";
         return Response.json({
           version: 1,
@@ -3963,7 +4089,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const view = render(<ProjectPage />);
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
 
     fireEvent.change(input, { target: { value: "history prompt" } });
     submitComposerWithEnter();
@@ -3975,10 +4101,10 @@ describe("Project dashboard smoke test", () => {
     view.rerender(<ProjectPage />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Chat with your project")).toHaveValue("alpha restored draft");
+      expect(screen.getByLabelText("Chat with your study")).toHaveValue("alpha restored draft");
     });
 
-    const switchedInput = screen.getByLabelText("Chat with your project");
+    const switchedInput = screen.getByLabelText("Chat with your study");
     fireEvent.keyDown(switchedInput, { key: "ArrowUp" });
     expect(switchedInput).toHaveValue("history prompt");
 
@@ -4033,9 +4159,9 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             { id: "demo-project", slug: "demo-project", name: "Demo Project", status: "active" },
             { id: "alpha-project", slug: "alpha-project", name: "Alpha Project", status: "active" },
           ],
@@ -4063,12 +4189,12 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project, dueTasks: [], frontier: [] });
       }
 
-      if (url.startsWith("/api/projects/") && url.endsWith("/import-summary")) {
+      if (url.startsWith("/api/studies/") && url.endsWith("/import-summary")) {
         const project = url.split("/")[3] ?? "demo-project";
         return Response.json({ project, lastImport: null });
       }
 
-      if (url.startsWith("/api/projects/") && !url.includes("/import-summary") && !url.includes("/import-state")) {
+      if (url.startsWith("/api/studies/") && !url.includes("/import-summary") && !url.includes("/import-state")) {
         const project = url.split("/")[3] ?? "demo-project";
         return Response.json({
           project: {
@@ -4079,7 +4205,7 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url.startsWith("/api/projects/") && url.endsWith("/import-state")) {
+      if (url.startsWith("/api/studies/") && url.endsWith("/import-state")) {
         const project = url.split("/")[3] ?? "demo-project";
         return Response.json({
           projectId: project,
@@ -4110,11 +4236,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ pages: [] });
       }
 
-      if (url.startsWith("/api/brain/list?project=")) {
+      if (url.startsWith("/api/brain/list?study=")) {
         return Response.json([]);
       }
 
-      if (url.startsWith("/api/chat/thread?project=")) {
+      if (url.startsWith("/api/chat/thread?study=")) {
         const project = new URL(`http://localhost${url}`).searchParams.get("project") ?? "demo-project";
         return Response.json({
           version: 1,
@@ -4134,7 +4260,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     try {
       const view = render(<ProjectPage />);
-      const input = await screen.findByLabelText("Chat with your project");
+      const input = await screen.findByLabelText("Chat with your study");
 
       fireEvent.change(input, { target: { value: "history prompt" } });
       submitComposerWithEnter();
@@ -4145,10 +4271,10 @@ describe("Project dashboard smoke test", () => {
       view.rerender(<ProjectPage />);
 
       await waitFor(() => {
-        expect(screen.getByLabelText("Chat with your project")).toHaveValue("alpha restored draft");
+        expect(screen.getByLabelText("Chat with your study")).toHaveValue("alpha restored draft");
       });
 
-      const switchedInput = screen.getByLabelText("Chat with your project");
+      const switchedInput = screen.getByLabelText("Chat with your study");
       fireEvent.change(switchedInput, { target: { value: "alpha restored draft plus fast typing" } });
 
       fireEvent.keyDown(switchedInput, { key: "ArrowUp" });
@@ -4211,9 +4337,9 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url === "/api/projects") {
+      if (url === "/api/studies") {
         return Response.json({
-          projects: [
+          studies: [
             { id: "demo-project", slug: "demo-project", name: "Demo Project", status: "active" },
             { id: "alpha-project", slug: "alpha-project", name: "Alpha Project", status: "active" },
           ],
@@ -4241,12 +4367,12 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project, dueTasks: [], frontier: [] });
       }
 
-      if (url.startsWith("/api/projects/") && url.endsWith("/import-summary")) {
+      if (url.startsWith("/api/studies/") && url.endsWith("/import-summary")) {
         const project = url.split("/")[3] ?? "demo-project";
         return Response.json({ project, lastImport: null });
       }
 
-      if (url.startsWith("/api/projects/") && !url.includes("/import-summary") && !url.includes("/import-state")) {
+      if (url.startsWith("/api/studies/") && !url.includes("/import-summary") && !url.includes("/import-state")) {
         const project = url.split("/")[3] ?? "demo-project";
         return Response.json({
           project: {
@@ -4257,7 +4383,7 @@ describe("Project dashboard smoke test", () => {
         });
       }
 
-      if (url.startsWith("/api/projects/") && url.endsWith("/import-state")) {
+      if (url.startsWith("/api/studies/") && url.endsWith("/import-state")) {
         const project = url.split("/")[3] ?? "demo-project";
         return Response.json({
           projectId: project,
@@ -4288,11 +4414,11 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ pages: [] });
       }
 
-      if (url.startsWith("/api/brain/list?project=")) {
+      if (url.startsWith("/api/brain/list?study=")) {
         return Response.json([]);
       }
 
-      if (url.startsWith("/api/chat/thread?project=")) {
+      if (url.startsWith("/api/chat/thread?study=")) {
         const project = new URL(`http://localhost${url}`).searchParams.get("project") ?? "demo-project";
         return Response.json({
           version: 1,
@@ -4312,7 +4438,7 @@ describe("Project dashboard smoke test", () => {
     vi.stubGlobal("fetch", fetchMock);
     try {
       const view = render(<ProjectPage />);
-      const input = await screen.findByLabelText("Chat with your project");
+      const input = await screen.findByLabelText("Chat with your study");
 
       fireEvent.change(input, { target: { value: "history prompt" } });
       submitComposerWithEnter();
@@ -4325,10 +4451,10 @@ describe("Project dashboard smoke test", () => {
       view.rerender(<ProjectPage />);
 
       await waitFor(() => {
-        expect(screen.getByLabelText("Chat with your project")).toHaveValue("alpha restored draft");
+        expect(screen.getByLabelText("Chat with your study")).toHaveValue("alpha restored draft");
       });
 
-      const switchedInput = screen.getByLabelText("Chat with your project") as HTMLTextAreaElement;
+      const switchedInput = screen.getByLabelText("Chat with your study") as HTMLTextAreaElement;
       const textareaValueSetter = Object.getOwnPropertyDescriptor(
         HTMLTextAreaElement.prototype,
         "value",
@@ -4393,7 +4519,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project" });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -4401,7 +4527,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -4421,7 +4547,7 @@ describe("Project dashboard smoke test", () => {
 
     render(<ProjectPage />);
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
 
     const arrowUpEvent = createEvent.keyDown(input, { key: "ArrowUp" });
     const arrowDownEvent = createEvent.keyDown(input, { key: "ArrowDown" });
@@ -4475,7 +4601,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project" });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -4483,7 +4609,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -4512,7 +4638,7 @@ describe("Project dashboard smoke test", () => {
 
     render(<ProjectPage />);
 
-    const input = await screen.findByLabelText("Chat with your project");
+    const input = await screen.findByLabelText("Chat with your study");
 
     fireEvent.change(input, { target: { value: "first prompt" } });
     submitComposerWithEnter();
@@ -4567,7 +4693,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project" });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -4575,7 +4701,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -4663,7 +4789,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -4702,7 +4828,7 @@ describe("Project dashboard smoke test", () => {
     expect(await screen.findByText(/Research workspace ready for/i)).toBeInTheDocument();
 
     fireEvent.change(
-      screen.getByLabelText("Chat with your project"),
+      screen.getByLabelText("Chat with your study"),
       { target: { value: "hi" } },
     );
     submitComposerWithEnter();
@@ -4807,7 +4933,7 @@ describe("Project dashboard smoke test", () => {
         );
       }
 
-      if (url.includes("/api/projects/")) {
+      if (url.includes("/api/studies/")) {
         throw new Error(`unexpected import-summary fetch: ${url}`);
       }
 
@@ -4823,7 +4949,7 @@ describe("Project dashboard smoke test", () => {
     });
     expect(
       fetchMock.mock.calls.some(([url]) =>
-        typeof url === "string" && url.includes("/api/projects/"),
+        typeof url === "string" && url.includes("/api/studies/"),
       ),
     ).toBe(false);
   });
@@ -4838,7 +4964,7 @@ describe("Project dashboard smoke test", () => {
     expect(await screen.findByRole("heading", { name: "Import Local Folder" })).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith("/dashboard/project?name=demo-project");
+      expect(replaceMock).toHaveBeenCalledWith("/dashboard/study?name=demo-project");
     });
   });
 
@@ -4928,7 +5054,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -4936,7 +5062,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -4955,7 +5081,7 @@ describe("Project dashboard smoke test", () => {
           content: "signal drift fixed by fresh batch",
           kind: "note",
           channel: "web",
-          project: "demo-project",
+          study: "demo-project",
         });
 
         return Response.json({
@@ -4963,6 +5089,7 @@ describe("Project dashboard smoke test", () => {
           channel: "web",
           userId: "web-user-1",
           kind: "note",
+          study: "demo-project",
           project: "demo-project",
           privacy: "cloud-ok",
           rawPath: "raw/captures/web/2026-04-13/capture-1.json",
@@ -4989,13 +5116,13 @@ describe("Project dashboard smoke test", () => {
     expect(await screen.findByText(/Research workspace ready for/i)).toBeInTheDocument();
 
     fireEvent.change(
-      screen.getByLabelText("Chat with your project"),
+      screen.getByLabelText("Chat with your study"),
       { target: { value: "note: signal drift fixed by fresh batch" } },
     );
     submitComposerWithEnter();
 
     expect(await screen.findByText(/Brain capture saved/i)).toBeInTheDocument();
-    expect(screen.getByText(/Project: demo-project/i)).toBeInTheDocument();
+    expect(screen.getByText(/Study: demo-project/i)).toBeInTheDocument();
     expect(screen.getByText(/wiki\/resources\/2026-04-13-signal-drift-fixed\.md/i)).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([input, init]) =>
@@ -5049,7 +5176,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "demo-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/demo-project/import-summary") {
+      if (url === "/api/studies/demo-project/import-summary") {
         return Response.json({ project: "demo-project", lastImport: null });
       }
 
@@ -5057,7 +5184,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=demo-project") {
+      if (url === "/api/chat/thread?study=demo-project") {
         return Response.json({
           version: 1,
           project: "demo-project",
@@ -5076,7 +5203,7 @@ describe("Project dashboard smoke test", () => {
           content: "retained 12 exact-title matches after dedupe",
           kind: "research_packet",
           channel: "web",
-          project: "demo-project",
+          study: "demo-project",
         });
 
         return Response.json({
@@ -5084,6 +5211,7 @@ describe("Project dashboard smoke test", () => {
           channel: "web",
           userId: "web-user-1",
           kind: "research_packet",
+          study: "demo-project",
           project: "demo-project",
           privacy: "cloud-ok",
           rawPath: "raw/captures/web/2026-04-13/capture-packet.json",
@@ -5110,7 +5238,7 @@ describe("Project dashboard smoke test", () => {
     expect(await screen.findByText(/Research workspace ready for/i)).toBeInTheDocument();
 
     fireEvent.change(
-      screen.getByLabelText("Chat with your project"),
+      screen.getByLabelText("Chat with your study"),
       { target: { value: "packet: retained 12 exact-title matches after dedupe" } },
     );
     submitComposerWithEnter();
@@ -5164,7 +5292,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "my-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/my-project/import-summary") {
+      if (url === "/api/studies/my-project/import-summary") {
         return Response.json({ project: "my-project", lastImport: null });
       }
 
@@ -5172,7 +5300,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=my-project") {
+      if (url === "/api/chat/thread?study=my-project") {
         return Response.json({
           version: 1,
           project: "my-project",
@@ -5187,18 +5315,19 @@ describe("Project dashboard smoke test", () => {
 
       if (url === "/api/brain/capture" && method === "POST") {
         const body = JSON.parse(String(init?.body));
-        expect(body.project).toBeNull();
+        expect(body.study).toBeNull();
 
         return Response.json({
           captureId: "capture-ambiguous",
           channel: "web",
           userId: "web-user-1",
           kind: "note",
+          study: null,
           project: null,
           privacy: "cloud-ok",
           rawPath: "raw/captures/web/2026-04-13/capture-ambiguous.json",
           requiresClarification: true,
-          clarificationQuestion: "Which project should this capture belong to?",
+          clarificationQuestion: "Which study should this capture belong to?",
           choices: ["alpha", "beta"],
           status: "needs-clarification",
           createdAt: "2026-04-13T16:05:00.000Z",
@@ -5209,7 +5338,7 @@ describe("Project dashboard smoke test", () => {
         const body = JSON.parse(String(init?.body));
         expect(body).toMatchObject({
           captureId: "capture-ambiguous",
-          project: "alpha",
+          study: "alpha",
           rawPath: "raw/captures/web/2026-04-13/capture-ambiguous.json",
         });
 
@@ -5218,6 +5347,7 @@ describe("Project dashboard smoke test", () => {
           channel: "web",
           userId: "web-user-1",
           kind: "note",
+          study: "alpha",
           project: "alpha",
           privacy: "cloud-ok",
           rawPath: "raw/captures/web/2026-04-13/capture-ambiguous.json",
@@ -5236,10 +5366,10 @@ describe("Project dashboard smoke test", () => {
 
     render(<ProjectPage />);
 
-    expect(await screen.findByText("No project selected")).toBeInTheDocument();
+    expect(await screen.findByText("No study selected")).toBeInTheDocument();
 
     fireEvent.change(
-      screen.getByLabelText("Chat with your project"),
+      screen.getByLabelText("Chat with your study"),
       { target: { value: "note: signal drift fixed by fresh batch" } },
     );
     submitComposerWithEnter();
@@ -5247,7 +5377,7 @@ describe("Project dashboard smoke test", () => {
     expect(await screen.findByRole("button", { name: "alpha" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "alpha" }));
 
-    expect(await screen.findByText(/Project: alpha/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Study: alpha/i)).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "beta" })).not.toBeInTheDocument();
     });
@@ -5297,7 +5427,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ project: "my-project", dueTasks: [], frontier: [] });
       }
 
-      if (url === "/api/projects/my-project/import-summary") {
+      if (url === "/api/studies/my-project/import-summary") {
         return Response.json({ project: "my-project", lastImport: null });
       }
 
@@ -5305,7 +5435,7 @@ describe("Project dashboard smoke test", () => {
         return Response.json({ tree: [] });
       }
 
-      if (url === "/api/chat/thread?project=my-project") {
+      if (url === "/api/chat/thread?study=my-project") {
         return Response.json({
           version: 1,
           project: "my-project",
@@ -5318,15 +5448,15 @@ describe("Project dashboard smoke test", () => {
                 "**Brain capture saved unlinked**",
                 "Title: signal drift fixed by fresh batch",
                 "Kind: Note",
-                "Project: unlinked",
+                "Study: unlinked",
                 "Path: raw/captures/web/2026-04-13/capture-ambiguous.json",
-                "Which project should this capture belong to?",
+                "Which study should this capture belong to?",
               ].join("\n"),
               timestamp: "2026-04-13T16:05:00.000Z",
               captureClarification: {
                 captureId: "capture-ambiguous",
                 rawPath: "raw/captures/web/2026-04-13/capture-ambiguous.json",
-                question: "Which project should this capture belong to?",
+                question: "Which study should this capture belong to?",
                 choices: ["alpha", "beta"],
                 capturedContent: "signal drift fixed by fresh batch",
               },
@@ -5343,7 +5473,7 @@ describe("Project dashboard smoke test", () => {
         const body = JSON.parse(String(init?.body));
         expect(body).toMatchObject({
           captureId: "capture-ambiguous",
-          project: "alpha",
+          study: "alpha",
           rawPath: "raw/captures/web/2026-04-13/capture-ambiguous.json",
         });
 
@@ -5352,6 +5482,7 @@ describe("Project dashboard smoke test", () => {
           channel: "web",
           userId: "web-user-1",
           kind: "note",
+          study: "alpha",
           project: "alpha",
           privacy: "cloud-ok",
           rawPath: "raw/captures/web/2026-04-13/capture-ambiguous.json",
@@ -5375,7 +5506,7 @@ describe("Project dashboard smoke test", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "alpha" }));
 
-    expect(await screen.findByText(/Project: alpha/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Study: alpha/i)).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "beta" })).not.toBeInTheDocument();
     });

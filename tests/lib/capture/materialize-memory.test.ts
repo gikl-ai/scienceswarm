@@ -357,7 +357,7 @@ describe("materializeMemory filing rules (gbrain writer)", () => {
 
     const projectPage = await engine.getPage("fresh-project");
     expect(projectPage).not.toBeNull();
-    expect(projectPage!.type).toBe("project");
+    expect(projectPage!.type).toBe("study");
     expect(projectPage!.title).toBe("fresh project");
 
     // The captured page itself was also written, and its slug is

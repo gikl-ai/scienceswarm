@@ -3,7 +3,7 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ProjectList } from "@/components/research/project-list";
+import { StudyList } from "@/components/research/study-list";
 import type { FileNode } from "@/components/research/file-tree";
 
 vi.mock("next/link", () => ({
@@ -18,8 +18,8 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-describe("ProjectList file tree", () => {
-  const projects = [
+describe("StudyList file tree", () => {
+  const studies = [
     {
       id: "demo-project",
       slug: "demo-project",
@@ -57,7 +57,7 @@ describe("ProjectList file tree", () => {
       "fetch",
       vi.fn(async () =>
         Response.json({
-          projects,
+          studies,
         }),
       ),
     );
@@ -67,14 +67,14 @@ describe("ProjectList file tree", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders the active project from the URL while the project list is still loading", () => {
+  it("renders the active study from the URL while the project list is still loading", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() => new Promise<Response>(() => {})),
     );
 
     render(
-      <ProjectList
+      <StudyList
         activeSlug="project-alpha"
         files={[]}
         onSelect={vi.fn()}
@@ -84,13 +84,13 @@ describe("ProjectList file tree", () => {
     );
 
     expect(screen.getByText("Project Alpha")).toBeInTheDocument();
-    expect(screen.queryByTestId("project-list-spinner")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("study-list-spinner")).not.toBeInTheDocument();
     expect(screen.getByText(/No files yet/)).toBeInTheDocument();
   });
 
   it("starts with folders collapsed and supports expanding or collapsing all folders", async () => {
     render(
-      <ProjectList
+      <StudyList
         activeSlug="demo-project"
         files={files}
         onSelect={vi.fn()}
@@ -120,7 +120,7 @@ describe("ProjectList file tree", () => {
 
   it("lets users expand a single folder without expanding the whole tree", async () => {
     render(
-      <ProjectList
+      <StudyList
         activeSlug="demo-project"
         files={files}
         onSelect={vi.fn()}
@@ -143,13 +143,13 @@ describe("ProjectList file tree", () => {
     expect(await screen.findByText("appendix.tex")).toBeInTheDocument();
   });
 
-  it("does not let an inactive project chevron reopen the active project", async () => {
+  it("does not let an inactive study chevron reopen the active study", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
         Response.json({
-          projects: [
-            ...projects,
+          studies: [
+            ...studies,
             {
               id: "other-project",
               slug: "other-project",
@@ -162,7 +162,7 @@ describe("ProjectList file tree", () => {
     );
 
     render(
-      <ProjectList
+      <StudyList
         activeSlug="demo-project"
         files={files}
         onSelect={vi.fn()}
@@ -173,10 +173,10 @@ describe("ProjectList file tree", () => {
 
     expect(await screen.findByText("First Proof")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse study" }));
     expect(screen.queryByText("First Proof")).not.toBeInTheDocument();
 
-    const expandProjectButtons = screen.getAllByRole("button", { name: "Expand project" });
+    const expandProjectButtons = screen.getAllByRole("button", { name: "Expand study" });
     fireEvent.click(expandProjectButtons[1]);
 
     expect(screen.queryByText("First Proof")).not.toBeInTheDocument();

@@ -1,0 +1,26 @@
+{
+  "slug": "scienceswarm-scm-scratch-results-report",
+  "name": "ScienceSwarm SCM From-Scratch Results Report",
+  "description": "Author the final from-scratch SCM reporting code and surface comparable figures, tables, interpretation, and artifact links in the project.",
+  "visibility": "public",
+  "status": "ready",
+  "tags": [
+    "science",
+    "synthetic-control",
+    "visualization",
+    "html",
+    "from-scratch"
+  ],
+  "hosts": [
+    "openclaw",
+    "claude-code",
+    "codex"
+  ],
+  "owner": "scienceswarm",
+  "summary": "Sixth step of the from-scratch SCM workflow: generate the selected report-rendering code and surface final artifacts with provenance.",
+  "source": {
+    "kind": "local"
+  },
+  "createdAt": "2026-04-26T00:00:00.000Z",
+  "updatedAt": "2026-04-26T00:00:00.000Z"
+}
