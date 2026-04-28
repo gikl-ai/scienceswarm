@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StudyRecord } from "@/brain/gbrain-data-contracts";
 import type { StudyRepository } from "@/lib/studies/study-repository";
 import { __setStudyRepositoryOverride } from "@/lib/testing/studies-route-overrides";
@@ -134,6 +134,81 @@ describe("POST /api/studies", () => {
     await expect(readFile(path.join(studyDir, "paper.pdf"), "utf-8")).resolves.toBe(
       "keep this local copy",
     );
+  });
+
+  it("archives the disk compatibility manifest when gbrain is unavailable", async () => {
+    const { POST } = await import("@/app/api/studies/route");
+    const unavailable = new Error("Brain backend unavailable");
+    unavailable.name = "BrainBackendUnavailableError";
+    const fakeRepository: StudyRepository = {
+      async list() {
+        return [];
+      },
+      async get() {
+        return null;
+      },
+      async create() {
+        throw new Error("not implemented");
+      },
+      async delete() {
+        throw unavailable;
+      },
+      async touch() {},
+    };
+    __setStudyRepositoryOverride(fakeRepository);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const studyDir = path.join(dataRoot, "projects", "disk-study");
+    await mkdir(studyDir, { recursive: true });
+    await writeFile(
+      path.join(studyDir, "project.json"),
+      JSON.stringify(
+        {
+          slug: "disk-study",
+          name: "Disk Study",
+          description: "Disk-backed study",
+          createdAt: "2026-04-16T00:00:00.000Z",
+          lastActive: "2026-04-17T00:00:00.000Z",
+          status: "active",
+        },
+        null,
+        2,
+      ),
+    );
+    await writeFile(path.join(studyDir, "paper.pdf"), "keep this local copy");
+
+    try {
+      const response = await POST(buildCreateRequest({
+        action: "archive",
+        studyId: "disk-study",
+      }));
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual(
+        expect.objectContaining({
+          ok: true,
+          existed: true,
+          persistence: "disk-fallback",
+          persistenceWarning: "Brain backend unavailable",
+        }),
+      );
+      expect(data.persistenceRecoveryWarning).toContain(
+        "local Study compatibility manifest was archived",
+      );
+      const diskMeta = JSON.parse(
+        await readFile(path.join(studyDir, "project.json"), "utf-8"),
+      );
+      expect(diskMeta.status).toBe("archived");
+      await expect(readFile(path.join(studyDir, "paper.pdf"), "utf-8")).resolves.toBe(
+        "keep this local copy",
+      );
+      expect(warn).toHaveBeenCalledWith(
+        "[studies] repository archive failed; falling back to disk:",
+        unavailable,
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
