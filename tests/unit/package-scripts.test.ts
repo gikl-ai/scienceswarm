@@ -47,6 +47,10 @@ const runtimePrereqsScript = fs.readFileSync(
   "scripts/install-runtime-prereqs.sh",
   "utf-8",
 );
+const desktopRuntimePrereqsScript = fs.readFileSync(
+  "scripts/install-desktop-runtime-prereqs.sh",
+  "utf-8",
+);
 
 describe("package.json scripts", () => {
   // Regression: `next dev` alone falls back to Next.js's built-in default
@@ -106,6 +110,18 @@ describe("package.json scripts", () => {
     );
   });
 
+  it("keeps desktop runtime setup as an on-demand model download", () => {
+    expect(pkg.scripts["desktop:install-runtime"]).toBe(
+      "bash scripts/install-desktop-runtime-prereqs.sh",
+    );
+    expect(desktopRuntimePrereqsScript).toContain(
+      'SCIENCESWARM_DEFAULT_OLLAMA_MODEL="${SCIENCESWARM_DEFAULT_OLLAMA_MODEL:-gemma4:e4b}"',
+    );
+    expect(desktopRuntimePrereqsScript).toContain("install-runtime-prereqs.sh");
+    expect(desktopRuntimePrereqsScript).toContain("SCIENCESWARM_SKIP_MODEL_PULL=1");
+    expect(desktopRuntimePrereqsScript).not.toContain(".gguf");
+  });
+
   it("keeps desktop installer workflow scripts aligned with package.json", () => {
     expect(pkg.scripts["prepare:desktop-package"]).toBe(
       "node scripts/prepare-desktop-package.mjs",
@@ -156,6 +172,12 @@ describe("package.json scripts", () => {
     expect(runtimePrereqsScript).toContain('MODEL="${MODEL#ollama/}"');
     expect(runtimePrereqsScript).toContain('awk -v target="$MODEL"');
     expect(runtimePrereqsScript).not.toContain('grep -Eq "^${MODEL}');
+  });
+
+  it("lets managed desktop installs skip the local model pull", () => {
+    expect(runtimePrereqsScript).toContain("SCIENCESWARM_SKIP_MODEL_PULL");
+    expect(runtimePrereqsScript).toContain("Skipping $MODEL download");
+    expect(runtimePrereqsScript).toContain('"$ollama_bin" pull "$MODEL"');
   });
 
   it("keeps shell Gemma alias matching aligned with TypeScript constants", () => {
