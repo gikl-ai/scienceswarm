@@ -33,13 +33,14 @@ After downloading an artifact bundle, verify the checksum manifest before
 opening the installer:
 
 ```bash
-shasum -a 256 -c SHA256SUMS.txt
+shasum -a 256 -c SHA256SUMS.txt   # macOS
+sha256sum -c SHA256SUMS.txt       # Linux
 ```
 
 On Windows PowerShell, compare the manifest entry with:
 
 ```powershell
-Get-FileHash .\ScienceSwarm-*.exe -Algorithm SHA256
+Get-Item .\ScienceSwarm-*.exe | Get-FileHash -Algorithm SHA256
 ```
 
 ## Release Notes
