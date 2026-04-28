@@ -148,6 +148,7 @@ export const phase0CorpusFixtureDescriptors: CorpusFixtureDescriptor[] = [
       createdAt: now,
       updatedAt: now,
       generatedAt: now,
+      summaryMarkdown: "Good PDF fixture has searchable source text.",
       evidence: [
         {
           statement: "Good PDF fixture has searchable source text.",

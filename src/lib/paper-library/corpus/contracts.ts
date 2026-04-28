@@ -303,6 +303,7 @@ export const PaperSummaryArtifactSchema = z
     updatedAt: IsoDateStringSchema,
     generatedAt: IsoDateStringSchema.optional(),
     generatedBy: NonEmptyStringSchema.optional(),
+    summaryMarkdown: z.string().default(""),
     evidence: z.array(SummaryEvidenceSchema).default([]),
     staleReason: NonEmptyStringSchema.optional(),
     warnings: z.array(PaperCorpusWarningSchema).default([]),
@@ -341,6 +342,13 @@ export const PaperSummaryArtifactSchema = z
         code: "custom",
         path: ["staleReason"],
         message: "stale summaries must include staleReason.",
+      });
+    }
+    if (value.status === "current" && value.summaryMarkdown.trim().length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["summaryMarkdown"],
+        message: "current summaries must include summaryMarkdown.",
       });
     }
   });

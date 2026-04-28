@@ -197,6 +197,9 @@ function formatSourceCompiledTruth(source: PaperSourceArtifact): string {
 }
 
 function formatSummaryCompiledTruth(summary: PaperSummaryArtifact): string {
+  const summaryLines = summary.summaryMarkdown.trim()
+    ? ["## Summary", "", summary.summaryMarkdown.trim(), ""]
+    : [];
   const evidenceLines = summary.evidence.length > 0
     ? summary.evidence.map((entry) => {
         const handles = entry.chunkHandles
@@ -220,6 +223,7 @@ function formatSummaryCompiledTruth(summary: PaperSummaryArtifact): string {
     `Prompt version: ${summary.promptVersion ?? "n/a"}`,
     `Model: ${summary.modelId ?? "n/a"}`,
     "",
+    ...summaryLines,
     "## Evidence",
     "",
     ...evidenceLines,
