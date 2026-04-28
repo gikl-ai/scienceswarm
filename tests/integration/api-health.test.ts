@@ -545,6 +545,28 @@ describe("GET /api/health", () => {
     });
   });
 
+  it("treats installed Gemma aliases as available for the e4b default", async () => {
+    vi.stubEnv("LLM_PROVIDER", "local");
+    vi.stubEnv("OLLAMA_MODEL", "gemma4:e4b");
+    getLocalModel.mockReturnValue("gemma4:e4b");
+    localHealth.mockResolvedValue({
+      running: true,
+      models: ["gemma4"],
+      url: "http://localhost:11434",
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(body.configuredLocalModel).toBe("gemma4:e4b");
+    expect(body.ollamaModels).toEqual(["gemma4"]);
+    expect(body.features.chat).toBe(true);
+    expect(body.runtime).toMatchObject({
+      state: "ready",
+      title: "Local chat ready",
+    });
+  });
+
   it("does not claim chat is available when strict local-only mode is enabled from system env without the local provider configured", async () => {
     vi.stubEnv("SCIENCESWARM_STRICT_LOCAL_ONLY", "1");
     vi.stubEnv("LLM_PROVIDER", "openai");
