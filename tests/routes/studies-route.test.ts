@@ -188,6 +188,8 @@ describe("POST /api/studies", () => {
         expect.objectContaining({
           ok: true,
           existed: true,
+          existedOnDisk: true,
+          mayExistInGbrain: true,
           persistence: "disk-fallback",
           persistenceWarning: "Brain backend unavailable",
         }),
@@ -205,6 +207,50 @@ describe("POST /api/studies", () => {
       expect(warn).toHaveBeenCalledWith(
         "[studies] repository archive failed; falling back to disk:",
         unavailable,
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("marks disk-fallback archive existence unknown when no local manifest exists", async () => {
+    const { POST } = await import("@/app/api/studies/route");
+    const unavailable = new Error("Brain backend unavailable");
+    unavailable.name = "BrainBackendUnavailableError";
+    const fakeRepository: StudyRepository = {
+      async list() {
+        return [];
+      },
+      async get() {
+        return null;
+      },
+      async create() {
+        throw new Error("not implemented");
+      },
+      async delete() {
+        throw unavailable;
+      },
+      async touch() {},
+    };
+    __setStudyRepositoryOverride(fakeRepository);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const response = await POST(buildCreateRequest({
+        action: "archive",
+        studyId: "gbrain-only-study",
+      }));
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual(
+        expect.objectContaining({
+          ok: true,
+          existed: null,
+          existedOnDisk: false,
+          mayExistInGbrain: true,
+          persistence: "disk-fallback",
+          persistenceWarning: "Brain backend unavailable",
+        }),
       );
     } finally {
       warn.mockRestore();
