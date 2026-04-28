@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  isTrustedDesktopIpcSender,
   resolveDesktopDiagnostics,
   resolveDesktopLaunchMarkerPath,
   resolveDesktopStartPath,
@@ -60,6 +61,22 @@ describe("desktop main", () => {
     }, {}, { firstLaunchComplete: true })).toMatchObject({
       startUrl: "https://127.0.0.1:3001/",
     });
+  });
+
+  it("trusts desktop diagnostics IPC from the configured frontend origin", () => {
+    expect(isTrustedDesktopIpcSender({
+      senderFrame: {
+        url: "https://127.0.0.1:3001/settings",
+      },
+    }, {})).toBe(true);
+  });
+
+  it("rejects desktop diagnostics IPC from a different renderer origin", () => {
+    expect(isTrustedDesktopIpcSender({
+      senderFrame: {
+        url: "https://example.com/settings",
+      },
+    }, {})).toBe(false);
   });
 
   it("resolves the desktop first-launch marker path under userData", () => {
