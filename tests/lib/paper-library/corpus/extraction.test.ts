@@ -33,7 +33,7 @@ describe("paper-library corpus extraction adapters", () => {
         \begin{abstract}
         We test whether neural field models recover signaling dynamics from sparse assays.
         \end{abstract}
-        \section{Introduction}
+        \section{Introduction to {Field} Models}
         The paper cites \citep{smith2024signals} and states the biological mechanism.
         \section{Methods}
         We fit a compact model to perturbation data.
@@ -60,7 +60,7 @@ describe("paper-library corpus extraction adapters", () => {
     expect(result.sourceArtifact.normalizedMarkdown).toContain("## Abstract");
     expect(result.sectionMap?.sections.map((section) => section.sectionId)).toEqual([
       "abstract",
-      "introduction",
+      "introduction-to-field-models",
       "methods",
       "references",
     ]);
@@ -101,7 +101,7 @@ describe("paper-library corpus extraction adapters", () => {
               <p>The extracted source remains section addressable.</p>
               <h2>References</h2>
               <ol>
-                <li>[1] Roe, B. "Semantic sidecars for research." Web Journal, 2024. doi:10.1000/html-sidecar.</li>
+                <li>[1] Roe, B. (2019). "Semantic sidecars for research." Web Journal, 2019. DOI registered 2020. doi:10.1000/html-sidecar.</li>
               </ol>
             </article>
           </body>
@@ -119,7 +119,38 @@ describe("paper-library corpus extraction adapters", () => {
     expect(result.sectionMap?.sections.map((section) => section.title)).toContain("Results");
     expect(result.bibliography[0]).toMatchObject({
       bibliographySlug: "wiki/bibliography/doi-10-1000-html-sidecar",
+      year: 2019,
       seenIn: [expect.objectContaining({ extractionSource: "html_references" })],
+    });
+  });
+
+  it("guards malformed bibliography metadata instead of emitting invalid artifacts", () => {
+    const candidate = fixtureCandidate("arxiv_latex_source");
+    const result = extractLatexCorpusSource({
+      candidate,
+      extractedAt: now,
+      latex: String.raw`
+        \title{Malformed Bibliography Paper}
+        \begin{abstract}A short abstract.\end{abstract}
+        \section{Findings}
+        The paper cites malformed metadata from a sidecar BibTeX file.
+      `,
+      bibtex: String.raw`
+        @article{forthcoming,
+          title = {Forthcoming work with malformed DOI},
+          author = {Curie, M.},
+          year = {forthcoming},
+          doi = {https://doi.org/}
+        }
+      `,
+    });
+
+    expect(result.bibliography[0]).toMatchObject({
+      bibliographySlug: "wiki/bibliography/title-forthcoming-work-with-malformed-doi",
+      title: "Forthcoming work with malformed DOI",
+      year: undefined,
+      identifiers: {},
+      seenIn: [expect.objectContaining({ extractionSource: "latex_bib" })],
     });
   });
 
@@ -246,6 +277,7 @@ describe("paper-library corpus extraction adapters", () => {
     const first = extractHtmlCorpusSource(input);
     const second = extractHtmlCorpusSource(input);
 
+    expect(first.sourceArtifact.normalizedMarkdown.startsWith("# Deterministic Artifact")).toBe(true);
     expect(first.sourceArtifact.sourceHash).toBe(second.sourceArtifact.sourceHash);
     expect(first.sectionMap?.sectionMapHash).toBe(second.sectionMap?.sectionMapHash);
     expect(first.sectionMap?.sections).toEqual(second.sectionMap?.sections);

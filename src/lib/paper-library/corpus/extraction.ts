@@ -583,6 +583,57 @@ function stripLatexInline(value: string): string {
     .trim();
 }
 
+function readLatexBraceBody(source: string, openBraceIndex: number): { body: string; endIndex: number } | undefined {
+  if (source[openBraceIndex] !== "{") return undefined;
+  let depth = 0;
+  for (let index = openBraceIndex; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+    if (char !== "}") continue;
+    depth -= 1;
+    if (depth === 0) {
+      return {
+        body: source.slice(openBraceIndex + 1, index),
+        endIndex: index + 1,
+      };
+    }
+  }
+  return undefined;
+}
+
+function latexHeadingPrefix(command: string): string {
+  if (command === "section") return "##";
+  if (command === "subsection") return "###";
+  if (command === "subsubsection") return "####";
+  return "#####";
+}
+
+function replaceLatexSectionCommands(source: string): string {
+  const commandPattern = /\\(section|subsection|subsubsection|paragraph)\*?\s*\{/g;
+  let result = "";
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = commandPattern.exec(source)) !== null) {
+    const openBraceIndex = commandPattern.lastIndex - 1;
+    const body = readLatexBraceBody(source, openBraceIndex);
+    if (!body) continue;
+    result += source.slice(lastIndex, match.index);
+    result += `\n\n${latexHeadingPrefix(match[1])} ${stripLatexInline(body.body)}\n\n`;
+    lastIndex = body.endIndex;
+    commandPattern.lastIndex = body.endIndex;
+  }
+
+  return result + source.slice(lastIndex);
+}
+
 function latexToMarkdown(input: { latex: string; title?: string }): string {
   let source = stripLatexComments(input.latex);
   const title = stripLatexInline(input.title ?? latexCommandBody(source, "title") ?? "");
@@ -597,11 +648,9 @@ function latexToMarkdown(input: { latex: string; title?: string }): string {
     .replace(/\\date\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g, "")
     .replace(/\\(?:documentclass|usepackage)(?:\[[^\]]*\])?\{[^{}]*\}/g, "")
     .replace(/\\maketitle/g, "")
-    .replace(/\\begin\{document\}|\\end\{document\}/g, "")
-    .replace(/\\section\*?\{([^{}]+)\}/g, "\n\n## $1\n\n")
-    .replace(/\\subsection\*?\{([^{}]+)\}/g, "\n\n### $1\n\n")
-    .replace(/\\subsubsection\*?\{([^{}]+)\}/g, "\n\n#### $1\n\n")
-    .replace(/\\paragraph\*?\{([^{}]+)\}/g, "\n\n##### $1\n\n")
+    .replace(/\\begin\{document\}|\\end\{document\}/g, "");
+
+  source = replaceLatexSectionCommands(source)
     .replace(/\\begin\{(?:equation|align|alignat|gather|multline)\*?\}([\s\S]*?)\\end\{(?:equation|align|alignat|gather|multline)\*?\}/g, "\n\n$$\n$1\n$$\n\n");
 
   const cleanedBody = source
@@ -761,27 +810,30 @@ function extractMarkdownSection(markdown: string, titles: readonly string[]): st
 }
 
 function normalizeDoi(value: string | undefined): string | undefined {
-  return value
+  const normalized = value
     ?.trim()
     .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
     .replace(/^doi:\s*/i, "")
     .replace(/[)\].,;:\s]+$/g, "")
     .toLowerCase();
+  return normalized || undefined;
 }
 
 function normalizeArxiv(value: string | undefined): string | undefined {
-  return value
+  const normalized = value
     ?.trim()
     .replace(/^arxiv\s*:\s*/i, "")
     .replace(/[)\].,;:\s]+$/g, "")
     .replace(/v\d+$/i, "");
+  return normalized || undefined;
 }
 
 function normalizePmid(value: string | undefined): string | undefined {
-  return value
+  const normalized = value
     ?.trim()
     .replace(/^pmid\s*:?\s*/i, "")
     .replace(/[)\].,;:\s]+$/g, "");
+  return normalized || undefined;
 }
 
 function firstMatch(regex: RegExp, value: string): string | undefined {
@@ -794,7 +846,15 @@ function firstYear(value: string): number | undefined {
   YEAR_RE.lastIndex = 0;
   const years = Array.from(value.matchAll(YEAR_RE), (match) => Number(match[1]))
     .filter((year) => Number.isInteger(year) && year >= 1000 && year <= 3000);
-  return years[years.length - 1];
+  return years[0];
+}
+
+function publicationYear(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const match = /\b(1[5-9]\d{2}|20\d{2}|2[1-9]\d{2})\b/.exec(value);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  return Number.isInteger(year) && year >= 1000 && year <= 3000 ? year : undefined;
 }
 
 function splitReferenceEntries(section: string): string[] {
@@ -861,7 +921,7 @@ function bibtexToReference(entry: BibtexEntry): ReferenceLikeEntry {
     key: entry.key,
     title: entry.title,
     authors: entry.authors ?? [],
-    year: entry.year ? Number(entry.year) : undefined,
+    year: publicationYear(entry.year),
     venue: entry.journal ?? entry.booktitle ?? entry.publisher,
     identifiers,
     confidence: 0.9,
