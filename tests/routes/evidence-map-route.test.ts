@@ -87,6 +87,13 @@ describe("evidence map route", () => {
     mocks.getCurrentUserHandle.mockReturnValue("test-scientist");
     mocks.getBrainStore.mockReturnValue({
       listPages: vi.fn(async () => sourcePages),
+      health: vi.fn(async () => ({
+        ok: true,
+        pageCount: sourcePages.length,
+        chunkCount: 0,
+        linkCount: 0,
+        embedCoverage: 0,
+      })),
     });
     mocks.filterProjectPages.mockReturnValue(sourcePages);
     mocks.isLocalRequest.mockResolvedValue(true);
@@ -191,5 +198,145 @@ describe("evidence map route", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.filterProjectPages).toHaveBeenCalledWith(sourcePages, "project-alpha");
+  });
+
+  it("uses corpus context packets before the fallback page-scan prompt", async () => {
+    const bibliographyPages = Array.from({ length: 16 }, (_, index) => ({
+      path: `wiki/bibliography/doi-10-1000-example-good-pdf-${index}`,
+      title: `Good PDF reference ${index}`,
+      type: "source",
+      content: "A cited paper that is not yet local.",
+      frontmatter: {
+        entity_type: "bibliography_entry",
+        project: "project-alpha",
+        local_status: "metadata_only",
+        seen_in: [
+          {
+            paperSlug: "wiki/entities/papers/good-pdf-2024",
+            extractionSource: "pdf_references",
+            confidence: 0.72,
+          },
+        ],
+      },
+    }));
+    const corpusPages = [
+      ...bibliographyPages,
+      {
+        path: "wiki/entities/papers/good-pdf-2024",
+        title: "Good PDF fixture",
+        type: "paper",
+        content: "Canonical paper page for EGFR resistance and MEK co-targeting.",
+        frontmatter: {
+          entity_type: "paper",
+          project: "project-alpha",
+          scientific_corpus: {
+            source_slug: "wiki/sources/papers/good-pdf-2024/source",
+          },
+        },
+      },
+      {
+        path: "wiki/sources/papers/good-pdf-2024/source",
+        title: "Good PDF fixture Source",
+        type: "source",
+        content: "EGFR inhibition rebounds unless MEK is co-targeted in patient organoids.",
+        frontmatter: {
+          entity_type: "paper_source",
+          source_kind: "paper_source_text",
+          project: "project-alpha",
+          paper_slug: "wiki/entities/papers/good-pdf-2024",
+          section_map: {
+            sections: [
+              {
+                sectionId: "abstract",
+                title: "Abstract",
+                anchor: "abstract",
+                chunkHandles: [
+                  {
+                    sourceSlug: "wiki/sources/papers/good-pdf-2024/source",
+                    chunkId: "chunk-abstract",
+                    chunkIndex: 0,
+                    sectionId: "abstract",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      {
+        path: "wiki/summaries/papers/good-pdf-2024/relevance",
+        title: "Good PDF fixture relevance summary",
+        type: "note",
+        content: "Best for EGFR resistance and MEK co-targeting questions.",
+        frontmatter: {
+          entity_type: "paper_summary",
+          summary_kind: "paper_relevance",
+          project: "project-alpha",
+          paper_slug: "wiki/entities/papers/good-pdf-2024",
+        },
+      },
+    ];
+    const complete = vi.fn(async () => ({
+      content: JSON.stringify({
+        focused_question: "Does EGFR resistance require MEK co-targeting?",
+        claims: [
+          {
+            id: "claim-1",
+            statement: "The local corpus supports MEK co-targeting as resistance evidence.",
+            qualifiers: ["patient organoid context"],
+            confidence: "medium",
+            sources: [
+              {
+                slug: "wiki/sources/papers/good-pdf-2024/source",
+                title: "Good PDF fixture Source",
+              },
+            ],
+          },
+        ],
+        tensions: [],
+        uncertainties: [],
+        honesty_note: "The corpus packet selected one local paper.",
+      }),
+    }));
+    mocks.getBrainStore.mockReturnValue({
+      listPages: vi.fn(async () => corpusPages),
+      health: vi.fn(async () => ({
+        ok: true,
+        pageCount: corpusPages.length,
+        chunkCount: 1,
+        linkCount: 3,
+        embedCoverage: 0,
+      })),
+    });
+    mocks.filterProjectPages.mockReturnValue(corpusPages);
+    mocks.getLLMClient.mockReturnValue({ complete });
+
+    const { POST } = await import("@/app/api/brain/evidence-map/route");
+    const response = await POST(request({
+      studyId: "project-alpha",
+      question: "Does EGFR resistance require MEK co-targeting?",
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      summary: {
+        claimCount: 1,
+        contextPacketUsed: true,
+        contextPaperCount: 1,
+        sourcePageCount: 14,
+      },
+    });
+    const [completionInput] = complete.mock.calls[0] as unknown as [{ user: string }];
+    expect(completionInput.user).toContain("ResearchContextPacket");
+    expect(completionInput.user).toContain("local-literature-first-v1");
+
+    const [, markdown] = mocks.putPage.mock.calls[0] as unknown as [
+      string,
+      string,
+    ];
+    expect(markdown).toContain("## Local corpus context");
+    expect(markdown).toContain("wiki/entities/papers/good-pdf-2024");
+    expect(markdown).toContain("wiki/bibliography/doi-10-1000-example-good-pdf-0");
+    expect(markdown).toContain("The corpus packet selected one local paper.");
   });
 });
