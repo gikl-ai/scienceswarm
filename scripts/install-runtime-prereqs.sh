@@ -114,8 +114,8 @@ wait_for_ollama() {
   done
 }
 
-skip_model_pull() {
-  case "$(printf '%s' "${SCIENCESWARM_SKIP_MODEL_PULL:-false}" | tr '[:upper:]' '[:lower:]')" in
+truthy_env() {
+  case "$(printf '%s' "${1:-false}" | tr '[:upper:]' '[:lower:]')" in
     1|true|yes|on)
       return 0
       ;;
@@ -125,15 +125,16 @@ skip_model_pull() {
   esac
 }
 
+skip_runtime_downloads() {
+  truthy_env "${SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS:-false}"
+}
+
+skip_model_pull() {
+  skip_runtime_downloads || truthy_env "${SCIENCESWARM_SKIP_MODEL_PULL:-false}"
+}
+
 skip_openhands_pull() {
-  case "$(printf '%s' "${SCIENCESWARM_SKIP_OPENHANDS_PULL:-false}" | tr '[:upper:]' '[:lower:]')" in
-    1|true|yes|on)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  skip_runtime_downloads || truthy_env "${SCIENCESWARM_SKIP_OPENHANDS_PULL:-false}"
 }
 
 install_docker_if_missing() {

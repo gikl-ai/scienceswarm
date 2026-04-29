@@ -184,12 +184,18 @@ describe("package.json scripts", () => {
   });
 
   it("lets managed desktop installs skip the local model pull", () => {
+    expect(desktopRuntimePrereqsScript).toContain("SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS=1");
+    expect(runtimePrereqsScript).toContain("SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS");
+    expect(runtimePrereqsScript).toContain("skip_runtime_downloads");
     expect(runtimePrereqsScript).toContain("SCIENCESWARM_SKIP_MODEL_PULL");
     expect(runtimePrereqsScript).toContain("Skipping $MODEL download");
     expect(runtimePrereqsScript).toContain('"$ollama_bin" pull "$MODEL"');
   });
 
   it("lets managed desktop installs skip the OpenHands image pull", () => {
+    expect(desktopRuntimePrereqsScript).toContain("SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS=1");
+    expect(runtimePrereqsScript).toContain("SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS");
+    expect(runtimePrereqsScript).toContain("skip_runtime_downloads");
     expect(desktopRuntimePrereqsScript).toContain("SCIENCESWARM_SKIP_OPENHANDS_PULL=1");
     expect(runtimePrereqsScript).toContain("SCIENCESWARM_SKIP_OPENHANDS_PULL");
     expect(runtimePrereqsScript).toContain("Skipping OpenHands image download");

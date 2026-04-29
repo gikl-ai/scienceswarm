@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 export SCIENCESWARM_DEFAULT_OLLAMA_MODEL="${SCIENCESWARM_DEFAULT_OLLAMA_MODEL:-gemma4:e4b}"
 
 echo "ScienceSwarm desktop runtime setup will download ${SCIENCESWARM_DEFAULT_OLLAMA_MODEL} with Ollama when needed."
+echo "Set SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS=1 to leave all heavy downloads to the in-app setup flow."
 echo "Set SCIENCESWARM_SKIP_MODEL_PULL=1 to leave model download to the in-app setup flow."
 echo "Set SCIENCESWARM_SKIP_OPENHANDS_PULL=1 to leave the OpenHands image download to /setup."
 
