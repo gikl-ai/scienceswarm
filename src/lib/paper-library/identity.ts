@@ -41,7 +41,16 @@ export function normalizeArxivId(value: string): string {
 
 export function deriveTitleHintFromPath(relativePath: string): string | undefined {
   const parsed = path.parse(relativePath);
-  const cleaned = parsed.name
+  const rawName = parsed.name
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const structuredTitle =
+    rawName.match(/^(?:19\d{2}|20\d{2})\s*[-\u2013\u2014]\s*[^-\u2013\u2014]+?\s*[-\u2013\u2014]\s*(.+)$/u)?.[1]
+    ?? rawName.match(/^[^-\u2013\u2014]+?\s+(?:19\d{2}|20\d{2})\s*[-\u2013\u2014]\s*(.+)$/u)?.[1]
+    ?? rawName.match(/^(?:19\d{2}|20\d{2})\s*[-\u2013\u2014]\s*(.+)$/u)?.[1]
+    ?? rawName;
+  const cleaned = structuredTitle
     .replace(/[_-]+/g, " ")
     .replace(/\b(?:final|draft|copy|download|paper|pdf)\b/gi, " ")
     .replace(/\b(?:v\d+|\(\d+\))\b/gi, " ")
