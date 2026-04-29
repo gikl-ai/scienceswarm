@@ -449,8 +449,9 @@ export async function runPaperLibraryScanJob(
     await flushReviewShard();
     const corpusWarnings: string[] = [];
     let heartbeatActive = true;
+    const heartbeatWrites = new Set<Promise<void>>();
     const heartbeatTimer = setInterval(() => {
-      void updatePaperLibraryScan(project, scanId, brainRoot, (current) => {
+      const heartbeatWrite = updatePaperLibraryScan(project, scanId, brainRoot, (current) => {
         if (!heartbeatActive || !ACTIVE_SCAN_STATUSES.has(current.status)) return current;
         const heartbeatAt = nowIso();
         return {
@@ -458,7 +459,11 @@ export async function runPaperLibraryScanJob(
           heartbeatAt,
           updatedAt: heartbeatAt,
         };
-      }).catch(() => undefined);
+      }).then(() => undefined, () => undefined);
+      heartbeatWrites.add(heartbeatWrite);
+      void heartbeatWrite.finally(() => {
+        heartbeatWrites.delete(heartbeatWrite);
+      });
     }, HEARTBEAT_WRITE_INTERVAL_MS);
     try {
       await writePaperCorpusManifestForScan({
@@ -476,6 +481,9 @@ export async function runPaperLibraryScanJob(
     } finally {
       heartbeatActive = false;
       clearInterval(heartbeatTimer);
+      // Drain any heartbeat write that already read active scan state before
+      // writing the terminal scan status below.
+      await Promise.allSettled([...heartbeatWrites]);
     }
 
     const finalUpdatedAt = nowIso();
