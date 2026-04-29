@@ -1,13 +1,31 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 const workflowPath = path.join(process.cwd(), ".github", "workflows", "desktop-installers.yml");
-const workflow = readFileSync(workflowPath, "utf8");
+let workflow = "";
+
+beforeAll(() => {
+  workflow = readFileSync(workflowPath, "utf8");
+});
 
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matrixEntryBlock(name: string) {
+  const pattern = new RegExp(
+    `^\\s*- name: ${escapeRegex(name)}\\n(?<block>[\\s\\S]*?)(?=^\\s*- name:|^\\s*env:)`,
+    "m",
+  );
+  const match = workflow.match(pattern);
+  expect(match?.groups?.block, `missing matrix entry for ${name}`).toBeDefined();
+  return match?.groups?.block ?? "";
+}
+
+function expectWorkflowLine(block: string, line: string) {
+  expect(block).toMatch(new RegExp(`^\\s*${escapeRegex(line)}$`, "m"));
 }
 
 function expectMatrixEntry(entry: {
@@ -18,18 +36,15 @@ function expectMatrixEntry(entry: {
   os: string;
   packageScript: string;
 }) {
-  const headerPattern = new RegExp([
-    `- name: ${escapeRegex(entry.name)}`,
-    `\\s+os: ${escapeRegex(entry.os)}`,
-    `\\s+package-script: ${escapeRegex(entry.packageScript)}`,
-    `\\s+artifact-platform: ${escapeRegex(entry.artifactPlatform)}`,
-    `\\s+artifact-name: ${escapeRegex(entry.artifactName)}`,
-    "\\s+artifact-path: \\|",
-  ].join(""));
+  const block = matrixEntryBlock(entry.name);
 
-  expect(workflow).toMatch(headerPattern);
+  expectWorkflowLine(block, `os: ${entry.os}`);
+  expectWorkflowLine(block, `package-script: ${entry.packageScript}`);
+  expectWorkflowLine(block, `artifact-platform: ${entry.artifactPlatform}`);
+  expectWorkflowLine(block, `artifact-name: ${entry.artifactName}`);
+  expectWorkflowLine(block, "artifact-path: |");
   for (const artifactPath of entry.artifactPaths) {
-    expect(workflow).toContain(`              ${artifactPath}`);
+    expectWorkflowLine(block, artifactPath);
   }
 }
 
