@@ -9,5 +9,6 @@ export SCIENCESWARM_DEFAULT_OLLAMA_MODEL="${SCIENCESWARM_DEFAULT_OLLAMA_MODEL:-g
 
 echo "ScienceSwarm desktop runtime setup will download ${SCIENCESWARM_DEFAULT_OLLAMA_MODEL} with Ollama when needed."
 echo "Set SCIENCESWARM_SKIP_MODEL_PULL=1 to leave model download to the in-app setup flow."
+echo "Set SCIENCESWARM_SKIP_OPENHANDS_PULL=1 to leave the OpenHands image download to /setup."
 
 exec bash "$SCRIPT_DIR/install-runtime-prereqs.sh"

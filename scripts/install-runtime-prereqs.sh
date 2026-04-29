@@ -125,6 +125,17 @@ skip_model_pull() {
   esac
 }
 
+skip_openhands_pull() {
+  case "$(printf '%s' "${SCIENCESWARM_SKIP_OPENHANDS_PULL:-false}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 install_docker_if_missing() {
   if resolve_docker >/dev/null 2>&1; then
     return 0
@@ -188,6 +199,11 @@ ensure_docker_runtime() {
   fi
 
   start_docker_if_needed "$docker_bin" || return 0
+  if skip_openhands_pull; then
+    warn "Skipping OpenHands image download because SCIENCESWARM_SKIP_OPENHANDS_PULL is set."
+    ok "Docker runtime ready"
+    return 0
+  fi
   info "Pulling OpenHands image"
   "$docker_bin" pull "$OPENHANDS_IMAGE" >/dev/null || warn "OpenHands image pull failed; /setup can retry it."
   ok "Docker runtime ready"
