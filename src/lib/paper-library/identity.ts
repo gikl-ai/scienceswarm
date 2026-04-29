@@ -7,6 +7,13 @@ const ARXIV_RE = /\b(?:arXiv\s*:\s*)?(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{
 const PMID_RE = /\b(?:PMID\s*:?\s*)(\d{6,9})\b/gi;
 const YEAR_RE = /\b(19\d{2}|20\d{2})\b/;
 const PDF_TITLE_SCAN_LINE_LIMIT = 80;
+const SPACED_DASH_SEPARATOR = String.raw`\s+[-\u2013\u2014]\s+`;
+const YEAR_AUTHOR_TITLE_PATH_RE = new RegExp(
+  `^(?:19\\d{2}|20\\d{2})${SPACED_DASH_SEPARATOR}.+?${SPACED_DASH_SEPARATOR}(.+)$`,
+  "u",
+);
+const AUTHOR_YEAR_TITLE_PATH_RE = new RegExp(`^.+?\\s+(?:19\\d{2}|20\\d{2})${SPACED_DASH_SEPARATOR}(.+)$`, "u");
+const YEAR_TITLE_PATH_RE = new RegExp(`^(?:19\\d{2}|20\\d{2})${SPACED_DASH_SEPARATOR}(.+)$`, "u");
 
 export interface PaperIdentityEvidenceInput {
   relativePath: string;
@@ -41,10 +48,19 @@ export function normalizeArxivId(value: string): string {
 
 export function deriveTitleHintFromPath(relativePath: string): string | undefined {
   const parsed = path.parse(relativePath);
-  const cleaned = parsed.name
-    .replace(/[_-]+/g, " ")
+  const rawName = parsed.name
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const structuredTitle =
+    rawName.match(YEAR_AUTHOR_TITLE_PATH_RE)?.[1]
+    ?? rawName.match(AUTHOR_YEAR_TITLE_PATH_RE)?.[1]
+    ?? rawName.match(YEAR_TITLE_PATH_RE)?.[1];
+  const cleaned = (structuredTitle ?? rawName)
+    .replace(structuredTitle ? /_/g : /[_-]+/g, " ")
     .replace(/\b(?:final|draft|copy|download|paper|pdf)\b/gi, " ")
     .replace(/\b(?:v\d+|\(\d+\))\b/gi, " ")
+    .replace(/(?:^|\s)[-\u2013\u2014]+(?=\s|$)/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 

@@ -70,7 +70,7 @@ describe("paper-library review and apply routes", () => {
   });
 
   it("reviews, approves, applies, and undoes a paper-library move over HTTP", async () => {
-    const originalPath = path.join(paperRoot, "2024 - Smith - Interesting Paper.pdf");
+    const originalPath = path.join(paperRoot, "2024 - Smith - Local Latex.pdf");
     await writeFile(originalPath, "fake pdf", "utf-8");
 
     const scanRoute = await import("@/app/api/brain/paper-library/scan/route");
@@ -124,6 +124,19 @@ describe("paper-library review and apply routes", () => {
     const created = await createdResponse.json() as { applyPlanId: string; status: string };
     expect(created.status).toBe("validated");
 
+    const plannedResponse = await applyPlanRoute.GET(new Request(
+      `http://localhost/api/brain/paper-library/apply-plan?project=project-alpha&id=${created.applyPlanId}&limit=10`,
+    ));
+    expect(plannedResponse.status).toBe(200);
+    const planned = await plannedResponse.json() as {
+      operations: Array<{ destinationRelativePath: string }>;
+    };
+    expect(planned.operations).toEqual([
+      expect.objectContaining({
+        destinationRelativePath: "2024 - Local Latex.pdf",
+      }),
+    ]);
+
     const approveRoute = await import("@/app/api/brain/paper-library/apply-plan/approve/route");
     const approvalResponse = await approveRoute.POST(jsonRequest("http://localhost/api/brain/paper-library/apply-plan/approve", {
       project: "project-alpha",
@@ -156,7 +169,7 @@ describe("paper-library review and apply routes", () => {
     const page = await getBrainStore({ root: getScienceSwarmProjectBrainRoot("project-alpha") })
       .getPage(`wiki/entities/papers/local-${reviewPage.items[0]?.paperId}`);
     expect(page).toMatchObject({
-      title: expect.stringContaining("Interesting"),
+      title: expect.stringContaining("Local Latex"),
       frontmatter: {
         entity_type: "paper",
         paper_library: expect.objectContaining({
@@ -193,7 +206,7 @@ describe("paper-library review and apply routes", () => {
       },
       operations: [
         expect.objectContaining({
-          sourceRelativePath: "2024 - Smith - Interesting Paper.pdf",
+          sourceRelativePath: "2024 - Smith - Local Latex.pdf",
           status: "verified",
         }),
       ],
