@@ -55,7 +55,9 @@ test("renders the code prompt and the Wobblefinch bot-ready card", async ({
   await page.goto("/setup");
   await expect(page.getByTestId("bootstrap-form")).toBeVisible();
 
-  await expect(page.getByTestId("handle-input")).toHaveValue("");
+  await expect(page.getByTestId("handle-input")).toHaveValue(
+    /^researcher-[a-z0-9]{5,8}$/,
+  );
   await page.getByTestId("handle-input").fill("testuser");
   await page.getByTestId("phone-input").fill("+19995550100");
   await page.getByTestId("bootstrap-submit").click();

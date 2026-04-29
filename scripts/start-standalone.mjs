@@ -26,6 +26,7 @@ export function resolveStandaloneServerEnv(env = process.env) {
     FRONTEND_PORT: port,
     FRONTEND_HOST: host,
     FRONTEND_PUBLIC_HOST: env.FRONTEND_PUBLIC_HOST?.trim() || host,
+    SCIENCESWARM_DESKTOP: env.SCIENCESWARM_DESKTOP?.trim() || "1",
   };
 }
 

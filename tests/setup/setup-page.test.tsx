@@ -55,10 +55,22 @@ function makeStreamingResponse(body: Uint8Array): Response {
 }
 
 describe("BootstrapForm", () => {
-  it("starts with an empty handle input (no OS username prefill)", () => {
+  it("starts with a generated handle input (no OS username prefill)", () => {
     render(<BootstrapForm disabled={false} onSubmit={vi.fn()} />);
     const input = screen.getByTestId("handle-input") as HTMLInputElement;
-    expect(input.value).toBe("");
+    expect(input.value).toMatch(/^researcher-[a-z0-9]{5,8}$/);
+  });
+
+  it("uses the server-suggested generated handle when provided", () => {
+    render(
+      <BootstrapForm
+        disabled={false}
+        onSubmit={vi.fn()}
+        initialHandle="researcher-test"
+      />,
+    );
+    const input = screen.getByTestId("handle-input") as HTMLInputElement;
+    expect(input.value).toBe("researcher-test");
   });
 
   it("defaults the brain preset to scientific research", () => {
@@ -349,7 +361,7 @@ describe("SetupPage telegram visibility transitions", () => {
     await act(async () => {
       render(<SetupPage />);
     });
-    // Handle is no longer prefilled — user types it in.
+    // User can still override the generated handle before submitting.
     await act(async () => {
       fireEvent.change(screen.getByTestId("handle-input"), {
         target: { value: "alice" },
@@ -422,7 +434,7 @@ describe("SetupPage integration", () => {
     vi.restoreAllMocks();
   });
 
-  it("prefills handle from /api/setup/status and shows the form", async () => {
+  it("prefills the generated handle from /api/setup/status and shows the form", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -441,12 +453,55 @@ describe("SetupPage integration", () => {
       render(<SetupPage />);
     });
 
-    // Handle is no longer prefilled — user types it in.
-    await act(async () => {
-      fireEvent.change(screen.getByTestId("handle-input"), {
-        target: { value: "alice" },
-      });
+    await waitFor(() => {
+      expect(screen.getByTestId("handle-input")).toHaveValue("alice");
     });
+  });
+
+  it("auto-starts setup in desktop mode with the generated handle", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/setup/status")) {
+        return new Response(
+          JSON.stringify({
+            defaultHandle: "researcher-test",
+            desktopMode: true,
+            persistedSetup: { complete: false },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/setup/bootstrap") && init?.method === "POST") {
+        return makeStreamingResponse(
+          encodeSseBody([
+            { type: "task", task: "gbrain-init", status: "pending" },
+            { type: "summary", status: "ok", failed: [], skipped: [] },
+          ]),
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => {
+      render(<SetupPage />);
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/setup/bootstrap",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            handle: "researcher-test",
+            email: "",
+            phone: "",
+            brainPreset: "scientific_research",
+          }),
+        }),
+      );
+    });
+    expect(screen.queryByTestId("bootstrap-form")).not.toBeInTheDocument();
   });
 
   it("shows the Windows note only for Windows browsers", async () => {
@@ -528,7 +583,7 @@ describe("SetupPage integration", () => {
       render(<SetupPage />);
     });
 
-    // Handle is no longer prefilled — user types it in.
+    // User can still override the generated handle before submitting.
     // Phone is optional; we include it here to exercise the full path.
     await act(async () => {
       fireEvent.change(screen.getByTestId("handle-input"), {
@@ -675,7 +730,7 @@ describe("SetupPage integration", () => {
     await act(async () => {
       render(<SetupPage />);
     });
-    // Handle is no longer prefilled — user types it in.
+    // User can still override the generated handle before submitting.
     // Phone is optional; we include it here to exercise the full path.
     await act(async () => {
       fireEvent.change(screen.getByTestId("handle-input"), {
@@ -786,7 +841,7 @@ describe("SetupPage integration", () => {
     await act(async () => {
       render(<SetupPage />);
     });
-    // Handle is no longer prefilled — user types it in.
+    // User can still override the generated handle before submitting.
     // Phone is optional; we include it here to exercise the full path.
     await act(async () => {
       fireEvent.change(screen.getByTestId("handle-input"), {
@@ -836,7 +891,7 @@ describe("SetupPage integration", () => {
     await act(async () => {
       render(<SetupPage />);
     });
-    // Handle is no longer prefilled — user types it in.
+    // User can still override the generated handle before submitting.
     // Phone is optional; we include it here to exercise the full path.
     await act(async () => {
       fireEvent.change(screen.getByTestId("handle-input"), {

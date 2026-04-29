@@ -19,12 +19,7 @@ import {
   isBrainPresetId,
   normalizeBrainPreset,
 } from "@/brain/presets/types";
-
-function isValidHandle(value: unknown): value is string {
-  return (
-    typeof value === "string" && /^[a-zA-Z0-9_.-]{1,64}$/.test(value.trim())
-  );
-}
+import { isValidUserHandle } from "@/lib/setup/user-handle";
 
 /**
  * Loose RFC-5322 style check: one @, at least one `.` in the domain.
@@ -48,7 +43,7 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  if (!isValidHandle(body.handle)) {
+  if (!isValidUserHandle(body.handle)) {
     return Response.json(
       {
         error:

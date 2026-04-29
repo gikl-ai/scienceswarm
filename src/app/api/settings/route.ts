@@ -27,6 +27,7 @@ import {
   writeEnvFileAtomic,
   type EnvDocument,
 } from "@/lib/setup/env-writer";
+import { isValidUserHandle } from "@/lib/setup/user-handle";
 
 const ENV_PATH = resolve(process.cwd(), ".env");
 
@@ -798,6 +799,15 @@ export async function POST(request: Request): Promise<Response> {
     /* ---- Identity ---- */
     case "save-user-handle": {
       const handle = body.userHandle?.trim() ?? "";
+      if (!isValidUserHandle(handle)) {
+        return Response.json(
+          {
+            error:
+              "Handle must be 1-64 chars, letters/digits/._- only.",
+          },
+          { status: 400 },
+        );
+      }
       await setEnvValue("SCIENCESWARM_USER_HANDLE", handle);
       return Response.json({ ok: true, userHandle: handle });
     }

@@ -21,7 +21,9 @@ test("allows bootstrap without a Telegram phone number", async ({
   await page.goto("/setup");
   await expect(page.getByTestId("bootstrap-form")).toBeVisible();
 
-  await expect(page.getByTestId("handle-input")).toHaveValue("");
+  await expect(page.getByTestId("handle-input")).toHaveValue(
+    /^researcher-[a-z0-9]{5,8}$/,
+  );
   await page.getByTestId("handle-input").fill("testuser");
 
   // Leave phone empty and submit — bootstrap should proceed.

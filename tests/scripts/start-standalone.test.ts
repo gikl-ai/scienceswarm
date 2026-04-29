@@ -28,6 +28,15 @@ describe("start-standalone", () => {
       FRONTEND_HOST: "127.0.0.1",
       FRONTEND_PUBLIC_HOST: "127.0.0.1",
       FRONTEND_PORT: "3001",
+      SCIENCESWARM_DESKTOP: "1",
+    });
+  });
+
+  it("preserves an explicit desktop mode override", () => {
+    expect(resolveStandaloneServerEnv({
+      SCIENCESWARM_DESKTOP: "0",
+    })).toMatchObject({
+      SCIENCESWARM_DESKTOP: "0",
     });
   });
 

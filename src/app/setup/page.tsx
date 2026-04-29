@@ -31,6 +31,7 @@ import type {
   BootstrapStreamEvent,
   BootstrapTaskId,
 } from "@/lib/setup/install-tasks/types";
+import { createRandomUserHandle } from "@/lib/setup/user-handle";
 
 /**
  * The telegram-bot task emits a "succeeded" event with detail formatted as
@@ -113,6 +114,8 @@ interface PersistedBootstrapState {
 
 interface SetupStatusResponse {
   ready?: boolean;
+  defaultHandle?: string;
+  desktopMode?: boolean;
   persistedSetup?: {
     complete?: boolean;
   };
@@ -201,13 +204,8 @@ function isLikelyWindowsBrowser(): boolean {
 
 export default function SetupPage() {
   const router = useRouter();
-  // Intentionally no handle prefill. Previously we fetched
-  // process.env.USER from /api/setup/status and dropped it into the
-  // handle field, but that surfaced the operator's macOS/Linux
-  // username (e.g. "jsmith") as the research handle by default,
-  // which is both privacy-leaky and confusing — the user's research
-  // handle is almost never their OS username. Blank field, user types
-  // whatever they want.
+  // The setup status endpoint returns a generated anonymous handle,
+  // never an OS username or computer name.
   const initialPersistedState = useMemo(
     () => readPersistedBootstrapState(),
     [],
@@ -233,6 +231,7 @@ export default function SetupPage() {
     () => initialPersistedState?.updatedAt ?? null,
   );
   const [checkingExistingSetup, setCheckingExistingSetup] = useState(true);
+  const [suggestedHandle, setSuggestedHandle] = useState<string | undefined>();
   const gbrainEvent = getLatestTaskEvent(events, "gbrain-init");
   const openclawEvent = getLatestTaskEvent(events, "openclaw");
   const openhandsEvent = getLatestTaskEvent(events, "openhands-docker");
@@ -253,6 +252,86 @@ export default function SetupPage() {
     setSummary(null);
     setSubmittedTelegram(false);
     setLastUpdatedAt(null);
+  }, []);
+
+  const handleSubmit = useCallback(async (values: BootstrapFormValues) => {
+    const now = new Date().toISOString();
+    setSubmitted(true);
+    setSubmittedTelegram(Boolean(values.phone || values.existingBot?.token));
+    setEvents([]);
+    setSummary(null);
+    setLastUpdatedAt(now);
+
+    // Wrap the whole network + stream path in try/catch. Without it,
+    // a fetch rejection (network unreachable, CORS) or a reader error
+    // mid-stream escapes the unawaited caller in BootstrapForm, leaves
+    // the UI stuck with `submitted=true` and `summary=null`, and the
+    // user sees "Installing your runtime…" pinned at pending with no
+    // error or retry path.
+    try {
+      const response = await fetch("/api/setup/bootstrap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+
+      if (!response.ok || !response.body) {
+        // Forward the API error body so the user sees why the server
+        // rejected the request (e.g. malformed email, invalid handle).
+        // Without this, the failed card just says "see per-task errors
+        // above" while the task rows stay at pending.
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        setSummary({
+          type: "summary",
+          status: "failed",
+          failed: [],
+          skipped: [],
+          error: body.error ?? `Bootstrap request failed (HTTP ${response.status}).`,
+        });
+        setLastUpdatedAt(new Date().toISOString());
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let frameEnd: number;
+        while ((frameEnd = buffer.indexOf("\n\n")) !== -1) {
+          const rawFrame = buffer.slice(0, frameEnd);
+          buffer = buffer.slice(frameEnd + 2);
+          const dataLine = rawFrame
+            .split(/\r?\n/)
+            .find((l) => l.startsWith("data:"));
+          if (!dataLine) continue;
+          const json = dataLine.slice("data:".length).trim();
+          try {
+            const event = JSON.parse(json) as BootstrapStreamEvent;
+            setEvents((prev) => [...prev, event]);
+            setLastUpdatedAt(new Date().toISOString());
+            if (event.type === "summary") setSummary(event);
+          } catch {
+            /* ignore malformed frames */
+          }
+        }
+      }
+    } catch (_err) {
+      // Surface the network/stream failure so the terminal-state UI
+      // renders the failed card instead of leaving the user stranded.
+      setSummary({
+        type: "summary",
+        status: "failed",
+        failed: [],
+        skipped: [],
+        error: "Bootstrap request failed due to a network or stream error. Please try again.",
+      });
+      setLastUpdatedAt(new Date().toISOString());
+    }
   }, []);
 
   useEffect(() => {
@@ -290,8 +369,19 @@ export default function SetupPage() {
         }
         const data = (await res.json()) as SetupStatusResponse;
         if (cancelled) return;
+        const defaultHandle = data.defaultHandle?.trim() || createRandomUserHandle();
+        setSuggestedHandle(defaultHandle);
         if (data.ready || data.persistedSetup?.complete === true) {
           router.replace("/dashboard/study");
+          return;
+        }
+        if (data.desktopMode === true) {
+          await handleSubmit({
+            handle: defaultHandle,
+            email: "",
+            phone: "",
+            brainPreset: "scientific_research",
+          });
           return;
         }
       } catch {
@@ -306,7 +396,7 @@ export default function SetupPage() {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, router, submitted]);
+  }, [handleSubmit, hydrated, router, submitted]);
 
   useEffect(() => {
     if (!submitted || summary || !hydrated) {
@@ -383,86 +473,6 @@ export default function SetupPage() {
     return () => window.clearTimeout(timer);
   }, [hydrated, router, summary]);
 
-  const handleSubmit = async (values: BootstrapFormValues) => {
-    const now = new Date().toISOString();
-    setSubmitted(true);
-    setSubmittedTelegram(Boolean(values.phone || values.existingBot?.token));
-    setEvents([]);
-    setSummary(null);
-    setLastUpdatedAt(now);
-
-    // Wrap the whole network + stream path in try/catch. Without it,
-    // a fetch rejection (network unreachable, CORS) or a reader error
-    // mid-stream escapes the unawaited caller in BootstrapForm, leaves
-    // the UI stuck with `submitted=true` and `summary=null`, and the
-    // user sees "Installing your runtime…" pinned at pending with no
-    // error or retry path.
-    try {
-      const response = await fetch("/api/setup/bootstrap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-
-      if (!response.ok || !response.body) {
-        // Forward the API error body so the user sees why the server
-        // rejected the request (e.g. malformed email, invalid handle).
-        // Without this, the failed card just says "see per-task errors
-        // above" while the task rows stay at pending.
-          const body = (await response.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          setSummary({
-            type: "summary",
-          status: "failed",
-          failed: [],
-            skipped: [],
-            error: body.error ?? `Bootstrap request failed (HTTP ${response.status}).`,
-          });
-          setLastUpdatedAt(new Date().toISOString());
-          return;
-        }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let frameEnd: number;
-        while ((frameEnd = buffer.indexOf("\n\n")) !== -1) {
-          const rawFrame = buffer.slice(0, frameEnd);
-          buffer = buffer.slice(frameEnd + 2);
-          const dataLine = rawFrame
-            .split(/\r?\n/)
-            .find((l) => l.startsWith("data:"));
-          if (!dataLine) continue;
-          const json = dataLine.slice("data:".length).trim();
-          try {
-            const event = JSON.parse(json) as BootstrapStreamEvent;
-            setEvents((prev) => [...prev, event]);
-            setLastUpdatedAt(new Date().toISOString());
-            if (event.type === "summary") setSummary(event);
-          } catch {
-            /* ignore malformed frames */
-          }
-        }
-      }
-    } catch (_err) {
-      // Surface the network/stream failure so the terminal-state UI
-      // renders the failed card instead of leaving the user stranded.
-      setSummary({
-        type: "summary",
-        status: "failed",
-        failed: [],
-        skipped: [],
-        error: "Bootstrap request failed due to a network or stream error. Please try again.",
-      });
-      setLastUpdatedAt(new Date().toISOString());
-    }
-  };
-
   const autoContinuing = shouldAutoContinue(summary);
   const deferredOpenHands = hasDeferredOpenHands(summary);
   const continueRoute = "/dashboard/study?onboarding=continue";
@@ -474,6 +484,7 @@ export default function SetupPage() {
         <BootstrapForm
           disabled={false}
           onSubmit={handleSubmit}
+          initialHandle={suggestedHandle}
           showWindowsNote={showWindowsNote}
         />
       )}
