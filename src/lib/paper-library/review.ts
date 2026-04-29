@@ -10,6 +10,7 @@ import {
   getPaperLibraryReviewShardPath,
   readCursorWindow,
 } from "./state";
+import { writePaperCorpusManifestForScan } from "./corpus/pipeline";
 import {
   readPaperLibraryScan,
   updatePaperLibraryScan,
@@ -131,6 +132,34 @@ async function updateScanReviewCounters(
   }));
 }
 
+async function refreshPaperCorpusManifestForReview(input: {
+  project: string;
+  scan: PaperLibraryScan;
+  stateRoot: string;
+  brainRoot: string;
+  items: readonly PaperReviewItem[];
+}): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  try {
+    await writePaperCorpusManifestForScan({
+      project: input.project,
+      scanId: input.scan.id,
+      rootRealpath: input.scan.rootRealpath ?? input.scan.rootPath,
+      createdAt: input.scan.createdAt,
+      updatedAt,
+      items: input.items,
+      stateRoot: input.stateRoot,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Corpus source inventory failed.";
+    await updatePaperLibraryScan(input.project, input.scan.id, input.brainRoot, (scan) => ({
+      ...scan,
+      warnings: Array.from(new Set([...scan.warnings, `corpus_source_inventory_failed: ${message}`])),
+      updatedAt,
+    }));
+  }
+}
+
 export async function updatePaperReviewItem(
   input: PaperReviewUpdateRequest & { brainRoot: string },
 ): Promise<{ item: PaperReviewItem; remainingCount: number } | null> {
@@ -163,6 +192,13 @@ export async function updatePaperReviewItem(
     const allItems = await readAllPaperReviewItems(input.project, input.scanId, input.brainRoot);
     const combined = allItems?.items ?? nextItems;
     await updateScanReviewCounters(input.project, input.scanId, input.brainRoot, combined);
+    await refreshPaperCorpusManifestForReview({
+      project: input.project,
+      scan,
+      stateRoot,
+      brainRoot: input.brainRoot,
+      items: combined,
+    });
     return {
       item: updated,
       remainingCount: countReviewState(combined).needsReview,

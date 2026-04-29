@@ -1,6 +1,6 @@
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
-import { getProjectBrainRootForBrainRoot } from "@/lib/state/project-storage";
+import { getProjectBrainRootForBrainRoot, getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 import type { PersistAppliedPaperLocationsInput } from "./apply";
 import type {
@@ -11,6 +11,8 @@ import type {
   PaperReviewItem,
 } from "./contracts";
 import { buildAppliedPaperMetadata, paperLibraryPageSlugForMetadata } from "./applied-metadata";
+import { materializePaperCorpusManifestToGbrain } from "./corpus/gbrain-materialization";
+import { readPaperCorpusManifestByScan } from "./corpus/state";
 
 function compactObject(value: Record<string, unknown>): Record<string, unknown> {
   const compacted: Record<string, unknown> = {};
@@ -156,4 +158,21 @@ export async function persistAppliedPaperLocations(input: PersistAppliedPaperLoc
       };
     });
   }
+
+  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
+  const corpusManifest = await readPaperCorpusManifestByScan(input.project, input.plan.scanId, stateRoot);
+  if (!corpusManifest.ok) {
+    if (corpusManifest.repairable.code === "missing") return;
+    throw new Error(`Paper corpus manifest for scan ${input.plan.scanId} is ${corpusManifest.repairable.code}.`);
+  }
+
+  await materializePaperCorpusManifestToGbrain({
+    project: input.project,
+    brainRoot: input.brainRoot,
+    manifest: corpusManifest.data,
+    stateRoot,
+    occurredAt: nowIso,
+    actor: userHandle,
+    client,
+  });
 }
