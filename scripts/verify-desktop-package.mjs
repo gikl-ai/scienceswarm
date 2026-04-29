@@ -4,6 +4,8 @@ import { existsSync, lstatSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isForbiddenDesktopPackageRelativePath } from "./desktop-package-policy.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
@@ -16,19 +18,6 @@ export const REQUIRED_DESKTOP_PACKAGE_PATHS = [
   "scripts/install-desktop-runtime-prereqs.sh",
   "package.json",
 ];
-export const FORBIDDEN_DESKTOP_PACKAGE_SEGMENTS = new Set([
-  ".claude",
-  ".codex",
-  ".gemini",
-  ".git",
-  ".github",
-  ".local",
-  ".worktrees",
-  "blobs",
-  "manifests",
-  "ollama-models",
-  "tests",
-]);
 
 export function resolveDesktopPackageDir(root = projectRoot, packageDir = ".desktop-package/app") {
   return path.resolve(root, packageDir);
@@ -62,23 +51,7 @@ function walkPackagePaths(packageDir) {
 
 export function isForbiddenDesktopPackagePath(filePath, packageDir) {
   const relativePath = path.relative(packageDir, filePath).split(path.sep).join("/");
-  const segments = relativePath.split("/");
-  const basename = segments.at(-1) ?? "";
-  const standalonePrefix = ".next/standalone/";
-  const standaloneRelativePath = relativePath.startsWith(standalonePrefix)
-    ? relativePath.slice(standalonePrefix.length)
-    : null;
-  return (
-    relativePath.endsWith(".gguf")
-    || basename === ".env"
-    || basename.startsWith(".env.")
-    || (
-      standaloneRelativePath != null
-      && !standaloneRelativePath.includes("/")
-      && standaloneRelativePath.endsWith(".md")
-    )
-    || segments.some((segment) => FORBIDDEN_DESKTOP_PACKAGE_SEGMENTS.has(segment))
-  );
+  return isForbiddenDesktopPackageRelativePath(relativePath);
 }
 
 export function findDesktopPackageProblems(options = {}) {

@@ -4,6 +4,8 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFi
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isForbiddenDesktopPackageRelativePath } from "./desktop-package-policy.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
@@ -13,19 +15,6 @@ export const DESKTOP_PACKAGE_SCRIPT_INPUTS = [
   "install-runtime-prereqs.sh",
   "install-desktop-runtime-prereqs.sh",
 ];
-export const FORBIDDEN_DESKTOP_PACKAGE_SEGMENTS = new Set([
-  ".claude",
-  ".codex",
-  ".gemini",
-  ".git",
-  ".github",
-  ".local",
-  ".worktrees",
-  "blobs",
-  "manifests",
-  "ollama-models",
-  "tests",
-]);
 
 export function shouldMarkDesktopPackageScriptExecutable(scriptName) {
   return scriptName.endsWith(".sh");
@@ -95,15 +84,7 @@ export function shouldCopyStandalonePackagePath(sourcePath, standaloneRoot) {
     return true;
   }
 
-  const segments = relativePath.split("/");
-  const basename = segments.at(-1) ?? "";
-  return !(
-    relativePath.endsWith(".gguf")
-    || basename === ".env"
-    || basename.startsWith(".env.")
-    || (!relativePath.includes("/") && relativePath.endsWith(".md"))
-    || segments.some((segment) => FORBIDDEN_DESKTOP_PACKAGE_SEGMENTS.has(segment))
-  );
+  return !isForbiddenDesktopPackageRelativePath(relativePath, { standaloneRoot: true });
 }
 
 export function prepareDesktopPackage(root = projectRoot) {
