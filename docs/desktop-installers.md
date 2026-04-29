@@ -29,6 +29,7 @@ Useful overrides:
 ```bash
 SCIENCESWARM_DEFAULT_OLLAMA_MODEL=gemma4:e2b npm run desktop:install-runtime
 OLLAMA_MODEL=gemma4:26b npm run desktop:install-runtime
+SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS=1 npm run desktop:install-runtime
 SCIENCESWARM_SKIP_MODEL_PULL=1 npm run desktop:install-runtime
 SCIENCESWARM_SKIP_OPENHANDS_PULL=1 npm run desktop:install-runtime
 ```
@@ -36,6 +37,8 @@ SCIENCESWARM_SKIP_OPENHANDS_PULL=1 npm run desktop:install-runtime
 - `SCIENCESWARM_DEFAULT_OLLAMA_MODEL` changes the installer default when
   `OLLAMA_MODEL` is not set.
 - `OLLAMA_MODEL` selects the exact Ollama model tag to pull.
+- `SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS=1` installs and starts prerequisites
+  but leaves both model and OpenHands image downloads to the in-app setup flow.
 - `SCIENCESWARM_SKIP_MODEL_PULL=1` installs and starts prerequisites but leaves
   model download to the in-app setup flow.
 - `SCIENCESWARM_SKIP_OPENHANDS_PULL=1` installs and starts Docker but leaves the
