@@ -13,6 +13,7 @@ describe("user handle helpers", () => {
 
   it("rejects invalid or empty handles", () => {
     expect(isValidUserHandle("")).toBe(false);
+    expect(isValidUserHandle(" alice ")).toBe(false);
     expect(isValidUserHandle("has spaces")).toBe(false);
     expect(isValidUserHandle("@alice")).toBe(false);
     expect(isValidUserHandle("x".repeat(65))).toBe(false);

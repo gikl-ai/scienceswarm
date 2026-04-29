@@ -43,7 +43,9 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  if (!isValidUserHandle(body.handle)) {
+  const rawHandle =
+    typeof body.handle === "string" ? body.handle.trim() : "";
+  if (!isValidUserHandle(rawHandle)) {
     return Response.json(
       {
         error:
@@ -102,7 +104,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
   const input: BootstrapInput = {
-    handle: body.handle.trim(),
+    handle: rawHandle,
     email: rawEmail || undefined,
     phone: rawPhone || undefined,
     brainPreset: normalizeBrainPreset(rawBrainPreset),

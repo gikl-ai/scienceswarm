@@ -14,6 +14,7 @@
  */
 
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 
 import { isGbrainRootReady } from "@/lib/brain/root-readiness";
@@ -33,10 +34,9 @@ import {
   type OpenClawStatusSummary,
 } from "@/lib/setup/config-status";
 import { migrateEnvLocalOnce } from "@/lib/setup/env-migration";
-import { createRandomUserHandle } from "@/lib/setup/user-handle";
+import { createGeneratedUserHandle } from "@/lib/setup/user-handle";
 
 const exec = promisify(execFile);
-let generatedDefaultHandle: string | null = null;
 
 type ConfigStatusForRuntime = Awaited<ReturnType<typeof getConfigStatus>>;
 
@@ -66,9 +66,22 @@ function getGbrainSnapshot(status: ConfigStatusForRuntime) {
   };
 }
 
-function getGeneratedDefaultHandle(): string {
-  generatedDefaultHandle ??= createRandomUserHandle();
-  return generatedDefaultHandle;
+function getDefaultHandle(status: ConfigStatusForRuntime): string {
+  const savedHandle = status.rawValues.SCIENCESWARM_USER_HANDLE?.trim();
+  if (savedHandle) return savedHandle;
+
+  // Stable but opaque: do not expose OS usernames or computer names in
+  // durable brain attribution metadata. Hashing the local install path
+  // keeps first-run suggestions stable across route-handler reloads.
+  const seed =
+    status.rawValues.SCIENCESWARM_DIR?.trim()
+    || status.rawValues.BRAIN_ROOT?.trim()
+    || process.env.SCIENCESWARM_HOME?.trim()
+    || process.env.SCIENCESWARM_DIR?.trim()
+    || process.env.BRAIN_ROOT?.trim()
+    || process.cwd();
+  const digest = createHash("sha256").update(seed).digest("hex");
+  return createGeneratedUserHandle(digest);
 }
 
 /**
@@ -190,9 +203,7 @@ export async function GET(request: Request): Promise<Response> {
       probeOpenClawOrUndefined(),
       probeOllamaOrUndefined(),
     ]);
-    const defaultHandle =
-      status.rawValues.SCIENCESWARM_USER_HANDLE?.trim()
-      || getGeneratedDefaultHandle();
+    const defaultHandle = getDefaultHandle(status);
     const agentType = getConfiguredAgent(status);
     const runtimeEnv = { ...process.env, ...status.rawValues };
     const openHandsEvidence = await readOpenHandsLocalEvidence(runtimeEnv);
