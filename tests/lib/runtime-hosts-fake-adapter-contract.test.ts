@@ -76,7 +76,10 @@ describe("runtime hosts fake adapter contract", () => {
       status: "completed",
       updatedAt: "2026-04-22T10:05:00.000Z",
     });
-    const events = createRuntimeEventStore({ sessions });
+    const events = createRuntimeEventStore({
+      sessions,
+      now: () => new Date("2026-04-22T10:06:00.000Z"),
+    });
 
     const first = events.appendEvent({
       id: "codex-event-1",
