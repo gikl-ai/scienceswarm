@@ -265,6 +265,44 @@ describe("openhandsDockerTask", () => {
     );
   });
 
+  it("does not restart OpenHands when the local service is already reachable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+
+    spawnMock.mockImplementation((command: string, args: string[] = []) => {
+      if (command === "which" && args[0] === "docker") {
+        return fakeProcess({ stdout: "/usr/local/bin/docker\n" });
+      }
+      if (command === "/usr/local/bin/docker" && args[0] === "--version") {
+        return fakeProcess({ stdout: "Docker version 28.5.1\n" });
+      }
+      if (command === "/usr/local/bin/docker" && args[0] === "info") {
+        return fakeProcess({ stdout: "Server: Docker Desktop\n" });
+      }
+      if (command === "/usr/local/bin/docker" && args.join(" ") === "image inspect test-openhands:latest") {
+        return fakeProcess({ stdout: "image exists\n" });
+      }
+      return fakeProcess({ code: 1 });
+    });
+    vi.stubEnv("OPENHANDS_IMAGE", "test-openhands:latest");
+
+    const events = await runTask();
+
+    expect(events.at(-1)).toMatchObject({
+      status: "succeeded",
+      detail: "OpenHands is already reachable.",
+    });
+    expect(spawnMock).not.toHaveBeenCalledWith(
+      "/usr/local/bin/docker",
+      ["rm", "-f", "scienceswarm-agent"],
+      expect.anything(),
+    );
+    expect(spawnMock).not.toHaveBeenCalledWith(
+      "/usr/local/bin/docker",
+      expect.arrayContaining(["run"]),
+      expect.anything(),
+    );
+  });
+
   it("skips the optional OpenHands step on Linux when Docker is missing", async () => {
     setPlatform("linux");
     spawnMock.mockImplementation((command: string, args: string[] = []) => {
