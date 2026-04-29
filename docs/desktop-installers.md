@@ -60,6 +60,41 @@ npm run desktop:checksums
 
 The workflow uploads the platform installer plus `SHA256SUMS.txt`.
 
+## Signing And Notarization
+
+Installer builds are unsigned unless signing is explicitly required. Keep
+unsigned release candidates clearly labeled in release notes and download
+instructions.
+
+Set this repository or workflow environment variable to fail the build when a
+platform signing environment is incomplete:
+
+```bash
+SCIENCESWARM_REQUIRE_DESKTOP_SIGNING=1
+```
+
+The signing preflight can also be run locally for a specific target:
+
+```bash
+SCIENCESWARM_REQUIRE_DESKTOP_SIGNING=1 \
+SCIENCESWARM_DESKTOP_SIGNING_TARGET=macos \
+npm run desktop:check-signing-env
+```
+
+Required signing secrets by platform:
+
+- macOS requires `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`,
+  and either `CSC_LINK` plus `CSC_KEY_PASSWORD` or `MAC_CSC_LINK` plus
+  `MAC_CSC_KEY_PASSWORD`.
+- Windows requires either `WIN_CSC_LINK` plus `WIN_CSC_KEY_PASSWORD` or the
+  shared `CSC_LINK` plus `CSC_KEY_PASSWORD` pair.
+- Linux AppImage builds do not require signing secrets today.
+
+For macOS releases, keep notarization enabled only when the Apple account and
+certificate secrets are present. If the workflow is intentionally run without
+signing, publish the unsigned artifacts as test builds rather than production
+installers.
+
 ## Verify Downloads
 
 After downloading an artifact bundle, verify the checksum manifest before
