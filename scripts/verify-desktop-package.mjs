@@ -36,7 +36,7 @@ function walkPackagePaths(packageDir) {
 
     entries.push(current);
     const stats = lstatSync(current);
-    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    if (!stats.isDirectory()) {
       continue;
     }
 
