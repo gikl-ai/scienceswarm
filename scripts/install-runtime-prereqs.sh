@@ -201,7 +201,7 @@ ensure_docker_runtime() {
 
   start_docker_if_needed "$docker_bin" || return 0
   if skip_openhands_pull; then
-    warn "Skipping OpenHands image download because SCIENCESWARM_SKIP_OPENHANDS_PULL is set."
+    warn "Skipping OpenHands image download because SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS or SCIENCESWARM_SKIP_OPENHANDS_PULL is set."
     ok "Docker runtime ready"
     return 0
   fi
@@ -280,7 +280,7 @@ ensure_ollama_runtime() {
     return 0
   fi
   if skip_model_pull; then
-    warn "Skipping $MODEL download because SCIENCESWARM_SKIP_MODEL_PULL is set."
+    warn "Skipping $MODEL download because SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS or SCIENCESWARM_SKIP_MODEL_PULL is set."
     return 0
   fi
   info "Downloading $MODEL with Ollama"
