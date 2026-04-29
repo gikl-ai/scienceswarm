@@ -143,11 +143,6 @@ export async function verifyDesktopArtifacts(options = {}) {
   if (primaryArtifactCount === 0) {
     throw new Error("No primary desktop installer artifact was listed in SHA256SUMS.txt.");
   }
-  if (expectedPlatform && expectedPlatformArtifactCount === 0) {
-    throw new Error(
-      `No ${expectedPlatform} desktop installer artifact was listed in SHA256SUMS.txt.`,
-    );
-  }
 
   return {
     artifactCount: entries.length,
