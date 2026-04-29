@@ -89,4 +89,11 @@ describe("paper-library identity", () => {
   it("cleans title hints from bad filenames", () => {
     expect(deriveTitleHintFromPath("papers/final-copy_Gene-Editing-Review-v2.pdf")).toBe("Gene Editing Review");
   });
+
+  it("strips common year and author prefixes from structured filenames", () => {
+    expect(deriveTitleHintFromPath("papers/2024 - Smith - Local Latex.pdf")).toBe("Local Latex");
+    expect(deriveTitleHintFromPath("papers/2024 - Local Latex.pdf")).toBe("Local Latex");
+    expect(deriveTitleHintFromPath("papers/Smith 2024 - Local Latex.pdf")).toBe("Local Latex");
+    expect(deriveTitleHintFromPath("papers/Scaling Laws 2024 Update.pdf")).toBe("Scaling Laws 2024 Update");
+  });
 });

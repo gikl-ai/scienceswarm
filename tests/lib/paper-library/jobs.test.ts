@@ -105,8 +105,16 @@ describe("paper-library jobs", () => {
       ),
       "utf-8",
     );
-    expect(reviewShard).toContain("2024 Smith 10.1000 test");
-    expect(reviewShard).toContain("text_layer_too_thin");
+    const parsedReviewShard = JSON.parse(reviewShard) as {
+      items: Array<{
+        candidates: Array<{ title?: string; year?: number; conflicts?: string[] }>;
+      }>;
+    };
+    expect(parsedReviewShard.items[0]?.candidates[0]).toMatchObject({
+      title: "10.1000 test",
+      year: 2024,
+      conflicts: ["text_layer_too_thin"],
+    });
   });
 
   it("streams large scans into review shards instead of waiting for one final in-memory batch", async () => {
