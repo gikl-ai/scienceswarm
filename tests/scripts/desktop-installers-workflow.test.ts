@@ -83,6 +83,7 @@ describe("desktop installers workflow", () => {
 
   it("runs the release smoke checks before upload", () => {
     expect(workflow).toContain("fail-fast: false");
+    expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"');
     expect(workflow).toContain("SCIENCESWARM_DESKTOP_ARTIFACT_PLATFORM: ${{ matrix.artifact-platform }}");
     expect(workflow).toContain("run: npm run build:standalone");
     expect(workflow).toContain("run: npm run desktop:check-signing-env");
