@@ -274,7 +274,7 @@ export function summarizePaperCorpusImportStatus(input: {
   let missingCount = 0;
   let qualityScoreTotal = 0;
   let qualityScoreCount = 0;
-  let warningCount = manifest.warnings.length;
+  let extractionWarningCount = 0;
 
   const byTier: PaperCorpusImportStatus["summaries"]["byTier"] = {
     relevance: summaryStatusCounts(),
@@ -286,11 +286,9 @@ export function summarizePaperCorpusImportStatus(input: {
   let entryCount = 0;
 
   for (const paper of manifest.papers) {
-    warningCount += paper.warnings.length;
     candidateCount += paper.sourceCandidates.length;
     for (const candidate of paper.sourceCandidates) {
       increment(candidateStatusCounts, candidate.status);
-      warningCount += candidate.warnings.length;
     }
     const selected = paper.sourceCandidates.find((candidate) => candidate.id === paper.selectedSourceCandidateId);
     if (selected) {
@@ -302,7 +300,7 @@ export function summarizePaperCorpusImportStatus(input: {
     if (!source) {
       missingCount += 1;
     } else {
-      warningCount += source.warnings.length + source.quality.warnings.length;
+      extractionWarningCount += source.warnings.length + source.quality.warnings.length;
       if (source.status === "current") currentCount += 1;
       else if (source.status === "stale") staleCount += 1;
       else if (source.status === "failed") failedCount += 1;
@@ -316,14 +314,12 @@ export function summarizePaperCorpusImportStatus(input: {
     for (const tier of SUMMARY_TIERS) {
       const summary = paper.summaries.find((entry) => entry.tier === tier);
       increment(byTier[tier], summary?.status ?? "missing");
-      warningCount += summary?.warnings.length ?? 0;
     }
 
     for (const entry of paper.bibliography) {
       entryCount += 1;
       increment(artifactStatusCounts, entry.status);
       increment(localStatusCounts, entry.localStatus);
-      warningCount += entry.warnings.length;
     }
   }
 
@@ -354,7 +350,7 @@ export function summarizePaperCorpusImportStatus(input: {
     plannedCount,
     missingCount,
     ...(qualityScoreCount > 0 ? { averageScore: qualityScoreTotal / qualityScoreCount } : {}),
-    warningCount,
+    warningCount: extractionWarningCount,
   };
 
   return {

@@ -50,8 +50,17 @@ async function seedCorpusState(): Promise<void> {
         status: "current",
         sourceCandidates: [fixture.expectedCandidate],
         selectedSourceCandidateId: fixture.expectedCandidate.id,
-        sourceArtifact: fixture.expectedSourceArtifact,
-        summaries: [fixture.expectedRelevanceSummary],
+        sourceArtifact: {
+          ...fixture.expectedSourceArtifact,
+          quality: {
+            ...fixture.expectedSourceArtifact.quality,
+            warnings: [{ code: "short_body", message: "Extraction was short." }],
+          },
+        },
+        summaries: [{
+          ...fixture.expectedRelevanceSummary,
+          warnings: [{ code: "references_not_found", message: "Summary could not resolve references." }],
+        }],
         bibliography: fixture.expectedBibliography ?? [],
       },
     ],
@@ -165,7 +174,7 @@ describe("paper-library corpus status route", () => {
       ok: boolean;
       status: {
         sourcePreference: { selectedCount: number; candidateCount: number };
-        extractionQuality: { currentCount: number; averageScore: number };
+        extractionQuality: { currentCount: number; averageScore: number; warningCount: number };
         summaries: { byTier: { relevance: { current: number }; brief: { missing: number } } };
         bibliography: { entryCount: number; localStatusCounts: { metadata_only: number } };
         graph: { status: string; nodeCount: number; edgeCount: number };
@@ -173,8 +182,9 @@ describe("paper-library corpus status route", () => {
     };
     expect(body.ok).toBe(true);
     expect(body.status.sourcePreference).toMatchObject({ selectedCount: 1, candidateCount: 1 });
-    expect(body.status.extractionQuality.currentCount).toBe(1);
-    expect(body.status.extractionQuality.averageScore).toBeCloseTo(0.76);
+	    expect(body.status.extractionQuality.currentCount).toBe(1);
+	    expect(body.status.extractionQuality.averageScore).toBeCloseTo(0.76);
+	    expect(body.status.extractionQuality.warningCount).toBe(1);
     expect(body.status.summaries.byTier.relevance.current).toBe(1);
     expect(body.status.summaries.byTier.brief.missing).toBe(1);
     expect(body.status.bibliography).toMatchObject({

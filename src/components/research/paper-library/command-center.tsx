@@ -529,7 +529,7 @@ function CorpusImportStatusPanel({
           label="Extraction quality"
           status={status.extractionQuality.status}
           primary={`${status.extractionQuality.currentCount} current / ${status.extractionQuality.missingCount} missing`}
-          detail={`Average quality ${formatPercent(status.extractionQuality.averageScore)} / ${status.extractionQuality.warningCount} warnings`}
+          detail={`Average quality ${formatPercent(status.extractionQuality.averageScore)} / ${status.extractionQuality.warningCount} extraction warnings`}
         />
         <CorpusStatusMetric
           label="Summary status"
@@ -1728,6 +1728,7 @@ export function PaperLibraryCommandCenter({
   const currentScanCreatedAt = scan?.createdAt;
   const currentScanId = scan?.id;
   const currentScanInFlight = scan ? isScanInFlight(scan) : false;
+  const currentScanStatus = scan?.status;
   const currentScanUpdatedAt = scan?.updatedAt;
 
   useEffect(() => {
@@ -1776,7 +1777,7 @@ export function PaperLibraryCommandCenter({
       return;
     }
     void loadCorpusStatus(session.scanId);
-  }, [currentScanUpdatedAt, loadCorpusStatus, session.scanId, sessionRestored]);
+  }, [currentScanStatus, loadCorpusStatus, session.scanId, sessionRestored]);
 
   useEffect(() => {
     if (!sessionRestored) return;
