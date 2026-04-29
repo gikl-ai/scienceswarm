@@ -71,13 +71,6 @@ describe("paper corpus source inventory", () => {
         rank: 1,
       },
       {
-        id: "paper-1:source:sidecar-html-papers-local-paper-1-html",
-        origin: "local_sidecar",
-        sourceType: "html",
-        status: "fallback",
-        rank: 2,
-      },
-      {
         id: "paper-1:source:sidecar-latex-papers-local-paper-1-tex",
         origin: "local_sidecar",
         sourceType: "latex",
@@ -85,11 +78,18 @@ describe("paper corpus source inventory", () => {
         rank: 2,
       },
       {
+        id: "paper-1:source:sidecar-html-papers-local-paper-1-html",
+        origin: "local_sidecar",
+        sourceType: "html",
+        status: "fallback",
+        rank: 3,
+      },
+      {
         id: "paper-1:source:local-pdf",
         origin: "local_pdf",
         sourceType: "pdf",
         status: "fallback",
-        rank: 3,
+        rank: 4,
       },
     ]);
     expect(candidates[0]?.url).toBe("https://arxiv.org/e-print/2401.01234");
@@ -118,6 +118,36 @@ describe("paper corpus source inventory", () => {
     expect(candidates.map((candidate) => [candidate.origin, candidate.status])).toEqual([
       ["local_sidecar", "preferred"],
       ["local_pdf", "fallback"],
+    ]);
+  });
+
+  it("prefers local LaTeX over local HTML when both sidecars are available", () => {
+    const candidates = buildPaperCorpusSourceCandidates({
+      item: reviewItem({
+        candidates: [
+          {
+            id: "identity-1",
+            identifiers: { doi: "10.1000/example" },
+            title: "Local Paper 1",
+            authors: [],
+            source: "crossref",
+            confidence: 0.82,
+            evidence: ["doi"],
+            conflicts: [],
+          },
+        ],
+      }),
+      detectedAt: now,
+      sidecarRelativePaths: [
+        "papers/local-paper-1.html",
+        "papers/local-paper-1.tex",
+      ],
+    });
+
+    expect(candidates.map((candidate) => [candidate.sourceType, candidate.status, candidate.preferenceRank])).toEqual([
+      ["latex", "preferred", 2],
+      ["html", "fallback", 3],
+      ["pdf", "fallback", 4],
     ]);
   });
 

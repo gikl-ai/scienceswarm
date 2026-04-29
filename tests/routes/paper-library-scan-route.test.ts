@@ -92,11 +92,50 @@ describe("paper-library scan route", () => {
         scanId: started.scanId,
         papers: [
           {
+            status: "current",
             sourceCandidates: expect.arrayContaining([
+              expect.objectContaining({ sourceType: "latex", origin: "local_sidecar", status: "preferred" }),
               expect.objectContaining({ sourceType: "pdf", origin: "local_pdf" }),
+            ]),
+            sourceArtifact: expect.objectContaining({
+              sourceType: "latex",
+              origin: "local_sidecar",
+              status: "current",
+              normalizedMarkdown: expect.stringContaining("## Methods"),
+            }),
+            sectionMap: expect.objectContaining({
+              status: "current",
+              sections: expect.arrayContaining([
+                expect.objectContaining({ sectionId: "methods" }),
+              ]),
+            }),
+            summaries: expect.arrayContaining([
+              expect.objectContaining({
+                tier: "relevance",
+                status: "current",
+                summaryMarkdown: expect.stringContaining("Local relevance card"),
+              }),
             ]),
           },
         ],
+      },
+    });
+
+    const { POST: retryCorpusStatus } = await import("@/app/api/brain/paper-library/corpus-status/route");
+    const retryResponse = await retryCorpusStatus(new Request("http://localhost/api/brain/paper-library/corpus-status", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "retry",
+        project: "project-alpha",
+        scanId: started.scanId,
+      }),
+    }));
+    expect(retryResponse.status).toBe(200);
+    await expect(retryResponse.json()).resolves.toMatchObject({
+      ok: true,
+      status: {
+        extractionQuality: { currentCount: 1 },
+        summaries: { byTier: { relevance: { current: 1 } } },
       },
     });
   });

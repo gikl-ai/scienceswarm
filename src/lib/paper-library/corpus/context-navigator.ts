@@ -68,9 +68,12 @@ function pagePaperSlug(page: CorpusContextPage): string | null {
 
 function isPaperPage(page: CorpusContextPage): boolean {
   const frontmatter = pageFrontmatter(page);
-  return readString(frontmatter.entity_type) === "paper"
-    || readString(frontmatter.type) === "paper"
-    || readRecord(frontmatter.scientific_corpus) !== null;
+  return (
+    (readString(frontmatter.entity_type) === "paper"
+      || readString(frontmatter.type) === "paper"
+      || page.type === "paper")
+    && readRecord(frontmatter.scientific_corpus) !== null
+  );
 }
 
 function summaryTier(page: CorpusContextPage): PaperSummaryTier | null {

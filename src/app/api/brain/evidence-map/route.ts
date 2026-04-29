@@ -58,6 +58,11 @@ type EvidenceMapPayload = {
   honesty_note: string;
 };
 
+type SelectedContextLink = {
+  to: string;
+  context: string;
+};
+
 type EvidenceMapRequestBody = {
   study?: unknown;
   studyId?: unknown;
@@ -501,6 +506,58 @@ function buildEvidenceMapMarkdown(args: {
   );
 }
 
+function buildSelectedContextLinks(packet: ResearchContextPacket): SelectedContextLink[] {
+  const links = new Map<string, string>();
+  const add = (to: string | undefined, context: string) => {
+    if (!to || links.has(to)) return;
+    links.set(to, context);
+  };
+
+  for (const paper of packet.papers) {
+    add(
+      paper.paperSlug,
+      `Selected local corpus paper for evidence map using ${packet.selectionPolicy}.`,
+    );
+    add(paper.relevanceCardSlug, `Selected relevance summary for ${paper.paperSlug}.`);
+    add(paper.briefSummarySlug, `Selected brief summary for ${paper.paperSlug}.`);
+    add(paper.detailedSummarySlug, `Selected detailed summary for ${paper.paperSlug}.`);
+    for (const chunk of paper.sourceChunks) {
+      add(
+        chunk.sourceSlug,
+        `Selected source text for ${paper.paperSlug}${chunk.sectionId ? ` section ${chunk.sectionId}` : ""}.`,
+      );
+    }
+    for (const graphPath of paper.graphPaths) {
+      add(
+        graphPath.to,
+        `Selected through corpus relation ${graphPath.relation} from ${graphPath.from}.`,
+      );
+    }
+  }
+  for (const missingPaper of packet.missingPapers) {
+    add(
+      missingPaper.bibliographySlug,
+      `Selected missing corpus bibliography node: ${missingPaper.acquisitionStatus}.`,
+    );
+  }
+
+  return [...links.entries()].map(([to, context]) => ({ to, context }));
+}
+
+async function linkSelectedContextPages(args: {
+  from: string;
+  packet: ResearchContextPacket | null;
+  gbrain: ReturnType<typeof createInProcessGbrainClient>;
+}): Promise<void> {
+  if (!args.packet) return;
+  for (const link of buildSelectedContextLinks(args.packet)) {
+    await args.gbrain.linkPages(args.from, link.to, {
+      linkType: "selected_for_context",
+      context: link.context,
+    });
+  }
+}
+
 function selectPagesForContextPacket(
   pages: BrainPage[],
   packet: ResearchContextPacket,
@@ -732,6 +789,7 @@ export async function POST(request: Request) {
 
     const gbrain = createInProcessGbrainClient();
     await gbrain.putPage(slug, markdown);
+    await linkSelectedContextPages({ from: slug, packet: contextPacket, gbrain });
 
     return Response.json({
       brain_slug: slug,

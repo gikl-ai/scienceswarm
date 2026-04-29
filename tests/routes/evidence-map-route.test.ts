@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentUserHandle: vi.fn(),
   getLLMClient: vi.fn(),
   isLocalRequest: vi.fn(),
+  linkPages: vi.fn(),
   putPage: vi.fn(),
 }));
 
@@ -28,6 +29,7 @@ vi.mock("@/brain/project-organizer", () => ({
 
 vi.mock("@/brain/in-process-gbrain-client", () => ({
   createInProcessGbrainClient: () => ({
+    linkPages: mocks.linkPages,
     putPage: mocks.putPage,
   }),
 }));
@@ -81,6 +83,7 @@ describe("evidence map route", () => {
     mocks.getCurrentUserHandle.mockReset();
     mocks.getLLMClient.mockReset();
     mocks.isLocalRequest.mockReset();
+    mocks.linkPages.mockReset();
     mocks.putPage.mockReset();
 
     mocks.getBrainConfig.mockReturnValue({ synthesisModel: "test-model" });
@@ -97,6 +100,7 @@ describe("evidence map route", () => {
     });
     mocks.filterProjectPages.mockReturnValue(sourcePages);
     mocks.isLocalRequest.mockResolvedValue(true);
+    mocks.linkPages.mockResolvedValue({ stdout: "", stderr: "" });
     mocks.putPage.mockResolvedValue({ stdout: "", stderr: "" });
     mocks.getLLMClient.mockReturnValue({
       complete: vi.fn(async () => ({
@@ -154,6 +158,7 @@ describe("evidence map route", () => {
     await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
     expect(mocks.ensureBrainStoreReady).not.toHaveBeenCalled();
     expect(mocks.putPage).not.toHaveBeenCalled();
+    expect(mocks.linkPages).not.toHaveBeenCalled();
   });
 
   it("generates a source-backed evidence-map artifact through the real route boundary", async () => {
@@ -187,6 +192,7 @@ describe("evidence map route", () => {
     expect(markdown).toContain("wiki/projects/project-alpha/results/resistance-note");
     expect(markdown).toContain("organoid-table.csv");
     expect(markdown).not.toContain("A hallucinated source should not become evidence.");
+    expect(mocks.linkPages).not.toHaveBeenCalled();
   });
 
   it("keeps projectId as a compatibility alias for evidence-map generation", async () => {
@@ -330,7 +336,7 @@ describe("evidence map route", () => {
     expect(completionInput.user).toContain("ResearchContextPacket");
     expect(completionInput.user).toContain("local-literature-first-v1");
 
-    const [, markdown] = mocks.putPage.mock.calls[0] as unknown as [
+    const [evidenceMapSlug, markdown] = mocks.putPage.mock.calls[0] as unknown as [
       string,
       string,
     ];
@@ -338,5 +344,26 @@ describe("evidence map route", () => {
     expect(markdown).toContain("wiki/entities/papers/good-pdf-2024");
     expect(markdown).toContain("wiki/bibliography/doi-10-1000-example-good-pdf-0");
     expect(markdown).toContain("The corpus packet selected one local paper.");
+    expect(mocks.linkPages).toHaveBeenCalledWith(
+      evidenceMapSlug,
+      "wiki/entities/papers/good-pdf-2024",
+      expect.objectContaining({
+        linkType: "selected_for_context",
+      }),
+    );
+    expect(mocks.linkPages).toHaveBeenCalledWith(
+      evidenceMapSlug,
+      "wiki/sources/papers/good-pdf-2024/source",
+      expect.objectContaining({
+        linkType: "selected_for_context",
+      }),
+    );
+    expect(mocks.linkPages).toHaveBeenCalledWith(
+      evidenceMapSlug,
+      "wiki/summaries/papers/good-pdf-2024/relevance",
+      expect.objectContaining({
+        linkType: "selected_for_context",
+      }),
+    );
   });
 });
