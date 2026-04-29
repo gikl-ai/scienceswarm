@@ -428,11 +428,15 @@ function CorpusImportStatusPanel({
   error,
   loading,
   onRefresh,
+  onRetry,
+  retrying,
   status,
 }: {
   error: string | null;
   loading: boolean;
   onRefresh: () => void;
+  onRetry: () => void;
+  retrying: boolean;
   status: PaperCorpusImportStatus | null;
 }) {
   if (loading && !status) {
@@ -454,14 +458,16 @@ function CorpusImportStatusPanel({
             <p className="text-sm font-semibold text-foreground">Scientific corpus status</p>
             <p className="mt-1 text-sm text-muted">Corpus source, extraction, summary, bibliography, and graph status appears after a scan is selected.</p>
           </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
-          >
-            <ArrowsClockwise size={14} />
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+            >
+              <ArrowsClockwise size={14} />
+              Refresh
+            </button>
+          </div>
         </div>
         {error && (
           <div role="alert" className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
@@ -501,15 +507,26 @@ function CorpusImportStatusPanel({
               : "No corpus manifest is available for this scan yet."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-        >
-          {loading ? <SpinnerGap className="animate-spin" size={14} /> : <ArrowsClockwise size={14} />}
-          Refresh
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={retrying || loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            {retrying ? <SpinnerGap className="animate-spin" size={14} /> : <ClockCounterClockwise size={14} />}
+            Retry ingestion
+          </button>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={loading || retrying}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            {loading ? <SpinnerGap className="animate-spin" size={14} /> : <ArrowsClockwise size={14} />}
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -1212,6 +1229,7 @@ export function PaperLibraryCommandCenter({
   const [corpusStatus, setCorpusStatus] = useState<PaperCorpusImportStatus | null>(null);
   const [corpusStatusLoading, setCorpusStatusLoading] = useState(false);
   const [corpusStatusError, setCorpusStatusError] = useState<string | null>(null);
+  const [corpusRetrying, setCorpusRetrying] = useState(false);
 
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>(DEFAULT_REVIEW_FILTER);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -1294,6 +1312,7 @@ export function PaperLibraryCommandCenter({
     setCorpusStatus(null);
     setCorpusStatusError(null);
     setCorpusStatusLoading(false);
+    setCorpusRetrying(false);
   }, []);
 
   useEffect(() => {
@@ -1453,6 +1472,30 @@ export function PaperLibraryCommandCenter({
       setCorpusStatusError(error instanceof Error ? error.message : "Could not load corpus status.");
     } finally {
       setCorpusStatusLoading(false);
+    }
+  }, [projectSlug]);
+
+  const retryCorpusIngestion = useCallback(async (scanId: string) => {
+    setCorpusRetrying(true);
+    setCorpusStatusError(null);
+    try {
+      const payload = await paperLibraryFetchJson<{ ok: true; status: PaperCorpusImportStatus }>(
+        "/api/brain/paper-library/corpus-status",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "retry",
+            project: projectSlug,
+            scanId,
+          }),
+        },
+      );
+      setCorpusStatus(payload.status);
+    } catch (error) {
+      setCorpusStatusError(error instanceof Error ? error.message : "Could not retry corpus ingestion.");
+    } finally {
+      setCorpusRetrying(false);
     }
   }, [projectSlug]);
 
@@ -3813,6 +3856,10 @@ export function PaperLibraryCommandCenter({
               onRefresh={() => {
                 if (session.scanId) void loadCorpusStatus(session.scanId);
               }}
+              onRetry={() => {
+                if (session.scanId) void retryCorpusIngestion(session.scanId);
+              }}
+              retrying={corpusRetrying}
               status={corpusStatus}
             />
           </div>
@@ -3844,6 +3891,7 @@ export function PaperLibraryCommandCenter({
     corpusStatus,
     corpusStatusError,
     corpusStatusLoading,
+    corpusRetrying,
     draftsByItemId,
     gapActionSuggestionId,
     gapFilter,
@@ -3903,6 +3951,7 @@ export function PaperLibraryCommandCenter({
     manifestPage,
     patchSession,
     repairingManifest,
+    retryCorpusIngestion,
     reviewActionItemId,
     reviewError,
     reviewFilter,

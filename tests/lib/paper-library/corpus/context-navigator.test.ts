@@ -172,4 +172,30 @@ describe("research context navigator", () => {
     ]));
     expect(formatResearchContextPacketForPrompt(packet)).toContain("local-literature-first-v1");
   });
+
+  it("does not treat generic paper pages as corpus paper artifacts", () => {
+    const packet = buildResearchContextPacketFromPages({
+      studySlug: "project-alpha",
+      question: "Does EGFR resistance require MEK co-targeting?",
+      pages: [
+        {
+          path: "wiki/projects/project-alpha/notes/legacy-paper-note",
+          title: "Legacy paper note",
+          type: "paper",
+          content: "A generic study note about EGFR resistance.",
+          frontmatter: {
+            entity_type: "paper",
+            project: "project-alpha",
+          },
+        },
+      ],
+      capabilities,
+      generatedAt: now,
+    });
+
+    expect(packet.papers).toEqual([]);
+    expect(packet.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "insufficient_local_evidence" }),
+    ]));
+  });
 });

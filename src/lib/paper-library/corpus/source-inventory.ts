@@ -101,6 +101,12 @@ function sourceTypeForSidecar(relativePath: string): PaperSourceType | null {
   return null;
 }
 
+function preferenceRankForSidecar(sourceType: PaperSourceType): number {
+  if (sourceType === "latex") return 2;
+  if (sourceType === "html") return 3;
+  return 4;
+}
+
 function candidateId(paperId: string, suffix: string): string {
   return `${paperId}:source:${suffix}`;
 }
@@ -193,7 +199,7 @@ export function buildPaperCorpusSourceCandidates(
       sourceType,
       origin: "local_sidecar",
       status: "available",
-      preferenceRank: 2,
+      preferenceRank: preferenceRankForSidecar(sourceType),
       confidence: Math.max(confidence, 0.72),
       identifiers,
       title,
@@ -212,7 +218,7 @@ export function buildPaperCorpusSourceCandidates(
       sourceType: "pdf",
       origin: "local_pdf",
       status: "available",
-      preferenceRank: 3,
+      preferenceRank: 4,
       confidence,
       identifiers,
       title,
@@ -226,7 +232,8 @@ export function buildPaperCorpusSourceCandidates(
     }));
   }
 
-  return withPreferredCandidate(sourceCandidates);
+  return withPreferredCandidate(sourceCandidates)
+    .sort((left, right) => left.preferenceRank - right.preferenceRank || left.id.localeCompare(right.id));
 }
 
 export function buildPaperCorpusIngestPaper(input: BuildPaperCorpusIngestPaperInput): PaperIngestPaper {

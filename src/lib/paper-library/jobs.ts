@@ -17,7 +17,10 @@ import {
   getPaperLibraryScanPath,
   readPersistedState,
 } from "./state";
-import { writePaperCorpusManifestForScan } from "./corpus/pipeline";
+import {
+  writePaperCorpusManifestForScan,
+  type PaperCorpusPdfExtractionPayload,
+} from "./corpus/pipeline";
 import {
   createIdentityCandidateFromEvidence,
   extractPaperIdentityEvidence,
@@ -328,6 +331,7 @@ export async function runPaperLibraryScanJob(
     let needsReviewCount = 0;
     let readyForApplyCount = 0;
     const allReviewItems: PaperReviewItem[] = [];
+    const pdfExtractionByPaperId: Record<string, PaperCorpusPdfExtractionPayload> = {};
 
     async function flushReviewShard(): Promise<void> {
       if (reviewShardBuffer.length === 0) return;
@@ -420,6 +424,13 @@ export async function runPaperLibraryScanJob(
       };
       reviewShardBuffer.push(reviewItem);
       allReviewItems.push(reviewItem);
+      if (extracted) {
+        pdfExtractionByPaperId[reviewItem.paperId] = {
+          text: extracted.text,
+          wordCount: extracted.wordCount,
+          pageCount: extracted.pageCount,
+        };
+      }
 
       if (reviewShardBuffer.length >= REVIEW_SHARD_SIZE) {
         await flushReviewShard();
@@ -474,6 +485,7 @@ export async function runPaperLibraryScanJob(
         updatedAt: nowIso(),
         items: allReviewItems,
         stateRoot,
+        pdfExtractionByPaperId,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Corpus source inventory failed.";
