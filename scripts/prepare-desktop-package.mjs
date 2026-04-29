@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,6 +13,10 @@ export const DESKTOP_PACKAGE_SCRIPT_INPUTS = [
   "install-runtime-prereqs.sh",
   "install-desktop-runtime-prereqs.sh",
 ];
+
+export function shouldMarkDesktopPackageScriptExecutable(scriptName) {
+  return scriptName.endsWith(".sh");
+}
 
 export function resolveDesktopPackageAppDir(root = projectRoot) {
   return path.join(root, DESKTOP_PACKAGE_APP_DIR);
@@ -89,10 +93,14 @@ export function prepareDesktopPackage(root = projectRoot) {
     filter: (sourcePath) => shouldCopyDesktopShellPath(sourcePath, desktopRoot),
   });
   for (const scriptName of DESKTOP_PACKAGE_SCRIPT_INPUTS) {
+    const stagedScriptPath = path.join(packageDir, "scripts", scriptName);
     copyTree(
       path.join(root, "scripts", scriptName),
-      path.join(packageDir, "scripts", scriptName),
+      stagedScriptPath,
     );
+    if (shouldMarkDesktopPackageScriptExecutable(scriptName)) {
+      chmodSync(stagedScriptPath, 0o755);
+    }
   }
 
   writeFileSync(

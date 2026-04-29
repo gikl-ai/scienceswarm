@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -11,6 +11,7 @@ import {
   prepareDesktopPackage,
   resolveDesktopPackageAppDir,
   shouldCopyDesktopShellPath,
+  shouldMarkDesktopPackageScriptExecutable,
 } from "../../scripts/prepare-desktop-package.mjs";
 
 describe("prepare-desktop-package", () => {
@@ -70,6 +71,9 @@ describe("prepare-desktop-package", () => {
       expect(existsSync(path.join(packageDir, "desktop", "main.mjs"))).toBe(true);
       for (const scriptName of DESKTOP_PACKAGE_SCRIPT_INPUTS) {
         expect(existsSync(path.join(packageDir, "scripts", scriptName))).toBe(true);
+        if (shouldMarkDesktopPackageScriptExecutable(scriptName)) {
+          expect(statSync(path.join(packageDir, "scripts", scriptName)).mode & 0o111).not.toBe(0);
+        }
       }
       expect(existsSync(path.join(packageDir, "desktop", "ollama-models", "model.gguf"))).toBe(false);
       expect(existsSync(path.join(packageDir, "desktop", "cache", "blobs", "sha256"))).toBe(false);
@@ -134,5 +138,11 @@ describe("prepare-desktop-package", () => {
     expect(shouldCopyDesktopShellPath(path.join(root, "ollama-models", "model.gguf"), root)).toBe(false);
     expect(shouldCopyDesktopShellPath(path.join(root, "cache", "blobs", "sha256"), root)).toBe(false);
     expect(shouldCopyDesktopShellPath(path.join(root, "cache", "manifests", "model"), root)).toBe(false);
+  });
+
+  it("marks only packaged shell scripts as executable", () => {
+    expect(shouldMarkDesktopPackageScriptExecutable("install-runtime-prereqs.sh")).toBe(true);
+    expect(shouldMarkDesktopPackageScriptExecutable("install-desktop-runtime-prereqs.sh")).toBe(true);
+    expect(shouldMarkDesktopPackageScriptExecutable("start-standalone.mjs")).toBe(false);
   });
 });
