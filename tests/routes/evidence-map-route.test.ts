@@ -201,7 +201,26 @@ describe("evidence map route", () => {
   });
 
   it("uses corpus context packets before the fallback page-scan prompt", async () => {
+    const bibliographyPages = Array.from({ length: 16 }, (_, index) => ({
+      path: `wiki/bibliography/doi-10-1000-example-good-pdf-${index}`,
+      title: `Good PDF reference ${index}`,
+      type: "source",
+      content: "A cited paper that is not yet local.",
+      frontmatter: {
+        entity_type: "bibliography_entry",
+        project: "project-alpha",
+        local_status: "metadata_only",
+        seen_in: [
+          {
+            paperSlug: "wiki/entities/papers/good-pdf-2024",
+            extractionSource: "pdf_references",
+            confidence: 0.72,
+          },
+        ],
+      },
+    }));
     const corpusPages = [
+      ...bibliographyPages,
       {
         path: "wiki/entities/papers/good-pdf-2024",
         title: "Good PDF fixture",
@@ -256,24 +275,6 @@ describe("evidence map route", () => {
           paper_slug: "wiki/entities/papers/good-pdf-2024",
         },
       },
-      {
-        path: "wiki/bibliography/doi-10-1000-example-good-pdf",
-        title: "Good PDF reference",
-        type: "source",
-        content: "A cited paper that is not yet local.",
-        frontmatter: {
-          entity_type: "bibliography_entry",
-          project: "project-alpha",
-          local_status: "metadata_only",
-          seen_in: [
-            {
-              paperSlug: "wiki/entities/papers/good-pdf-2024",
-              extractionSource: "pdf_references",
-              confidence: 0.72,
-            },
-          ],
-        },
-      },
     ];
     const complete = vi.fn(async () => ({
       content: JSON.stringify({
@@ -319,9 +320,10 @@ describe("evidence map route", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       summary: {
+        claimCount: 1,
         contextPacketUsed: true,
         contextPaperCount: 1,
-        sourcePageCount: 4,
+        sourcePageCount: 14,
       },
     });
     const [completionInput] = complete.mock.calls[0] as unknown as [{ user: string }];
@@ -334,7 +336,7 @@ describe("evidence map route", () => {
     ];
     expect(markdown).toContain("## Local corpus context");
     expect(markdown).toContain("wiki/entities/papers/good-pdf-2024");
-    expect(markdown).toContain("wiki/bibliography/doi-10-1000-example-good-pdf");
+    expect(markdown).toContain("wiki/bibliography/doi-10-1000-example-good-pdf-0");
     expect(markdown).toContain("The corpus packet selected one local paper.");
   });
 });

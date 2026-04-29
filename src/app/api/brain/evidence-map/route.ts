@@ -506,10 +506,24 @@ function selectPagesForContextPacket(
   packet: ResearchContextPacket,
 ): BrainPage[] {
   const wanted = new Set(researchContextPacketPageSlugs(packet));
+  const pagePriority = (page: BrainPage): number => {
+    const frontmatter = page.frontmatter ?? {};
+    if (frontmatter.source_kind === "paper_source_text" || frontmatter.entity_type === "paper_source") return 0;
+    if (typeof frontmatter.summary_kind === "string" && frontmatter.summary_kind.startsWith("paper_")) return 1;
+    if (page.type === "paper" || frontmatter.entity_type === "paper" || frontmatter.scientific_corpus) return 2;
+    if (frontmatter.entity_type === "bibliography_entry") return 3;
+    return 4;
+  };
+  const candidates = pages
+    .map((page, index) => ({ page, index }))
+    .filter(({ page }) => wanted.has(page.path.replace(/\.md$/i, "")))
+    .sort((left, right) => {
+      const priorityDelta = pagePriority(left.page) - pagePriority(right.page);
+      if (priorityDelta !== 0) return priorityDelta;
+      return left.index - right.index;
+    });
   const selected: BrainPage[] = [];
-  for (const page of pages) {
-    const normalized = page.path.replace(/\.md$/i, "");
-    if (!wanted.has(normalized)) continue;
+  for (const { page } of candidates) {
     selected.push(page);
     if (selected.length >= PAGE_SELECTION_LIMIT) break;
   }
