@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   isDesktopFirstLaunchComplete,
+  isDesktopMainEntrypoint,
   isTrustedDesktopIpcSender,
   logDesktopWindowLoadFailure,
   resolveDesktopDiagnostics,
@@ -224,6 +225,33 @@ describe("desktop main", () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  it("treats packaged Electron browser processes as the desktop entrypoint", () => {
+    expect(isDesktopMainEntrypoint({
+      argv: ["/Applications/ScienceSwarm.app/Contents/MacOS/ScienceSwarm"],
+      modulePath: "/Applications/ScienceSwarm.app/Contents/Resources/app.asar/desktop/main.mjs",
+      versions: { electron: "41.3.0" } as NodeJS.ProcessVersions,
+      processType: "browser",
+    })).toBe(true);
+  });
+
+  it("keeps direct node execution as a desktop entrypoint", () => {
+    expect(isDesktopMainEntrypoint({
+      argv: ["node", "/repo/desktop/main.mjs"],
+      modulePath: "/repo/desktop/main.mjs",
+      versions: {} as NodeJS.ProcessVersions,
+      processType: undefined,
+    })).toBe(true);
+  });
+
+  it("does not auto-launch when imported by non-Electron tests", () => {
+    expect(isDesktopMainEntrypoint({
+      argv: ["node", "/repo/tests/desktop-main.test.ts"],
+      modulePath: "/repo/desktop/main.mjs",
+      versions: {} as NodeJS.ProcessVersions,
+      processType: undefined,
+    })).toBe(false);
   });
 
   it("resolves the desktop first-launch marker path under userData", () => {

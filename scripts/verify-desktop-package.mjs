@@ -10,12 +10,25 @@ const projectRoot = path.resolve(__dirname, "..");
 export const REQUIRED_DESKTOP_PACKAGE_PATHS = [
   ".next/standalone/server.js",
   "desktop/main.mjs",
-  "desktop/preload.mjs",
+  "desktop/preload.cjs",
   "scripts/start-standalone.mjs",
   "scripts/install-runtime-prereqs.sh",
   "scripts/install-desktop-runtime-prereqs.sh",
   "package.json",
 ];
+export const FORBIDDEN_DESKTOP_PACKAGE_SEGMENTS = new Set([
+  ".claude",
+  ".codex",
+  ".gemini",
+  ".git",
+  ".github",
+  ".local",
+  ".worktrees",
+  "blobs",
+  "manifests",
+  "ollama-models",
+  "tests",
+]);
 
 export function resolveDesktopPackageDir(root = projectRoot, packageDir = ".desktop-package/app") {
   return path.resolve(root, packageDir);
@@ -50,11 +63,21 @@ function walkPackagePaths(packageDir) {
 export function isForbiddenDesktopPackagePath(filePath, packageDir) {
   const relativePath = path.relative(packageDir, filePath).split(path.sep).join("/");
   const segments = relativePath.split("/");
+  const basename = segments.at(-1) ?? "";
+  const standalonePrefix = ".next/standalone/";
+  const standaloneRelativePath = relativePath.startsWith(standalonePrefix)
+    ? relativePath.slice(standalonePrefix.length)
+    : null;
   return (
     relativePath.endsWith(".gguf")
-    || segments.includes("ollama-models")
-    || segments.includes("blobs")
-    || segments.includes("manifests")
+    || basename === ".env"
+    || basename.startsWith(".env.")
+    || (
+      standaloneRelativePath != null
+      && !standaloneRelativePath.includes("/")
+      && standaloneRelativePath.endsWith(".md")
+    )
+    || segments.some((segment) => FORBIDDEN_DESKTOP_PACKAGE_SEGMENTS.has(segment))
   );
 }
 

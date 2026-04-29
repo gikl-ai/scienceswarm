@@ -7,6 +7,7 @@ import {
   isStandaloneEntrypoint,
   resolveStandaloneServerEnv,
   resolveStandaloneServerPath,
+  resolveStandaloneServerRoot,
 } from "../../scripts/start-standalone.mjs";
 
 describe("start-standalone", () => {
@@ -33,6 +34,38 @@ describe("start-standalone", () => {
   it("resolves the packaged standalone server location", () => {
     expect(resolveStandaloneServerPath("/tmp/scienceswarm")).toBe(
       path.join("/tmp/scienceswarm", ".next", "standalone", "server.js"),
+    );
+  });
+
+  it("resolves asar-packaged standalone payloads from app.asar.unpacked", () => {
+    const appAsarRoot = path.join(
+      "/Applications",
+      "ScienceSwarm.app",
+      "Contents",
+      "Resources",
+      "app.asar",
+    );
+
+    expect(resolveStandaloneServerRoot(appAsarRoot)).toBe(
+      path.join(
+        "/Applications",
+        "ScienceSwarm.app",
+        "Contents",
+        "Resources",
+        "app.asar.unpacked",
+      ),
+    );
+    expect(resolveStandaloneServerPath(appAsarRoot)).toBe(
+      path.join(
+        "/Applications",
+        "ScienceSwarm.app",
+        "Contents",
+        "Resources",
+        "app.asar.unpacked",
+        ".next",
+        "standalone",
+        "server.js",
+      ),
     );
   });
 

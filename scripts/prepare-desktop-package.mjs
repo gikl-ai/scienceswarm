@@ -13,6 +13,19 @@ export const DESKTOP_PACKAGE_SCRIPT_INPUTS = [
   "install-runtime-prereqs.sh",
   "install-desktop-runtime-prereqs.sh",
 ];
+export const FORBIDDEN_DESKTOP_PACKAGE_SEGMENTS = new Set([
+  ".claude",
+  ".codex",
+  ".gemini",
+  ".git",
+  ".github",
+  ".local",
+  ".worktrees",
+  "blobs",
+  "manifests",
+  "ollama-models",
+  "tests",
+]);
 
 export function shouldMarkDesktopPackageScriptExecutable(scriptName) {
   return scriptName.endsWith(".sh");
@@ -76,6 +89,23 @@ export function shouldCopyDesktopShellPath(sourcePath, desktopRoot) {
   );
 }
 
+export function shouldCopyStandalonePackagePath(sourcePath, standaloneRoot) {
+  const relativePath = path.relative(standaloneRoot, sourcePath).split(path.sep).join("/");
+  if (!relativePath || relativePath === ".") {
+    return true;
+  }
+
+  const segments = relativePath.split("/");
+  const basename = segments.at(-1) ?? "";
+  return !(
+    relativePath.endsWith(".gguf")
+    || basename === ".env"
+    || basename.startsWith(".env.")
+    || (!relativePath.includes("/") && relativePath.endsWith(".md"))
+    || segments.some((segment) => FORBIDDEN_DESKTOP_PACKAGE_SEGMENTS.has(segment))
+  );
+}
+
 export function prepareDesktopPackage(root = projectRoot) {
   const packageDir = resolveDesktopPackageAppDir(root);
   const desktopRoot = path.join(root, "desktop");
@@ -88,6 +118,12 @@ export function prepareDesktopPackage(root = projectRoot) {
   copyTree(
     path.join(root, ".next", "standalone"),
     path.join(packageDir, ".next", "standalone"),
+    {
+      filter: (sourcePath) => shouldCopyStandalonePackagePath(
+        sourcePath,
+        path.join(root, ".next", "standalone"),
+      ),
+    },
   );
   copyTree(desktopRoot, path.join(packageDir, "desktop"), {
     filter: (sourcePath) => shouldCopyDesktopShellPath(sourcePath, desktopRoot),

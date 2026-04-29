@@ -11,6 +11,7 @@ import {
   prepareDesktopPackage,
   resolveDesktopPackageAppDir,
   shouldCopyDesktopShellPath,
+  shouldCopyStandalonePackagePath,
   shouldMarkDesktopPackageScriptExecutable,
 } from "../../scripts/prepare-desktop-package.mjs";
 
@@ -21,6 +22,15 @@ describe("prepare-desktop-package", () => {
       mkdirSync(path.join(root, ".next", "standalone", "node_modules", "next"), {
         recursive: true,
       });
+      mkdirSync(path.join(root, ".next", "standalone", ".local", "private-docs"), {
+        recursive: true,
+      });
+      mkdirSync(path.join(root, ".next", "standalone", ".worktrees", "old-branch"), {
+        recursive: true,
+      });
+      mkdirSync(path.join(root, ".next", "standalone", ".git"), { recursive: true });
+      mkdirSync(path.join(root, ".next", "standalone", ".github"), { recursive: true });
+      mkdirSync(path.join(root, ".next", "standalone", "docs"), { recursive: true });
       mkdirSync(path.join(root, "desktop", "ollama-models"), { recursive: true });
       mkdirSync(path.join(root, "desktop", "cache", "blobs"), { recursive: true });
       mkdirSync(path.join(root, "desktop", "cache", "manifests"), { recursive: true });
@@ -28,8 +38,19 @@ describe("prepare-desktop-package", () => {
 
       writeFileSync(path.join(root, ".next", "standalone", "server.js"), "server");
       writeFileSync(path.join(root, ".next", "standalone", "node_modules", "next", "index.js"), "next");
+      writeFileSync(
+        path.join(root, ".next", "standalone", ".local", "private-docs", "plan.md"),
+        "private",
+      );
+      writeFileSync(path.join(root, ".next", "standalone", ".worktrees", "old-branch", "x"), "x");
+      writeFileSync(path.join(root, ".next", "standalone", ".git", "HEAD"), "ref");
+      writeFileSync(path.join(root, ".next", "standalone", ".github", "pull_request_template.md"), "template");
+      writeFileSync(path.join(root, ".next", "standalone", ".env"), "SECRET=value");
+      writeFileSync(path.join(root, ".next", "standalone", "CHAT_TIMING_FIX_ENG_PLAN.md"), "plan");
+      writeFileSync(path.join(root, ".next", "standalone", "README.md"), "readme");
+      writeFileSync(path.join(root, ".next", "standalone", "docs", "desktop-installers.md"), "public docs");
       writeFileSync(path.join(root, "desktop", "main.mjs"), "main");
-      writeFileSync(path.join(root, "desktop", "preload.mjs"), "preload");
+      writeFileSync(path.join(root, "desktop", "preload.cjs"), "preload");
       writeFileSync(path.join(root, "desktop", "ollama-models", "model.gguf"), "weights");
       writeFileSync(path.join(root, "desktop", "cache", "blobs", "sha256"), "blob");
       writeFileSync(path.join(root, "desktop", "cache", "manifests", "model"), "manifest");
@@ -52,6 +73,11 @@ describe("prepare-desktop-package", () => {
           appId: "ai.scienceswarm.desktop",
           asar: true,
           asarUnpack: [".next/standalone/**"],
+          extraResources: [{
+            from: ".next/standalone/node_modules",
+            to: "app.asar.unpacked/.next/standalone/node_modules",
+            filter: ["**/*"],
+          }],
           npmRebuild: false,
           files: ["**/*"],
           directories: {
@@ -68,7 +94,16 @@ describe("prepare-desktop-package", () => {
 
       expect(packageDir).toBe(resolveDesktopPackageAppDir(root));
       expect(existsSync(path.join(packageDir, ".next", "standalone", "server.js"))).toBe(true);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", ".local"))).toBe(false);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", ".worktrees"))).toBe(false);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", ".git"))).toBe(false);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", ".github"))).toBe(false);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", ".env"))).toBe(false);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "CHAT_TIMING_FIX_ENG_PLAN.md"))).toBe(false);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "README.md"))).toBe(false);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "docs", "desktop-installers.md"))).toBe(true);
       expect(existsSync(path.join(packageDir, "desktop", "main.mjs"))).toBe(true);
+      expect(existsSync(path.join(packageDir, "desktop", "preload.cjs"))).toBe(true);
       for (const scriptName of DESKTOP_PACKAGE_SCRIPT_INPUTS) {
         expect(existsSync(path.join(packageDir, "scripts", scriptName))).toBe(true);
         if (shouldMarkDesktopPackageScriptExecutable(scriptName)) {
@@ -89,6 +124,11 @@ describe("prepare-desktop-package", () => {
           appId: "ai.scienceswarm.desktop",
           asar: true,
           asarUnpack: [".next/standalone/**"],
+          extraResources: [{
+            from: ".next/standalone/node_modules",
+            to: "app.asar.unpacked/.next/standalone/node_modules",
+            filter: ["**/*"],
+          }],
           npmRebuild: false,
           files: ["**/*"],
           directories: {
@@ -138,6 +178,21 @@ describe("prepare-desktop-package", () => {
     expect(shouldCopyDesktopShellPath(path.join(root, "ollama-models", "model.gguf"), root)).toBe(false);
     expect(shouldCopyDesktopShellPath(path.join(root, "cache", "blobs", "sha256"), root)).toBe(false);
     expect(shouldCopyDesktopShellPath(path.join(root, "cache", "manifests", "model"), root)).toBe(false);
+  });
+
+  it("filters local state and agent worktrees from the standalone payload", () => {
+    const root = path.join("/tmp", "standalone");
+
+    expect(shouldCopyStandalonePackagePath(path.join(root, "server.js"), root)).toBe(true);
+    expect(shouldCopyStandalonePackagePath(path.join(root, ".local", "private-docs", "plan.md"), root)).toBe(false);
+    expect(shouldCopyStandalonePackagePath(path.join(root, ".worktrees", "branch", "file"), root)).toBe(false);
+    expect(shouldCopyStandalonePackagePath(path.join(root, ".git", "HEAD"), root)).toBe(false);
+    expect(shouldCopyStandalonePackagePath(path.join(root, ".github", "pull_request_template.md"), root)).toBe(false);
+    expect(shouldCopyStandalonePackagePath(path.join(root, ".env"), root)).toBe(false);
+    expect(shouldCopyStandalonePackagePath(path.join(root, "CHAT_TIMING_ANALYSIS.md"), root)).toBe(false);
+    expect(shouldCopyStandalonePackagePath(path.join(root, "README.md"), root)).toBe(false);
+    expect(shouldCopyStandalonePackagePath(path.join(root, "docs", "desktop-installers.md"), root)).toBe(true);
+    expect(shouldCopyStandalonePackagePath(path.join(root, "desktop", "model.gguf"), root)).toBe(false);
   });
 
   it("marks only packaged shell scripts as executable", () => {

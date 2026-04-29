@@ -5,7 +5,11 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export function resolveStandaloneServerPath(cwd = process.cwd()) {
-  return path.join(cwd, ".next", "standalone", "server.js");
+  return path.join(resolveStandaloneServerRoot(cwd), ".next", "standalone", "server.js");
+}
+
+export function resolveStandaloneServerRoot(cwd = process.cwd()) {
+  return cwd.replace(/\.asar(?=$|[\\/])/, ".asar.unpacked");
 }
 
 /**

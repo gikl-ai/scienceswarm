@@ -77,6 +77,43 @@ describe("verify-desktop-package", () => {
     }
   });
 
+  it("rejects local state, private docs, and agent worktree payloads", () => {
+    const root = path.join(tmpdir(), `scienceswarm-desktop-package-verify-${Date.now()}`);
+    const packageDir = path.join(root, ".desktop-package", "app");
+    try {
+      writeRequiredPackageFiles(packageDir);
+      mkdirSync(path.join(packageDir, ".next", "standalone", ".local", "private-docs"), { recursive: true });
+      writeFileSync(path.join(packageDir, ".next", "standalone", ".local", "private-docs", "plan.md"), "private");
+      mkdirSync(path.join(packageDir, ".next", "standalone", ".worktrees", "old-branch"), { recursive: true });
+      writeFileSync(path.join(packageDir, ".next", "standalone", ".worktrees", "old-branch", "x"), "x");
+      mkdirSync(path.join(packageDir, ".next", "standalone", ".git"), { recursive: true });
+      writeFileSync(path.join(packageDir, ".next", "standalone", ".git", "HEAD"), "ref");
+      mkdirSync(path.join(packageDir, ".next", "standalone", ".github"), { recursive: true });
+      writeFileSync(path.join(packageDir, ".next", "standalone", ".github", "pull_request_template.md"), "template");
+      writeFileSync(path.join(packageDir, ".next", "standalone", ".env"), "SECRET=value");
+      writeFileSync(path.join(packageDir, ".next", "standalone", "CHAT_TIMING_FIX_ENG_PLAN.md"), "plan");
+
+      expect(findDesktopPackageProblems({ root })).toEqual(
+        expect.arrayContaining([
+          "Forbidden desktop package payload path: .next/standalone/.local",
+          "Forbidden desktop package payload path: .next/standalone/.local/private-docs",
+          "Forbidden desktop package payload path: .next/standalone/.local/private-docs/plan.md",
+          "Forbidden desktop package payload path: .next/standalone/.worktrees",
+          "Forbidden desktop package payload path: .next/standalone/.worktrees/old-branch",
+          "Forbidden desktop package payload path: .next/standalone/.worktrees/old-branch/x",
+          "Forbidden desktop package payload path: .next/standalone/.git",
+          "Forbidden desktop package payload path: .next/standalone/.git/HEAD",
+          "Forbidden desktop package payload path: .next/standalone/.github",
+          "Forbidden desktop package payload path: .next/standalone/.github/pull_request_template.md",
+          "Forbidden desktop package payload path: .next/standalone/.env",
+          "Forbidden desktop package payload path: .next/standalone/CHAT_TIMING_FIX_ENG_PLAN.md",
+        ]),
+      );
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("does not follow symlinked directories while scanning package payloads", () => {
     const root = path.join(tmpdir(), `scienceswarm-desktop-package-verify-${Date.now()}`);
     const packageDir = path.join(root, ".desktop-package", "app");
