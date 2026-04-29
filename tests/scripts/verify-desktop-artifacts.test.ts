@@ -6,6 +6,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  isInstallerArtifactForPlatform,
+  normalizeDesktopArtifactPlatform,
   parseChecksumManifest,
   verifyDesktopArtifacts,
 } from "../../scripts/verify-desktop-artifacts.mjs";
@@ -42,6 +44,33 @@ describe("verify-desktop-artifacts", () => {
         artifactCount: 2,
         primaryArtifactCount: 1,
       });
+      await expect(verifyDesktopArtifacts({
+        expectedPlatform: "linux",
+        root,
+      })).resolves.toMatchObject({
+        expectedPlatform: "linux",
+        expectedPlatformArtifactCount: 1,
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects primary installer artifacts for the wrong platform", async () => {
+    const root = path.join(tmpdir(), `scienceswarm-verify-artifacts-${Date.now()}`);
+    const distDir = path.join(root, "dist");
+    try {
+      mkdirSync(distDir, { recursive: true });
+      writeArtifact(distDir, "ScienceSwarm-0.1.0-mac-arm64.dmg", "dmg");
+      writeFileSync(
+        path.join(distDir, "SHA256SUMS.txt"),
+        `${sha256("dmg")}  ScienceSwarm-0.1.0-mac-arm64.dmg\n`,
+      );
+
+      await expect(verifyDesktopArtifacts({
+        expectedPlatform: "linux",
+        root,
+      })).rejects.toThrow("Unexpected desktop installer artifact for linux");
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -94,5 +123,18 @@ describe("verify-desktop-artifacts", () => {
     ]);
     expect(() => parseChecksumManifest(`${"a".repeat(64)} installer.dmg\n`))
       .toThrow("Invalid checksum manifest line");
+  });
+
+  it("normalizes platform aliases for installer verification", () => {
+    expect(normalizeDesktopArtifactPlatform("mac")).toBe("macos");
+    expect(normalizeDesktopArtifactPlatform("win32")).toBe("windows");
+    expect(normalizeDesktopArtifactPlatform("linux")).toBe("linux");
+    expect(isInstallerArtifactForPlatform("ScienceSwarm.dmg", "darwin")).toBe(true);
+    expect(isInstallerArtifactForPlatform("ScienceSwarm.exe", "windows")).toBe(true);
+    expect(isInstallerArtifactForPlatform("ScienceSwarm.AppImage", "linux")).toBe(true);
+    expect(isInstallerArtifactForPlatform("ScienceSwarm.dmg", "linux")).toBe(false);
+    expect(() => normalizeDesktopArtifactPlatform("solaris")).toThrow(
+      "Unsupported desktop artifact platform",
+    );
   });
 });
