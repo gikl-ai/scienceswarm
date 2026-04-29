@@ -258,13 +258,24 @@ async function openHandsReachable(
   }
 }
 
+async function probeOpenHandsOnce(timeoutMs = 500): Promise<boolean> {
+  try {
+    const response = await fetch(getOpenHandsUrl(), {
+      signal: AbortSignal.timeout(Math.max(1, timeoutMs)),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function startOpenHandsContainer(dockerCli: string, image: string): Promise<{
   ok: boolean;
   started: boolean;
   detail?: string;
   error?: string;
 }> {
-  if (await openHandsReachable(0)) {
+  if (await probeOpenHandsOnce()) {
     return {
       ok: true,
       started: false,
