@@ -11,6 +11,32 @@ The installers do not bundle local model weights. Setup downloads the selected
 Ollama model on first run, defaulting to `gemma4:e4b` with `gemma4:e2b` as the
 lower-memory option.
 
+## Local Model Download Controls
+
+Keep installer artifacts model-free. Runtime setup downloads model weights with
+Ollama after install, which keeps DMG, NSIS, and AppImage artifacts small and
+lets users choose the right model for their machine.
+
+The desktop runtime setup entrypoint is:
+
+```bash
+npm run desktop:install-runtime
+```
+
+Useful overrides:
+
+```bash
+SCIENCESWARM_DEFAULT_OLLAMA_MODEL=gemma4:e2b npm run desktop:install-runtime
+OLLAMA_MODEL=gemma4:26b npm run desktop:install-runtime
+SCIENCESWARM_SKIP_MODEL_PULL=1 npm run desktop:install-runtime
+```
+
+- `SCIENCESWARM_DEFAULT_OLLAMA_MODEL` changes the installer default when
+  `OLLAMA_MODEL` is not set.
+- `OLLAMA_MODEL` selects the exact Ollama model tag to pull.
+- `SCIENCESWARM_SKIP_MODEL_PULL=1` installs and starts prerequisites but leaves
+  model download to the in-app setup flow.
+
 ## Build
 
 Run the workflow manually from GitHub Actions, or push a `v*` tag. Each matrix

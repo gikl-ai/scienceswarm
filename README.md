@@ -125,12 +125,14 @@ npm run desktop:checksums
 
 Desktop installers do not bundle local model weights. Setup downloads the
 selected Ollama model instead, defaulting to `gemma4:e4b` and offering
-`gemma4:e2b` as the lower-memory option. Packaging stages a minimal desktop app
-under `.desktop-package/app` so installer builds do not scan or ship the
-repository's development `node_modules`. Each uploaded installer artifact also
-includes `SHA256SUMS.txt` for local download verification. See
+`gemma4:e2b` as the lower-memory option. Maintainers can override the runtime
+setup model with `OLLAMA_MODEL` or defer the model pull with
+`SCIENCESWARM_SKIP_MODEL_PULL=1`. Packaging stages a minimal desktop app under
+`.desktop-package/app` so installer builds do not scan or ship the repository's
+development `node_modules`. Each uploaded installer artifact also includes
+`SHA256SUMS.txt` for local download verification. See
 [`docs/desktop-installers.md`](docs/desktop-installers.md) for the release
-checklist.
+checklist and model-download controls.
 
 ### Windows via WSL2
 
