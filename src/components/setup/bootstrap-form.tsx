@@ -52,7 +52,8 @@ export function BootstrapForm({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!isValidUserHandle(handle)) {
+    const trimmedHandle = handle.trim();
+    if (!isValidUserHandle(trimmedHandle)) {
       setError("Handle must be 1-64 letters/digits/._- only.");
       return;
     }
@@ -63,7 +64,7 @@ export function BootstrapForm({
     }
     setError(null);
     const values: BootstrapFormValues = {
-      handle: handle.trim(),
+      handle: trimmedHandle,
       email: email.trim(),
       phone: mode === "fresh" ? phone.trim() : "",
       brainPreset,

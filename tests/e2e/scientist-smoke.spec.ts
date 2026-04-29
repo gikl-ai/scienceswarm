@@ -36,13 +36,13 @@ import { test, expect } from "@playwright/test";
  *     broken imports, and route renames — all of which have bit
  *     us before during the pivot.
  *
- *   • /dashboard/project redirects a fresh install to /setup.
- *     The dashboard layout is a server-component guard that
- *     re-reads `.env` on every request and redirects until
- *     OpenClaw + Ollama are configured. Pinning the redirect is
- *     the honest version of the dashboard smoke for a clean
- *     environment — asserting on the demo workspace chrome is
- *     deferred until the smoke can pre-seed a "ready" config.
+ *   • /dashboard/project follows the setup guard. The dashboard
+ *     layout is a server-component guard that re-reads `.env` on
+ *     every request and redirects until setup is configured. Local
+ *     developer checkouts may already have a ready `.env`, so the
+ *     smoke first reads `/api/setup/status` and asserts the route
+ *     behavior matches that status: incomplete setup redirects to
+ *     `/setup`, ready setup renders the dashboard shell.
  *
  *   • `/api/brain/status` responds with a real JSON shape. This
  *     is the one "hot" API path the dashboard brain card depends
@@ -92,7 +92,7 @@ test.describe("scientist smoke — render happy path", () => {
     // (new simple-onboarding single-screen form).
     await expect(
       page.getByRole("heading", {
-        name: /Connect your OpenClaw/,
+        name: /Set up ScienceSwarm/,
       }),
     ).toBeVisible({ timeout: 15_000 });
 
@@ -114,53 +114,53 @@ test.describe("scientist smoke — render happy path", () => {
     ).toEqual([]);
   });
 
-  test("/dashboard/project redirects a fresh install to /setup", async ({
+  test("/dashboard/project follows the setup guard status", async ({
     page,
+    request,
   }) => {
     const pageErrors: string[] = [];
     page.on("pageerror", (err) => {
       pageErrors.push(err.message);
     });
 
-    // Fresh install behavior: the dashboard layout at
-    // `src/app/dashboard/layout.tsx` is a server component that
-    // calls `getConfigStatus(process.cwd())` on every request and
-    // redirects to `/setup` unless the current `.env` on disk is
-    // "ready" (OpenClaw + Ollama configured). In a fresh smoke
-    // environment none of that is configured, so the redirect
-    // must fire — if it doesn't, a real guard has broken. If
-    // something else broke, we'd either get a 5xx or a crash on
-    // the way out.
-    //
-    // Pinning this redirect explicitly is the honest version of
-    // the dashboard smoke: we can't assert on the demo workspace
-    // chrome without first threading a full local-runtime setup,
-    // which is out of scope for the first landing of this suite.
-    // See the `test.fixme` at the bottom of this file for the
-    // real dashboard assertion.
+    const statusResponse = await request.get("/api/setup/status");
+    expect(
+      statusResponse.ok(),
+      "/api/setup/status should return a 2xx before checking the dashboard guard",
+    ).toBe(true);
+    const status = (await statusResponse.json()) as {
+      ready?: boolean;
+      persistedSetup?: { complete?: boolean };
+    };
+    const setupComplete =
+      status.ready === true || status.persistedSetup?.complete === true;
+
     const response = await page.goto("/dashboard/project");
     expect(
       response?.ok(),
       "/dashboard/project should resolve to a 2xx after its redirect chain",
     ).toBe(true);
 
-    // After following the redirect chain, the URL should have
-    // landed on /setup. Anything else means the guard moved or
-    // stopped firing — a real regression.
-    expect(
-      page.url(),
-      "/dashboard/project should redirect a fresh install to /setup",
-    ).toContain("/setup");
-
-    // Redirect target should still render the setup chrome. This
-    // is redundant with the first test but it closes the loop on
-    // "the redirect lands somewhere useful" rather than a blank
-    // screen or a crash page.
-    await expect(
-      page.getByRole("heading", {
-        name: /Connect your OpenClaw/,
-      }),
-    ).toBeVisible({ timeout: 15_000 });
+    if (setupComplete) {
+      expect(
+        page.url(),
+        "/dashboard/project should not redirect to /setup when setup is complete",
+      ).not.toContain("/setup");
+      await expect(page.getByRole("link", { name: "Workspace" })).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(page.locator("main")).toBeVisible();
+    } else {
+      expect(
+        page.url(),
+        "/dashboard/project should redirect incomplete setup to /setup",
+      ).toContain("/setup");
+      await expect(
+        page.getByRole("heading", {
+          name: /Set up ScienceSwarm/,
+        }),
+      ).toBeVisible({ timeout: 15_000 });
+    }
 
     expect(
       pageErrors,
