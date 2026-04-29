@@ -98,12 +98,12 @@ describe("POST /api/workspace/upload", () => {
     expect(body.error).toMatch(/multipart|No files/);
   });
 
-  it("rejects a request without a projectId", async () => {
+  it("rejects a request without a studyId", async () => {
     const fd = new FormData();
     fd.append("files", new File([Buffer.from("hello")], "a.py"));
     const response = await POST(makeRequest(fd));
     expect(response.status).toBe(400);
-    expect((await response.json()).error).toContain("projectId");
+    expect((await response.json()).error).toContain("studyId");
   });
 
   it("ingests a text-bearing PDF as a paper", async () => {

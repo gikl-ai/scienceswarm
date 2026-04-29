@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initBrain } from "@/brain/init";
+import { readPaperCorpusManifestByScan } from "@/lib/paper-library/corpus";
+import { getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 const mockIsLocal = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
 const ORIGINAL_SCIENCESWARM_DIR = process.env.SCIENCESWARM_DIR;
@@ -41,6 +43,7 @@ describe("paper-library scan route", () => {
     await mkdir(homeTmp, { recursive: true });
     paperRoot = await mkdtemp(path.join(homeTmp, "scienceswarm-paper-library-route-source-"));
     await writeFile(path.join(paperRoot, "2024 - Smith - Interesting Paper.pdf"), "fake pdf", "utf-8");
+    await writeFile(path.join(paperRoot, "2024 - Smith - Interesting Paper.tex"), "\\section{Methods}", "utf-8");
   });
 
   afterEach(async () => {
@@ -76,6 +79,24 @@ describe("paper-library scan route", () => {
       project: "project-alpha",
       counters: {
         detectedFiles: 1,
+      },
+    });
+    const corpus = await readPaperCorpusManifestByScan(
+      "project-alpha",
+      started.scanId,
+      getProjectStateRootForBrainRoot("project-alpha", path.join(dataRoot, "brain")),
+    );
+    expect(corpus).toMatchObject({
+      ok: true,
+      data: {
+        scanId: started.scanId,
+        papers: [
+          {
+            sourceCandidates: expect.arrayContaining([
+              expect.objectContaining({ sourceType: "pdf", origin: "local_pdf" }),
+            ]),
+          },
+        ],
       },
     });
   });

@@ -17,6 +17,7 @@ import {
   getPaperLibraryScanPath,
   readPersistedState,
 } from "./state";
+import { writePaperCorpusManifestForScan } from "./corpus/pipeline";
 import {
   createIdentityCandidateFromEvidence,
   extractPaperIdentityEvidence,
@@ -326,6 +327,7 @@ export async function runPaperLibraryScanJob(
     let failed = 0;
     let needsReviewCount = 0;
     let readyForApplyCount = 0;
+    const allReviewItems: PaperReviewItem[] = [];
 
     async function flushReviewShard(): Promise<void> {
       if (reviewShardBuffer.length === 0) return;
@@ -398,7 +400,7 @@ export async function runPaperLibraryScanJob(
       if (!needsReview) identified += 1;
       if (needsReview) needsReviewCount += 1;
       else readyForApplyCount += 1;
-      reviewShardBuffer.push({
+      const reviewItem: PaperReviewItem = {
         id: randomUUID(),
         scanId,
         paperId: candidate.id,
@@ -415,7 +417,9 @@ export async function runPaperLibraryScanJob(
         pageCount: extracted?.pageCount,
         wordCount: extracted?.wordCount,
         updatedAt: nowIso(),
-      });
+      };
+      reviewShardBuffer.push(reviewItem);
+      allReviewItems.push(reviewItem);
 
       if (reviewShardBuffer.length >= REVIEW_SHARD_SIZE) {
         await flushReviewShard();
@@ -443,16 +447,56 @@ export async function runPaperLibraryScanJob(
     }
 
     await flushReviewShard();
+    const corpusWarnings: string[] = [];
+    let heartbeatActive = true;
+    const heartbeatWrites = new Set<Promise<void>>();
+    const heartbeatTimer = setInterval(() => {
+      const heartbeatWrite = updatePaperLibraryScan(project, scanId, brainRoot, (current) => {
+        if (!heartbeatActive || !ACTIVE_SCAN_STATUSES.has(current.status)) return current;
+        const heartbeatAt = nowIso();
+        return {
+          ...current,
+          heartbeatAt,
+          updatedAt: heartbeatAt,
+        };
+      }).then(() => undefined, () => undefined);
+      heartbeatWrites.add(heartbeatWrite);
+      void heartbeatWrite.finally(() => {
+        heartbeatWrites.delete(heartbeatWrite);
+      });
+    }, HEARTBEAT_WRITE_INTERVAL_MS);
+    try {
+      await writePaperCorpusManifestForScan({
+        project,
+        scanId,
+        rootRealpath,
+        createdAt: scan.createdAt,
+        updatedAt: nowIso(),
+        items: allReviewItems,
+        stateRoot,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Corpus source inventory failed.";
+      corpusWarnings.push(`corpus_source_inventory_failed: ${message}`);
+    } finally {
+      heartbeatActive = false;
+      clearInterval(heartbeatTimer);
+      // Drain any heartbeat write that already read active scan state before
+      // writing the terminal scan status below.
+      await Promise.allSettled([...heartbeatWrites]);
+    }
 
+    const finalUpdatedAt = nowIso();
     await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
       ...current,
       status: needsReviewCount > 0 ? "ready_for_review" : "ready_for_apply",
       rootRealpath,
       claimId: undefined,
       heartbeatAt: nowIso(),
-      updatedAt: nowIso(),
+      updatedAt: finalUpdatedAt,
       currentPath: null,
       reviewShardIds: shardIds,
+      warnings: [...scanWarnings(current), ...corpusWarnings],
       counters: {
         detectedFiles,
         identified,

@@ -1,6 +1,6 @@
 import { createInProcessGbrainClient } from "@/brain/in-process-gbrain-client";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
-import { getProjectBrainRootForBrainRoot } from "@/lib/state/project-storage";
+import { getProjectBrainRootForBrainRoot, getProjectStateRootForBrainRoot } from "@/lib/state/project-storage";
 
 import type { PersistAppliedPaperLocationsInput } from "./apply";
 import type {
@@ -11,6 +11,8 @@ import type {
   PaperReviewItem,
 } from "./contracts";
 import { buildAppliedPaperMetadata, paperLibraryPageSlugForMetadata } from "./applied-metadata";
+import { materializePaperCorpusManifestToGbrain } from "./corpus/gbrain-materialization";
+import { readPaperCorpusManifestByScan } from "./corpus/state";
 
 function compactObject(value: Record<string, unknown>): Record<string, unknown> {
   const compacted: Record<string, unknown> = {};
@@ -91,6 +93,12 @@ function mergeCompiledTruth(existingCompiledTruth: string | undefined, paperLibr
 
 export async function persistAppliedPaperLocations(input: PersistAppliedPaperLocationsInput): Promise<void> {
   const userHandle = getCurrentUserHandle();
+  const stateRoot = getProjectStateRootForBrainRoot(input.project, input.brainRoot);
+  const corpusManifest = await readPaperCorpusManifestByScan(input.project, input.plan.scanId, stateRoot);
+  if (!corpusManifest.ok && corpusManifest.repairable.code !== "missing") {
+    throw new Error(`Paper corpus manifest for scan ${input.plan.scanId} is ${corpusManifest.repairable.code}.`);
+  }
+
   const resolvedBrainRoot = getProjectBrainRootForBrainRoot(input.project, input.brainRoot);
   const client = createInProcessGbrainClient({ root: resolvedBrainRoot });
   const operationsById = new Map(input.operations.map((operation) => [operation.id, operation]));
@@ -156,4 +164,18 @@ export async function persistAppliedPaperLocations(input: PersistAppliedPaperLoc
       };
     });
   }
+
+  if (!corpusManifest.ok) {
+    return;
+  }
+
+  await materializePaperCorpusManifestToGbrain({
+    project: input.project,
+    brainRoot: input.brainRoot,
+    manifest: corpusManifest.data,
+    stateRoot,
+    occurredAt: nowIso,
+    actor: userHandle,
+    client,
+  });
 }

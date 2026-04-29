@@ -30,6 +30,7 @@ import type {
   PaperReviewItem,
   PaperReviewItemState,
 } from "@/lib/paper-library/contracts";
+import type { PaperCorpusImportStatus, PaperCorpusOverallStatus } from "@/lib/paper-library/corpus/status";
 import { computeGraphInsights } from "@/lib/paper-library/graph-insights";
 import { buildWorkspaceHrefForSlug } from "@/lib/project-navigation";
 
@@ -244,7 +245,7 @@ function shouldPromoteLatestScan({
   latestScan: PaperLibraryScan;
 }): boolean {
   if (!currentSession.scanId) return true;
-  if (currentSession.scanId === latestScan.id) return true;
+  if (currentSession.scanId === latestScan.id) return false;
   if (!currentScan || isScanInFlight(currentScan)) return false;
   if (currentSession.step !== "scan") return false;
   return scanTimestamp(latestScan) > scanTimestamp(currentScan);
@@ -370,6 +371,200 @@ function StatusBadge({
     <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold ${className}`}>
       {formatStatus(value)}
     </span>
+  );
+}
+
+function corpusStatusTone(status: PaperCorpusOverallStatus | PaperCorpusImportStatus["graph"]["status"]): "neutral" | "success" | "warning" | "danger" {
+  if (status === "current") return "success";
+  if (status === "malformed" || status === "unsupported_version" || status === "needs_attention" || status === "blocked" || status === "failed") return "danger";
+  if (status === "stale" || status === "partial" || status === "missing" || status === "skipped") return "warning";
+  return "neutral";
+}
+
+function formatPercent(value: number | undefined): string {
+  return typeof value === "number" ? `${Math.round(value * 100)}%` : "not scored";
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function selectedSourceTypes(status: PaperCorpusImportStatus): string {
+  const values = Object.entries(status.sourcePreference.selectedTypeCounts)
+    .filter(([, count]) => count > 0)
+    .map(([type, count]) => `${count} ${formatStatus(type)}`);
+  return values.length > 0 ? values.join(" / ") : "No preferred source yet";
+}
+
+function summaryTierLine(status: PaperCorpusImportStatus, tier: "relevance" | "brief" | "detailed"): string {
+  const counts = status.summaries.byTier[tier];
+  return `${tier}: ${counts.current} current, ${counts.stale} stale, ${counts.missing} missing`;
+}
+
+function CorpusStatusMetric({
+  detail,
+  label,
+  primary,
+  status,
+}: {
+  detail: string;
+  label: string;
+  primary: string;
+  status: PaperCorpusOverallStatus | PaperCorpusImportStatus["graph"]["status"];
+}) {
+  return (
+    <div className="min-w-0 border-l border-border pl-3">
+      <div className="flex min-h-7 flex-wrap items-center gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
+        <StatusBadge tone={corpusStatusTone(status)} value={status} />
+      </div>
+      <p className="mt-2 text-sm font-semibold text-foreground">{primary}</p>
+      <p className="mt-1 text-xs leading-5 text-muted">{detail}</p>
+    </div>
+  );
+}
+
+function CorpusImportStatusPanel({
+  error,
+  loading,
+  onRefresh,
+  status,
+}: {
+  error: string | null;
+  loading: boolean;
+  onRefresh: () => void;
+  status: PaperCorpusImportStatus | null;
+}) {
+  if (loading && !status) {
+    return (
+      <section className="rounded-xl border border-border bg-white p-4 lg:col-span-2">
+        <div className="flex items-center gap-2 text-sm text-muted">
+          <SpinnerGap className="animate-spin" size={16} />
+          Loading corpus status...
+        </div>
+      </section>
+    );
+  }
+
+  if (!status) {
+    return (
+      <section className="rounded-xl border border-border bg-white p-4 lg:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Scientific corpus status</p>
+            <p className="mt-1 text-sm text-muted">Corpus source, extraction, summary, bibliography, and graph status appears after a scan is selected.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+          >
+            <ArrowsClockwise size={14} />
+            Refresh
+          </button>
+        </div>
+        {error && (
+          <div role="alert" className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+            {error}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  const summaryCurrent = ["relevance", "brief", "detailed"].reduce((total, tier) => (
+    total + status.summaries.byTier[tier as "relevance" | "brief" | "detailed"].current
+  ), 0);
+  const summaryMissing = ["relevance", "brief", "detailed"].reduce((total, tier) => (
+    total + status.summaries.byTier[tier as "relevance" | "brief" | "detailed"].missing
+  ), 0);
+  const bibliographyDetail = [
+    pluralize(status.bibliography.localStatusCounts.local, "local entry", "local entries"),
+    pluralize(status.bibliography.localStatusCounts.metadata_only, "metadata-only entry", "metadata-only entries"),
+    pluralize(status.bibliography.localStatusCounts.unresolved, "unresolved entry", "unresolved entries"),
+  ].join(" / ");
+  const graphDetail = status.graph.status === "missing"
+    ? "Open or refresh the graph after scan review to build citation context."
+    : `${status.graph.sourceRunCount} source runs, ${status.graph.successfulSourceRunCount} with relations, ${status.graph.warningCount} warnings`;
+
+  return (
+    <section className="rounded-xl border border-border bg-white p-4 lg:col-span-2">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-foreground">Scientific corpus status</p>
+            <StatusBadge tone={corpusStatusTone(status.status)} value={status.status} />
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            {status.paperCount > 0
+              ? `${status.paperCount} ${status.paperCount === 1 ? "paper" : "papers"} tracked by corpus artifacts.`
+              : "No corpus manifest is available for this scan yet."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+        >
+          {loading ? <SpinnerGap className="animate-spin" size={14} /> : <ArrowsClockwise size={14} />}
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div role="alert" className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+          {error}
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <CorpusStatusMetric
+          label="Source preference"
+          status={status.sourcePreference.status}
+          primary={`${status.sourcePreference.selectedCount}/${status.paperCount} selected`}
+          detail={`${status.sourcePreference.candidateCount} candidates / ${selectedSourceTypes(status)}`}
+        />
+        <CorpusStatusMetric
+          label="Extraction quality"
+          status={status.extractionQuality.status}
+          primary={`${status.extractionQuality.currentCount} current / ${status.extractionQuality.missingCount} missing`}
+          detail={`Average quality ${formatPercent(status.extractionQuality.averageScore)} / ${status.extractionQuality.warningCount} extraction warnings`}
+        />
+        <CorpusStatusMetric
+          label="Summary status"
+          status={status.summaries.status}
+          primary={`${summaryCurrent} current / ${summaryMissing} missing`}
+          detail={[
+            summaryTierLine(status, "relevance"),
+            summaryTierLine(status, "brief"),
+            summaryTierLine(status, "detailed"),
+          ].join(" / ")}
+        />
+        <CorpusStatusMetric
+          label="Bibliography"
+          status={status.bibliography.status}
+          primary={pluralize(status.bibliography.entryCount, "entry", "entries")}
+          detail={bibliographyDetail}
+        />
+        <CorpusStatusMetric
+          label="Graph"
+          status={status.graph.status}
+          primary={`${status.graph.nodeCount} nodes / ${status.graph.edgeCount} edges`}
+          detail={graphDetail}
+        />
+      </div>
+
+      {status.warnings.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {status.warnings.slice(0, 3).map((warning) => (
+            <div key={warning} className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">
+              {warning}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1014,6 +1209,9 @@ export function PaperLibraryCommandCenter({
   const [folderPickerLoading, setFolderPickerLoading] = useState(false);
   const [manualRootPath, setManualRootPath] = useState("");
   const [manualScanLoading, setManualScanLoading] = useState(false);
+  const [corpusStatus, setCorpusStatus] = useState<PaperCorpusImportStatus | null>(null);
+  const [corpusStatusLoading, setCorpusStatusLoading] = useState(false);
+  const [corpusStatusError, setCorpusStatusError] = useState<string | null>(null);
 
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>(DEFAULT_REVIEW_FILTER);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -1093,6 +1291,9 @@ export function PaperLibraryCommandCenter({
     setApplyActionLoading(false);
     setReviewFilter(DEFAULT_REVIEW_FILTER);
     setDraftsByItemId({});
+    setCorpusStatus(null);
+    setCorpusStatusError(null);
+    setCorpusStatusLoading(false);
   }, []);
 
   useEffect(() => {
@@ -1233,6 +1434,25 @@ export function PaperLibraryCommandCenter({
       setScanError(error instanceof Error ? error.message : "Could not restore the latest paper-library scan.");
     } finally {
       setScanLoading(false);
+    }
+  }, [projectSlug]);
+
+  const loadCorpusStatus = useCallback(async (scanId: string) => {
+    setCorpusStatusLoading(true);
+    setCorpusStatusError(null);
+    try {
+      const params = new URLSearchParams({
+        study: projectSlug,
+        scanId,
+      });
+      const payload = await paperLibraryFetchJson<{ ok: true; status: PaperCorpusImportStatus }>(
+        `/api/brain/paper-library/corpus-status?${params.toString()}`,
+      );
+      setCorpusStatus(payload.status);
+    } catch (error) {
+      setCorpusStatusError(error instanceof Error ? error.message : "Could not load corpus status.");
+    } finally {
+      setCorpusStatusLoading(false);
     }
   }, [projectSlug]);
 
@@ -1508,6 +1728,7 @@ export function PaperLibraryCommandCenter({
   const currentScanCreatedAt = scan?.createdAt;
   const currentScanId = scan?.id;
   const currentScanInFlight = scan ? isScanInFlight(scan) : false;
+  const currentScanStatus = scan?.status;
   const currentScanUpdatedAt = scan?.updatedAt;
 
   useEffect(() => {
@@ -1546,6 +1767,17 @@ export function PaperLibraryCommandCenter({
     }, 2_000);
     return () => window.clearInterval(interval);
   }, [loadScan, scan, sessionRestored]);
+
+  useEffect(() => {
+    if (!sessionRestored) return;
+    if (!session.scanId) {
+      setCorpusStatus(null);
+      setCorpusStatusError(null);
+      setCorpusStatusLoading(false);
+      return;
+    }
+    void loadCorpusStatus(session.scanId);
+  }, [currentScanStatus, loadCorpusStatus, session.scanId, sessionRestored]);
 
   useEffect(() => {
     if (!sessionRestored) return;
@@ -1752,6 +1984,7 @@ export function PaperLibraryCommandCenter({
       setApprovalToken(null);
       await loadScan(session.scanId);
       await loadReview();
+      await loadCorpusStatus(session.scanId);
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : "Could not update the review item.");
     } finally {
@@ -1761,6 +1994,7 @@ export function PaperLibraryCommandCenter({
     draftsByItemId,
     loadReview,
     loadScan,
+    loadCorpusStatus,
     patchSession,
     projectSlug,
     session.scanId,
@@ -3572,6 +3806,15 @@ export function PaperLibraryCommandCenter({
                 No files are renamed or moved during scan. ScienceSwarm only proposes operations after review and explicit approval.
               </div>
             </section>
+
+            <CorpusImportStatusPanel
+              error={corpusStatusError}
+              loading={corpusStatusLoading}
+              onRefresh={() => {
+                if (session.scanId) void loadCorpusStatus(session.scanId);
+              }}
+              status={corpusStatus}
+            />
           </div>
         ) : (
           <EmptyState
@@ -3598,6 +3841,9 @@ export function PaperLibraryCommandCenter({
     clustersLoading,
     clustersLoadingMore,
     clustersPage,
+    corpusStatus,
+    corpusStatusError,
+    corpusStatusLoading,
     draftsByItemId,
     gapActionSuggestionId,
     gapFilter,
@@ -3648,6 +3894,7 @@ export function PaperLibraryCommandCenter({
     loadGaps,
     loadGraph,
     loadGraphOverview,
+    loadCorpusStatus,
     loadManifest,
     loadReview,
     manifestError,

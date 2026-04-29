@@ -235,10 +235,11 @@ export async function processCapture(input: ProcessCaptureInput): Promise<Captur
     throw new Error("Capture content is required");
   }
 
-  const explicitProject = input.project?.trim();
+  const explicitProject = typeof input.project === "string" ? input.project.trim() : undefined;
   if (explicitProject) {
     assertSafeProjectSlug(explicitProject);
   }
+  const allowSingleProjectFallback = input.project !== null;
 
   const session =
     channel === "telegram"
@@ -281,6 +282,7 @@ export async function processCapture(input: ProcessCaptureInput): Promise<Captur
     stateRoot,
     explicitProject: explicitProject ?? undefined,
     sessionActiveProject: session?.activeProject ?? null,
+    allowSingleProjectFallback,
   });
   const resolvedProject = projectResolution.project?.trim()
     ? assertSafeProjectSlug(projectResolution.project.trim())
