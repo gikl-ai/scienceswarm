@@ -13,6 +13,7 @@ import {
   resolveDesktopStartPath,
   resolveDesktopStartUrl,
   resolveDesktopWindowOptions,
+  shouldForceDesktopSetup,
   resolveStandaloneEntry,
   shouldStartStandaloneServer,
   shouldWaitForDesktopServer,
@@ -32,6 +33,22 @@ describe("desktop main", () => {
 
   it("defaults returning users to the main route", () => {
     expect(resolveDesktopStartPath({}, { firstLaunchComplete: true })).toBe("/");
+  });
+
+  it("can force returning desktop users back through setup", () => {
+    const env = {
+      SCIENCESWARM_DESKTOP_FORCE_SETUP: "1",
+    };
+
+    expect(shouldForceDesktopSetup(env)).toBe(true);
+    expect(resolveDesktopStartPath(env, { firstLaunchComplete: true })).toBe("/setup");
+  });
+
+  it("keeps an explicit desktop start path ahead of forced setup", () => {
+    expect(resolveDesktopStartPath({
+      SCIENCESWARM_DESKTOP_FORCE_SETUP: "1",
+      SCIENCESWARM_DESKTOP_START_PATH: "runtime/compare",
+    }, { firstLaunchComplete: true })).toBe("/runtime/compare");
   });
 
   it("normalizes a custom desktop start path override", () => {

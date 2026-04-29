@@ -25,6 +25,17 @@ export function isDesktopFirstLaunchComplete(app) {
   return existsSync(resolveDesktopLaunchMarkerPath(app));
 }
 
+export function isTruthyDesktopEnvValue(value) {
+  return /^(1|true|yes|on)$/i.test(String(value ?? "").trim());
+}
+
+/**
+ * @param {DesktopEnv} env
+ */
+export function shouldForceDesktopSetup(env = process.env) {
+  return isTruthyDesktopEnvValue(env.SCIENCESWARM_DESKTOP_FORCE_SETUP);
+}
+
 /**
  * @param {DesktopEnv} env
  * @param {DesktopStartOptions} options
@@ -32,6 +43,10 @@ export function isDesktopFirstLaunchComplete(app) {
 export function resolveDesktopStartPath(env = process.env, options = {}) {
   const configuredPath = env.SCIENCESWARM_DESKTOP_START_PATH?.trim();
   if (!configuredPath) {
+    if (shouldForceDesktopSetup(env)) {
+      return "/setup";
+    }
+
     return options.firstLaunchComplete ? "/" : "/setup";
   }
 
@@ -247,7 +262,7 @@ export async function launchDesktopShell(options = {}) {
   const window = new BrowserWindow(resolveDesktopWindowOptions());
 
   await window.loadURL(startUrl);
-  if (!firstLaunchComplete) {
+  if (!firstLaunchComplete && !shouldForceDesktopSetup(options.env)) {
     markDesktopFirstLaunchComplete(app);
   }
 
