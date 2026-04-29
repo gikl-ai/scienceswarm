@@ -33,8 +33,10 @@ import {
   type OpenClawStatusSummary,
 } from "@/lib/setup/config-status";
 import { migrateEnvLocalOnce } from "@/lib/setup/env-migration";
+import { createRandomUserHandle } from "@/lib/setup/user-handle";
 
 const exec = promisify(execFile);
+let generatedDefaultHandle: string | null = null;
 
 type ConfigStatusForRuntime = Awaited<ReturnType<typeof getConfigStatus>>;
 
@@ -62,6 +64,11 @@ function getGbrainSnapshot(status: ConfigStatusForRuntime) {
     uploadFiles: ready,
     localFolder: ready,
   };
+}
+
+function getGeneratedDefaultHandle(): string {
+  generatedDefaultHandle ??= createRandomUserHandle();
+  return generatedDefaultHandle;
 }
 
 /**
@@ -183,7 +190,9 @@ export async function GET(request: Request): Promise<Response> {
       probeOpenClawOrUndefined(),
       probeOllamaOrUndefined(),
     ]);
-    const defaultHandle = (process.env.USER ?? process.env.LOGNAME ?? "").trim();
+    const defaultHandle =
+      status.rawValues.SCIENCESWARM_USER_HANDLE?.trim()
+      || getGeneratedDefaultHandle();
     const agentType = getConfiguredAgent(status);
     const runtimeEnv = { ...process.env, ...status.rawValues };
     const openHandsEvidence = await readOpenHandsLocalEvidence(runtimeEnv);
@@ -221,6 +230,7 @@ export async function GET(request: Request): Promise<Response> {
       ollamaStatus,
       runtimeContract,
       defaultHandle,
+      desktopMode: process.env.SCIENCESWARM_DESKTOP === "1",
     });
   } catch (err) {
     // Log the specific error server-side so an operator can see what

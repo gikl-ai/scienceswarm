@@ -8,6 +8,10 @@ import {
   type BrainPresetId,
 } from "@/brain/presets/types";
 import { isTelegramBotTokenShape } from "@/lib/telegram/bot-token";
+import {
+  createRandomUserHandle,
+  isValidUserHandle,
+} from "@/lib/setup/user-handle";
 
 export interface BootstrapFormValues {
   handle: string;
@@ -22,18 +26,22 @@ export interface BootstrapFormValues {
 interface BootstrapFormProps {
   disabled: boolean;
   onSubmit: (values: BootstrapFormValues) => void;
+  initialHandle?: string;
   showWindowsNote?: boolean;
 }
 
 export function BootstrapForm({
   disabled,
   onSubmit,
+  initialHandle,
   showWindowsNote = false,
 }: BootstrapFormProps) {
-  // Always start blank. Previously we prefilled the handle from
-  // process.env.USER via /api/setup/status, which surfaced the
-  // operator's OS username as the research handle by default.
-  const [handle, setHandle] = useState("");
+  // Use an anonymous generated handle by default. Do not derive this
+  // from OS username or computer name because it is copied into durable
+  // brain attribution metadata.
+  const [handle, setHandle] = useState(() =>
+    initialHandle?.trim() || createRandomUserHandle()
+  );
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [brainPreset, setBrainPreset] =
@@ -44,7 +52,7 @@ export function BootstrapForm({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(handle.trim())) {
+    if (!isValidUserHandle(handle)) {
       setError("Handle must be 1-64 letters/digits/._- only.");
       return;
     }
@@ -76,7 +84,7 @@ export function BootstrapForm({
         LOCAL-FIRST SETUP
       </p>
       <h1 className="mt-2 text-2xl font-semibold text-foreground">
-        Connect your OpenClaw
+        Set up ScienceSwarm
       </h1>
       <p className="mt-2 text-sm leading-6 text-muted">
         A couple of quick things — then we install everything else for you.
@@ -113,8 +121,8 @@ export function BootstrapForm({
               disabled={disabled}
             />
             <span className="mt-1 block text-xs text-muted">
-              Used to sign everything you write. Shows up as the author on
-              every brain page.
+              Used to sign everything you write. We generated a local handle
+              so setup can start fast; rename it here or later in Settings.
             </span>
           </label>
 
