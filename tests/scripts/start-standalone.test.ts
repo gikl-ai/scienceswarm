@@ -21,11 +21,34 @@ describe("start-standalone", () => {
     });
   });
 
+  it("exports frontend host and port for production local-request guards", () => {
+    expect(resolveStandaloneServerEnv({})).toMatchObject({
+      HOSTNAME: "127.0.0.1",
+      PORT: "3001",
+      FRONTEND_HOST: "127.0.0.1",
+      FRONTEND_PUBLIC_HOST: "127.0.0.1",
+      FRONTEND_PORT: "3001",
+    });
+  });
+
+  it("preserves an explicit published frontend host", () => {
+    expect(resolveStandaloneServerEnv({
+      FRONTEND_HOST: "0.0.0.0",
+      FRONTEND_PUBLIC_HOST: "127.0.0.1",
+    })).toMatchObject({
+      HOSTNAME: "0.0.0.0",
+      FRONTEND_HOST: "0.0.0.0",
+      FRONTEND_PUBLIC_HOST: "127.0.0.1",
+    });
+  });
+
   it("falls back to existing HOSTNAME and PORT values", () => {
     expect(resolveStandaloneServerEnv({
       HOSTNAME: "127.0.0.1",
       PORT: "3009",
     })).toMatchObject({
+      FRONTEND_HOST: "127.0.0.1",
+      FRONTEND_PORT: "3009",
       HOSTNAME: "127.0.0.1",
       PORT: "3009",
     });
