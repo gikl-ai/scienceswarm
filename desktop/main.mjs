@@ -21,6 +21,22 @@ export function resolveDesktopLaunchMarkerPath(app) {
   return path.join(app.getPath("userData"), "desktop-first-launch.json");
 }
 
+export function resolveDesktopConfigRoot(app) {
+  return app.getPath("userData");
+}
+
+/**
+ * @param {{ getPath(name: string): string }} app
+ * @param {DesktopEnv} env
+ */
+export function resolveDesktopRuntimeEnv(app, env = process.env) {
+  return {
+    ...env,
+    SCIENCESWARM_CONFIG_ROOT:
+      env.SCIENCESWARM_CONFIG_ROOT?.trim() || resolveDesktopConfigRoot(app),
+  };
+}
+
 export function isDesktopFirstLaunchComplete(app) {
   return existsSync(resolveDesktopLaunchMarkerPath(app));
 }
@@ -131,6 +147,7 @@ export function resolveDesktopDiagnostics(app, env = process.env, options = {}) 
     platform: process.platform,
     startUrl: resolveDesktopStartUrl(env, options),
     userDataPath: app.getPath("userData"),
+    configRoot: env.SCIENCESWARM_CONFIG_ROOT?.trim() || resolveDesktopConfigRoot(app),
     logsPath: app.getPath("logs"),
   };
 }
@@ -245,12 +262,14 @@ export async function launchDesktopShell(options = {}) {
   ]);
 
   await app.whenReady();
+  const desktopEnv = resolveDesktopRuntimeEnv(app, options.env);
+  mkdirSync(desktopEnv.SCIENCESWARM_CONFIG_ROOT, { recursive: true });
   const firstLaunchComplete = isDesktopFirstLaunchComplete(app);
-  const startUrl = resolveDesktopStartUrl(options.env, { firstLaunchComplete });
-  if (shouldStartStandaloneServer(options.env)) {
+  const startUrl = resolveDesktopStartUrl(desktopEnv, { firstLaunchComplete });
+  if (shouldStartStandaloneServer(desktopEnv)) {
     await startStandaloneServer({
       cwd: options.projectRoot,
-      env: options.env,
+      env: desktopEnv,
     });
   }
   if (shouldWaitForDesktopServer(startUrl)) {
@@ -265,17 +284,17 @@ export async function launchDesktopShell(options = {}) {
     const diagnosticsOptions = {
       firstLaunchComplete: isDesktopFirstLaunchComplete(app),
     };
-    if (!isTrustedDesktopIpcSender(event, options.env, diagnosticsOptions)) {
+    if (!isTrustedDesktopIpcSender(event, desktopEnv, diagnosticsOptions)) {
       throw new Error("Blocked desktop diagnostics request from an untrusted renderer.");
     }
 
-    return resolveDesktopDiagnostics(app, options.env, diagnosticsOptions);
+    return resolveDesktopDiagnostics(app, desktopEnv, diagnosticsOptions);
   });
 
   const window = new BrowserWindow(resolveDesktopWindowOptions());
 
   await window.loadURL(startUrl);
-  if (!firstLaunchComplete && !shouldForceDesktopSetup(options.env)) {
+  if (!firstLaunchComplete && !shouldForceDesktopSetup(desktopEnv)) {
     markDesktopFirstLaunchComplete(app);
   }
 
@@ -283,7 +302,7 @@ export async function launchDesktopShell(options = {}) {
     if (BrowserWindow.getAllWindows().length === 0) {
       const nextWindow = new BrowserWindow(resolveDesktopWindowOptions());
       void nextWindow.loadURL(
-        resolveDesktopStartUrl(options.env, {
+        resolveDesktopStartUrl(desktopEnv, {
           firstLaunchComplete: isDesktopFirstLaunchComplete(app),
         }),
       ).catch((error) => {

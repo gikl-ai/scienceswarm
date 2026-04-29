@@ -19,6 +19,7 @@ import {
   isBrainPresetId,
   normalizeBrainPreset,
 } from "@/brain/presets/types";
+import { resolveSetupConfigRoot } from "@/lib/setup/config-root";
 import { isValidUserHandle } from "@/lib/setup/user-handle";
 
 /**
@@ -110,7 +111,7 @@ export async function POST(request: Request): Promise<Response> {
     brainPreset: normalizeBrainPreset(rawBrainPreset),
     telegramMode: rawExistingToken ? "reuse" : rawPhone ? "fresh" : undefined,
     existingBot: rawExistingToken ? { token: rawExistingToken } : undefined,
-    repoRoot: process.cwd(),
+    repoRoot: resolveSetupConfigRoot(),
   };
 
   const encoder = new TextEncoder();

@@ -4,6 +4,7 @@ import "katex/dist/katex.min.css";
 import { Sidebar } from "@/components/sidebar";
 import { ResizableLayout } from "@/components/resizable-layout";
 import { getConfigStatus } from "@/lib/setup/config-status";
+import { resolveSetupConfigRoot } from "@/lib/setup/config-root";
 import { migrateEnvLocalOnce } from "@/lib/setup/env-migration";
 
 /**
@@ -53,8 +54,9 @@ export default async function DashboardLayout({
   // here because we still want to render the dashboard (or redirect
   // to /setup) even if migration fails — the user will see the
   // `.env.local` still on disk and can recover manually.
+  const configRoot = resolveSetupConfigRoot();
   try {
-    await migrateEnvLocalOnce(process.cwd());
+    await migrateEnvLocalOnce(configRoot);
   } catch (err) {
     console.warn(
       "[dashboard-redirect] env migration failed (non-blocking)",
@@ -64,7 +66,7 @@ export default async function DashboardLayout({
 
   let canEnterDashboard = false;
   try {
-    const status = await getConfigStatus(process.cwd(), {
+    const status = await getConfigStatus(configRoot, {
       includeRuntimeEnv: true,
     });
     canEnterDashboard = status.ready || status.persistedSetup?.complete === true;

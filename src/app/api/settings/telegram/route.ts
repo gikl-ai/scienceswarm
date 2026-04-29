@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 
 import { isLocalRequest } from "@/lib/local-guard";
 import {
@@ -20,9 +19,11 @@ import {
   serializeEnvDocument,
   writeEnvFileAtomic,
 } from "@/lib/setup/env-writer";
+import {
+  resolveSetupConfigRoot,
+  resolveSetupEnvPath,
+} from "@/lib/setup/config-root";
 import { isTelegramBotTokenShape } from "@/lib/telegram/bot-token";
-
-const ENV_PATH = resolve(process.cwd(), ".env");
 
 interface PostBody {
   action?: "approve-pending";
@@ -86,7 +87,7 @@ function isValidHandle(value: string): boolean {
 async function readEffectiveEnv(): Promise<Record<string, string | undefined>> {
   const entries: Record<string, string | undefined> = { ...process.env };
   try {
-    const doc = parseEnvFile(await readFile(ENV_PATH, "utf8"));
+    const doc = parseEnvFile(await readFile(resolveSetupEnvPath(), "utf8"));
     for (const line of doc.lines) {
       if (line.type === "entry") {
         entries[line.key] = line.value;
@@ -101,7 +102,7 @@ async function readEffectiveEnv(): Promise<Record<string, string | undefined>> {
 async function persistTelegramUserId(userId: string): Promise<void> {
   let existing = "";
   try {
-    existing = await readFile(ENV_PATH, "utf8");
+    existing = await readFile(resolveSetupEnvPath(), "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
@@ -112,7 +113,7 @@ async function persistTelegramUserId(userId: string): Promise<void> {
   const merged = mergeEnvValues(doc, {
     TELEGRAM_USER_ID: userId,
   });
-  await writeEnvFileAtomic(ENV_PATH, serializeEnvDocument(merged));
+  await writeEnvFileAtomic(resolveSetupEnvPath(), serializeEnvDocument(merged));
 }
 
 function streamFrame(event: BootstrapStreamEvent): Uint8Array {
@@ -264,7 +265,7 @@ export async function POST(request: Request): Promise<Response> {
     phone: body.mode === "fresh" ? phone : undefined,
     telegramMode: body.mode,
     existingBot: body.mode === "reuse" && botToken ? { token: botToken } : undefined,
-    repoRoot: process.cwd(),
+    repoRoot: resolveSetupConfigRoot(),
   };
 
   const stream = new ReadableStream({

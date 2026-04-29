@@ -18,6 +18,7 @@ import {
   writeEnvFileAtomic,
 } from "@/lib/setup/env-writer";
 import { readTelegramBotEnvValues } from "@/lib/setup/telegram-bot-env";
+import { resolveSetupConfigRoot } from "@/lib/setup/config-root";
 import {
   getScienceSwarmBrainRoot,
   getScienceSwarmDataRoot,
@@ -85,7 +86,7 @@ export async function POST(request: Request): Promise<Response> {
     }
   }
 
-  const repoRoot = process.cwd();
+  const repoRoot = resolveSetupConfigRoot();
   const envPath = path.join(repoRoot, ".env");
   try {
     const existing = await fs.readFile(envPath, "utf8");

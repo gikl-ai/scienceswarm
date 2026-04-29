@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 
 import { OPENCLAW_OLLAMA_PROVIDER_KEY } from "@/lib/openclaw/ollama-provider";
+import { resolveSetupEnvPath } from "@/lib/setup/config-root";
 import {
   mergeEnvValues,
   parseEnvFile,
@@ -21,7 +21,7 @@ function isTruthyRuntimeFlag(value: string | undefined): boolean {
 }
 
 export async function activateOpenClawAgentBackend(
-  envPath = resolve(process.cwd(), ".env"),
+  envPath = resolveSetupEnvPath(),
 ): Promise<void> {
   let rawEnv = "";
   try {
