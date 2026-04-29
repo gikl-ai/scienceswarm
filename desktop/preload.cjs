@@ -1,4 +1,6 @@
-import { contextBridge, ipcRenderer } from "electron";
+/* eslint-disable @typescript-eslint/no-require-imports */
+
+const { contextBridge, ipcRenderer } = require("electron");
 
 const scienceswarmDesktopBridge = Object.freeze({
   shell: "electron",
@@ -8,5 +10,3 @@ const scienceswarmDesktopBridge = Object.freeze({
 });
 
 contextBridge.exposeInMainWorld("scienceswarmDesktop", scienceswarmDesktopBridge);
-
-export { scienceswarmDesktopBridge };

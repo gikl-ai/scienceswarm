@@ -32,6 +32,11 @@ const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8")) as {
     };
     npmRebuild?: boolean;
     asarUnpack?: string[];
+    extraResources?: Array<{
+      filter?: string[];
+      from?: string;
+      to?: string;
+    }>;
     win?: {
       artifactName?: string;
     };
@@ -147,6 +152,11 @@ describe("package.json scripts", () => {
     expect(pkg.build?.npmRebuild).toBe(false);
     expect(pkg.build?.asar).toBe(true);
     expect(pkg.build?.asarUnpack).toContain(".next/standalone/**");
+    expect(pkg.build?.extraResources).toContainEqual({
+      from: ".next/standalone/node_modules",
+      to: "app.asar.unpacked/.next/standalone/node_modules",
+      filter: ["**/*"],
+    });
     expect(pkg.build?.mac?.artifactName).toBe(
       "${productName}-${version}-mac-${arch}.${ext}",
     );

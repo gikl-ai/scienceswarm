@@ -105,7 +105,7 @@ export function resolveDesktopWindowOptions() {
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
-      preload: path.join(__dirname, "preload.mjs"),
+      preload: path.join(__dirname, "preload.cjs"),
     },
   };
 }
@@ -225,6 +225,19 @@ export function logDesktopWindowLoadFailure(context, error) {
   );
 }
 
+export function isDesktopMainEntrypoint({
+  argv = process.argv,
+  modulePath = fileURLToPath(import.meta.url),
+  versions = process.versions,
+  processType = process.type,
+} = {}) {
+  if (versions?.electron && processType === "browser") {
+    return true;
+  }
+
+  return Boolean(argv[1] && path.resolve(argv[1]) === path.resolve(modulePath));
+}
+
 export async function launchDesktopShell(options = {}) {
   const [{ app, BrowserWindow, ipcMain }, { startStandaloneServer }] = await Promise.all([
     import("electron"),
@@ -286,7 +299,7 @@ export async function launchDesktopShell(options = {}) {
   });
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDesktopMainEntrypoint()) {
   launchDesktopShell({
     projectRoot,
     env: process.env,
