@@ -11,8 +11,8 @@ export default function NotFound() {
           This route is not part of ScienceSwarm.
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
-          If you are setting up for the first time, start with OpenClaw and
-          Telegram. If your runtime is already connected, open the study
+          If you are setting up for the first time, open setup and start the
+          local runtime. If your runtime is already connected, open the study
           workspace and import research data to build your brain.
         </p>
       </div>

@@ -7,10 +7,12 @@ import { describe, expect, it } from "vitest";
 import {
   createDesktopPackageBuildConfig,
   createDesktopPackageManifest,
+  DESKTOP_PACKAGE_RUNTIME_DEPENDENCIES,
   DESKTOP_PACKAGE_SCRIPT_INPUTS,
   prepareDesktopPackage,
   resolveDesktopPackageAppDir,
   shouldCopyDesktopShellPath,
+  shouldCopyRuntimeDependencyPath,
   shouldCopyStandalonePackagePath,
   shouldMarkDesktopPackageScriptExecutable,
 } from "../../scripts/prepare-desktop-package.mjs";
@@ -22,6 +24,11 @@ describe("prepare-desktop-package", () => {
       mkdirSync(path.join(root, ".next", "standalone", "node_modules", "next"), {
         recursive: true,
       });
+      mkdirSync(path.join(root, "node_modules", "gbrain", "src"), { recursive: true });
+      mkdirSync(path.join(root, "node_modules", "gbrain", ".github"), { recursive: true });
+      mkdirSync(path.join(root, "node_modules", "gbrain", "test"), { recursive: true });
+      mkdirSync(path.join(root, "node_modules", "gbrain", "node_modules", ".bin"), { recursive: true });
+      mkdirSync(path.join(root, "node_modules", "gbrain", "node_modules", "openai"), { recursive: true });
       mkdirSync(path.join(root, ".next", "standalone", ".local", "private-docs"), {
         recursive: true,
       });
@@ -38,6 +45,24 @@ describe("prepare-desktop-package", () => {
 
       writeFileSync(path.join(root, ".next", "standalone", "server.js"), "server");
       writeFileSync(path.join(root, ".next", "standalone", "node_modules", "next", "index.js"), "next");
+      writeFileSync(path.join(root, "package-lock.json"), JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          "node_modules/gbrain": {
+            version: "0.21.0",
+            resolved: "git+https://github.com/garrytan/gbrain.git#f718c595b3a382b2a9a6a1f6553448ad047b5e94",
+          },
+        },
+      }));
+      writeFileSync(
+        path.join(root, "node_modules", "gbrain", "package.json"),
+        JSON.stringify({ name: "gbrain", version: "0.21.0", bin: { gbrain: "src/cli.ts" } }),
+      );
+      writeFileSync(path.join(root, "node_modules", "gbrain", "src", "cli.ts"), "#!/usr/bin/env bun\n");
+      writeFileSync(path.join(root, "node_modules", "gbrain", ".github", "workflow.yml"), "ci");
+      writeFileSync(path.join(root, "node_modules", "gbrain", "test", "fixture.ts"), "test");
+      writeFileSync(path.join(root, "node_modules", "gbrain", "node_modules", ".bin", "openai"), "bin");
+      writeFileSync(path.join(root, "node_modules", "gbrain", "node_modules", "openai", "package.json"), "{}");
       writeFileSync(
         path.join(root, ".next", "standalone", ".local", "private-docs", "plan.md"),
         "private",
@@ -94,6 +119,15 @@ describe("prepare-desktop-package", () => {
 
       expect(packageDir).toBe(resolveDesktopPackageAppDir(root));
       expect(existsSync(path.join(packageDir, ".next", "standalone", "server.js"))).toBe(true);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "package-lock.json"))).toBe(true);
+      expect(DESKTOP_PACKAGE_RUNTIME_DEPENDENCIES).toContain("gbrain");
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", "package.json"))).toBe(true);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", "src", "cli.ts"))).toBe(true);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", ".bin", "gbrain"))).toBe(true);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", ".github"))).toBe(false);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", "test"))).toBe(false);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", "node_modules", ".bin"))).toBe(false);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", "node_modules", "openai", "package.json"))).toBe(true);
       expect(existsSync(path.join(packageDir, ".next", "standalone", ".local"))).toBe(false);
       expect(existsSync(path.join(packageDir, ".next", "standalone", ".worktrees"))).toBe(false);
       expect(existsSync(path.join(packageDir, ".next", "standalone", ".git"))).toBe(false);
@@ -193,6 +227,15 @@ describe("prepare-desktop-package", () => {
     expect(shouldCopyStandalonePackagePath(path.join(root, "README.md"), root)).toBe(false);
     expect(shouldCopyStandalonePackagePath(path.join(root, "docs", "desktop-installers.md"), root)).toBe(true);
     expect(shouldCopyStandalonePackagePath(path.join(root, "desktop", "model.gguf"), root)).toBe(false);
+  });
+
+  it("filters nested dependency bin shims from manually staged runtime dependencies", () => {
+    const root = path.join("/tmp", "node_modules", "gbrain");
+
+    expect(shouldCopyRuntimeDependencyPath(path.join(root, "package.json"), root)).toBe(true);
+    expect(shouldCopyRuntimeDependencyPath(path.join(root, "node_modules", "openai", "package.json"), root)).toBe(true);
+    expect(shouldCopyRuntimeDependencyPath(path.join(root, "node_modules", ".bin"), root)).toBe(false);
+    expect(shouldCopyRuntimeDependencyPath(path.join(root, "node_modules", ".bin", "openai"), root)).toBe(false);
   });
 
   it("marks only packaged shell scripts as executable", () => {

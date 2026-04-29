@@ -11,6 +11,9 @@ const projectRoot = path.resolve(__dirname, "..");
 
 export const REQUIRED_DESKTOP_PACKAGE_PATHS = [
   ".next/standalone/server.js",
+  ".next/standalone/package-lock.json",
+  ".next/standalone/node_modules/gbrain/package.json",
+  ".next/standalone/node_modules/.bin/gbrain",
   "desktop/main.mjs",
   "desktop/preload.cjs",
   "scripts/start-standalone.mjs",

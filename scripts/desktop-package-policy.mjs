@@ -11,6 +11,7 @@ export const FORBIDDEN_DESKTOP_PACKAGE_SEGMENTS = new Set([
   "blobs",
   "manifests",
   "ollama-models",
+  "test",
   "tests",
 ]);
 
