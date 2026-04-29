@@ -766,7 +766,7 @@ async function materializePaper(input: {
     return {
       page: {
         type: "paper",
-        title: paperTitle(input.paper),
+        title: existing?.title?.trim() || paperTitle(input.paper),
         compiledTruth: mergeSection(
           existing?.compiledTruth,
           "Scientific Corpus",

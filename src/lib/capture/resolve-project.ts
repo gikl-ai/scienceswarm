@@ -41,6 +41,7 @@ export async function resolveProject(input: {
   stateRoot: string;
   explicitProject?: string | null;
   sessionActiveProject?: string | null;
+  allowSingleProjectFallback?: boolean;
 }): Promise<ProjectResolution> {
   if (input.explicitProject?.trim()) {
     return {
@@ -59,7 +60,7 @@ export async function resolveProject(input: {
   }
 
   const candidates = await listActiveProjectSlugs(input.stateRoot);
-  if (candidates.length === 1) {
+  if ((input.allowSingleProjectFallback ?? true) && candidates.length === 1) {
     return {
       project: candidates[0],
       source: "single-project",
