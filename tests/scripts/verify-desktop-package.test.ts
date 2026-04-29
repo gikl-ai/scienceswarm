@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -59,6 +59,8 @@ describe("verify-desktop-package", () => {
       writeFileSync(path.join(packageDir, "desktop", "ollama-models", "model.gguf"), "weights");
       mkdirSync(path.join(packageDir, "desktop", "cache", "blobs"), { recursive: true });
       writeFileSync(path.join(packageDir, "desktop", "cache", "blobs", "sha256"), "blob");
+      mkdirSync(path.join(packageDir, "desktop", "cache", "manifests"), { recursive: true });
+      writeFileSync(path.join(packageDir, "desktop", "cache", "manifests", "model"), "manifest");
 
       expect(findDesktopPackageProblems({ root })).toEqual(
         expect.arrayContaining([
@@ -66,8 +68,23 @@ describe("verify-desktop-package", () => {
           "Forbidden desktop package payload path: desktop/ollama-models/model.gguf",
           "Forbidden desktop package payload path: desktop/cache/blobs",
           "Forbidden desktop package payload path: desktop/cache/blobs/sha256",
+          "Forbidden desktop package payload path: desktop/cache/manifests",
+          "Forbidden desktop package payload path: desktop/cache/manifests/model",
         ]),
       );
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not follow symlinked directories while scanning package payloads", () => {
+    const root = path.join(tmpdir(), `scienceswarm-desktop-package-verify-${Date.now()}`);
+    const packageDir = path.join(root, ".desktop-package", "app");
+    try {
+      writeRequiredPackageFiles(packageDir);
+      symlinkSync(packageDir, path.join(packageDir, "desktop", "loop"), "dir");
+
+      expect(findDesktopPackageProblems({ root })).toEqual([]);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }

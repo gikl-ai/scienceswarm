@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,7 +35,8 @@ function walkPackagePaths(packageDir) {
     }
 
     entries.push(current);
-    if (!statSync(current).isDirectory()) {
+    const stats = lstatSync(current);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
       continue;
     }
 
