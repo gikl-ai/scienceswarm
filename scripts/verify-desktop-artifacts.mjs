@@ -17,6 +17,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
 export const PRIMARY_INSTALLER_ARTIFACT_SUFFIXES = [".dmg", ".exe", ".AppImage"];
+export const DESKTOP_PLATFORM_INSTALLER_SUFFIXES = {
+  linux: [".AppImage"],
+  macos: [".dmg"],
+  windows: [".exe"],
+};
 
 export function parseChecksumManifest(manifest) {
   return manifest
@@ -42,6 +47,35 @@ export function isPrimaryInstallerArtifactPath(filePath) {
   return PRIMARY_INSTALLER_ARTIFACT_SUFFIXES.some((suffix) => basename.endsWith(suffix));
 }
 
+export function normalizeDesktopArtifactPlatform(platform) {
+  const normalized = platform?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized === "mac" || normalized === "darwin") {
+    return "macos";
+  }
+  if (normalized === "win" || normalized === "win32") {
+    return "windows";
+  }
+  if (normalized in DESKTOP_PLATFORM_INSTALLER_SUFFIXES) {
+    return normalized;
+  }
+
+  throw new Error(`Unsupported desktop artifact platform: ${platform}`);
+}
+
+export function isInstallerArtifactForPlatform(filePath, platform) {
+  const normalizedPlatform = normalizeDesktopArtifactPlatform(platform);
+  if (!normalizedPlatform) {
+    return false;
+  }
+
+  const basename = path.basename(filePath);
+  return DESKTOP_PLATFORM_INSTALLER_SUFFIXES[normalizedPlatform]
+    .some((suffix) => basename.endsWith(suffix));
+}
+
 export function resolveDesktopArtifactManifestPath(distDir) {
   return path.join(distDir, "SHA256SUMS.txt");
 }
@@ -64,7 +98,9 @@ export async function verifyDesktopArtifacts(options = {}) {
     throw new Error(`Desktop installer checksum manifest is empty: ${manifestPath}`);
   }
 
+  const expectedPlatform = normalizeDesktopArtifactPlatform(options.expectedPlatform);
   let primaryArtifactCount = 0;
+  let expectedPlatformArtifactCount = 0;
   for (const entry of entries) {
     const pathSegments = entry.relativePath.split("/");
     if (
@@ -90,17 +126,33 @@ export async function verifyDesktopArtifacts(options = {}) {
       throw new Error(`Checksum mismatch for ${entry.relativePath}`);
     }
 
-    if (isPrimaryInstallerArtifactPath(entry.relativePath)) {
+    const isPrimaryArtifact = isPrimaryInstallerArtifactPath(entry.relativePath);
+    if (isPrimaryArtifact) {
       primaryArtifactCount += 1;
+      if (expectedPlatform && !isInstallerArtifactForPlatform(entry.relativePath, expectedPlatform)) {
+        throw new Error(
+          `Unexpected desktop installer artifact for ${expectedPlatform}: ${entry.relativePath}`,
+        );
+      }
+      if (expectedPlatform) {
+        expectedPlatformArtifactCount += 1;
+      }
     }
   }
 
   if (primaryArtifactCount === 0) {
     throw new Error("No primary desktop installer artifact was listed in SHA256SUMS.txt.");
   }
+  if (expectedPlatform && expectedPlatformArtifactCount === 0) {
+    throw new Error(
+      `No ${expectedPlatform} desktop installer artifact was listed in SHA256SUMS.txt.`,
+    );
+  }
 
   return {
     artifactCount: entries.length,
+    expectedPlatform,
+    expectedPlatformArtifactCount,
     manifestPath,
     primaryArtifactCount,
   };
@@ -112,6 +164,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     : resolveProjectChecksumDistDir(process.env.SCIENCESWARM_DESKTOP_DIST_DIR || "dist");
   const result = await verifyDesktopArtifacts({
     distDir,
+    expectedPlatform: process.env.SCIENCESWARM_DESKTOP_ARTIFACT_PLATFORM,
   });
   console.log(
     `Verified ${result.artifactCount} desktop installer artifacts from ${result.manifestPath}`,

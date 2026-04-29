@@ -25,6 +25,7 @@ jobs:
           - name: macOS DMG
             os: macos-latest
             package-script: desktop:pack:mac
+            artifact-platform: macos
             artifact-name: scienceswarm-macos-dmg
             artifact-path: |
               dist/*.dmg
@@ -33,6 +34,7 @@ jobs:
           - name: Windows NSIS
             os: windows-latest
             package-script: desktop:pack:win
+            artifact-platform: windows
             artifact-name: scienceswarm-windows-nsis
             artifact-path: |
               dist/*.exe
@@ -41,6 +43,7 @@ jobs:
           - name: Linux AppImage
             os: ubuntu-latest
             package-script: desktop:pack:linux
+            artifact-platform: linux
             artifact-name: scienceswarm-linux-appimage
             artifact-path: |
               dist/*.AppImage
@@ -49,6 +52,7 @@ jobs:
 
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      SCIENCESWARM_DESKTOP_ARTIFACT_PLATFORM: ${{ matrix.artifact-platform }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
