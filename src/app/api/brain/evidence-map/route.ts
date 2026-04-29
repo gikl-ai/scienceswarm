@@ -7,6 +7,13 @@ import { ensureBrainStoreReady, getBrainStore, type BrainPage } from "@/brain/st
 import { filterProjectPages } from "@/brain/project-organizer";
 import { parseEvidenceMapModelJson } from "@/lib/evidence-map-json";
 import { isLocalRequest } from "@/lib/local-guard";
+import {
+  buildResearchContextPacketFromPages,
+  detectGbrainCorpusCapabilities,
+  formatResearchContextPacketForPrompt,
+  researchContextPacketPageSlugs,
+  type ResearchContextPacket,
+} from "@/lib/paper-library/corpus";
 import { assertSafeProjectSlug } from "@/lib/state/project-manifests";
 import { getCurrentUserHandle } from "@/lib/setup/gbrain-installer";
 
@@ -317,6 +324,27 @@ function normalizeEvidenceMapPayload(
   };
 }
 
+function compactFrontmatter(value: Record<string, unknown>): Record<string, unknown> {
+  const compacted: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry === undefined) continue;
+    if (Array.isArray(entry)) {
+      compacted[key] = entry.map((item) => (
+        item && typeof item === "object" && !Array.isArray(item)
+          ? compactFrontmatter(item as Record<string, unknown>)
+          : item
+      ));
+      continue;
+    }
+    if (entry && typeof entry === "object") {
+      compacted[key] = compactFrontmatter(entry as Record<string, unknown>);
+      continue;
+    }
+    compacted[key] = entry;
+  }
+  return compacted;
+}
+
 function buildEvidenceMapMarkdown(args: {
   studySlug: string;
   payload: EvidenceMapPayload;
@@ -324,9 +352,11 @@ function buildEvidenceMapMarkdown(args: {
   generatedBy: string;
   question: string;
   sourcePages: BrainPage[];
+  contextPacket?: ResearchContextPacket | null;
 }): string {
   const title = `Evidence Map: ${args.payload.focused_question}`;
-  const frontmatter = {
+  const contextPacket = args.contextPacket ?? null;
+  const frontmatter = compactFrontmatter({
     title,
     type: "note",
     study: args.studySlug,
@@ -340,7 +370,15 @@ function buildEvidenceMapMarkdown(args: {
     tension_count: args.payload.tensions.length,
     source_page_count: args.sourcePages.length,
     source_pages: args.sourcePages.map((page) => page.path),
-  };
+    context_packet_used: Boolean(contextPacket),
+    context_packet_policy: contextPacket?.selectionPolicy,
+    context_packet_papers: contextPacket?.papers.map((paper) => paper.paperSlug),
+    context_packet_retrieval_modes: contextPacket?.capabilities.capabilities.map((capability) => ({
+      mode: capability.mode,
+      status: capability.status,
+      reason: capability.reason,
+    })),
+  });
 
   const claimLines = args.payload.claims.flatMap((claim, index) => {
     const lines = [
@@ -406,6 +444,31 @@ function buildEvidenceMapMarkdown(args: {
           "",
         ])
       : ["- No major unresolved gaps were called out from the selected sources.", ""];
+  const contextLines = contextPacket
+    ? [
+        "## Local corpus context",
+        "",
+        `Selection policy: ${contextPacket.selectionPolicy}`,
+        "",
+        "Selected papers:",
+        ...(contextPacket.papers.length > 0
+          ? contextPacket.papers.map((paper) => [
+              `- [[${paper.paperSlug}]] - ${paper.role}`,
+              paper.reasonSelected ? `; ${paper.reasonSelected}` : "",
+              paper.caveats.length > 0 ? ` Caveats: ${paper.caveats.join("; ")}` : "",
+            ].join(""))
+          : ["- No local corpus papers were selected."]),
+        "",
+        "Missing or metadata-only papers:",
+        ...(contextPacket.missingPapers.length > 0
+          ? contextPacket.missingPapers.map((paper) => `- [[${paper.bibliographySlug}]] - ${paper.reason}`)
+          : ["- No missing corpus bibliography nodes were selected."]),
+        "",
+        ...(contextPacket.caveats.length > 0
+          ? ["Capability caveats:", ...contextPacket.caveats.map((caveat) => `- ${caveat}`), ""]
+          : []),
+      ]
+    : [];
 
   return matter.stringify(
     [
@@ -428,6 +491,7 @@ function buildEvidenceMapMarkdown(args: {
       "## Uncertainties",
       "",
       ...uncertaintyLines,
+      ...contextLines,
       "## Honesty note",
       "",
       args.payload.honesty_note,
@@ -435,6 +499,21 @@ function buildEvidenceMapMarkdown(args: {
     ].join("\n"),
     frontmatter,
   );
+}
+
+function selectPagesForContextPacket(
+  pages: BrainPage[],
+  packet: ResearchContextPacket,
+): BrainPage[] {
+  const wanted = new Set(researchContextPacketPageSlugs(packet));
+  const selected: BrainPage[] = [];
+  for (const page of pages) {
+    const normalized = page.path.replace(/\.md$/i, "");
+    if (!wanted.has(normalized)) continue;
+    selected.push(page);
+    if (selected.length >= PAGE_SELECTION_LIMIT) break;
+  }
+  return selected;
 }
 
 const SYSTEM_PROMPT = `You build study evidence maps for scientists.
@@ -531,7 +610,8 @@ export async function POST(request: Request) {
 
   try {
     await ensureBrainStoreReady();
-    const allPages = await getBrainStore().listPages({ limit: PAGE_SCAN_LIMIT });
+    const store = getBrainStore();
+    const allPages = await store.listPages({ limit: PAGE_SCAN_LIMIT });
     const projectPages = filterProjectPages(allPages, studySlug)
       .filter((page) => {
         if (page.type === "project" || page.content.trim().length === 0) {
@@ -546,7 +626,28 @@ export async function POST(request: Request) {
       );
     }
 
-    const selectedPages = selectPagesForQuestion(projectPages, question);
+    let contextPacket: ResearchContextPacket | null = null;
+    try {
+      const capabilities = await detectGbrainCorpusCapabilities({ store });
+      const packet = buildResearchContextPacketFromPages({
+        studySlug,
+        question,
+        pages: projectPages,
+        capabilities,
+      });
+      if (packet.papers.length > 0) {
+        contextPacket = packet;
+      }
+    } catch {
+      contextPacket = null;
+    }
+
+    const contextPages = contextPacket
+      ? selectPagesForContextPacket(projectPages, contextPacket)
+      : [];
+    const selectedPages = contextPages.length > 0
+      ? contextPages
+      : selectPagesForQuestion(projectPages, question);
     if (focusBrainSlug) {
       const focusedPage = projectPages.find((page) => page.path === focusBrainSlug);
       if (focusedPage && !selectedPages.some((page) => page.path === focusedPage.path)) {
@@ -563,6 +664,11 @@ export async function POST(request: Request) {
         `Study: ${studySlug}`,
         `Focused question: ${question}`,
         "",
+        ...(contextPacket ? [
+          "ResearchContextPacket:",
+          formatResearchContextPacketForPrompt(contextPacket),
+          "",
+        ] : []),
         "Sources:",
         formatPagesForPrompt(selectedPages),
       ].join("\n"),
@@ -607,6 +713,7 @@ export async function POST(request: Request) {
       generatedBy,
       question,
       sourcePages: selectedPages,
+      contextPacket,
     });
 
     const gbrain = createInProcessGbrainClient();
@@ -621,6 +728,8 @@ export async function POST(request: Request) {
         claimCount: payload.claims.length,
         tensionCount: payload.tensions.length,
         sourcePageCount: selectedPages.length,
+        contextPacketUsed: Boolean(contextPacket),
+        contextPaperCount: contextPacket?.papers.length ?? 0,
         honestyNote: payload.honesty_note,
       },
     });
