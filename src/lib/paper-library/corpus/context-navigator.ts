@@ -184,9 +184,13 @@ function bibliographyForPaper(
   bibliographyPages: readonly CorpusContextPage[],
   paperSlug: string,
 ): CorpusContextPage[] {
+  const normalizedPaperSlug = normalizeSlug(paperSlug);
   return bibliographyPages.filter((page) => {
     const seenIn = readArray(pageFrontmatter(page).seen_in);
-    return seenIn.some((entry) => readString(readRecord(entry)?.paperSlug) === paperSlug);
+    return seenIn.some((entry) => {
+      const seenPaperSlug = readString(readRecord(entry)?.paperSlug);
+      return Boolean(seenPaperSlug && normalizeSlug(seenPaperSlug) === normalizedPaperSlug);
+    });
   });
 }
 
@@ -202,7 +206,7 @@ function missingPapersForSelection(
     const seenIn = readArray(frontmatter.seen_in);
     const selectedSeenIn = seenIn.find((entry) => {
       const paperSlug = readString(readRecord(entry)?.paperSlug);
-      return Boolean(paperSlug && selectedPaperSlugs.has(paperSlug));
+      return Boolean(paperSlug && selectedPaperSlugs.has(normalizeSlug(paperSlug)));
     });
     if (!selectedSeenIn) continue;
     missing.push({

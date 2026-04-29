@@ -90,7 +90,7 @@ const pages = [
       local_status: "metadata_only",
       seen_in: [
         {
-          paperSlug: "wiki/entities/papers/good-pdf-2024",
+          paperSlug: "wiki/entities/papers/good-pdf-2024.md",
           extractionSource: "pdf_references",
           confidence: 0.72,
         },
