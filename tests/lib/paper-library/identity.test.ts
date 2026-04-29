@@ -92,8 +92,10 @@ describe("paper-library identity", () => {
 
   it("strips common year and author prefixes from structured filenames", () => {
     expect(deriveTitleHintFromPath("papers/2024 - Smith - Local Latex.pdf")).toBe("Local Latex");
+    expect(deriveTitleHintFromPath("papers/2024 - Smith-Jones - Local Latex.pdf")).toBe("Local Latex");
     expect(deriveTitleHintFromPath("papers/2024 - Local Latex.pdf")).toBe("Local Latex");
     expect(deriveTitleHintFromPath("papers/Smith 2024 - Local Latex.pdf")).toBe("Local Latex");
+    expect(deriveTitleHintFromPath("papers/Smith-Jones 2024 - Local Latex.pdf")).toBe("Local Latex");
     expect(deriveTitleHintFromPath("papers/Scaling Laws 2024 Update.pdf")).toBe("Scaling Laws 2024 Update");
   });
 });
