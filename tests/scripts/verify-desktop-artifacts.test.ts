@@ -49,8 +49,30 @@ describe("verify-desktop-artifacts", () => {
         root,
       })).resolves.toMatchObject({
         expectedPlatform: "linux",
-        expectedPlatformArtifactCount: 1,
+        primaryArtifactCount: 1,
       });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects secondary-only manifests even when a platform is expected", async () => {
+    const root = path.join(tmpdir(), `scienceswarm-verify-artifacts-${Date.now()}`);
+    const distDir = path.join(root, "dist");
+    try {
+      mkdirSync(distDir, { recursive: true });
+      writeArtifact(distDir, "ScienceSwarm-0.1.0-windows-x64.exe.blockmap", "blockmap");
+      writeFileSync(
+        path.join(distDir, "SHA256SUMS.txt"),
+        `${sha256("blockmap")}  ScienceSwarm-0.1.0-windows-x64.exe.blockmap\n`,
+      );
+
+      await expect(verifyDesktopArtifacts({
+        expectedPlatform: "windows",
+        root,
+      })).rejects.toThrow(
+        "No primary desktop installer artifact was listed in SHA256SUMS.txt.",
+      );
     } finally {
       rmSync(root, { force: true, recursive: true });
     }

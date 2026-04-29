@@ -58,7 +58,7 @@ export function normalizeDesktopArtifactPlatform(platform) {
   if (normalized === "win" || normalized === "win32") {
     return "windows";
   }
-  if (normalized in DESKTOP_PLATFORM_INSTALLER_SUFFIXES) {
+  if (Object.hasOwn(DESKTOP_PLATFORM_INSTALLER_SUFFIXES, normalized)) {
     return normalized;
   }
 
@@ -100,7 +100,6 @@ export async function verifyDesktopArtifacts(options = {}) {
 
   const expectedPlatform = normalizeDesktopArtifactPlatform(options.expectedPlatform);
   let primaryArtifactCount = 0;
-  let expectedPlatformArtifactCount = 0;
   for (const entry of entries) {
     const pathSegments = entry.relativePath.split("/");
     if (
@@ -134,9 +133,6 @@ export async function verifyDesktopArtifacts(options = {}) {
           `Unexpected desktop installer artifact for ${expectedPlatform}: ${entry.relativePath}`,
         );
       }
-      if (expectedPlatform) {
-        expectedPlatformArtifactCount += 1;
-      }
     }
   }
 
@@ -147,7 +143,6 @@ export async function verifyDesktopArtifacts(options = {}) {
   return {
     artifactCount: entries.length,
     expectedPlatform,
-    expectedPlatformArtifactCount,
     manifestPath,
     primaryArtifactCount,
   };
