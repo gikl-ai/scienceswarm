@@ -962,6 +962,43 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
 
+    case "prepare-openhands": {
+      const { openhandsDockerTask } = await import(
+        "@/lib/setup/install-tasks/openhands-docker"
+      );
+      const events = [];
+      for await (const event of openhandsDockerTask.run({
+        handle: "settings",
+        repoRoot: process.cwd(),
+      })) {
+        events.push(event);
+      }
+
+      let terminal = null;
+      for (let index = events.length - 1; index >= 0; index -= 1) {
+        const event = events[index];
+        if (
+          event.status === "succeeded"
+          || event.status === "skipped"
+          || event.status === "failed"
+        ) {
+          terminal = event;
+          break;
+        }
+      }
+      const ok = terminal?.status === "succeeded";
+      return Response.json(
+        {
+          ok,
+          status: terminal?.status ?? "failed",
+          detail: terminal?.detail ?? null,
+          error: terminal?.error ?? null,
+          events,
+        },
+        { status: ok ? 200 : terminal?.status === "skipped" ? 409 : 500 },
+      );
+    }
+
     case "install-ollama": {
       // Convenience install — spawns in background, returns immediately.
       // The install path is hardware-aware so Apple Silicon does not

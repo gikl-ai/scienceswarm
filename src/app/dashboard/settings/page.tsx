@@ -15,6 +15,7 @@ import { IdentitySection } from "./sections/identity";
 import { SetupAndConfigurationSection } from "./sections/setup-and-configuration";
 import { ApiKeysAndModelSection } from "./sections/api-keys-and-model";
 import { LocalModelSection } from "./sections/local-model";
+import { OpenHandsRuntimeSection } from "./sections/openhands-runtime";
 import { TelegramOpenClawSection } from "./sections/telegram-openclaw";
 import { WorkspaceDisplaySection } from "./sections/workspace-display";
 import { ProjectRuntimeSection } from "./sections/project-runtime";
@@ -890,6 +891,19 @@ export default function SettingsPage() {
             showNanoClawFallback={false}
             disabled={saving !== null}
             autoStart
+          />
+
+          <OpenHandsRuntimeSection
+            openhandsStatus={health?.openhands ?? null}
+            disabled={saving !== null}
+            primaryButtonClassName={btnPrimary}
+            secondaryButtonClassName={btnSecondary}
+            onPrepared={() => {
+              void Promise.all([
+                fetchHealth(),
+                fetchRuntimeHealth(),
+              ]);
+            }}
           />
 
           {settings && (
