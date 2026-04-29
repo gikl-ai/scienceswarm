@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +23,7 @@ export const DESKTOP_PACKAGE_SCRIPT_INPUTS = [
   "install-runtime-prereqs.sh",
   "install-desktop-runtime-prereqs.sh",
 ];
+export const DESKTOP_PACKAGE_RUNTIME_DEPENDENCIES = ["gbrain"];
 
 export function shouldMarkDesktopPackageScriptExecutable(scriptName) {
   return scriptName.endsWith(".sh");
@@ -63,6 +72,50 @@ function copyTree(sourcePath, destinationPath, options = {}) {
   });
 }
 
+export function shouldCopyRuntimeDependencyPath(sourcePath, dependencyRoot) {
+  const relativePath = path.relative(dependencyRoot, sourcePath).split(path.sep).join("/");
+  if (!relativePath || relativePath === ".") {
+    return true;
+  }
+  return !(
+    relativePath === "node_modules/.bin"
+    || relativePath.startsWith("node_modules/.bin/")
+    || relativePath.includes("/node_modules/.bin/")
+  );
+}
+
+function stageRuntimeDependency(root, packageDir, packageName) {
+  const sourcePath = path.join(root, "node_modules", packageName);
+  const standaloneRoot = path.join(packageDir, ".next", "standalone");
+  const dependencyRoot = sourcePath;
+  const destinationPath = path.join(standaloneRoot, "node_modules", packageName);
+  copyTree(sourcePath, destinationPath, {
+    filter: (sourcePath) =>
+      shouldCopyRuntimeDependencyPath(sourcePath, dependencyRoot)
+      && shouldCopyStandalonePackagePath(sourcePath, standaloneRoot),
+  });
+
+  const packageJsonPath = path.join(destinationPath, "package.json");
+  const dependencyPackage = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+  const binEntries = typeof dependencyPackage.bin === "string"
+    ? { [packageName]: dependencyPackage.bin }
+    : dependencyPackage.bin ?? {};
+  const binDir = path.join(standaloneRoot, "node_modules", ".bin");
+  mkdirSync(binDir, { recursive: true });
+  for (const [binName, binTarget] of Object.entries(binEntries)) {
+    if (typeof binTarget !== "string" || !binName) {
+      continue;
+    }
+    const binPath = path.join(binDir, binName);
+    rmSync(binPath, { force: true });
+    writeFileSync(
+      binPath,
+      `#!/bin/sh\nexec "$(dirname "$0")/../${packageName}/${binTarget}" "$@"\n`,
+    );
+    chmodSync(binPath, 0o755);
+  }
+}
+
 export function shouldCopyDesktopShellPath(sourcePath, desktopRoot) {
   const relativePath = path.relative(desktopRoot, sourcePath).split(path.sep).join("/");
   if (!relativePath || relativePath === ".") {
@@ -106,9 +159,16 @@ export function prepareDesktopPackage(root = projectRoot) {
       ),
     },
   );
+  copyTree(
+    path.join(root, "package-lock.json"),
+    path.join(packageDir, ".next", "standalone", "package-lock.json"),
+  );
   copyTree(desktopRoot, path.join(packageDir, "desktop"), {
     filter: (sourcePath) => shouldCopyDesktopShellPath(sourcePath, desktopRoot),
   });
+  for (const packageName of DESKTOP_PACKAGE_RUNTIME_DEPENDENCIES) {
+    stageRuntimeDependency(root, packageDir, packageName);
+  }
   for (const scriptName of DESKTOP_PACKAGE_SCRIPT_INPUTS) {
     const stagedScriptPath = path.join(packageDir, "scripts", scriptName);
     copyTree(
