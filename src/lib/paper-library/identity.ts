@@ -55,10 +55,9 @@ export function deriveTitleHintFromPath(relativePath: string): string | undefine
   const structuredTitle =
     rawName.match(YEAR_AUTHOR_TITLE_PATH_RE)?.[1]
     ?? rawName.match(AUTHOR_YEAR_TITLE_PATH_RE)?.[1]
-    ?? rawName.match(YEAR_TITLE_PATH_RE)?.[1]
-    ?? rawName;
-  const cleaned = structuredTitle
-    .replace(/[_-]+/g, " ")
+    ?? rawName.match(YEAR_TITLE_PATH_RE)?.[1];
+  const cleaned = (structuredTitle ?? rawName)
+    .replace(structuredTitle ? /_/g : /[_-]+/g, " ")
     .replace(/\b(?:final|draft|copy|download|paper|pdf)\b/gi, " ")
     .replace(/\b(?:v\d+|\(\d+\))\b/gi, " ")
     .replace(/\s+/g, " ")

@@ -110,8 +110,10 @@ describe("paper-library jobs", () => {
         candidates: Array<{ title?: string; year?: number; conflicts?: string[] }>;
       }>;
     };
-    expect(parsedReviewShard.items[0]?.candidates[0]).toMatchObject({
-      title: "10.1000 test",
+    expect(parsedReviewShard.items).toHaveLength(1);
+    expect(parsedReviewShard.items[0].candidates).toHaveLength(1);
+    expect(parsedReviewShard.items[0].candidates[0]).toMatchObject({
+      title: "10.1000-test",
       year: 2024,
       conflicts: ["text_layer_too_thin"],
     });
