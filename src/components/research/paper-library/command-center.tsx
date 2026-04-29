@@ -245,7 +245,7 @@ function shouldPromoteLatestScan({
   latestScan: PaperLibraryScan;
 }): boolean {
   if (!currentSession.scanId) return true;
-  if (currentSession.scanId === latestScan.id) return true;
+  if (currentSession.scanId === latestScan.id) return false;
   if (!currentScan || isScanInFlight(currentScan)) return false;
   if (currentSession.step !== "scan") return false;
   return scanTimestamp(latestScan) > scanTimestamp(currentScan);
