@@ -204,7 +204,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const configRoot = resolveSetupConfigRoot();
     const [status, openclawStatus, ollamaStatus] = await Promise.all([
-      getConfigStatus(configRoot),
+      getConfigStatus(configRoot, { includeRuntimeEnv: true }),
       probeOpenClawOrUndefined(),
       probeOllamaOrUndefined(),
     ]);
