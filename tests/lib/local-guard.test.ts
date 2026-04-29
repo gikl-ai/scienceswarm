@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { isLocalRequest } from "@/lib/local-guard";
+import { resolveStandaloneServerEnv } from "../../scripts/start-standalone.mjs";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -255,6 +256,25 @@ describe("isLocalRequest", () => {
         }),
       ),
     ).resolves.toBe(false);
+  });
+
+  it("allows packaged standalone desktop requests in production", async () => {
+    const standaloneEnv = resolveStandaloneServerEnv({});
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("FRONTEND_HOST", standaloneEnv.FRONTEND_HOST);
+    vi.stubEnv("FRONTEND_PUBLIC_HOST", standaloneEnv.FRONTEND_PUBLIC_HOST);
+    vi.stubEnv("FRONTEND_PORT", standaloneEnv.FRONTEND_PORT);
+
+    await expect(
+      isLocalRequest(
+        new Request("http://127.0.0.1:3001/api/setup/bootstrap", {
+          headers: {
+            origin: "http://127.0.0.1:3001",
+            "sec-fetch-site": "same-origin",
+          },
+        }),
+      ),
+    ).resolves.toBe(true);
   });
 
   it("rejects IPv4-mapped IPv6 non-loopback forwarded clients", async () => {

@@ -16,10 +16,16 @@ export function resolveStandaloneServerRoot(cwd = process.cwd()) {
  * @param {Record<string, string | undefined>} env
  */
 export function resolveStandaloneServerEnv(env = process.env) {
+  const port = env.FRONTEND_PORT?.trim() || env.PORT?.trim() || "3001";
+  const host = env.FRONTEND_HOST?.trim() || env.HOSTNAME?.trim() || "127.0.0.1";
+
   return {
     ...env,
-    PORT: env.FRONTEND_PORT?.trim() || env.PORT?.trim() || "3001",
-    HOSTNAME: env.FRONTEND_HOST?.trim() || env.HOSTNAME?.trim() || "127.0.0.1",
+    PORT: port,
+    HOSTNAME: host,
+    FRONTEND_PORT: port,
+    FRONTEND_HOST: host,
+    FRONTEND_PUBLIC_HOST: env.FRONTEND_PUBLIC_HOST?.trim() || host,
   };
 }
 
