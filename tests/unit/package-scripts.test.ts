@@ -189,6 +189,13 @@ describe("package.json scripts", () => {
     expect(runtimePrereqsScript).toContain('"$ollama_bin" pull "$MODEL"');
   });
 
+  it("lets managed desktop installs skip the OpenHands image pull", () => {
+    expect(desktopRuntimePrereqsScript).toContain("SCIENCESWARM_SKIP_OPENHANDS_PULL=1");
+    expect(runtimePrereqsScript).toContain("SCIENCESWARM_SKIP_OPENHANDS_PULL");
+    expect(runtimePrereqsScript).toContain("Skipping OpenHands image download");
+    expect(runtimePrereqsScript).toContain('"$docker_bin" pull "$OPENHANDS_IMAGE"');
+  });
+
   it("keeps shell Gemma alias matching aligned with TypeScript constants", () => {
     const aliasBlock = runtimePrereqsScript.match(
       /Keep the Gemma 4 alias rows in sync[\s\S]*?END \{ exit found \? 0 : 1 \}/,
