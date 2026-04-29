@@ -447,23 +447,38 @@ export async function runPaperLibraryScanJob(
     }
 
     await flushReviewShard();
-    const finalUpdatedAt = nowIso();
     const corpusWarnings: string[] = [];
+    let heartbeatActive = true;
+    const heartbeatTimer = setInterval(() => {
+      void updatePaperLibraryScan(project, scanId, brainRoot, (current) => {
+        if (!heartbeatActive || !ACTIVE_SCAN_STATUSES.has(current.status)) return current;
+        const heartbeatAt = nowIso();
+        return {
+          ...current,
+          heartbeatAt,
+          updatedAt: heartbeatAt,
+        };
+      }).catch(() => undefined);
+    }, HEARTBEAT_WRITE_INTERVAL_MS);
     try {
       await writePaperCorpusManifestForScan({
         project,
         scanId,
         rootRealpath,
         createdAt: scan.createdAt,
-        updatedAt: finalUpdatedAt,
+        updatedAt: nowIso(),
         items: allReviewItems,
         stateRoot,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Corpus source inventory failed.";
       corpusWarnings.push(`corpus_source_inventory_failed: ${message}`);
+    } finally {
+      heartbeatActive = false;
+      clearInterval(heartbeatTimer);
     }
 
+    const finalUpdatedAt = nowIso();
     await updatePaperLibraryScan(project, scanId, brainRoot, (current) => ({
       ...current,
       status: needsReviewCount > 0 ? "ready_for_review" : "ready_for_apply",
