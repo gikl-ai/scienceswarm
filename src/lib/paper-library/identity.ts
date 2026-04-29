@@ -60,6 +60,7 @@ export function deriveTitleHintFromPath(relativePath: string): string | undefine
     .replace(structuredTitle ? /_/g : /[_-]+/g, " ")
     .replace(/\b(?:final|draft|copy|download|paper|pdf)\b/gi, " ")
     .replace(/\b(?:v\d+|\(\d+\))\b/gi, " ")
+    .replace(/(?:^|\s)[-\u2013\u2014]+(?=\s|$)/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 

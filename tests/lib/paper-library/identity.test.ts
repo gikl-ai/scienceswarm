@@ -94,6 +94,7 @@ describe("paper-library identity", () => {
     expect(deriveTitleHintFromPath("papers/2024 - Smith - Local Latex.pdf")).toBe("Local Latex");
     expect(deriveTitleHintFromPath("papers/2024 - Smith-Jones - Local Latex.pdf")).toBe("Local Latex");
     expect(deriveTitleHintFromPath("papers/2024 - Smith - Meta-Analysis Review.pdf")).toBe("Meta-Analysis Review");
+    expect(deriveTitleHintFromPath("papers/2024 - Smith - Meta-Analysis Review - final.pdf")).toBe("Meta-Analysis Review");
     expect(deriveTitleHintFromPath("papers/2024 - Local Latex.pdf")).toBe("Local Latex");
     expect(deriveTitleHintFromPath("papers/Smith 2024 - Local Latex.pdf")).toBe("Local Latex");
     expect(deriveTitleHintFromPath("papers/Smith-Jones 2024 - Local Latex.pdf")).toBe("Local Latex");
