@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDesktopPackageBuildConfig,
   createDesktopPackageManifest,
+  DESKTOP_PACKAGE_SCRIPT_INPUTS,
   prepareDesktopPackage,
   resolveDesktopPackageAppDir,
   shouldCopyDesktopShellPath,
@@ -31,7 +32,9 @@ describe("prepare-desktop-package", () => {
       writeFileSync(path.join(root, "desktop", "ollama-models", "model.gguf"), "weights");
       writeFileSync(path.join(root, "desktop", "cache", "blobs", "sha256"), "blob");
       writeFileSync(path.join(root, "desktop", "cache", "manifests", "model"), "manifest");
-      writeFileSync(path.join(root, "scripts", "start-standalone.mjs"), "start");
+      for (const scriptName of DESKTOP_PACKAGE_SCRIPT_INPUTS) {
+        writeFileSync(path.join(root, "scripts", scriptName), scriptName);
+      }
       writeFileSync(path.join(root, "package.json"), JSON.stringify({
         name: "scienceswarm",
         version: "0.1.0",
@@ -65,7 +68,9 @@ describe("prepare-desktop-package", () => {
       expect(packageDir).toBe(resolveDesktopPackageAppDir(root));
       expect(existsSync(path.join(packageDir, ".next", "standalone", "server.js"))).toBe(true);
       expect(existsSync(path.join(packageDir, "desktop", "main.mjs"))).toBe(true);
-      expect(existsSync(path.join(packageDir, "scripts", "start-standalone.mjs"))).toBe(true);
+      for (const scriptName of DESKTOP_PACKAGE_SCRIPT_INPUTS) {
+        expect(existsSync(path.join(packageDir, "scripts", scriptName))).toBe(true);
+      }
       expect(existsSync(path.join(packageDir, "desktop", "ollama-models", "model.gguf"))).toBe(false);
       expect(existsSync(path.join(packageDir, "desktop", "cache", "blobs", "sha256"))).toBe(false);
       expect(existsSync(path.join(packageDir, "desktop", "cache", "manifests", "model"))).toBe(false);
