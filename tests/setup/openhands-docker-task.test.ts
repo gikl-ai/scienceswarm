@@ -73,10 +73,12 @@ afterEach(() => {
   setPlatform(originalPlatform);
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("openhandsDockerTask", () => {
   it("starts Docker Desktop when the CLI exists but the daemon is stopped", async () => {
+    vi.stubEnv("SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS", "1");
     let infoCalls = 0;
     spawnMock.mockImplementation((command: string, args: string[] = []) => {
       if (command === "which" && args[0] === "docker") {
@@ -107,7 +109,7 @@ describe("openhandsDockerTask", () => {
     );
     expect(events.at(-1)).toMatchObject({
       status: "succeeded",
-      detail: expect.stringContaining("ScienceSwarm will provision OpenHands code execution when you first use it"),
+      detail: expect.stringContaining("OpenHands image download was skipped"),
     });
     expect(spawnMock).toHaveBeenCalledWith(
       "open",
@@ -167,6 +169,7 @@ describe("openhandsDockerTask", () => {
   });
 
   it("falls back to common Docker CLI paths when PATH lookup misses", async () => {
+    vi.stubEnv("SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS", "1");
     spawnMock.mockImplementation((command: string, args: string[] = []) => {
       if (command === "which" && args[0] === "docker") {
         return fakeProcess({ code: 1 });
@@ -190,6 +193,78 @@ describe("openhandsDockerTask", () => {
     );
   });
 
+  it("pulls the OpenHands image and starts the managed container when Docker is ready", async () => {
+    vi.stubEnv("SCIENCESWARM_DIR", "/tmp/scienceswarm-openhands-docker-test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockRejectedValueOnce(new Error("not running yet"))
+        .mockResolvedValue({ ok: true, status: 200 }),
+    );
+
+    spawnMock.mockImplementation((command: string, args: string[] = []) => {
+      if (command === "which" && args[0] === "docker") {
+        return fakeProcess({ stdout: "/usr/local/bin/docker\n" });
+      }
+      if (command === "/usr/local/bin/docker" && args[0] === "--version") {
+        return fakeProcess({ stdout: "Docker version 28.5.1\n" });
+      }
+      if (command === "/usr/local/bin/docker" && args[0] === "info") {
+        return fakeProcess({ stdout: "Server: Docker Desktop\n" });
+      }
+      if (command === "/usr/local/bin/docker" && args.join(" ") === "image inspect test-openhands:latest") {
+        return fakeProcess({ code: 1 });
+      }
+      if (command === "/usr/local/bin/docker" && args.join(" ") === "pull test-openhands:latest") {
+        return fakeProcess({ stdout: "pulled\n" });
+      }
+      if (command === "/usr/local/bin/docker" && args.join(" ") === `rm -f scienceswarm-agent`) {
+        return fakeProcess({});
+      }
+      if (command === "/usr/local/bin/docker" && args[0] === "run") {
+        return fakeProcess({ stdout: "container-id\n" });
+      }
+      return fakeProcess({ code: 1 });
+    });
+    vi.stubEnv("OPENHANDS_IMAGE", "test-openhands:latest");
+
+    const events = await runTask();
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        status: "running",
+        detail: "Downloading the pinned OpenHands runtime image…",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        status: "running",
+        detail: "Starting the local OpenHands service…",
+      }),
+    );
+    expect(events.at(-1)).toMatchObject({
+      status: "succeeded",
+      detail: expect.stringContaining("OpenHands container started"),
+    });
+    expect(spawnMock).toHaveBeenCalledWith(
+      "/usr/local/bin/docker",
+      ["pull", "test-openhands:latest"],
+      expect.anything(),
+    );
+    expect(spawnMock).toHaveBeenCalledWith(
+      "/usr/local/bin/docker",
+      expect.arrayContaining([
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        "scienceswarm-agent",
+        "test-openhands:latest",
+      ]),
+      expect.anything(),
+    );
+  });
+
   it("skips the optional OpenHands step on Linux when Docker is missing", async () => {
     setPlatform("linux");
     spawnMock.mockImplementation((command: string, args: string[] = []) => {
@@ -203,7 +278,7 @@ describe("openhandsDockerTask", () => {
 
     expect(events.at(-1)).toMatchObject({
       status: "skipped",
-      detail: expect.stringContaining("OpenHands code execution is optional during setup"),
+      detail: expect.stringContaining("OpenHands code execution needs Docker"),
     });
     expect(spawnMock).toHaveBeenCalledWith(
       "which",
@@ -245,7 +320,7 @@ describe("openhandsDockerTask", () => {
 
     expect(events.at(-1)).toMatchObject({
       status: "skipped",
-      detail: expect.stringContaining("optional during setup"),
+      detail: expect.stringContaining("needs Docker"),
     });
   });
 });
