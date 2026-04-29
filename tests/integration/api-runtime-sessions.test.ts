@@ -29,6 +29,7 @@ import type {
 import { requireRuntimeHostProfile } from "@/lib/runtime-hosts/registry";
 
 let sessions: RuntimeSessionStore;
+const fixedRuntimeNow = () => new Date("2026-04-22T12:00:00Z");
 
 function jsonRequest(url: string, body: unknown): Request {
   return new Request(url, {
@@ -102,9 +103,16 @@ function adapter(
   };
 }
 
+function createFixedRuntimeEventStore() {
+  return createRuntimeEventStore({
+    sessions,
+    now: fixedRuntimeNow,
+  });
+}
+
 beforeEach(() => {
   sessions = createRuntimeSessionStore({
-    now: () => new Date("2026-04-22T12:00:00Z"),
+    now: fixedRuntimeNow,
     idGenerator: (() => {
       let index = 0;
       return () => `session-${++index}`;
@@ -112,7 +120,7 @@ beforeEach(() => {
   });
   const events = createRuntimeEventStore({
     sessions,
-    now: () => new Date("2026-04-22T12:00:00Z"),
+    now: fixedRuntimeNow,
     idGenerator: (() => {
       let index = 0;
       return () => `event-${++index}`;
@@ -126,7 +134,7 @@ beforeEach(() => {
       adapter(requireRuntimeHostProfile("codex")),
       adapter(requireRuntimeHostProfile("openhands")),
     ],
-    now: () => new Date("2026-04-22T12:00:00Z"),
+    now: fixedRuntimeNow,
   });
 });
 
@@ -261,7 +269,7 @@ describe("runtime session APIs", () => {
     const turns: RuntimeTurnRequest[] = [];
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
-      eventStore: createRuntimeEventStore({ sessions }),
+      eventStore: createFixedRuntimeEventStore(),
       adapters: [
         adapter(requireRuntimeHostProfile("codex"), {
           onTurn: (turn) => turns.push(turn),
@@ -325,7 +333,7 @@ describe("runtime session APIs", () => {
     const turns: RuntimeTurnRequest[] = [];
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
-      eventStore: createRuntimeEventStore({ sessions }),
+      eventStore: createFixedRuntimeEventStore(),
       adapters: [
         adapter(requireRuntimeHostProfile("claude-code"), {
           onTurn: (turn) => turns.push(turn),
@@ -368,7 +376,7 @@ describe("runtime session APIs", () => {
     const turns: RuntimeTurnRequest[] = [];
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
-      eventStore: createRuntimeEventStore({ sessions }),
+      eventStore: createFixedRuntimeEventStore(),
       adapters: [
         adapter(requireRuntimeHostProfile("openclaw"), {
           onTurn: (turn) => turns.push(turn),
@@ -399,7 +407,7 @@ describe("runtime session APIs", () => {
   it("does not duplicate adapter-provided message events on non-streaming sessions", async () => {
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
-      eventStore: createRuntimeEventStore({ sessions }),
+      eventStore: createFixedRuntimeEventStore(),
       adapters: [
         {
           ...adapter(requireRuntimeHostProfile("codex")),
@@ -456,7 +464,7 @@ describe("runtime session APIs", () => {
   it("persists task-mode adapter events and native conversation ids", async () => {
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
-      eventStore: createRuntimeEventStore({ sessions }),
+      eventStore: createFixedRuntimeEventStore(),
       adapters: [
         {
           ...adapter(requireRuntimeHostProfile("claude-code")),
@@ -531,7 +539,7 @@ describe("runtime session APIs", () => {
     let rejectTurn: ((error: Error) => void) | null = null;
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
-      eventStore: createRuntimeEventStore({ sessions }),
+      eventStore: createFixedRuntimeEventStore(),
       adapters: [
         {
           ...adapter(requireRuntimeHostProfile("codex")),
@@ -575,7 +583,7 @@ describe("runtime session APIs", () => {
   it("stores semantic RuntimeHostError codes on failed sessions", async () => {
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
-      eventStore: createRuntimeEventStore({ sessions }),
+      eventStore: createFixedRuntimeEventStore(),
       adapters: [
         {
           ...adapter(requireRuntimeHostProfile("openclaw")),
@@ -616,7 +624,7 @@ describe("runtime session APIs", () => {
   it("keeps duplicate artifact source paths as distinct runtime events", async () => {
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
-      eventStore: createRuntimeEventStore({ sessions }),
+      eventStore: createFixedRuntimeEventStore(),
       adapters: [
         {
           ...adapter(requireRuntimeHostProfile("openclaw")),
@@ -715,7 +723,7 @@ describe("runtime session APIs", () => {
   it("does not append a failure event when non-streaming CLI cancellation wins the race", async () => {
     __setRuntimeApiServicesForTests({
       sessionStore: sessions,
-      eventStore: createRuntimeEventStore({ sessions }),
+      eventStore: createFixedRuntimeEventStore(),
       adapters: [
         {
           ...adapter(requireRuntimeHostProfile("codex")),
