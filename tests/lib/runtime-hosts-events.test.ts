@@ -67,7 +67,10 @@ describe("runtime event store", () => {
       status: "completed",
       updatedAt: "2026-04-22T10:05:00.000Z",
     });
-    const events = createRuntimeEventStore({ sessions });
+    const events = createRuntimeEventStore({
+      sessions,
+      now: () => new Date("2026-04-22T10:06:00.000Z"),
+    });
 
     const result = events.appendEvent({
       id: "late-running-status",
