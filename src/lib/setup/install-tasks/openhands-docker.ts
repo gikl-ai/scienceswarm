@@ -235,20 +235,27 @@ async function dockerImagePresent(
   })).ok;
 }
 
-async function openHandsReachable(timeoutMs = OPENHANDS_HEALTH_TIMEOUT_MS): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() <= deadline) {
+async function openHandsReachable(
+  timeoutMs = OPENHANDS_HEALTH_TIMEOUT_MS,
+): Promise<boolean> {
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  while (true) {
+    const attemptTimeoutMs = Math.max(
+      1,
+      Math.min(3_000, deadline - Date.now()),
+    );
     try {
       const response = await fetch(getOpenHandsUrl(), {
-        signal: AbortSignal.timeout(3_000),
+        signal: AbortSignal.timeout(attemptTimeoutMs),
       });
       if (response.ok) return true;
     } catch {
       // Keep polling until the deadline.
     }
-    await sleep(OPENHANDS_HEALTH_POLL_INTERVAL_MS);
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) return false;
+    await sleep(Math.min(OPENHANDS_HEALTH_POLL_INTERVAL_MS, remainingMs));
   }
-  return false;
 }
 
 async function startOpenHandsContainer(dockerCli: string, image: string): Promise<{
@@ -257,7 +264,7 @@ async function startOpenHandsContainer(dockerCli: string, image: string): Promis
   detail?: string;
   error?: string;
 }> {
-  if (await openHandsReachable(1)) {
+  if (await openHandsReachable(0)) {
     return {
       ok: true,
       started: false,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Section } from "./_primitives";
 
@@ -38,29 +38,51 @@ export function OpenHandsRuntimeSection({
   const [preparing, setPreparing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const prepareControllerRef = useRef<AbortController | null>(null);
 
   const ready = openhandsStatus === "connected";
 
+  useEffect(() => {
+    return () => {
+      prepareControllerRef.current?.abort();
+    };
+  }, []);
+
   const prepareOpenHands = async () => {
+    prepareControllerRef.current?.abort();
+    const controller = new AbortController();
+    prepareControllerRef.current = controller;
+
     setPreparing(true);
-    setMessage("Preparing Docker and OpenHands. This can take several minutes on a cold machine.");
+    setMessage(
+      "Preparing Docker and OpenHands. This can take several minutes on a cold machine.",
+    );
     setError(null);
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "prepare-openhands" }),
+        signal: controller.signal,
       });
+      if (controller.signal.aborted) return;
       if (!res.ok) {
         throw new Error(await parsePrepareError(res));
       }
       const body = (await res.json()) as PrepareOpenHandsResponse;
+      if (controller.signal.aborted) return;
       setMessage(body.detail || "OpenHands is ready.");
       onPrepared();
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : "OpenHands setup failed.");
     } finally {
-      setPreparing(false);
+      if (prepareControllerRef.current === controller) {
+        prepareControllerRef.current = null;
+      }
+      if (!controller.signal.aborted) {
+        setPreparing(false);
+      }
     }
   };
 
