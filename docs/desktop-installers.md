@@ -81,6 +81,9 @@ SCIENCESWARM_DESKTOP_SIGNING_TARGET=macos \
 npm run desktop:check-signing-env
 ```
 
+Accepted `SCIENCESWARM_DESKTOP_SIGNING_TARGET` values are `macos`, `windows`,
+and `linux`.
+
 Required signing secrets by platform:
 
 - macOS requires `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`,
