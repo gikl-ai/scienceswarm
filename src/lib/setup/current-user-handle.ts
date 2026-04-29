@@ -2,6 +2,7 @@ import * as path from "node:path";
 import { readFileSync } from "node:fs";
 
 import { parseEnvFile } from "@/lib/setup/env-writer";
+import { resolveSetupConfigRoot } from "@/lib/setup/config-root";
 
 export function getCurrentUserHandle(
   envSource: Record<string, string | undefined> = process.env,
@@ -43,7 +44,7 @@ function resolveCurrentUserHandle(
   return savedHandle?.trim() || null;
 }
 
-function readSavedUserHandle(cwd = process.cwd()): string | null {
+function readSavedUserHandle(cwd = resolveSetupConfigRoot()): string | null {
   try {
     const envPath = path.join(cwd, ".env");
     const contents = readFileSync(envPath, "utf8");

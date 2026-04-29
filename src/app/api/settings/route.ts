@@ -4,7 +4,7 @@
 
 import { exec, execFile, spawn, type ExecException } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { resolve, join, dirname } from "node:path";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
@@ -27,9 +27,8 @@ import {
   writeEnvFileAtomic,
   type EnvDocument,
 } from "@/lib/setup/env-writer";
+import { resolveSetupEnvPath } from "@/lib/setup/config-root";
 import { isValidUserHandle } from "@/lib/setup/user-handle";
-
-const ENV_PATH = resolve(process.cwd(), ".env");
 
 type OllamaPullStatus = "running" | "completed" | "failed";
 
@@ -374,7 +373,7 @@ function maskKey(key: string | undefined): string | null {
  */
 async function loadEnvDocument(): Promise<EnvDocument> {
   try {
-    return parseEnvFile(await readFile(ENV_PATH, "utf-8"));
+    return parseEnvFile(await readFile(resolveSetupEnvPath(), "utf-8"));
   } catch {
     return { lines: [], newline: "\n", trailingNewline: true };
   }
@@ -388,7 +387,7 @@ async function loadEnvDocument(): Promise<EnvDocument> {
 async function readEnvFile(): Promise<Record<string, string>> {
   const entries: Record<string, string> = {};
   try {
-    const doc = parseEnvFile(await readFile(ENV_PATH, "utf-8"));
+    const doc = parseEnvFile(await readFile(resolveSetupEnvPath(), "utf-8"));
     for (const line of doc.lines) {
       if (line.type === "entry") {
         entries[line.key] = line.value;
@@ -427,7 +426,7 @@ async function setEnvValue(key: string, value: string): Promise<void> {
   const updates: Record<string, string | null> = { [key]: sanitized };
   const nextDoc = mergeEnvValues(doc, updates);
   const serialized = serializeEnvDocument(nextDoc);
-  await writeEnvFileAtomic(ENV_PATH, serialized);
+  await writeEnvFileAtomic(resolveSetupEnvPath(), serialized);
 
   // Also update process.env so subsequent reads pick it up
   process.env[key] = sanitized;

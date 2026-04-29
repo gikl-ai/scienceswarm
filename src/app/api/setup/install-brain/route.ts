@@ -31,6 +31,7 @@
 
 import { type BrainPresetId, isBrainPresetId } from "@/brain/presets/types";
 import type { InstallerEvent } from "@/lib/setup/gbrain-installer";
+import { resolveSetupConfigRoot } from "@/lib/setup/config-root";
 import { isLocalRequest } from "@/lib/local-guard";
 
 interface RequestBody {
@@ -142,7 +143,7 @@ export async function POST(request: Request): Promise<Response> {
       try {
         for await (const event of installer.runInstaller(
           {
-            repoRoot: process.cwd(),
+            repoRoot: resolveSetupConfigRoot(),
             brainRoot: parsed.brainRoot,
             brainPreset: parsed.brainPreset,
             skipNetworkCheck: parsed.skipNetworkCheck,

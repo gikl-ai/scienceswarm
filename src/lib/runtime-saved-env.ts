@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { resolveSetupConfigRoot } from "@/lib/setup/config-root";
 import { parseEnvFile } from "@/lib/setup/env-writer";
 
 const MUTABLE_RUNTIME_KEYS = [
@@ -167,7 +168,7 @@ export function resolveExplicitLlmRuntimeConfig(
 
 export function readSavedLlmRuntimeEnv(
   processEnv: NodeJS.ProcessEnv = process.env,
-  cwd = process.cwd(),
+  cwd = resolveSetupConfigRoot(processEnv),
 ): SavedLlmRuntimeEnv {
   let envFileContents: string | null = null;
   try {
@@ -181,7 +182,7 @@ export function readSavedLlmRuntimeEnv(
 
 export function readExplicitLlmRuntimeConfig(
   processEnv: NodeJS.ProcessEnv = process.env,
-  cwd = process.cwd(),
+  cwd = resolveSetupConfigRoot(processEnv),
 ): ExplicitLlmRuntimeConfig {
   let envFileContents: string | null = null;
   try {
@@ -195,7 +196,7 @@ export function readExplicitLlmRuntimeConfig(
 
 export function getCurrentLlmRuntimeEnv(
   processEnv: NodeJS.ProcessEnv = process.env,
-  cwd = process.cwd(),
+  cwd = resolveSetupConfigRoot(processEnv),
 ): SavedLlmRuntimeEnv {
   return processEnv.NODE_ENV === "test"
     ? resolveSavedLlmRuntimeEnv(processEnv, null)
@@ -204,7 +205,7 @@ export function getCurrentLlmRuntimeEnv(
 
 export function getCurrentExplicitLlmRuntimeConfig(
   processEnv: NodeJS.ProcessEnv = process.env,
-  cwd = process.cwd(),
+  cwd = resolveSetupConfigRoot(processEnv),
 ): ExplicitLlmRuntimeConfig {
   return processEnv.NODE_ENV === "test"
     ? resolveExplicitLlmRuntimeConfig(processEnv, null)

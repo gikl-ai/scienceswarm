@@ -44,6 +44,7 @@ import {
   writeEnvFileAtomic,
   type EnvDocument,
 } from "@/lib/setup/env-writer";
+import { resolveSetupConfigRoot } from "@/lib/setup/config-root";
 
 /**
  * The client-facing payload. Every field is optional; omitting a field
@@ -418,7 +419,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const repoRoot = process.cwd();
+  const repoRoot = resolveSetupConfigRoot();
   const filePath = path.join(repoRoot, ".env");
   let openClawModelSync: Awaited<
     ReturnType<typeof syncOpenClawLocalModelAfterSetup>

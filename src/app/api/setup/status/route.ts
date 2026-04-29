@@ -33,6 +33,7 @@ import {
   type OllamaStatusSummary,
   type OpenClawStatusSummary,
 } from "@/lib/setup/config-status";
+import { resolveSetupConfigRoot } from "@/lib/setup/config-root";
 import { migrateEnvLocalOnce } from "@/lib/setup/env-migration";
 import { createGeneratedUserHandle } from "@/lib/setup/user-handle";
 
@@ -66,7 +67,10 @@ function getGbrainSnapshot(status: ConfigStatusForRuntime) {
   };
 }
 
-function getDefaultHandle(status: ConfigStatusForRuntime): string {
+function getDefaultHandle(
+  status: ConfigStatusForRuntime,
+  configRoot = resolveSetupConfigRoot(),
+): string {
   const savedHandle = status.rawValues.SCIENCESWARM_USER_HANDLE?.trim();
   if (savedHandle) return savedHandle;
 
@@ -79,7 +83,7 @@ function getDefaultHandle(status: ConfigStatusForRuntime): string {
     || process.env.SCIENCESWARM_HOME?.trim()
     || process.env.SCIENCESWARM_DIR?.trim()
     || process.env.BRAIN_ROOT?.trim()
-    || process.cwd();
+    || configRoot;
   const digest = createHash("sha256").update(seed).digest("hex");
   return createGeneratedUserHandle(digest);
 }
@@ -189,7 +193,7 @@ export async function GET(request: Request): Promise<Response> {
   // swallow errors so a migration failure never blocks the status
   // probe — the user will still see the underlying config state.
   try {
-    await migrateEnvLocalOnce(process.cwd());
+    await migrateEnvLocalOnce(resolveSetupConfigRoot());
   } catch (err) {
     console.warn(
       "api/setup/status: env migration failed (non-blocking)",
@@ -198,12 +202,13 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
+    const configRoot = resolveSetupConfigRoot();
     const [status, openclawStatus, ollamaStatus] = await Promise.all([
-      getConfigStatus(process.cwd()),
+      getConfigStatus(configRoot),
       probeOpenClawOrUndefined(),
       probeOllamaOrUndefined(),
     ]);
-    const defaultHandle = getDefaultHandle(status);
+    const defaultHandle = getDefaultHandle(status, configRoot);
     const agentType = getConfiguredAgent(status);
     const runtimeEnv = { ...process.env, ...status.rawValues };
     const openHandsEvidence = await readOpenHandsLocalEvidence(runtimeEnv);

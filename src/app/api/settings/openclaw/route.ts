@@ -3,7 +3,6 @@
 
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { isStrictLocalOnlyEnabled } from "@/lib/env-flags";
@@ -33,10 +32,10 @@ import {
   OpenClawGatewayAuthConfigError,
 } from "@/lib/openclaw/gateway-auth";
 import { getOpenClawStatus } from "@/lib/openclaw-status";
+import { resolveSetupEnvPath } from "@/lib/setup/config-root";
 import { parseEnvFile } from "@/lib/setup/env-writer";
 
 const exec = promisify(execFile);
-const ENV_PATH = resolve(process.cwd(), ".env");
 // Canonical default model the rest of the settings surface assumes when
 // `LLM_MODEL` is absent from `.env` (see `src/app/api/settings/route.ts`).
 // Using this here means a new user who completes /setup without ever
@@ -109,7 +108,7 @@ async function killGatewayByPort(): Promise<boolean> {
 async function readEffectiveEnv(): Promise<Record<string, string | undefined>> {
   const entries: Record<string, string | undefined> = { ...process.env };
   try {
-    const doc = parseEnvFile(await readFile(ENV_PATH, "utf-8"));
+    const doc = parseEnvFile(await readFile(resolveSetupEnvPath(), "utf-8"));
     for (const line of doc.lines) {
       if (line.type === "entry") {
         entries[line.key] = line.value;
@@ -181,7 +180,7 @@ async function activateOpenClawBackendOrResponse(
   detail: { alreadyRunning?: boolean } = {},
 ): Promise<Response | null> {
   try {
-    await activateOpenClawAgentBackend();
+    await activateOpenClawAgentBackend(resolveSetupEnvPath());
     return null;
   } catch {
     return Response.json(

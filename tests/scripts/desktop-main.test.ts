@@ -9,8 +9,10 @@ import {
   isDesktopMainEntrypoint,
   isTrustedDesktopIpcSender,
   logDesktopWindowLoadFailure,
+  resolveDesktopConfigRoot,
   resolveDesktopDiagnostics,
   resolveDesktopLaunchMarkerPath,
+  resolveDesktopRuntimeEnv,
   resolveDesktopStartPath,
   resolveDesktopStartUrl,
   resolveDesktopWindowOptions,
@@ -99,7 +101,35 @@ describe("desktop main", () => {
       shell: "electron",
       startUrl: "http://127.0.0.1:3001/setup",
       userDataPath: "/tmp/user-data",
+      configRoot: "/tmp/user-data",
       logsPath: "/tmp/logs",
+    });
+  });
+
+  it("uses Electron userData as the writable desktop config root", () => {
+    const app = {
+      getPath(name: string) {
+        return name === "userData" ? "/tmp/user-data" : "/tmp/logs";
+      },
+    };
+
+    expect(resolveDesktopConfigRoot(app)).toBe("/tmp/user-data");
+    expect(resolveDesktopRuntimeEnv(app, {})).toMatchObject({
+      SCIENCESWARM_CONFIG_ROOT: "/tmp/user-data",
+    });
+  });
+
+  it("preserves an explicit desktop config root override", () => {
+    const app = {
+      getPath(name: string) {
+        return name === "userData" ? "/tmp/user-data" : "/tmp/logs";
+      },
+    };
+
+    expect(resolveDesktopRuntimeEnv(app, {
+      SCIENCESWARM_CONFIG_ROOT: "/tmp/custom-config",
+    })).toMatchObject({
+      SCIENCESWARM_CONFIG_ROOT: "/tmp/custom-config",
     });
   });
 
