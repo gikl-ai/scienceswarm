@@ -16,7 +16,7 @@ function escapeRegex(value: string) {
 
 function matrixEntryBlock(name: string) {
   const pattern = new RegExp(
-    `^\\s*- name: ${escapeRegex(name)}\\n(?<block>[\\s\\S]*?)(?=^\\s*- name:|^\\s*env:)`,
+    `^\\s*- name: ${escapeRegex(name)}\\n(?<block>[\\s\\S]*?)(?=^\\s*- name:|^\\s*env:|^\\s*steps:)`,
     "m",
   );
   const match = workflow.match(pattern);
@@ -26,6 +26,22 @@ function matrixEntryBlock(name: string) {
 
 function expectWorkflowLine(block: string, line: string) {
   expect(block).toMatch(new RegExp(`^\\s*${escapeRegex(line)}$`, "m"));
+}
+
+function expectWorkflowOrder(lines: string[]) {
+  let previousIndex = -1;
+  for (const line of lines) {
+    const index = workflow.indexOf(line);
+    expect(index, `missing workflow line: ${line}`).toBeGreaterThanOrEqual(0);
+    expect(index, `workflow line is out of order: ${line}`).toBeGreaterThan(previousIndex);
+    previousIndex = index;
+  }
+}
+
+function workflowTailFrom(line: string) {
+  const index = workflow.indexOf(line);
+  expect(index, `missing workflow section: ${line}`).toBeGreaterThanOrEqual(0);
+  return workflow.slice(index);
 }
 
 function expectMatrixEntry(entry: {
@@ -85,12 +101,17 @@ describe("desktop installers workflow", () => {
     expect(workflow).toContain("fail-fast: false");
     expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"');
     expect(workflow).toContain("SCIENCESWARM_DESKTOP_ARTIFACT_PLATFORM: ${{ matrix.artifact-platform }}");
-    expect(workflow).toContain("run: npm run build:standalone");
-    expect(workflow).toContain("run: npm run desktop:check-signing-env");
-    expect(workflow).toContain("run: npm run ${{ matrix.package-script }}");
-    expect(workflow).toContain("run: npm run desktop:checksums");
-    expect(workflow).toContain("run: npm run desktop:verify-artifacts");
-    expect(workflow).toContain("if-no-files-found: error");
-    expect(workflow).toContain("retention-days: 14");
+    expectWorkflowOrder([
+      "run: npm run build:standalone",
+      "run: npm run desktop:check-signing-env",
+      "run: npm run ${{ matrix.package-script }}",
+      "run: npm run desktop:checksums",
+      "run: npm run desktop:verify-artifacts",
+      "name: Upload installer artifact",
+    ]);
+
+    const uploadStep = workflowTailFrom("name: Upload installer artifact");
+    expect(uploadStep).toContain("if-no-files-found: error");
+    expect(uploadStep).toContain("retention-days: 14");
   });
 });
