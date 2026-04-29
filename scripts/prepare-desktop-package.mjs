@@ -8,6 +8,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
 export const DESKTOP_PACKAGE_APP_DIR = ".desktop-package/app";
+export const DESKTOP_PACKAGE_SCRIPT_INPUTS = [
+  "start-standalone.mjs",
+  "install-runtime-prereqs.sh",
+  "install-desktop-runtime-prereqs.sh",
+];
 
 export function resolveDesktopPackageAppDir(root = projectRoot) {
   return path.join(root, DESKTOP_PACKAGE_APP_DIR);
@@ -83,10 +88,12 @@ export function prepareDesktopPackage(root = projectRoot) {
   copyTree(desktopRoot, path.join(packageDir, "desktop"), {
     filter: (sourcePath) => shouldCopyDesktopShellPath(sourcePath, desktopRoot),
   });
-  copyTree(
-    path.join(root, "scripts", "start-standalone.mjs"),
-    path.join(packageDir, "scripts", "start-standalone.mjs"),
-  );
+  for (const scriptName of DESKTOP_PACKAGE_SCRIPT_INPUTS) {
+    copyTree(
+      path.join(root, "scripts", scriptName),
+      path.join(packageDir, "scripts", scriptName),
+    );
+  }
 
   writeFileSync(
     path.join(packageDir, "package.json"),
