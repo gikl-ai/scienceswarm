@@ -188,7 +188,9 @@ describe("package.json scripts", () => {
     expect(runtimePrereqsScript).toContain("SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS");
     expect(runtimePrereqsScript).toContain("skip_runtime_downloads");
     expect(runtimePrereqsScript).toContain("SCIENCESWARM_SKIP_MODEL_PULL");
-    expect(runtimePrereqsScript).toContain("Skipping $MODEL download");
+    expect(runtimePrereqsScript).toContain(
+      "Skipping $MODEL download because SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS or SCIENCESWARM_SKIP_MODEL_PULL is set.",
+    );
     expect(runtimePrereqsScript).toContain('"$ollama_bin" pull "$MODEL"');
   });
 
@@ -198,7 +200,9 @@ describe("package.json scripts", () => {
     expect(runtimePrereqsScript).toContain("skip_runtime_downloads");
     expect(desktopRuntimePrereqsScript).toContain("SCIENCESWARM_SKIP_OPENHANDS_PULL=1");
     expect(runtimePrereqsScript).toContain("SCIENCESWARM_SKIP_OPENHANDS_PULL");
-    expect(runtimePrereqsScript).toContain("Skipping OpenHands image download");
+    expect(runtimePrereqsScript).toContain(
+      "Skipping OpenHands image download because SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS or SCIENCESWARM_SKIP_OPENHANDS_PULL is set.",
+    );
     expect(runtimePrereqsScript).toContain('"$docker_bin" pull "$OPENHANDS_IMAGE"');
   });
 
