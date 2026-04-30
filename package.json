@@ -1,6 +1,6 @@
 {
   "name": "scienceswarm",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "main": "desktop/main.mjs",
   "description": "ScienceSwarm — local-first research workspace. OpenClaw (manager agent) + OpenHands (execution agent) + gbrain (knowledge layer).",
