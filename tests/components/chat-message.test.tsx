@@ -607,7 +607,6 @@ describe("ChatMessage", () => {
           {
             kind: "activity",
             text: "Waiting for OpenClaw to respond",
-            source: "server",
             status: "running",
             label: "Wait",
           },

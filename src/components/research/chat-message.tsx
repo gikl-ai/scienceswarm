@@ -96,11 +96,10 @@ function sanitizeEmbedHeight(value: string | undefined, fallback: string): strin
 }
 
 function isVisibleProgressEntry(entry: MessageProgressEntry): boolean {
-  return !(
-    entry.kind === "activity"
-    && entry.source === "server"
-    && isLowSignalOpenClawTransportProgressText(entry.text)
-  );
+  if (entry.kind !== "activity") {
+    return true;
+  }
+  return !isLowSignalOpenClawTransportProgressText(entry.text);
 }
 
 function isVisibleActivityLine(line: string): boolean {
