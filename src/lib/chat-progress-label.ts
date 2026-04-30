@@ -25,3 +25,11 @@ export function inferProgressEntryLabel(rawText: string): string | undefined {
   }
   return undefined;
 }
+
+export function isLowSignalOpenClawTransportProgressText(rawText: string): boolean {
+  const normalized = rawText.trim();
+  return (
+    /^Sending request to OpenClaw$/i.test(normalized)
+    || /^Waiting for OpenClaw to respond$/i.test(normalized)
+  );
+}

@@ -509,10 +509,10 @@ describe("ChatMessage", () => {
         progressLog={[
           {
             kind: "activity",
-            text: "Waiting for OpenClaw to respond",
+            text: "Preparing workspace context",
             source: "server",
             status: "running",
-            label: "Wait",
+            label: "Prepare",
           },
         ]}
         timestamp={new Date("2026-04-20T10:04:30.000Z")}
@@ -524,8 +524,8 @@ describe("ChatMessage", () => {
     const runState = screen.getByTestId("assistant-run-state");
     expect(progressLog).toHaveTextContent("Server");
     expect(progressLog).toHaveTextContent("Running");
-    expect(progressLog).toHaveTextContent("Wait");
-    expect(progressLog).toHaveTextContent("Waiting for OpenClaw to respond");
+    expect(progressLog).toHaveTextContent("Prepare");
+    expect(progressLog).toHaveTextContent("Preparing workspace context");
     expect(within(runState).getByText("Server")).toHaveClass("text-body");
     expect(within(runState).getByText("Running")).toHaveClass("text-amber-800");
   });
@@ -564,7 +564,7 @@ describe("ChatMessage", () => {
         progressLog={[
           {
             kind: "activity",
-            text: "Waiting for OpenClaw to respond",
+            text: "Preparing workspace context",
             source: "server",
             status: "running",
           },
@@ -585,6 +585,41 @@ describe("ChatMessage", () => {
     expect(progressLog).toHaveTextContent("Running");
     expect(progressLog).toHaveTextContent("Agent");
     expect(progressLog).toHaveTextContent("Complete");
+  });
+
+  it("hides low-signal OpenClaw transport placeholders from visible progress", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        content=""
+        activityLog={[
+          "Sending request to OpenClaw",
+          "Waiting for OpenClaw to respond",
+        ]}
+        progressLog={[
+          {
+            kind: "activity",
+            text: "Sending request to OpenClaw",
+            source: "server",
+            status: "started",
+            label: "Send",
+          },
+          {
+            kind: "activity",
+            text: "Waiting for OpenClaw to respond",
+            source: "server",
+            status: "running",
+            label: "Wait",
+          },
+        ]}
+        timestamp={new Date("2026-04-20T10:04:30.000Z")}
+        isStreaming
+      />,
+    );
+
+    expect(screen.queryByText("Sending request to OpenClaw")).not.toBeInTheDocument();
+    expect(screen.queryByText("Waiting for OpenClaw to respond")).not.toBeInTheDocument();
+    expect(screen.queryByText("Activity")).not.toBeInTheDocument();
   });
 
   it("renders a dedicated run-state surface before transcript progress arrives", () => {
@@ -814,11 +849,11 @@ describe("ChatMessage", () => {
         progressLog={[
           {
             kind: "activity",
-            text: "Waiting for OpenClaw to respond",
+            text: "Preparing workspace context",
             source: "server",
-            phase: "waiting",
+            phase: "prepare",
             status: "running",
-            label: "Wait",
+            label: "Prepare",
           },
         ]}
         timestamp={new Date("2026-04-20T10:00:00.000Z")}
@@ -827,8 +862,8 @@ describe("ChatMessage", () => {
     );
 
     const runState = screen.getByTestId("assistant-run-state");
-    expect(runState).toHaveTextContent("Wait");
-    expect(runState).toHaveTextContent("Waiting for OpenClaw to respond");
+    expect(runState).toHaveTextContent("Prepare");
+    expect(runState).toHaveTextContent("Preparing workspace context");
     expect(runState).not.toHaveTextContent("Activity");
   });
 
@@ -1493,7 +1528,7 @@ describe("ChatMessage", () => {
           { kind: "thinking", text: "Planning how to inspect the chart files." },
           { kind: "activity", text: "Preparing workspace context" },
           { kind: "thinking", text: "Comparing prior chart revisions." },
-          { kind: "activity", text: "Waiting for OpenClaw to respond" },
+          { kind: "activity", text: "Reading project notes" },
           { kind: "thinking", text: "Drafting the summary notes." },
         ]}
         timestamp={new Date("2026-04-20T10:04:00.000Z")}

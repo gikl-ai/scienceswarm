@@ -14,7 +14,10 @@ import {
   PROGRESS_SECTION_META,
   type ProgressTranscriptBlock,
 } from "@/components/research/assistant-progress-transcript";
-import { inferProgressEntryLabel } from "@/lib/chat-progress-label";
+import {
+  inferProgressEntryLabel,
+  isLowSignalOpenClawTransportProgressText,
+} from "@/lib/chat-progress-label";
 import { Spinner } from "@/components/spinner";
 
 // ── Channel badges ─────────────────────────────────────────────
@@ -90,6 +93,18 @@ function sanitizeEmbedHeight(value: string | undefined, fallback: string): strin
     : /* em / rem */ 200;
   const clamped = Math.min(n, max);
   return `${clamped}${unit}`;
+}
+
+function isVisibleProgressEntry(entry: MessageProgressEntry): boolean {
+  return !(
+    entry.kind === "activity"
+    && entry.source === "server"
+    && isLowSignalOpenClawTransportProgressText(entry.text)
+  );
+}
+
+function isVisibleActivityLine(line: string): boolean {
+  return !isLowSignalOpenClawTransportProgressText(line);
 }
 
 function getVideoMimeType(ext: string): string | undefined {
@@ -1895,11 +1910,11 @@ export function ChatMessage({
       : [];
   const visibleActivityLog =
     role === "assistant" && Array.isArray(activityLog) && activityLog.length > 0
-      ? activityLog
+      ? activityLog.filter(isVisibleActivityLine)
       : [];
   const storedProgressLog =
     role === "assistant" && Array.isArray(progressLog) && progressLog.length > 0
-      ? progressLog
+      ? progressLog.filter(isVisibleProgressEntry)
       : [];
   const hasLegacyProgressFields =
     role === "assistant"
