@@ -99,6 +99,7 @@ describe("desktop installers workflow", () => {
 
   it("runs the release smoke checks before upload", () => {
     expect(workflow).toContain("fail-fast: false");
+    expect(workflow).toContain("contents: write");
     expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"');
     expect(workflow).toContain("SCIENCESWARM_DESKTOP_ARTIFACT_PLATFORM: ${{ matrix.artifact-platform }}");
     expectWorkflowOrder([
@@ -113,5 +114,20 @@ describe("desktop installers workflow", () => {
     const uploadStep = workflowTailFrom("name: Upload installer artifact");
     expect(uploadStep).toContain("if-no-files-found: error");
     expect(uploadStep).toContain("retention-days: 14");
+  });
+
+  it("publishes installer assets to a draft GitHub Release on version tags", () => {
+    const releaseStep = workflowTailFrom("name: Upload installer asset to GitHub Release");
+    expect(releaseStep).toContain("startsWith(github.ref, 'refs/tags/v')");
+    expect(releaseStep).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(releaseStep).toContain('gh release view "$tag"');
+    expect(releaseStep).toContain('gh release create "$tag"');
+    expect(releaseStep).toContain("--verify-tag");
+    expect(releaseStep).toContain("--draft");
+    expect(releaseStep).toContain('gh release upload "$tag" "${assets[@]}" --clobber');
+    expect(releaseStep).toContain("dist/*.dmg");
+    expect(releaseStep).toContain("dist/*.exe");
+    expect(releaseStep).toContain("dist/*.AppImage");
+    expect(releaseStep).toContain("dist/SHA256SUMS.txt");
   });
 });
