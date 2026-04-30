@@ -126,6 +126,7 @@ import {
   looksLikeSlashCommandInput,
 } from "@/lib/openclaw/slash-commands";
 import { buildMirroredBrainPagePath } from "@/lib/brain-artifact-path";
+import { isLowSignalOpenClawTransportProgressText } from "@/lib/chat-progress-label";
 
 // ── Types ──────────────────────────────────────────────────────
 interface Message {
@@ -300,7 +301,11 @@ function buildCompactLiveRunStateSummary(message: {
   const latestProgress = Array.isArray(message?.progressLog)
     ? [...message.progressLog]
       .reverse()
-      .find((entry) => typeof entry.text === "string" && entry.text.trim().length > 0)
+      .find((entry) => (
+        typeof entry.text === "string"
+        && entry.text.trim().length > 0
+        && !isLowSignalOpenClawTransportProgressText(entry.text)
+      ))
       ?.text?.trim() ?? ""
     : "";
 
