@@ -137,7 +137,10 @@ includes `SHA256SUMS.txt` for local download verification; tag release uploads
 use platform-specific checksum assets such as `SHA256SUMS-macos.txt` so
 platform jobs do not overwrite each other. If the tag does not already have a
 release, the workflow creates a draft release so maintainers can review
-unsigned artifacts before publishing. See
+unsigned artifacts before publishing. The workflow refuses to update a
+published release by default; set `SCIENCESWARM_ALLOW_PUBLISHED_RELEASE_UPLOADS=1`
+only when intentionally replacing unsigned assets on an already published
+release. See
 [`docs/desktop-installers.md`](docs/desktop-installers.md) for the release
 checklist and runtime-download controls.
 

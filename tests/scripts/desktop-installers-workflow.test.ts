@@ -99,7 +99,11 @@ describe("desktop installers workflow", () => {
 
   it("runs the release smoke checks before upload", () => {
     expect(workflow).toContain("fail-fast: false");
+    expect(workflow).toMatch(/^permissions:\n\s+contents: read$/m);
     expect(workflow).toContain("contents: write");
+    expect(workflow.indexOf("contents: write")).toBeGreaterThan(
+      workflow.indexOf("jobs:\n  package:"),
+    );
     expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"');
     expect(workflow).toContain("SCIENCESWARM_DESKTOP_ARTIFACT_PLATFORM: ${{ matrix.artifact-platform }}");
     expectWorkflowOrder([
@@ -120,10 +124,15 @@ describe("desktop installers workflow", () => {
     const releaseStep = workflowTailFrom("name: Upload installer asset to GitHub Release");
     expect(releaseStep).toContain("startsWith(github.ref, 'refs/tags/v')");
     expect(releaseStep).toContain("GH_TOKEN: ${{ github.token }}");
-    expect(releaseStep).toContain('gh release view "$tag"');
+    expect(releaseStep).toContain(
+      "SCIENCESWARM_ALLOW_PUBLISHED_RELEASE_UPLOADS: ${{ vars.SCIENCESWARM_ALLOW_PUBLISHED_RELEASE_UPLOADS || '0' }}",
+    );
+    expect(releaseStep).toContain('gh release view "$tag" --json isDraft');
     expect(releaseStep).toContain('gh release create "$tag"');
     expect(releaseStep).toContain("--verify-tag");
     expect(releaseStep).toContain("--draft");
+    expect(releaseStep).toContain("Draft release already exists");
+    expect(releaseStep).toContain("SCIENCESWARM_ALLOW_PUBLISHED_RELEASE_UPLOADS=1");
     expect(releaseStep).toContain(
       'checksum_asset="dist/SHA256SUMS-${SCIENCESWARM_DESKTOP_ARTIFACT_PLATFORM}.txt"',
     );

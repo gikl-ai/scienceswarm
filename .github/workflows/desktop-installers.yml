@@ -11,13 +11,15 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   package:
     name: Package ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -102,17 +104,34 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          SCIENCESWARM_ALLOW_PUBLISHED_RELEASE_UPLOADS: ${{ vars.SCIENCESWARM_ALLOW_PUBLISHED_RELEASE_UPLOADS || '0' }}
         run: |
           set -euo pipefail
 
           tag="${GITHUB_REF_NAME}"
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" \
+          release_draft_state() {
+            gh release view "$tag" --json isDraft --jq '.isDraft'
+          }
+
+          if ! release_is_draft="$(release_draft_state 2>/dev/null)"; then
+            if gh release create "$tag" \
               --verify-tag \
               --draft \
               --title "$tag" \
-              --notes "Unsigned ScienceSwarm desktop installer artifacts." \
-              || gh release view "$tag" >/dev/null
+              --notes "Unsigned ScienceSwarm desktop installer artifacts."; then
+              release_is_draft="true"
+            elif release_is_draft="$(release_draft_state 2>/dev/null)" && [ "$release_is_draft" = "true" ]; then
+              echo "Draft release already exists for $tag; continuing after matrix create race."
+            else
+              echo "Failed to create or find a draft GitHub Release for $tag." >&2
+              exit 1
+            fi
+          fi
+
+          if [ "$release_is_draft" != "true" ] && [ "$SCIENCESWARM_ALLOW_PUBLISHED_RELEASE_UPLOADS" != "1" ]; then
+            echo "Release $tag is already published; refusing to upload unsigned installer assets." >&2
+            echo "Set SCIENCESWARM_ALLOW_PUBLISHED_RELEASE_UPLOADS=1 to intentionally update a published release." >&2
+            exit 1
           fi
 
           checksum_asset="dist/SHA256SUMS-${SCIENCESWARM_DESKTOP_ARTIFACT_PLATFORM}.txt"
