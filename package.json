@@ -142,10 +142,6 @@
     ],
     "extraResources": [
       {
-        "from": ".next/standalone/package-lock.json",
-        "to": "app.asar.unpacked/.next/standalone/package-lock.json"
-      },
-      {
         "from": ".next/standalone/node_modules",
         "to": "app.asar.unpacked/.next/standalone/node_modules",
         "filter": [

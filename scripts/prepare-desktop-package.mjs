@@ -90,9 +90,14 @@ function stageRuntimeDependency(root, packageDir, packageName) {
   const dependencyRoot = sourcePath;
   const destinationPath = path.join(standaloneRoot, "node_modules", packageName);
   copyTree(sourcePath, destinationPath, {
-    filter: (sourcePath) =>
-      shouldCopyRuntimeDependencyPath(sourcePath, dependencyRoot)
-      && shouldCopyStandalonePackagePath(sourcePath, standaloneRoot),
+    filter: (sourcePath) => {
+      const stagedPath = path.join(
+        destinationPath,
+        path.relative(dependencyRoot, sourcePath),
+      );
+      return shouldCopyRuntimeDependencyPath(sourcePath, dependencyRoot)
+        && shouldCopyStandalonePackagePath(stagedPath, standaloneRoot);
+    },
   });
 
   const packageJsonPath = path.join(destinationPath, "package.json");
@@ -107,12 +112,18 @@ function stageRuntimeDependency(root, packageDir, packageName) {
       continue;
     }
     const binPath = path.join(binDir, binName);
+    const cmdPath = path.join(binDir, `${binName}.cmd`);
     rmSync(binPath, { force: true });
+    rmSync(cmdPath, { force: true });
     writeFileSync(
       binPath,
       `#!/bin/sh\nexec "$(dirname "$0")/../${packageName}/${binTarget}" "$@"\n`,
     );
     chmodSync(binPath, 0o755);
+    writeFileSync(
+      cmdPath,
+      `@ECHO off\r\nSETLOCAL\r\nbun "%~dp0\\..\\${packageName}\\${binTarget.split("/").join("\\")}" %*\r\n`,
+    );
   }
 }
 

@@ -86,14 +86,6 @@ const BASE_TASKS: BootstrapTaskId[] = [
   "ollama-gemma",
 ];
 
-// Fifth task — included when the request uses Telegram, or when the
-// server discovers a saved bot token in `.env` and emits telegram-bot
-// events during bootstrap.
-const TASKS_WITH_TELEGRAM: BootstrapTaskId[] = [
-  ...BASE_TASKS,
-  "telegram-bot",
-];
-
 const BOOTSTRAP_STORAGE_KEY = "scienceswarm.setup.bootstrap.v1";
 const AUTO_CONTINUE_DELAY_MS = 1_000;
 const DEFERRED_AUTO_CONTINUE_DELAY_MS = 4_000;
@@ -103,6 +95,23 @@ const NON_BLOCKING_BOOTSTRAP_TASKS = new Set<BootstrapTaskId>([
   "openhands-docker",
   "telegram-bot",
 ]);
+
+function getActiveBootstrapTasks(
+  events: readonly BootstrapStreamEvent[],
+  submittedTelegram: boolean,
+): BootstrapTaskId[] {
+  const tasks = [...BASE_TASKS];
+  if (events.some((event) => event.type === "task" && event.task === "openclaw-gateway")) {
+    tasks.splice(tasks.indexOf("openclaw") + 1, 0, "openclaw-gateway");
+  }
+  if (
+    submittedTelegram
+    || events.some((event) => event.type === "task" && event.task === "telegram-bot")
+  ) {
+    tasks.push("telegram-bot");
+  }
+  return tasks;
+}
 
 interface PersistedBootstrapState {
   submitted: boolean;
@@ -244,6 +253,10 @@ export default function SetupPage() {
     coreRuntimeReady
     && (!summary || summary.type !== "summary")
     && openhandsEvent?.status !== "succeeded";
+  const activeBootstrapTasks = useMemo(
+    () => getActiveBootstrapTasks(events, submittedTelegram),
+    [events, submittedTelegram],
+  );
 
   const resetSetup = useCallback(() => {
     clearPersistedBootstrapState();
@@ -491,12 +504,7 @@ export default function SetupPage() {
       {hydrated && submitted && (
         <BootstrapProgress
           events={events}
-          activeTasks={
-            submittedTelegram ||
-            events.some((e) => e.type === "task" && e.task === "telegram-bot")
-              ? TASKS_WITH_TELEGRAM
-              : BASE_TASKS
-          }
+          activeTasks={activeBootstrapTasks}
         />
       )}
       {hydrated && (() => {

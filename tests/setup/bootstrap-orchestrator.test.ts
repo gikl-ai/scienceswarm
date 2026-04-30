@@ -40,7 +40,7 @@ import {
   runBootstrap,
   persistIdentity,
 } from "@/lib/setup/bootstrap-orchestrator";
-import { runOpenClaw } from "@/lib/openclaw/runner";
+import { runOpenClaw, spawnOpenClaw } from "@/lib/openclaw/runner";
 import { isOpenClawGatewayReachable } from "@/lib/openclaw/reachability";
 import { TEST_TELEGRAM_BOT_TOKEN } from "../helpers/telegram-fixtures";
 import type {
@@ -52,6 +52,7 @@ import type {
 } from "@/lib/setup/install-tasks/types";
 
 const runOpenClawMock = vi.mocked(runOpenClaw);
+const spawnOpenClawMock = vi.mocked(spawnOpenClaw);
 const isOpenClawGatewayReachableMock = vi.mocked(isOpenClawGatewayReachable);
 const OPENCLAW_START_TIMEOUT_ENV =
   "SCIENCESWARM_OPENCLAW_BOOTSTRAP_START_TIMEOUT_MS";
@@ -109,6 +110,7 @@ describe("runBootstrap orchestrator", () => {
     });
     isOpenClawGatewayReachableMock.mockReset();
     isOpenClawGatewayReachableMock.mockResolvedValue(true);
+    spawnOpenClawMock.mockClear();
   });
 
   afterEach(async () => {
@@ -575,9 +577,10 @@ describe("runBootstrap finalize ready flags", () => {
   });
 
   it("starts OpenClaw before emitting an ok summary", async () => {
-    isOpenClawGatewayReachableMock
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+    process.env[OPENCLAW_START_TIMEOUT_ENV] = "1";
+    isOpenClawGatewayReachableMock.mockImplementation(async () =>
+      spawnOpenClawMock.mock.calls.length > 0
+    );
     const tasks: InstallTask[] = [
       fakeTask("openclaw", [{ status: "succeeded" }]),
       fakeTask("ollama-gemma", [{ status: "succeeded" }]),
@@ -591,16 +594,21 @@ describe("runBootstrap finalize ready flags", () => {
     const openclawEvents = events.filter(
       (event) => event.type === "task" && event.task === "openclaw",
     );
-    expect(openclawEvents).toContainEqual(
+    const gatewayEvents = events.filter(
+      (event) => event.type === "task" && event.task === "openclaw-gateway",
+    );
+    expect(openclawEvents.at(-1)).toMatchObject({ status: "succeeded" });
+    expect(gatewayEvents).toContainEqual(
       expect.objectContaining({
         status: "running",
         detail: "Starting OpenClaw gateway…",
       }),
     );
-    expect(openclawEvents.at(-1)).toMatchObject({
+    expect(gatewayEvents.at(-1)).toMatchObject({
       status: "succeeded",
       detail: "OpenClaw gateway started.",
     });
+    expect(spawnOpenClawMock).toHaveBeenCalledTimes(1);
     expect(events.at(-1)).toMatchObject({
       type: "summary",
       status: "ok",
@@ -623,14 +631,17 @@ describe("runBootstrap finalize ready flags", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "task",
-        task: "openclaw",
+        task: "openclaw-gateway",
         status: "failed",
       }),
     );
+    expect(
+      events.filter((event) => event.type === "task" && event.task === "openclaw").at(-1),
+    ).toMatchObject({ status: "succeeded" });
     expect(events.at(-1)).toMatchObject({
       type: "summary",
       status: "partial",
-      failed: ["openclaw"],
+      failed: ["openclaw-gateway"],
     });
   });
 

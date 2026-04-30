@@ -124,6 +124,13 @@ describe("prepare-desktop-package", () => {
       expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", "package.json"))).toBe(true);
       expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", "src", "cli.ts"))).toBe(true);
       expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", ".bin", "gbrain"))).toBe(true);
+      expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", ".bin", "gbrain.cmd"))).toBe(true);
+      expect(
+        readFileSync(
+          path.join(packageDir, ".next", "standalone", "node_modules", ".bin", "gbrain.cmd"),
+          "utf-8",
+        ),
+      ).toContain('bun "%~dp0\\..\\gbrain\\src\\cli.ts" %*');
       expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", ".github"))).toBe(false);
       expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", "test"))).toBe(false);
       expect(existsSync(path.join(packageDir, ".next", "standalone", "node_modules", "gbrain", "node_modules", ".bin"))).toBe(false);
