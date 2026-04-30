@@ -132,10 +132,12 @@ downloads with `SCIENCESWARM_SKIP_RUNTIME_DOWNLOADS=1`, defer only the model
 pull with `SCIENCESWARM_SKIP_MODEL_PULL=1`, or defer only the OpenHands image
 pull with `SCIENCESWARM_SKIP_OPENHANDS_PULL=1`. Packaging stages a minimal
 desktop app under `.desktop-package/app` so installer builds do not scan or ship the
-repository's development `node_modules`. Each uploaded installer artifact also
-includes `SHA256SUMS.txt` for local download verification. If the tag does not
-already have a release, the workflow creates a draft release so maintainers can
-review unsigned artifacts before publishing. See
+repository's development `node_modules`. Each uploaded workflow artifact also
+includes `SHA256SUMS.txt` for local download verification; tag release uploads
+use platform-specific checksum assets such as `SHA256SUMS-macos.txt` so
+platform jobs do not overwrite each other. If the tag does not already have a
+release, the workflow creates a draft release so maintainers can review
+unsigned artifacts before publishing. See
 [`docs/desktop-installers.md`](docs/desktop-installers.md) for the release
 checklist and runtime-download controls.
 
