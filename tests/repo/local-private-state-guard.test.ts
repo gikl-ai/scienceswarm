@@ -35,4 +35,12 @@ describe("repo local-state guard", () => {
 
     expect(trackedLocalEnvFiles).toEqual([]);
   });
+
+  it("does not track local engineering plan documents", () => {
+    const trackedLocalPlans = listTrackedFiles().filter((file) =>
+      /(^|\/)(CHAT_TIMING_FIX_ENG_PLAN|.+_ENG_PLAN)\.md$/i.test(file),
+    );
+
+    expect(trackedLocalPlans).toEqual([]);
+  });
 });
