@@ -138,19 +138,20 @@ jobs:
           cp dist/SHA256SUMS.txt "$checksum_asset"
 
           shopt -s nullglob
-          assets=(
+          installer_assets=(
             dist/*.dmg
             dist/*.dmg.blockmap
             dist/*.exe
             dist/*.exe.blockmap
             dist/*.AppImage
             dist/*.AppImage.zsync
-            "$checksum_asset"
           )
 
-          if [ "${#assets[@]}" -eq 0 ]; then
+          if [ "${#installer_assets[@]}" -eq 0 ]; then
             echo "No desktop installer assets found in dist/." >&2
             exit 1
           fi
+
+          assets=("${installer_assets[@]}" "$checksum_asset")
 
           gh release upload "$tag" "${assets[@]}" --clobber

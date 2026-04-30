@@ -138,10 +138,13 @@ describe("desktop installers workflow", () => {
     );
     expect(releaseStep).toContain('cp dist/SHA256SUMS.txt "$checksum_asset"');
     expect(releaseStep).toContain('gh release upload "$tag" "${assets[@]}" --clobber');
-    const assetsBlock = releaseStep.match(/assets=\(\n([\s\S]*?)\n\s*\)/)?.[1];
-    expect(assetsBlock, "missing release upload assets array").toBeDefined();
-    expect(assetsBlock).toContain('"$checksum_asset"');
-    expect(assetsBlock).not.toContain("dist/SHA256SUMS.txt");
+    expect(releaseStep).toContain("installer_assets=(");
+    expect(releaseStep).toContain('if [ "${#installer_assets[@]}" -eq 0 ]; then');
+    expect(releaseStep).toContain('assets=("${installer_assets[@]}" "$checksum_asset")');
+    const installerAssetsBlock = releaseStep.match(/installer_assets=\(\n([\s\S]*?)\n\s*\)/)?.[1];
+    expect(installerAssetsBlock, "missing release upload installer assets array").toBeDefined();
+    expect(installerAssetsBlock).not.toContain('"$checksum_asset"');
+    expect(installerAssetsBlock).not.toContain("dist/SHA256SUMS.txt");
     expect(releaseStep).toContain("dist/*.dmg");
     expect(releaseStep).toContain("dist/*.exe");
     expect(releaseStep).toContain("dist/*.AppImage");
