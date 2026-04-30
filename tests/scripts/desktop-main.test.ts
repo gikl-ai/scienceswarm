@@ -34,11 +34,11 @@ describe("desktop main", () => {
     expect(resolveDesktopStartPath({})).toBe("/setup");
   });
 
-  it("defaults returning users to the main route", () => {
-    expect(resolveDesktopStartPath({}, { firstLaunchComplete: true })).toBe("/");
+  it("keeps returning users on setup so it can redirect when ready", () => {
+    expect(resolveDesktopStartPath({}, { firstLaunchComplete: true })).toBe("/setup");
   });
 
-  it("can force returning desktop users back through setup", () => {
+  it("keeps forced setup users on setup", () => {
     const env = {
       SCIENCESWARM_DESKTOP_FORCE_SETUP: "1",
     };
@@ -133,13 +133,13 @@ describe("desktop main", () => {
     });
   });
 
-  it("reports the returning-user start url in desktop diagnostics", () => {
+  it("reports setup as the returning-user start url in desktop diagnostics", () => {
     expect(resolveDesktopDiagnostics({
       getPath(name: string) {
         return name === "userData" ? "/tmp/user-data" : "/tmp/logs";
       },
     }, {}, { firstLaunchComplete: true })).toMatchObject({
-      startUrl: "http://127.0.0.1:3001/",
+      startUrl: "http://127.0.0.1:3001/setup",
     });
   });
 

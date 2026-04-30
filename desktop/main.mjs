@@ -59,11 +59,12 @@ export function shouldForceDesktopSetup(env = process.env) {
 export function resolveDesktopStartPath(env = process.env, options = {}) {
   const configuredPath = env.SCIENCESWARM_DESKTOP_START_PATH?.trim();
   if (!configuredPath) {
-    if (shouldForceDesktopSetup(env)) {
-      return "/setup";
-    }
-
-    return options.firstLaunchComplete ? "/" : "/setup";
+    // Always enter through /setup in the packaged app. The setup page is the
+    // only route that can safely decide whether to auto-bootstrap or redirect
+    // to the ready chat workspace, and it avoids stale first-launch markers
+    // dropping users onto the marketing/404 surface.
+    void options;
+    return "/setup";
   }
 
   return configuredPath.startsWith("/") ? configuredPath : `/${configuredPath}`;
@@ -294,10 +295,6 @@ export async function launchDesktopShell(options = {}) {
   const window = new BrowserWindow(resolveDesktopWindowOptions());
 
   await window.loadURL(startUrl);
-  if (!firstLaunchComplete && !shouldForceDesktopSetup(desktopEnv)) {
-    markDesktopFirstLaunchComplete(app);
-  }
-
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const nextWindow = new BrowserWindow(resolveDesktopWindowOptions());
