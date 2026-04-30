@@ -138,9 +138,12 @@ describe("desktop installers workflow", () => {
     );
     expect(releaseStep).toContain('cp dist/SHA256SUMS.txt "$checksum_asset"');
     expect(releaseStep).toContain('gh release upload "$tag" "${assets[@]}" --clobber');
+    const assetsBlock = releaseStep.match(/assets=\(\n(?<block>[\s\S]*?)\n\s*\)/)?.groups?.block;
+    expect(assetsBlock, "missing release upload assets array").toBeDefined();
+    expect(assetsBlock).toContain('"$checksum_asset"');
+    expect(assetsBlock).not.toContain("dist/SHA256SUMS.txt");
     expect(releaseStep).toContain("dist/*.dmg");
     expect(releaseStep).toContain("dist/*.exe");
     expect(releaseStep).toContain("dist/*.AppImage");
-    expect(releaseStep).toContain('"$checksum_asset"');
   });
 });
