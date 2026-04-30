@@ -65,7 +65,10 @@ matching GitHub Release. If the tag does not already have a release, the
 workflow creates a draft release first. Release checksum assets are named by
 platform, such as `SHA256SUMS-macos.txt`, so macOS, Windows, and Linux jobs do
 not overwrite each other. Keep that draft unpublished until the checksums,
-release notes, and unsigned-installer caveats are reviewed.
+release notes, and unsigned-installer caveats are reviewed. The workflow
+refuses to update a published release by default; set
+`SCIENCESWARM_ALLOW_PUBLISHED_RELEASE_UPLOADS=1` only when intentionally
+replacing unsigned assets on an already published release.
 
 ## Signing And Notarization
 
@@ -129,6 +132,8 @@ Before publishing a release, confirm:
 - All three platform jobs completed successfully.
 - `SHA256SUMS.txt` is present in each uploaded artifact bundle, and each release
   asset set has the platform-specific checksum file.
+- Published release uploads were not allowed unless the maintainer intentionally
+  set `SCIENCESWARM_ALLOW_PUBLISHED_RELEASE_UPLOADS=1`.
 - The release notes state that installers are unsigned unless signing and
   notarization have been added for that release.
 - The release notes state that local model weights and the OpenHands image are
