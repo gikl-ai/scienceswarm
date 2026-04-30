@@ -106,7 +106,8 @@ research-first layout.
 
 Maintainers can build unsigned desktop installer artifacts from GitHub Actions
 with the **Desktop Installers** workflow, or by pushing a `v*` tag. The workflow
-builds the standalone Next.js bundle and uploads:
+builds the standalone Next.js bundle, uploads workflow artifacts, and on `v*`
+tag builds uploads the installer files to the matching GitHub Release:
 
 - macOS: DMG
 - Windows: NSIS `.exe`
@@ -132,7 +133,9 @@ pull with `SCIENCESWARM_SKIP_MODEL_PULL=1`, or defer only the OpenHands image
 pull with `SCIENCESWARM_SKIP_OPENHANDS_PULL=1`. Packaging stages a minimal
 desktop app under `.desktop-package/app` so installer builds do not scan or ship the
 repository's development `node_modules`. Each uploaded installer artifact also
-includes `SHA256SUMS.txt` for local download verification. See
+includes `SHA256SUMS.txt` for local download verification. If the tag does not
+already have a release, the workflow creates a draft release so maintainers can
+review unsigned artifacts before publishing. See
 [`docs/desktop-installers.md`](docs/desktop-installers.md) for the release
 checklist and runtime-download controls.
 
