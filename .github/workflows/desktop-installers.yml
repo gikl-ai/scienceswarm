@@ -115,6 +115,9 @@ jobs:
               || gh release view "$tag" >/dev/null
           fi
 
+          checksum_asset="dist/SHA256SUMS-${SCIENCESWARM_DESKTOP_ARTIFACT_PLATFORM}.txt"
+          cp dist/SHA256SUMS.txt "$checksum_asset"
+
           shopt -s nullglob
           assets=(
             dist/*.dmg
@@ -123,7 +126,7 @@ jobs:
             dist/*.exe.blockmap
             dist/*.AppImage
             dist/*.AppImage.zsync
-            dist/SHA256SUMS.txt
+            "$checksum_asset"
           )
 
           if [ "${#assets[@]}" -eq 0 ]; then

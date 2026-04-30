@@ -124,10 +124,14 @@ describe("desktop installers workflow", () => {
     expect(releaseStep).toContain('gh release create "$tag"');
     expect(releaseStep).toContain("--verify-tag");
     expect(releaseStep).toContain("--draft");
+    expect(releaseStep).toContain(
+      'checksum_asset="dist/SHA256SUMS-${SCIENCESWARM_DESKTOP_ARTIFACT_PLATFORM}.txt"',
+    );
+    expect(releaseStep).toContain('cp dist/SHA256SUMS.txt "$checksum_asset"');
     expect(releaseStep).toContain('gh release upload "$tag" "${assets[@]}" --clobber');
     expect(releaseStep).toContain("dist/*.dmg");
     expect(releaseStep).toContain("dist/*.exe");
     expect(releaseStep).toContain("dist/*.AppImage");
-    expect(releaseStep).toContain("dist/SHA256SUMS.txt");
+    expect(releaseStep).toContain('"$checksum_asset"');
   });
 });

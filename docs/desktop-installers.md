@@ -62,8 +62,10 @@ The workflow uploads the platform installer plus `SHA256SUMS.txt`.
 
 For `v*` tag builds, each matrix job also uploads its installer assets to the
 matching GitHub Release. If the tag does not already have a release, the
-workflow creates a draft release first. Keep that draft unpublished until the
-checksums, release notes, and unsigned-installer caveats are reviewed.
+workflow creates a draft release first. Release checksum assets are named by
+platform, such as `SHA256SUMS-macos.txt`, so macOS, Windows, and Linux jobs do
+not overwrite each other. Keep that draft unpublished until the checksums,
+release notes, and unsigned-installer caveats are reviewed.
 
 ## Signing And Notarization
 
@@ -125,8 +127,8 @@ Before publishing a release, confirm:
 
 - The workflow run used the intended commit or tag.
 - All three platform jobs completed successfully.
-- `SHA256SUMS.txt` is present in each uploaded artifact bundle and release
-  asset set.
+- `SHA256SUMS.txt` is present in each uploaded artifact bundle, and each release
+  asset set has the platform-specific checksum file.
 - The release notes state that installers are unsigned unless signing and
   notarization have been added for that release.
 - The release notes state that local model weights and the OpenHands image are
