@@ -10,6 +10,7 @@ import type { BrainPresetId } from "@/brain/presets/types";
 export type BootstrapTaskId =
   | "gbrain-init"
   | "openclaw"
+  | "openclaw-gateway"
   | "openhands-docker"
   | "ollama-gemma"
   | "telegram-bot";

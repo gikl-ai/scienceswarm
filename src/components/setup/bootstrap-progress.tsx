@@ -8,6 +8,7 @@ import { Spinner } from "@/components/spinner";
 const TASK_LABELS: Record<BootstrapTaskId, string> = {
   "gbrain-init": "Local research store",
   openclaw: "Private OpenClaw runtime",
+  "openclaw-gateway": "OpenClaw gateway",
   "openhands-docker": "OpenHands code execution",
   "ollama-gemma": "Ollama + Gemma 4 local model",
   "telegram-bot": "Telegram account connection",

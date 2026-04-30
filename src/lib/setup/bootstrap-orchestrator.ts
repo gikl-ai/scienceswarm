@@ -46,6 +46,7 @@ import { ollamaGemmaTask } from "./install-tasks/ollama-gemma";
 import { telegramBotTask } from "./install-tasks/telegram-bot";
 
 const OPENCLAW_BOOTSTRAP_START_TIMEOUT_MS = 15_000;
+const OPENCLAW_BOOTSTRAP_PRESPAWN_WAIT_MS = 5_000;
 const OPENCLAW_BOOTSTRAP_START_POLL_MS = 500;
 const OPENCLAW_BOOTSTRAP_START_TIMEOUT_ENV =
   "SCIENCESWARM_OPENCLAW_BOOTSTRAP_START_TIMEOUT_MS";
@@ -222,6 +223,7 @@ export async function* runBootstrap(
   const availableTaskIds = new Set(tasks.map((task) => task.id));
   let readyFlagsFinalized = false;
   let openClawDefaultsFinalized = false;
+  let gatewayStartAttempted = false;
 
   // Emit pending events up front so the UI can show every row before
   // the phased execution below starts.
@@ -375,9 +377,10 @@ export async function* runBootstrap(
   }
 
   if (taskSucceeded("openclaw")) {
+    gatewayStartAttempted = true;
     yield {
       type: "task",
-      task: "openclaw",
+      task: "openclaw-gateway",
       status: "running",
       detail: "Starting OpenClaw gateway…",
     };
@@ -387,17 +390,17 @@ export async function* runBootstrap(
     if (startResult.ok) {
       yield {
         type: "task",
-        task: "openclaw",
+        task: "openclaw-gateway",
         status: "succeeded",
         detail: startResult.alreadyRunning
           ? "OpenClaw gateway is running."
           : "OpenClaw gateway started.",
       };
     } else {
-      failedSet.add("openclaw");
+      failedSet.add("openclaw-gateway");
       yield {
         type: "task",
-        task: "openclaw",
+        task: "openclaw-gateway",
         status: "failed",
         error: startResult.error,
       };
@@ -406,10 +409,11 @@ export async function* runBootstrap(
 
   const failed = Array.from(failedSet);
   const skipped = Array.from(skippedSet);
+  const totalSummaryTaskCount = tasks.length + (gatewayStartAttempted ? 1 : 0);
   const status: "ok" | "partial" | "failed" =
     failed.length === 0
       ? "ok"
-      : failed.length === tasks.length
+      : failed.length === totalSummaryTaskCount
         ? "failed"
         : "partial";
   yield { type: "summary", status, failed, skipped };
@@ -682,9 +686,13 @@ async function waitForOpenClawGateway(
     if (await isReachable(1_000)) {
       return true;
     }
-    await new Promise((resolve) =>
-      setTimeout(resolve, OPENCLAW_BOOTSTRAP_START_POLL_MS),
+    const delayMs = Math.min(
+      OPENCLAW_BOOTSTRAP_START_POLL_MS,
+      Math.max(0, deadline - Date.now()),
     );
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
   return false;
 }
@@ -706,7 +714,13 @@ async function startOpenClawGatewayAfterBootstrap(args: {
   const { isOpenClawGatewayReachable } = await import(
     "@/lib/openclaw/reachability"
   );
-  const alreadyRunning = await isOpenClawGatewayReachable(1_000);
+  const alreadyRunning = await waitForOpenClawGateway(
+    isOpenClawGatewayReachable,
+    Math.min(
+      OPENCLAW_BOOTSTRAP_PRESPAWN_WAIT_MS,
+      resolveOpenClawBootstrapStartTimeoutMs(),
+    ),
+  );
   if (alreadyRunning) {
     return { ok: true, alreadyRunning: true };
   }
