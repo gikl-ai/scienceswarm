@@ -35,12 +35,12 @@ const themeInitScript = `
 (function(){
   try {
     var stored = localStorage.getItem('scienceswarm.theme');
-    // ScienceSwarm design system v1 is dark-first. Light is opt-in
-    // via Settings > Appearance, not inferred from OS preference.
-    var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
+    // Fresh installs default to light. A saved Settings > Appearance
+    // choice still wins and is not inferred from OS preference.
+    var theme = stored === 'light' || stored === 'dark' ? stored : 'light';
     document.documentElement.setAttribute('data-theme', theme);
   } catch (e) {
-    document.documentElement.setAttribute('data-theme', 'dark');
+    document.documentElement.setAttribute('data-theme', 'light');
   }
 })();
 `;
@@ -53,7 +53,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      data-theme="dark"
+      data-theme="light"
       suppressHydrationWarning
       className={`${sans.variable} ${mono.variable} h-full antialiased`}
     >

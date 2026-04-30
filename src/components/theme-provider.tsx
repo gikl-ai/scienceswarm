@@ -33,9 +33,9 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function readInitialTheme(): Theme {
-  if (typeof document === "undefined") return "dark";
+  if (typeof document === "undefined") return "light";
   const attr = document.documentElement.getAttribute("data-theme");
-  return attr === "light" ? "light" : "dark";
+  return attr === "dark" ? "dark" : "light";
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

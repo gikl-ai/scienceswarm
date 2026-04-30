@@ -20,6 +20,7 @@ import * as path from "node:path";
 import { promises as fs } from "node:fs";
 
 import { buildLocalOpenClawAllowedModels } from "@/lib/openclaw/model-config";
+import { getOpenClawPort } from "@/lib/config/ports";
 import { resolveConfiguredLocalModel } from "@/lib/runtime/model-catalog";
 import {
   mergeEnvValues,
@@ -43,6 +44,11 @@ import { openclawTask } from "./install-tasks/openclaw";
 import { openhandsDockerTask } from "./install-tasks/openhands-docker";
 import { ollamaGemmaTask } from "./install-tasks/ollama-gemma";
 import { telegramBotTask } from "./install-tasks/telegram-bot";
+
+const OPENCLAW_BOOTSTRAP_START_TIMEOUT_MS = 15_000;
+const OPENCLAW_BOOTSTRAP_START_POLL_MS = 500;
+const OPENCLAW_BOOTSTRAP_START_TIMEOUT_ENV =
+  "SCIENCESWARM_OPENCLAW_BOOTSTRAP_START_TIMEOUT_MS";
 
 const DEFAULT_TASKS: InstallTask[] = [
   gbrainInitTask,
@@ -322,9 +328,6 @@ export async function* runBootstrap(
   yield* runTaskPhase(nonTelegramTasks);
   yield* runTaskPhase(telegramTasks);
 
-  const failed = Array.from(failedSet);
-  const skipped = Array.from(skippedSet);
-
   // Complete the config so `/dashboard` stops bouncing the user back
   // to `/setup`. `getConfigStatus` requires `AGENT_BACKEND` and a
   // usable LLM path (either `OPENAI_API_KEY` or
@@ -371,6 +374,38 @@ export async function* runBootstrap(
     }
   }
 
+  if (taskSucceeded("openclaw")) {
+    yield {
+      type: "task",
+      task: "openclaw",
+      status: "running",
+      detail: "Starting OpenClaw gateway…",
+    };
+    const startResult = await startOpenClawGatewayAfterBootstrap({
+      repoRoot: input.repoRoot,
+    });
+    if (startResult.ok) {
+      yield {
+        type: "task",
+        task: "openclaw",
+        status: "succeeded",
+        detail: startResult.alreadyRunning
+          ? "OpenClaw gateway is running."
+          : "OpenClaw gateway started.",
+      };
+    } else {
+      failedSet.add("openclaw");
+      yield {
+        type: "task",
+        task: "openclaw",
+        status: "failed",
+        error: startResult.error,
+      };
+    }
+  }
+
+  const failed = Array.from(failedSet);
+  const skipped = Array.from(skippedSet);
   const status: "ok" | "partial" | "failed" =
     failed.length === 0
       ? "ok"
@@ -614,5 +649,117 @@ async function finalizeOpenClawDefaults(args: {
     throw new Error(
       `openclaw models set ${openClawOllamaModelRef} failed: ${modelResult.stderr || `exit ${modelResult.code}`}`,
     );
+  }
+}
+
+async function readBootstrapEnvEntries(
+  repoRoot: string,
+): Promise<Record<string, string>> {
+  const envPath = path.join(repoRoot, ".env");
+  let existing = "";
+  try {
+    existing = await fs.readFile(envPath, { encoding: "utf8" });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+
+  const doc = parseEnvFile(existing);
+  const entries: Record<string, string> = {};
+  for (const line of doc.lines) {
+    if (line.type === "entry") {
+      entries[line.key] = line.value;
+    }
+  }
+  return entries;
+}
+
+async function waitForOpenClawGateway(
+  isReachable: (timeoutMs?: number) => Promise<boolean>,
+  timeoutMs = resolveOpenClawBootstrapStartTimeoutMs(),
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    if (await isReachable(1_000)) {
+      return true;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, OPENCLAW_BOOTSTRAP_START_POLL_MS),
+    );
+  }
+  return false;
+}
+
+function resolveOpenClawBootstrapStartTimeoutMs(): number {
+  const raw = process.env[OPENCLAW_BOOTSTRAP_START_TIMEOUT_ENV]?.trim();
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : OPENCLAW_BOOTSTRAP_START_TIMEOUT_MS;
+}
+
+async function startOpenClawGatewayAfterBootstrap(args: {
+  repoRoot: string;
+}): Promise<
+  | { ok: true; alreadyRunning: boolean }
+  | { ok: false; error: string }
+> {
+  const { isOpenClawGatewayReachable } = await import(
+    "@/lib/openclaw/reachability"
+  );
+  const alreadyRunning = await isOpenClawGatewayReachable(1_000);
+  if (alreadyRunning) {
+    return { ok: true, alreadyRunning: true };
+  }
+
+  try {
+    const [
+      { ensureOpenClawGatewayAuthConfig },
+      { resolveOpenClawMode, spawnOpenClaw, writeGatewayPid },
+    ] = await Promise.all([
+      import("@/lib/openclaw/gateway-auth"),
+      import("@/lib/openclaw/runner"),
+    ]);
+    const mode = resolveOpenClawMode();
+    ensureOpenClawGatewayAuthConfig({ mode, port: getOpenClawPort() });
+    const extraEnv = await readBootstrapEnvEntries(args.repoRoot);
+    const child = spawnOpenClaw(
+      [
+        "gateway",
+        "run",
+        "--allow-unconfigured",
+        "--port",
+        String(getOpenClawPort()),
+        "--bind",
+        "loopback",
+      ],
+      {
+        mode,
+        extraEnv,
+        cwd: process.cwd(),
+        detached: true,
+        stdio: "ignore",
+      },
+    );
+    if (typeof child.pid === "number") {
+      writeGatewayPid(child.pid, mode);
+    }
+    child.unref();
+    const started = await waitForOpenClawGateway(isOpenClawGatewayReachable);
+    if (started) {
+      return { ok: true, alreadyRunning: false };
+    }
+    return {
+      ok: false,
+      error:
+        "OpenClaw was configured, but the gateway did not become reachable. Start it from Settings or check OpenClaw logs.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "OpenClaw gateway could not be started.",
+    };
   }
 }

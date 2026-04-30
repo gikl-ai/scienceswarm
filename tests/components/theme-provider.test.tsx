@@ -44,13 +44,13 @@ describe("ThemeProvider", () => {
     expect(screen.getByTestId("theme").textContent).toBe("light");
   });
 
-  it("defaults to dark when no data-theme is set", () => {
+  it("defaults to light when no data-theme is set", () => {
     render(
       <ThemeProvider>
         <Probe />
       </ThemeProvider>,
     );
-    expect(screen.getByTestId("theme").textContent).toBe("dark");
+    expect(screen.getByTestId("theme").textContent).toBe("light");
   });
 
   it("setTheme updates <html data-theme> and localStorage", () => {

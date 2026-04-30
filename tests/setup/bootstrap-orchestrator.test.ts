@@ -16,6 +16,11 @@ vi.mock("@/lib/openclaw/runner", () => ({
     stderr: "",
     code: 0,
   }),
+  spawnOpenClaw: vi.fn().mockReturnValue({
+    pid: 12345,
+    unref: vi.fn(),
+  }),
+  writeGatewayPid: vi.fn(),
   resolveOpenClawMode: vi.fn().mockReturnValue({
     kind: "state-dir",
     stateDir: "/tmp/fake-openclaw-state",
@@ -23,11 +28,20 @@ vi.mock("@/lib/openclaw/runner", () => ({
   }),
 }));
 
+vi.mock("@/lib/openclaw/gateway-auth", () => ({
+  ensureOpenClawGatewayAuthConfig: vi.fn(),
+}));
+
+vi.mock("@/lib/openclaw/reachability", () => ({
+  isOpenClawGatewayReachable: vi.fn().mockResolvedValue(true),
+}));
+
 import {
   runBootstrap,
   persistIdentity,
 } from "@/lib/setup/bootstrap-orchestrator";
 import { runOpenClaw } from "@/lib/openclaw/runner";
+import { isOpenClawGatewayReachable } from "@/lib/openclaw/reachability";
 import { TEST_TELEGRAM_BOT_TOKEN } from "../helpers/telegram-fixtures";
 import type {
   BootstrapEvent,
@@ -38,6 +52,9 @@ import type {
 } from "@/lib/setup/install-tasks/types";
 
 const runOpenClawMock = vi.mocked(runOpenClaw);
+const isOpenClawGatewayReachableMock = vi.mocked(isOpenClawGatewayReachable);
+const OPENCLAW_START_TIMEOUT_ENV =
+  "SCIENCESWARM_OPENCLAW_BOOTSTRAP_START_TIMEOUT_MS";
 
 async function makeRepo(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "scienceswarm-bootstrap-"));
@@ -82,6 +99,7 @@ describe("runBootstrap orchestrator", () => {
 
   beforeEach(async () => {
     repoRoot = await makeRepo();
+    delete process.env[OPENCLAW_START_TIMEOUT_ENV];
     runOpenClawMock.mockClear();
     runOpenClawMock.mockResolvedValue({
       ok: true,
@@ -89,9 +107,12 @@ describe("runBootstrap orchestrator", () => {
       stderr: "",
       code: 0,
     });
+    isOpenClawGatewayReachableMock.mockReset();
+    isOpenClawGatewayReachableMock.mockResolvedValue(true);
   });
 
   afterEach(async () => {
+    delete process.env[OPENCLAW_START_TIMEOUT_ENV];
     await fs.rm(repoRoot, { recursive: true, force: true });
   });
 
@@ -362,9 +383,20 @@ describe("runBootstrap finalize ready flags", () => {
   beforeEach(async () => {
     repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "scienceswarm-finalize-"));
     await fs.writeFile(path.join(repoRoot, ".env"), "", { encoding: "utf8" });
+    delete process.env[OPENCLAW_START_TIMEOUT_ENV];
+    runOpenClawMock.mockClear();
+    runOpenClawMock.mockResolvedValue({
+      ok: true,
+      stdout: "",
+      stderr: "",
+      code: 0,
+    });
+    isOpenClawGatewayReachableMock.mockReset();
+    isOpenClawGatewayReachableMock.mockResolvedValue(true);
   });
 
   afterEach(async () => {
+    delete process.env[OPENCLAW_START_TIMEOUT_ENV];
     await fs.rm(repoRoot, { recursive: true, force: true });
   });
 
@@ -540,6 +572,66 @@ describe("runBootstrap finalize ready flags", () => {
         extraEnv: { OLLAMA_API_KEY: "ollama-local" },
       },
     ]);
+  });
+
+  it("starts OpenClaw before emitting an ok summary", async () => {
+    isOpenClawGatewayReachableMock
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const tasks: InstallTask[] = [
+      fakeTask("openclaw", [{ status: "succeeded" }]),
+      fakeTask("ollama-gemma", [{ status: "succeeded" }]),
+    ];
+
+    const events: BootstrapStreamEvent[] = [];
+    for await (const event of runBootstrap({ handle: "h", repoRoot }, { tasks })) {
+      events.push(event);
+    }
+
+    const openclawEvents = events.filter(
+      (event) => event.type === "task" && event.task === "openclaw",
+    );
+    expect(openclawEvents).toContainEqual(
+      expect.objectContaining({
+        status: "running",
+        detail: "Starting OpenClaw gateway…",
+      }),
+    );
+    expect(openclawEvents.at(-1)).toMatchObject({
+      status: "succeeded",
+      detail: "OpenClaw gateway started.",
+    });
+    expect(events.at(-1)).toMatchObject({
+      type: "summary",
+      status: "ok",
+    });
+  });
+
+  it("marks bootstrap partial when OpenClaw config succeeds but gateway start fails", async () => {
+    process.env[OPENCLAW_START_TIMEOUT_ENV] = "1";
+    isOpenClawGatewayReachableMock.mockResolvedValue(false);
+    const tasks: InstallTask[] = [
+      fakeTask("openclaw", [{ status: "succeeded" }]),
+      fakeTask("ollama-gemma", [{ status: "succeeded" }]),
+    ];
+
+    const events: BootstrapStreamEvent[] = [];
+    for await (const event of runBootstrap({ handle: "h", repoRoot }, { tasks })) {
+      events.push(event);
+    }
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "task",
+        task: "openclaw",
+        status: "failed",
+      }),
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: "summary",
+      status: "partial",
+      failed: ["openclaw"],
+    });
   });
 
   it("normalizes provider-prefixed Ollama model refs before configuring OpenClaw", async () => {
